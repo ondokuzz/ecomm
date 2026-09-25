@@ -2,10 +2,6 @@
 
 Start with `README.md`, `CONTEXT-MAP.md`, `CONTEXT.md`, and `docs/roadmap.md`.
 
-## Environment
-
-Run `source ~/.zshrc` before docker, java, or gradle commands. That puts Docker Desktop, Temurin JDK 21, and Gradle 9.7.1 on PATH.
-
 ## Agent skills
 
 ### Issue tracker
