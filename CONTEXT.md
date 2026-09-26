@@ -33,7 +33,7 @@ What a Variant sells for, as `Money`: an amount in the currency's minor unit. Ca
 _Avoid_: Cost (what the platform pays a supplier)
 
 **Cart**:
-A Customer's in-progress, unconfirmed selection of Variants and quantities. Ephemeral — it is not an Order until checkout completes.
+A Customer's in-progress, unconfirmed selection of Variants and quantities. Ephemeral — it is not an Order until checkout completes, and it lapses 7 days after the Customer last changed it. Each Customer has at most one Cart, and only they can see or change it.
 _Avoid_: Basket, Bag
 
 **Reservation**:

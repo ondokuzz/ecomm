@@ -1,0 +1,57 @@
+# Exercises every Cart endpoint against the compose stack (`docker compose up -d --build`).
+# Run the requests top to bottom in the IntelliJ HTTP client; the token request stores a token for
+# the ones after it.
+
+@cart = http://localhost:8083
+@keycloak = http://localhost:8180/realms/ecomm/protocol/openid-connect/token
+
+### Customer token
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=dev-cli&username=demo@ecomm.local&password=demo
+
+> {% client.global.set("customerToken", response.body.access_token); %}
+
+### The Customer's Cart: empty until they add something
+GET {{cart}}/cart
+Authorization: Bearer {{customerToken}}
+
+### Put a Variant in the Cart: 200 with the whole Cart
+PUT {{cart}}/cart/items/PHN-PIXEL-9
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"quantity": 2}
+
+### Another Variant
+PUT {{cart}}/cart/items/AUD-JBL-FLIP-6
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"quantity": 1}
+
+### Change a quantity: it replaces the old one
+PUT {{cart}}/cart/items/PHN-PIXEL-9
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"quantity": 3}
+
+### A quantity that isn't a positive integer: 400
+PUT {{cart}}/cart/items/PHN-PIXEL-9
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"quantity": 0}
+
+### Take a Variant out: 200 with the rest of the Cart
+DELETE {{cart}}/cart/items/AUD-JBL-FLIP-6
+Authorization: Bearer {{customerToken}}
+
+### Empty the Cart: 204
+DELETE {{cart}}/cart
+Authorization: Bearer {{customerToken}}
+
+### Without a token: 401
+GET {{cart}}/cart
