@@ -1,3 +1,7 @@
+---
+status: superseded by ADR-0009
+---
+
 # Sagas run on Axon + Quartz, not a dedicated workflow engine
 
 Axon's built-in `@Saga` support, backed by a JPA-persisted saga store on Postgres, covers the order-fulfillment and returns-approval workflows without a new runtime. Long waits — a Warranty Window on an RMA, for instance — use Axon's Quartz-backed `DeadlineManager`, which persists scheduled deadlines to the same Postgres.

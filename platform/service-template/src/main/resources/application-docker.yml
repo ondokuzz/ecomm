@@ -1,0 +1,2 @@
+# Active inside Docker Compose (SPRING_PROFILES_ACTIVE=docker). Point datastores and other
+# services at their compose service names here, e.g. spring.data.redis.host: redis

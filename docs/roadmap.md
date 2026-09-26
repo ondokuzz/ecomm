@@ -24,6 +24,8 @@ Eight two-week sprints, five tracks running in parallel for a 4-5 person team. S
 
 **Definition of done**: `docker-compose up` → browse seeded products → add to cart → check out with a mock payment → see an order confirmation and status — entirely local.
 
+> **Note (Sprint 1 implementation):** Kafka and Mongo are defined in Compose but sit behind the `full` profile (`docker compose --profile full up`), because nothing uses them until Sprint 3 and the default stack has to fit in about 8 GB of Docker memory. A plain `docker compose up` starts everything the definition of done needs.
+
 ## Sprint 2 (Weeks 3–4) — Harden the Skeleton
 
 | Track | Delivers |
@@ -58,10 +60,10 @@ Eight two-week sprints, five tracks running in parallel for a 4-5 person team. S
 
 | Track | Delivers |
 |---|---|
-| A | Multi-warehouse config; secrets management hardening |
+| A | Multi-warehouse config; secrets management hardening; Temporal server in Compose (Postgres persistence) |
 | B | Warranty metadata on catalog items (length, manufacturer) |
 | C | Shipping-cost estimate (abstracted provider); address validation |
-| D | Fulfillment & Shipping — pick/pack/ship state machine, driven by an Axon Saga; Returns & Warranty v1 — request → approve/reject, IMEI/serial capture |
+| D | Fulfillment & Shipping — pick/pack/ship state machine, driven by a Temporal workflow Saga ([ADR 0009](./adr/0009-sagas-on-temporal.md)); Returns & Warranty v1 — request → approve/reject, IMEI/serial capture |
 | E | Shipment tracking UI; admin fulfillment queue + RMA approval queue |
 
 ## Sprint 6 (Weeks 11–12) — Returns Completion
@@ -71,7 +73,7 @@ Eight two-week sprints, five tracks running in parallel for a 4-5 person team. S
 | A | Notification provider abstraction (email/SMS/push); message template system |
 | B | Reviews moderation; recommendation quality pass |
 | C | Promotion expiry/usage-limit edge cases; cart-abandonment detection |
-| D | Returns & Warranty completion — received → inspected → refund/exchange; Quartz-backed deadline auto-closing a request after the warranty window lapses; wired to Payment refund + Inventory restock events |
+| D | Returns & Warranty completion — received → inspected → refund/exchange; Temporal durable timer auto-closing a request after the Warranty Window lapses; wired to Payment refund + Inventory restock events |
 | E | Return-request UI; admin RMA lifecycle UI; notifications wired to order/payment/fulfillment/return events |
 
 ## Sprint 7 (Weeks 13–14) — AI Assistant

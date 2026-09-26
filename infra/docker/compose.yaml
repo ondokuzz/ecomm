@@ -1,0 +1,115 @@
+# Local infrastructure for the whole platform. Credentials here are for local development only.
+# Host ports can be overridden (e.g. POSTGRES_PORT=5433) when something else already holds them.
+# Couchbase is the exception: its SDK bootstraps from the ports the cluster advertises, so they
+# stay fixed.
+#
+#   docker compose up -d                   # default stack
+#   docker compose --profile full up -d    # plus Kafka and Mongo (unused until Sprint 3)
+
+name: ecomm
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ecomm
+      POSTGRES_PASSWORD: ecomm
+    ports: ["${POSTGRES_PORT:-5432}:5432"]
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h localhost -U ecomm -d keycloak"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7
+    ports: ["${REDIS_PORT:-6379}:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.4
+    command: ["start-dev"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: ecomm
+      KC_DB_PASSWORD: ecomm
+      KC_HEALTH_ENABLED: "true"
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+    ports: ["${KEYCLOAK_PORT:-8180}:8080"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck:
+      # The image has no curl; talk HTTP to the management port over bash's /dev/tcp.
+      test:
+        - CMD-SHELL
+        - >-
+          exec 3<>/dev/tcp/localhost/9000 &&
+          printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          grep -q '"status": "UP"' <&3
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  couchbase:
+    image: couchbase:community-7.6.2
+    ports:
+      - "8091-8096:8091-8096"
+      - "11210:11210"
+    volumes:
+      - couchbase-data:/opt/couchbase/var
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8091/ui/index.html"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  couchbase-init:
+    image: couchbase:community-7.6.2
+    entrypoint: ["/init/couchbase-init.sh"]
+    environment:
+      COUCHBASE_USERNAME: admin
+      COUCHBASE_PASSWORD: password
+      COUCHBASE_BUCKET: catalog
+    volumes:
+      - ./couchbase-init.sh:/init/couchbase-init.sh:ro
+    depends_on:
+      couchbase: { condition: service_healthy }
+    restart: "no"
+
+  kafka:
+    image: apache/kafka:4.3.1
+    profiles: [full]
+    ports: ["${KAFKA_PORT:-9092}:9092"]
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 20s
+
+  mongo:
+    image: mongo:7
+    profiles: [full]
+    ports: ["${MONGO_PORT:-27017}:27017"]
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  postgres-data:
+  couchbase-data:
+  mongo-data:
