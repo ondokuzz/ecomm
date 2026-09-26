@@ -82,6 +82,13 @@ class BrowseProductsApiTest extends CatalogApiTest {
   }
 
   @Test
+  void anEmptyCategoryListsEveryProduct() {
+    assertThat(products("/products?category="))
+        .extracting(ProductView::sku)
+        .contains("PHN-IPHONE-16", "LPT-XPS-13", "AUD-JBL-FLIP-6");
+  }
+
+  @Test
   void anUnknownCategoryHasNoProducts() {
     assertThat(products("/products?category=garden-furniture")).isEmpty();
   }

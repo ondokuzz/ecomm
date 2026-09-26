@@ -39,7 +39,9 @@ class ProductController {
 
   @GetMapping
   List<ProductResponse> products(@RequestParam Optional<String> category) {
-    return browse.products(category).stream().map(ProductResponse::of).toList();
+    // "?category=" means no filter, not the empty category.
+    var filter = category.filter(c -> !c.isBlank());
+    return browse.products(filter).stream().map(ProductResponse::of).toList();
   }
 
   @GetMapping("/{sku}")
