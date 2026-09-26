@@ -1,0 +1,22 @@
+spring:
+  application:
+    name: catalog
+  couchbase:
+    connection-string: couchbase://localhost
+    username: admin
+    password: password
+
+ecomm:
+  catalog:
+    bucket: catalog
+    # Loaded on startup, only into an empty bucket.
+    seed: classpath:seed/products.json
+  security:
+    # Customers browse the Catalog without logging in; changes still need a Staff token.
+    public-read-paths: /products/**, /categories
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

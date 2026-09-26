@@ -39,8 +39,11 @@ JWTs (`JwtResourceServerAutoConfiguration`):
   `ecomm.security.jwt.issuer-uri`, which defaults to `http://localhost:8180/realms/ecomm`. Outside
   Docker the JWK set URI is derived from the issuer; `application-docker.yml` points it at
   `keycloak:8080`.
-- A service that needs different URL rules, such as public endpoints, declares its own
-  `SecurityFilterChain` bean, which replaces the default.
+- To let anyone `GET` some paths without a token, such as a public product listing, list them as
+  path patterns under `ecomm.security.public-read-paths`. Other methods on those paths still need
+  a token.
+- A service that needs other URL rules declares its own `SecurityFilterChain` bean, which replaces
+  the default.
 
 ## Tests
 

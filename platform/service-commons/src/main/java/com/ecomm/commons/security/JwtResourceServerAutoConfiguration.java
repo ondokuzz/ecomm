@@ -9,6 +9,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplicat
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -31,8 +32,9 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  * <ul>
  *   <li>Keys come from the configured JWK set URI; the {@code iss} claim is checked explicitly
  *       against the configured issuer (see {@link JwtResourceServerProperties}).
- *   <li>{@code /actuator/health} is open; every other request needs a valid token. Restrict by role
- *       with {@code @PreAuthorize("hasRole('STAFF')")}.
+ *   <li>{@code /actuator/health} and any {@code GET} on the paths in {@link PublicReadProperties}
+ *       are open; every other request needs a valid token. Restrict by role with
+ *       {@code @PreAuthorize("hasRole('STAFF')")}.
  *   <li>Realm roles become authorities via {@link KeycloakRealmRoleConverter}.
  *   <li>A {@link CurrentCustomer} controller parameter resolves to the token's {@code sub}.
  *   <li>401 and 403 come back as problem details.
@@ -49,7 +51,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
     })
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 @ConditionalOnClass({SecurityFilterChain.class, JwtDecoder.class})
-@EnableConfigurationProperties(JwtResourceServerProperties.class)
+@EnableConfigurationProperties({JwtResourceServerProperties.class, PublicReadProperties.class})
 @EnableMethodSecurity
 @Import(SecurityProblemDetailHandler.class)
 public class JwtResourceServerAutoConfiguration {
@@ -66,6 +68,7 @@ public class JwtResourceServerAutoConfiguration {
   @ConditionalOnMissingBean
   SecurityFilterChain securityFilterChain(
       HttpSecurity http,
+      PublicReadProperties publicReads,
       @Qualifier("handlerExceptionResolver") HandlerExceptionResolver exceptionResolver)
       throws Exception {
     AuthenticationEntryPoint entryPoint = problemDetailEntryPoint(exceptionResolver);
@@ -74,13 +77,16 @@ public class JwtResourceServerAutoConfiguration {
     var authenticationConverter = new JwtAuthenticationConverter();
     authenticationConverter.setJwtGrantedAuthoritiesConverter(new KeycloakRealmRoleConverter());
 
+    var publicReadPaths = publicReads.publicReadPaths().toArray(String[]::new);
+
     return http.authorizeHttpRequests(
-            requests ->
-                requests
-                    .requestMatchers("/actuator/health/**")
-                    .permitAll()
-                    .anyRequest()
-                    .authenticated())
+            requests -> {
+              requests.requestMatchers("/actuator/health/**").permitAll();
+              if (publicReadPaths.length > 0) {
+                requests.requestMatchers(HttpMethod.GET, publicReadPaths).permitAll();
+              }
+              requests.anyRequest().authenticated();
+            })
         .oauth2ResourceServer(
             server ->
                 server

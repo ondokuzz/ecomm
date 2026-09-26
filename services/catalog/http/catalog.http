@@ -1,0 +1,93 @@
+# Exercises every Catalog endpoint against the compose stack (`docker compose up -d --build`).
+# Run the requests top to bottom in the IntelliJ HTTP client; the token requests store tokens for
+# the ones after them.
+
+@catalog = http://localhost:8081
+@keycloak = http://localhost:8180/realms/ecomm/protocol/openid-connect/token
+
+### Staff token
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=dev-cli&username=staff@ecomm.local&password=staff
+
+> {% client.global.set("staffToken", response.body.access_token); %}
+
+### Customer token
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=dev-cli&username=demo@ecomm.local&password=demo
+
+> {% client.global.set("customerToken", response.body.access_token); %}
+
+### Categories, no token needed
+GET {{catalog}}/categories
+
+### Every Product, no token needed
+GET {{catalog}}/products
+
+### Products in a category
+GET {{catalog}}/products?category=phones
+
+### A Product's detail; variants[0].id is the Variant ID a Cart takes
+GET {{catalog}}/products/PHN-PIXEL-9
+
+### A missing Product: 404
+GET {{catalog}}/products/NO-SUCH-SKU
+
+### Staff create a Product: 201
+POST {{catalog}}/products
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{
+  "sku": "AUD-DEMO-BUDS",
+  "name": "Demo Buds",
+  "category": "audio",
+  "attributes": {"brand": "Demo", "type": "In-ear"},
+  "price": {"amountMinor": 4999, "currency": "EUR"},
+  "images": ["/images/products/aud-demo-buds/front.jpg"]
+}
+
+### Creating it again: 409
+POST {{catalog}}/products
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{
+  "sku": "AUD-DEMO-BUDS",
+  "name": "Demo Buds",
+  "category": "audio",
+  "price": {"amountMinor": 4999, "currency": "EUR"}
+}
+
+### Staff update it: 200
+PUT {{catalog}}/products/AUD-DEMO-BUDS
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{
+  "name": "Demo Buds 2",
+  "category": "audio",
+  "attributes": {"brand": "Demo", "type": "In-ear"},
+  "price": {"amountMinor": 3999, "currency": "EUR"},
+  "images": ["/images/products/aud-demo-buds/front.jpg"]
+}
+
+### A Customer may not change Products: 403
+PUT {{catalog}}/products/AUD-DEMO-BUDS
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"name": "Hijacked", "category": "audio", "price": {"amountMinor": 1, "currency": "EUR"}}
+
+### Nor may anyone without a token: 401
+DELETE {{catalog}}/products/AUD-DEMO-BUDS
+
+### Staff delete it: 204
+DELETE {{catalog}}/products/AUD-DEMO-BUDS
+Authorization: Bearer {{staffToken}}
+
+### Gone: 404
+GET {{catalog}}/products/AUD-DEMO-BUDS

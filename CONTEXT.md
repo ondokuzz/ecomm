@@ -16,9 +16,17 @@ _Avoid_: Admin, Operator
 A sellable item in the Catalog, identified by SKU, with category-specific attributes and one or more Variants.
 _Avoid_: Item, SKU (SKU is an identifier, not the concept)
 
+**Category**:
+A grouping of Products that Customers browse by, such as `phones`, `laptops` or `audio`, named by a lowercase slug. A category exists as long as at least one Product is in it.
+_Avoid_: Department, Collection
+
 **Variant**:
-A specific purchasable version of a Product (e.g. a color/storage combination), each with its own stock level.
+A specific purchasable version of a Product (e.g. a color/storage combination), each with its own stock level, identified by its Variant ID. Until multi-Variant Products arrive, every Product has exactly one Variant, whose Variant ID is the Product's SKU.
 _Avoid_: Option, Configuration
+
+**Price**:
+What a Variant sells for, as `Money`: an amount in the currency's minor unit. Catalog owns Price. A Cart holds no authoritative price: whatever a Cart shows is a copy, and the Price that counts is always the one Catalog holds now.
+_Avoid_: Cost (what the platform pays a supplier)
 
 **Cart**:
 A Customer's in-progress, unconfirmed selection of Variants and quantities. Ephemeral — it is not an Order until checkout completes.

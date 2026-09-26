@@ -1,0 +1,368 @@
+[
+  {
+    "sku": "PHN-PIXEL-9",
+    "name": "Google Pixel 9",
+    "category": "phones",
+    "attributes": {
+      "brand": "Google",
+      "storage": "128 GB",
+      "color": "Obsidian",
+      "screen": "6.3 in"
+    },
+    "price": {
+      "amountMinor": 79900,
+      "currency": "EUR"
+    },
+    "images": [
+      "/images/products/phn-pixel-9/front.jpg"
+    ]
+  },
+  {
+    "sku": "PHN-PIXEL-9-PRO",
+    "name": "Google Pixel 9 Pro",
+    "category": "phones",
+    "attributes": {
+      "brand": "Google",
+      "storage": "256 GB",
+      "color": "Porcelain",
+      "screen": "6.3 in"
+    },
+    "price": {
+      "amountMinor": 109900,
+      "currency": "EUR"
+    },
+    "images": [
+      "/images/products/phn-pixel-9-pro/front.jpg"
+    ]
+  },
+  {
+    "sku": "PHN-IPHONE-16",
+    "name": "Apple iPhone 16",
+    "category": "phones",
+    "attributes": {
+      "brand": "Apple",
+      "storage": "128 GB",
+      "color": "Black",
+      "screen": "6.1 in"
+    },
+    "price": {
+      "amountMinor": 94900,
+      "currency": "EUR"
+    },
+    "images": [
+      "/images/products/phn-iphone-16/front.jpg"
+    ]
+  },
+  {
+    "sku": "PHN-IPHONE-16-PRO",
+    "name": "Apple iPhone 16 Pro",
+    "category": "phones",
+    "attributes": {
+      "brand": "Apple",
+      "storage": "256 GB",
+      "color": "Desert Titanium",
+      "screen": "6.3 in"
+    },
+    "price": {
+      "amountMinor": 119900,
+      "currency": "EUR"
+    },
+    "images": [
+      "/images/products/phn-iphone-16-pro/front.jpg"
+    ]
+  },
+  {
+    "sku": "PHN-GALAXY-S24",
+    "name": "Samsung Galaxy S24",
+    "category": "phones",
+    "attributes": {
+      "brand": "Samsung",
+      "storage": "128 GB",
+      "color": "Onyx Black",
+      "screen": "6.2 in"
+    },
+    "price": {
+      "amountMinor": 84900,
+      "currency": "EUR"
+    },
+    "images": [
+      "/images/products/phn-galaxy-s24/front.jpg"
+    ]
+  },
+  {
+    "sku": "PHN-GALAXY-A55",
+    "name": "Samsung Galaxy A55",
+    "category": "phones",
+    "attributes": {
+      "brand": "Samsung",
+      "storage": "128 GB",
+      "color": "Awesome Navy",
+      "screen": "6.6 in"
+    },
+    "price": {
+      "amountMinor": 42900,
+      "currency": "EUR"
+    },
+    "images": [
+      "/images/products/phn-galaxy-a55/front.jpg"
+    ]
+  },
+  {
+    "sku": "PHN-NOTHING-2A",
+    "name": "Nothing Phone (2a)",
+    "category": "phones",
+    "attributes": {
+      "brand": "Nothing",
+      "storage": "128 GB",
+      "color": "White",
+      "screen": "6.7 in"
+    },
+    "price": {
+      "amountMinor": 32900,
+      "currency": "EUR"
+    },
+    "images": [
+      "/images/products/phn-nothing-2a/front.jpg"
+    ]
+  },
+  {
+    "sku": "LPT-MBA-13-M3",
+    "name": "Apple MacBook Air 13 (M3)",
+    "category": "laptops",
+    "attributes": {
+      "brand": "Apple",
+      "cpu": "Apple M3",
+      "ram": "16 GB",
+      "storage": "256 GB SSD",
+      "screen": "13.6 in"
+    },
+    "price": {
+      "amountMinor": 129900,
+      "currency": "EUR"
+    },
+    "images": [
+      "/images/products/lpt-mba-13-m3/front.jpg"
+    ]
+  },
+  {
+    "sku": "LPT-MBP-14-M4",
+    "name": "Apple MacBook Pro 14 (M4)",
+    "category": "laptops",
+    "attributes": {
+      "brand": "Apple",
+      "cpu": "Apple M4",
+      "ram": "16 GB",
+      "storage": "512 GB SSD",
+      "screen": "14.2 in"
+    },
+    "price": {
+      "amountMinor": 199900,
+      "currency": "EUR"
+    },
+    "images": [
+      "/images/products/lpt-mbp-14-m4/front.jpg"
+    ]
+  },
+  {
+    "sku": "LPT-XPS-13",
+    "name": "Dell XPS 13",
+    "category": "laptops",
+    "attributes": {
+      "brand": "Dell",
+      "cpu": "Intel Core Ultra 7",
+      "ram": "16 GB",
+      "storage": "512 GB SSD",
+      "screen": "13.4 in"
+    },
+    "price": {
+      "amountMinor": 139900,
+      "currency": "EUR"
+    },
+    "images": [
+      "/images/products/lpt-xps-13/front.jpg"
+    ]
+  },
+  {
+    "sku": "LPT-THINKPAD-X1",
+    "name": "Lenovo ThinkPad X1 Carbon Gen 12",
+    "category": "laptops",
+    "attributes": {
+      "brand": "Lenovo",
+      "cpu": "Intel Core Ultra 7",
+      "ram": "32 GB",
+      "storage": "1 TB SSD",
+      "screen": "14 in"
+    },
+    "price": {
+      "amountMinor": 189900,
+      "currency": "EUR"
+    },
+    "images": [
+      "/images/products/lpt-thinkpad-x1/front.jpg"
+    ]
+  },
+  {
+    "sku": "LPT-ZENBOOK-14",
+    "name": "ASUS Zenbook 14 OLED",
+    "category": "laptops",
+    "attributes": {
+      "brand": "ASUS",
+      "cpu": "Intel Core Ultra 5",
+      "ram": "16 GB",
+      "storage": "512 GB SSD",
+      "screen": "14 in"
+    },
+    "price": {
+      "amountMinor": 99900,
+      "currency": "EUR"
+    },
+    "images": [
+      "/images/products/lpt-zenbook-14/front.jpg"
+    ]
+  },
+  {
+    "sku": "LPT-FRAMEWORK-13",
+    "name": "Framework Laptop 13",
+    "category": "laptops",
+    "attributes": {
+      "brand": "Framework",
+      "cpu": "AMD Ryzen 7 7840U",
+      "ram": "16 GB",
+      "storage": "512 GB SSD",
+      "screen": "13.5 in"
+    },
+    "price": {
+      "amountMinor": 109900,
+      "currency": "EUR"
+    },
+    "images": [
+      "/images/products/lpt-framework-13/front.jpg"
+    ]
+  },
+  {
+    "sku": "LPT-SURFACE-7",
+    "name": "Microsoft Surface Laptop 7",
+    "category": "laptops",
+    "attributes": {
+      "brand": "Microsoft",
+      "cpu": "Snapdragon X Elite",
+      "ram": "16 GB",
+      "storage": "512 GB SSD",
+      "screen": "13.8 in"
+    },
+    "price": {
+      "amountMinor": 119900,
+      "currency": "EUR"
+    },
+    "images": [
+      "/images/products/lpt-surface-7/front.jpg"
+    ]
+  },
+  {
+    "sku": "AUD-AIRPODS-PRO-2",
+    "name": "Apple AirPods Pro 2",
+    "category": "audio",
+    "attributes": {
+      "brand": "Apple",
+      "type": "In-ear",
+      "wireless": "yes",
+      "noiseCancelling": "yes"
+    },
+    "price": {
+      "amountMinor": 27900,
+      "currency": "EUR"
+    },
+    "images": [
+      "/images/products/aud-airpods-pro-2/front.jpg"
+    ]
+  },
+  {
+    "sku": "AUD-SONY-WH1000XM5",
+    "name": "Sony WH-1000XM5",
+    "category": "audio",
+    "attributes": {
+      "brand": "Sony",
+      "type": "Over-ear",
+      "wireless": "yes",
+      "noiseCancelling": "yes"
+    },
+    "price": {
+      "amountMinor": 37900,
+      "currency": "EUR"
+    },
+    "images": [
+      "/images/products/aud-sony-wh1000xm5/front.jpg"
+    ]
+  },
+  {
+    "sku": "AUD-BOSE-QC-ULTRA",
+    "name": "Bose QuietComfort Ultra Headphones",
+    "category": "audio",
+    "attributes": {
+      "brand": "Bose",
+      "type": "Over-ear",
+      "wireless": "yes",
+      "noiseCancelling": "yes"
+    },
+    "price": {
+      "amountMinor": 44900,
+      "currency": "EUR"
+    },
+    "images": [
+      "/images/products/aud-bose-qc-ultra/front.jpg"
+    ]
+  },
+  {
+    "sku": "AUD-SENNHEISER-MTW4",
+    "name": "Sennheiser Momentum True Wireless 4",
+    "category": "audio",
+    "attributes": {
+      "brand": "Sennheiser",
+      "type": "In-ear",
+      "wireless": "yes",
+      "noiseCancelling": "yes"
+    },
+    "price": {
+      "amountMinor": 29900,
+      "currency": "EUR"
+    },
+    "images": [
+      "/images/products/aud-sennheiser-mtw4/front.jpg"
+    ]
+  },
+  {
+    "sku": "AUD-JBL-FLIP-6",
+    "name": "JBL Flip 6",
+    "category": "audio",
+    "attributes": {
+      "brand": "JBL",
+      "type": "Portable speaker",
+      "wireless": "yes",
+      "waterproof": "IP67"
+    },
+    "price": {
+      "amountMinor": 12900,
+      "currency": "EUR"
+    },
+    "images": [
+      "/images/products/aud-jbl-flip-6/front.jpg"
+    ]
+  },
+  {
+    "sku": "AUD-SONOS-ERA-100",
+    "name": "Sonos Era 100",
+    "category": "audio",
+    "attributes": {
+      "brand": "Sonos",
+      "type": "Smart speaker",
+      "wireless": "yes"
+    },
+    "price": {
+      "amountMinor": 27900,
+      "currency": "EUR"
+    },
+    "images": [
+      "/images/products/aud-sonos-era-100/front.jpg"
+    ]
+  }
+]
