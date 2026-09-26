@@ -1,0 +1,51 @@
+# Exercises every Payment endpoint against the compose stack (`docker compose up -d --build`).
+# Run the requests top to bottom in the IntelliJ HTTP client; the token request stores a token for
+# the ones after it.
+
+@payment = http://localhost:8084
+@keycloak = http://localhost:8180/realms/ecomm/protocol/openid-connect/token
+
+### Customer token
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=dev-cli&username=demo@ecomm.local&password=demo
+
+> {% client.global.set("customerToken", response.body.access_token); %}
+
+### Authorize an Order's payment: 201 with the Payment, AUTHORIZED by the mock gateway
+POST {{payment}}/payments
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"orderId": "order-1", "amount": {"amountMinor": 79900, "currency": "EUR"}}
+
+> {% client.global.set("paymentId", response.body.id); %}
+
+### Read it back
+GET {{payment}}/payments/{{paymentId}}
+Authorization: Bearer {{customerToken}}
+
+### An unknown Payment: 404
+GET {{payment}}/payments/00000000-0000-4000-8000-000000000000
+Authorization: Bearer {{customerToken}}
+
+### An amount that isn't positive: 400
+POST {{payment}}/payments
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"orderId": "order-1", "amount": {"amountMinor": 0, "currency": "EUR"}}
+
+### An unknown currency: 400
+POST {{payment}}/payments
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"orderId": "order-1", "amount": {"amountMinor": 79900, "currency": "XYZ"}}
+
+### Without a token: 401
+POST {{payment}}/payments
+Content-Type: application/json
+
+{"orderId": "order-1", "amount": {"amountMinor": 79900, "currency": "EUR"}}

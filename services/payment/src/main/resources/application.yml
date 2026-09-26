@@ -1,0 +1,14 @@
+spring:
+  application:
+    name: payment
+  datasource:
+    # POSTGRES_PORT matches the compose override, for when something else holds 5432.
+    url: jdbc:postgresql://localhost:${POSTGRES_PORT:5432}/payment
+    username: ecomm
+    password: ecomm
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

@@ -48,6 +48,10 @@ _Avoid_: Purchase, Transaction
 The lifecycle stage of an Order: `Placed → Paid → Fulfilled → Shipped → Delivered`, with `Returned` and `Cancelled` as branches off that path.
 _Avoid_: State (Status is the domain term; state is a general programming concept)
 
+**Payment**:
+An Order's amount, as `Money`, taken through a payment gateway and recorded with the gateway's reference for it. A Payment starts `AUTHORIZED`: the gateway has approved the amount but not yet captured it. Capture and refund come later.
+_Avoid_: Charge, Transaction
+
 **Fulfillment**:
 The physical pick/pack/ship process that turns a Paid Order into a Shipped Order.
 _Avoid_: Shipping — that's the carrier hand-off specifically, one step inside Fulfillment
