@@ -1,5 +1,6 @@
 package com.ecomm.template.adapter.in.web;
 
+import com.ecomm.commons.security.CurrentCustomer;
 import com.ecomm.template.application.port.in.PingUseCase;
 import java.time.Instant;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -15,10 +16,10 @@ class PingController {
   }
 
   @GetMapping("/ping")
-  PingResponse ping() {
-    var pong = pingUseCase.ping();
-    return new PingResponse(pong.service(), pong.at());
+  PingResponse ping(CurrentCustomer customer) {
+    var pong = pingUseCase.ping(customer.id());
+    return new PingResponse(pong.service(), pong.customerId(), pong.at());
   }
 
-  record PingResponse(String service, Instant at) {}
+  record PingResponse(String service, String customerId, Instant at) {}
 }

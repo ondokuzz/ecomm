@@ -1,1 +1,2 @@
 com.ecomm.commons.web.CommonsWebAutoConfiguration
+com.ecomm.commons.security.JwtResourceServerAutoConfiguration

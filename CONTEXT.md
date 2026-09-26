@@ -5,8 +5,12 @@ A from-scratch e-commerce platform: customers browse a catalog, buy, track, and 
 ## Language
 
 **Customer**:
-A person who browses, buys, and manages Orders on the platform.
+A person who browses, buys, and manages Orders on the platform. Keycloak holds a Customer's identity; the Customer ID is the access token's `sub`.
 _Avoid_: User, Account, Buyer
+
+**Staff**:
+A back-office person with the `STAFF` role.
+_Avoid_: Admin, Operator
 
 **Product**:
 A sellable item in the Catalog, identified by SKU, with category-specific attributes and one or more Variants.

@@ -1,0 +1,89 @@
+{
+  "realm": "ecomm",
+  "displayName": "Ecomm",
+  "enabled": true,
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "verifyEmail": false,
+  "sslRequired": "external",
+  "accessTokenLifespan": 900,
+  "roles": {
+    "realm": [
+      { "name": "CUSTOMER", "description": "A Customer who browses, buys and manages Orders." },
+      { "name": "STAFF", "description": "A back-office person." },
+      {
+        "name": "default-roles-ecomm",
+        "description": "Granted to every new user, including self-registered ones.",
+        "composite": true,
+        "composites": { "realm": ["CUSTOMER"] }
+      }
+    ]
+  },
+  "defaultRole": { "name": "default-roles-ecomm" },
+  "clients": [
+    {
+      "clientId": "storefront",
+      "name": "Storefront",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": ["http://localhost:8080/*", "http://localhost:5173/*"],
+      "webOrigins": ["+"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:8080/*##http://localhost:5173/*"
+      }
+    },
+    {
+      "clientId": "admin-console",
+      "name": "Admin Console (reserved for Sprint 2)",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [],
+      "webOrigins": [],
+      "attributes": { "pkce.code.challenge.method": "S256" }
+    },
+    {
+      "clientId": "dev-cli",
+      "name": "Direct grant for local development and tests only",
+      "description": "Password grant for curl and tests. Never enable outside local development.",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true
+    }
+  ],
+  "users": [
+    {
+      "username": "demo@ecomm.local",
+      "email": "demo@ecomm.local",
+      "emailVerified": true,
+      "firstName": "Demo",
+      "lastName": "Customer",
+      "enabled": true,
+      "credentials": [{ "type": "password", "value": "demo", "temporary": false }],
+      "realmRoles": ["default-roles-ecomm"]
+    },
+    {
+      "username": "staff@ecomm.local",
+      "email": "staff@ecomm.local",
+      "emailVerified": true,
+      "firstName": "Staff",
+      "lastName": "Member",
+      "enabled": true,
+      "credentials": [{ "type": "password", "value": "staff", "temporary": false }],
+      "realmRoles": ["STAFF"]
+    }
+  ]
+}

@@ -23,7 +23,11 @@ import com.tngtech.archunit.lang.ArchRule;
 public final class HexagonalRules {
 
   private static final String[] FRAMEWORKS = {
-    "org.springframework..", "jakarta..", "org.keycloak..", "com.ecomm.commons.web.."
+    "org.springframework..",
+    "jakarta..",
+    "org.keycloak..",
+    "com.ecomm.commons.web..",
+    "com.ecomm.commons.security.."
   };
 
   private HexagonalRules() {}

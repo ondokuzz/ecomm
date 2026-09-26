@@ -35,8 +35,12 @@ services:
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.7.4
-    command: ["start-dev"]
+    # Imports the ecomm realm on first start; an existing realm is left alone, so after changing
+    # the realm file, delete the realm (or the postgres-data volume) to re-import it.
+    command: ["start-dev", "--import-realm"]
     environment:
+      # Tokens carry this browser-facing issuer; services fetch keys from keycloak:8080 instead.
+      KC_HOSTNAME: http://localhost:8180
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
       KC_DB_USERNAME: ecomm
@@ -45,6 +49,8 @@ services:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
     ports: ["${KEYCLOAK_PORT:-8180}:8080"]
+    volumes:
+      - ../../services/identity-access/realm:/opt/keycloak/data/import:ro
     depends_on:
       postgres: { condition: service_healthy }
     healthcheck:

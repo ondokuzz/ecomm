@@ -15,7 +15,7 @@ public class PingService implements PingUseCase {
   }
 
   @Override
-  public Pong ping() {
-    return new Pong(serviceName, timeSource.now());
+  public Pong ping(String customerId) {
+    return new Pong(serviceName, customerId, timeSource.now());
   }
 }

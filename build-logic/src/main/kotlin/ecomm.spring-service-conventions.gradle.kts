@@ -11,6 +11,7 @@ dependencies {
   implementation(project(":platform:service-commons"))
   implementation("org.springframework.boot:spring-boot-starter-webmvc")
   implementation("org.springframework.boot:spring-boot-starter-actuator")
+  implementation("org.springframework.boot:spring-boot-starter-security-oauth2-resource-server")
 
   testImplementation(testFixtures(project(":platform:service-commons")))
   testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")

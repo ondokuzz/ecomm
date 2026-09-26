@@ -4,7 +4,7 @@
 
 | Context | Lives at | Owns |
 |---|---|---|
-| Identity & Access | `services/identity-access` | Customer and staff authentication, roles and permissions |
+| Identity & Access | Keycloak realm `ecomm` (config in `services/identity-access`) | Customer and Staff authentication, roles and permissions |
 | Catalog | `services/catalog` | Products, Variants, categories, specs, pricing |
 | Search & Discovery | `services/search-discovery` | Faceted browse/filter — a read projection over Catalog |
 | Reviews & Ratings | `services/reviews-ratings` | Verified-purchase reviews and ratings |

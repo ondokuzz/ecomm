@@ -4,5 +4,5 @@ import com.ecomm.template.domain.Pong;
 
 public interface PingUseCase {
 
-  Pong ping();
+  Pong ping(String customerId);
 }
