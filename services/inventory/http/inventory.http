@@ -1,0 +1,60 @@
+# Exercises every Inventory endpoint against the compose stack (`docker compose up -d --build`).
+# Run the requests top to bottom in the IntelliJ HTTP client; the token request stores a token for
+# the ones after it.
+
+@inventory = http://localhost:8082
+@keycloak = http://localhost:8180/realms/ecomm/protocol/openid-connect/token
+
+### Customer token
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=dev-cli&username=demo@ecomm.local&password=demo
+
+> {% client.global.set("customerToken", response.body.access_token); %}
+
+### A Variant's stock, no token needed
+GET {{inventory}}/stock/PHN-PIXEL-9
+
+### An unknown Variant: 404
+GET {{inventory}}/stock/NO-SUCH-VARIANT
+
+### Decrement a batch: 200 with the new stock of each Variant
+POST {{inventory}}/stock/decrement
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"items": [
+  {"variantId": "PHN-PIXEL-9", "quantity": 1},
+  {"variantId": "AUD-JBL-FLIP-6", "quantity": 2}
+]}
+
+### A batch that would take a Variant negative: 409, and nothing changes
+POST {{inventory}}/stock/decrement
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"items": [
+  {"variantId": "PHN-PIXEL-9", "quantity": 1},
+  {"variantId": "AUD-SONOS-ERA-100", "quantity": 1000}
+]}
+
+### A batch with an unknown Variant: 404, and nothing changes
+POST {{inventory}}/stock/decrement
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"items": [{"variantId": "NO-SUCH-VARIANT", "quantity": 1}]}
+
+### A non-positive quantity: 400
+POST {{inventory}}/stock/decrement
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"items": [{"variantId": "PHN-PIXEL-9", "quantity": 0}]}
+
+### Decrementing without a token: 401
+POST {{inventory}}/stock/decrement
+Content-Type: application/json
+
+{"items": [{"variantId": "PHN-PIXEL-9", "quantity": 1}]}

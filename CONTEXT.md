@@ -24,6 +24,10 @@ _Avoid_: Department, Collection
 A specific purchasable version of a Product (e.g. a color/storage combination), each with its own stock level, identified by its Variant ID. Until multi-Variant Products arrive, every Product has exactly one Variant, whose Variant ID is the Product's SKU.
 _Avoid_: Option, Configuration
 
+**Stock**:
+How many units of a Variant are available to sell, counted per Variant ID and never negative. Inventory owns Stock. A checkout decrements the Stock of several Variants as one batch that applies whole or not at all.
+_Avoid_: Inventory (that's the context, not the count)
+
 **Price**:
 What a Variant sells for, as `Money`: an amount in the currency's minor unit. Catalog owns Price. A Cart holds no authoritative price: whatever a Cart shows is a copy, and the Price that counts is always the one Catalog holds now.
 _Avoid_: Cost (what the platform pays a supplier)

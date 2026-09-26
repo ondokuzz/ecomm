@@ -6,4 +6,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "ecomm"
 
-include(":platform:service-commons", ":platform:service-template", ":services:catalog")
+include(":platform:service-commons", ":platform:service-template", ":services:catalog", ":services:inventory")
