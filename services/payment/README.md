@@ -12,12 +12,15 @@ event-sourced rebuild in Sprint 4 (see the [roadmap](../../docs/roadmap.md)).
 
 ## API
 
-Every endpoint needs a token.
+Every endpoint needs a token with the `CUSTOMER` role. A Payment belongs to the Customer who
+authorized it (the token's `sub`), and only they can read it: another Customer's Payment is a 404,
+the same as an unknown one, so its existence never leaks. Staff have no Payments: a token without
+`CUSTOMER` gets 403.
 
 | Endpoint | |
 |---|---|
 | `POST /payments` | Authorizes an Order's amount; 201 with the Payment, its URL in `Location` |
-| `GET /payments/{id}` | The Payment; 404 for an unknown ID |
+| `GET /payments/{id}` | The Customer's Payment; 404 for an unknown ID or another Customer's |
 
 A request looks like `{"orderId": "order-1", "amount": {"amountMinor": 79900, "currency": "EUR"}}`,
 the amount as `Money`: an integer in the currency's minor unit and an ISO 4217 code. A Payment

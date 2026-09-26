@@ -20,14 +20,15 @@ public class PaymentService implements AuthorizePaymentUseCase, FindPaymentUseCa
   }
 
   @Override
-  public Payment authorize(AuthorizationRequest request) {
-    var payment = Payment.authorized(UUID.randomUUID(), request, gateway.authorize(request));
+  public Payment authorize(String customerId, AuthorizationRequest request) {
+    var payment =
+        Payment.authorized(UUID.randomUUID(), customerId, request, gateway.authorize(request));
     payments.add(payment);
     return payment;
   }
 
   @Override
-  public Optional<Payment> payment(UUID id) {
-    return payments.find(id);
+  public Optional<Payment> payment(String customerId, UUID id) {
+    return payments.find(id).filter(payment -> payment.belongsTo(customerId));
   }
 }

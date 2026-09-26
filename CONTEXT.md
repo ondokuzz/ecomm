@@ -49,7 +49,7 @@ The lifecycle stage of an Order: `Placed → Paid → Fulfilled → Shipped → 
 _Avoid_: State (Status is the domain term; state is a general programming concept)
 
 **Payment**:
-An Order's amount, as `Money`, taken through a payment gateway and recorded with the gateway's reference for it. A Payment starts `AUTHORIZED`: the gateway has approved the amount but not yet captured it. Capture and refund come later.
+An Order's amount, as `Money`, taken through a payment gateway and recorded with the gateway's reference for it. A Payment starts `AUTHORIZED`: the gateway has approved the amount but not yet captured it. It belongs to the Customer who authorized it, and only they can see it. Capture and refund come later.
 _Avoid_: Charge, Transaction
 
 **Fulfillment**:

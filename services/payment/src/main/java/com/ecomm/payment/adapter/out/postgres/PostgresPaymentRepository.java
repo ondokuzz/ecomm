@@ -18,6 +18,7 @@ class PostgresPaymentRepository implements PaymentRepository {
       (rs, row) ->
           new Payment(
               rs.getObject("id", UUID.class),
+              rs.getString("customer_id"),
               rs.getString("order_id"),
               Money.of(rs.getLong("amount_minor"), rs.getString("currency")),
               PaymentStatus.valueOf(rs.getString("status")),
@@ -33,10 +34,13 @@ class PostgresPaymentRepository implements PaymentRepository {
   public void add(Payment payment) {
     jdbc.sql(
             """
-            INSERT INTO payment (id, order_id, amount_minor, currency, status, gateway_reference)
-            VALUES (:id, :orderId, :amountMinor, :currency, :status, :gatewayReference)
+            INSERT INTO payment
+              (id, customer_id, order_id, amount_minor, currency, status, gateway_reference)
+            VALUES
+              (:id, :customerId, :orderId, :amountMinor, :currency, :status, :gatewayReference)
             """)
         .param("id", payment.id())
+        .param("customerId", payment.customerId())
         .param("orderId", payment.orderId())
         .param("amountMinor", payment.amount().amountMinor())
         .param("currency", payment.amount().currency().getCurrencyCode())
@@ -49,7 +53,7 @@ class PostgresPaymentRepository implements PaymentRepository {
   public Optional<Payment> find(UUID id) {
     return jdbc.sql(
             """
-            SELECT id, order_id, amount_minor, currency, status, gateway_reference
+            SELECT id, customer_id, order_id, amount_minor, currency, status, gateway_reference
             FROM payment WHERE id = :id
             """)
         .param("id", id)

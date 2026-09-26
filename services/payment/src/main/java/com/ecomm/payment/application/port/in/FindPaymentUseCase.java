@@ -6,5 +6,6 @@ import java.util.UUID;
 
 public interface FindPaymentUseCase {
 
-  Optional<Payment> payment(UUID id);
+  /** Empty unless the Payment exists and belongs to this Customer. */
+  Optional<Payment> payment(String customerId, UUID id);
 }
