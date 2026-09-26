@@ -2,6 +2,7 @@ package com.ecomm.cart;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.ecomm.commons.security.FakeKeycloak;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -10,7 +11,10 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 
-/** A Cart belongs to the Customer whose token made it; nobody else can see or change it. */
+/**
+ * A Cart belongs to the Customer whose token made it; nobody else can see or change it, and only
+ * Customers have one.
+ */
 class CartIsolationApiTest extends CartApiTest {
 
   @Test
@@ -63,6 +67,21 @@ class CartIsolationApiTest extends CartApiTest {
         .exchange()
         .expectStatus()
         .isUnauthorized()
+        .expectHeader()
+        .contentType(MediaType.APPLICATION_PROBLEM_JSON);
+  }
+
+  @ParameterizedTest(name = "{0} {1}")
+  @MethodSource("everyEndpoint")
+  void onlyCustomersHaveACart(HttpMethod method, String path) {
+    http.method(method)
+        .uri(path)
+        .headers(h -> h.setBearerAuth(FakeKeycloak.token("staff-7", "STAFF")))
+        .contentType(MediaType.APPLICATION_JSON)
+        .body("{\"quantity\": 1}")
+        .exchange()
+        .expectStatus()
+        .isForbidden()
         .expectHeader()
         .contentType(MediaType.APPLICATION_PROBLEM_JSON);
   }

@@ -55,3 +55,15 @@ Authorization: Bearer {{customerToken}}
 
 ### Without a token: 401
 GET {{cart}}/cart
+
+### Staff have no Cart: 403
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=dev-cli&username=staff@ecomm.local&password=staff
+
+> {% client.global.set("staffToken", response.body.access_token); %}
+
+###
+GET {{cart}}/cart
+Authorization: Bearer {{staffToken}}

@@ -9,8 +9,9 @@ exists or is in stock; checkout does that against Catalog and Inventory.
 
 ## API
 
-Every endpoint needs a token, and acts on the Cart of the Customer it names (its `sub`). No one can
-reach another Customer's Cart.
+Every endpoint needs a token with the `CUSTOMER` role, and acts on the Cart of the Customer it
+names (its `sub`). No one can reach another Customer's Cart. Staff have no Cart: a token without
+`CUSTOMER` gets 403.
 
 | Endpoint | |
 |---|---|

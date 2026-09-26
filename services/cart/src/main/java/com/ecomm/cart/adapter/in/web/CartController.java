@@ -8,6 +8,7 @@ import com.ecomm.cart.domain.InvalidCartItemException;
 import com.ecomm.commons.security.CurrentCustomer;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,8 +19,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/** The calling Customer's own Cart; every endpoint needs a token, whose {@code sub} picks it. */
+/**
+ * The calling Customer's own Cart. Every endpoint needs a token with the {@code CUSTOMER} role,
+ * whose {@code sub} picks the Cart; Staff have no Cart.
+ */
 @RestController
+@PreAuthorize("hasRole('CUSTOMER')")
 @RequestMapping("/cart")
 class CartController {
 
