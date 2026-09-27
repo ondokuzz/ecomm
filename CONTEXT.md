@@ -36,6 +36,10 @@ _Avoid_: Cost (what the platform pays a supplier)
 A Customer's in-progress, unconfirmed selection of Variants and quantities. Ephemeral — it is not an Order until checkout completes, and it lapses 7 days after the Customer last changed it. Each Customer has at most one Cart, and only they can see or change it.
 _Avoid_: Basket, Bag
 
+**Checkout**:
+The step where a Customer confirms their Cart: its Variants are priced, their Stock is taken, payment is authorized, and an Order is placed.
+_Avoid_: Purchase, Order placement
+
 **Reservation**:
 A temporary hold on a Variant's stock, created when checkout starts and either released on abandonment or converted to a permanent stock decrement on payment success.
 _Avoid_: Lock, Hold
