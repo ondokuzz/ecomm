@@ -3,26 +3,24 @@ package com.ecomm.checkoutpricing.adapter.in.web;
 import com.ecomm.checkoutpricing.application.port.in.CheckoutUseCase;
 import com.ecomm.checkoutpricing.application.port.in.DownstreamFailureException;
 import com.ecomm.checkoutpricing.application.port.in.ServiceTokenUnavailableException;
-import com.ecomm.checkoutpricing.domain.Customer;
 import com.ecomm.checkoutpricing.domain.EmptyCartException;
 import com.ecomm.checkoutpricing.domain.MixedCurrencyException;
 import com.ecomm.checkoutpricing.domain.OutOfStockException;
 import com.ecomm.checkoutpricing.domain.UnknownVariantsException;
+import com.ecomm.commons.security.CurrentCustomer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The calling Customer checks out their own Cart. Needs a {@code CUSTOMER} token, which is also the
- * one Checkout forwards to Cart.
+ * The calling Customer checks out their own Cart. Needs a {@code CUSTOMER} token, which Checkout
+ * also forwards to Cart.
  */
 @RestController
 @RequestMapping("/checkout")
@@ -38,9 +36,8 @@ class CheckoutController {
 
   @PostMapping
   @PreAuthorize("hasRole('CUSTOMER')")
-  CheckoutResponse checkout(@AuthenticationPrincipal Jwt token) {
-    return CheckoutResponse.of(
-        checkout.checkout(new Customer(token.getSubject(), token.getTokenValue())));
+  CheckoutResponse checkout(CurrentCustomer customer) {
+    return CheckoutResponse.of(checkout.checkout(customer.id()));
   }
 
   @ExceptionHandler(EmptyCartException.class)

@@ -18,11 +18,11 @@ import org.springframework.web.client.RestClient;
 /**
  * The {@link RestClient}s behind the outbound ports.
  *
- * <p>Cart and Catalog get plain clients: Cart calls carry the Customer's token, set per request,
- * and Catalog reads are public. Inventory, Order Management and Payment get clients that carry
- * Checkout's own token from the {@code checkout} client-credentials registration (Identity & Access
- * ADR 0002). That token is cached in memory, replaced once it has less than a minute left, and
- * replaced on a 401 before the one retry.
+ * <p>Cart calls carry the token of the Customer making the current request, and Catalog reads are
+ * public. Inventory, Order Management and Payment get clients that carry Checkout's own token from
+ * the {@code checkout} client-credentials registration (Identity & Access ADR 0002). That token is
+ * cached in memory, replaced once it has less than a minute left, and replaced on a 401 before the
+ * one retry.
  */
 @Configuration
 @EnableConfigurationProperties(DownstreamProperties.class)
@@ -58,7 +58,11 @@ class HttpClientsConfiguration {
 
   @Bean
   RestClient cartRestClient(RestClient.Builder builder, DownstreamProperties urls) {
-    return builder.clone().baseUrl(urls.cartUrl()).build();
+    return builder
+        .clone()
+        .baseUrl(urls.cartUrl())
+        .requestInterceptor(new ForwardCustomerToken())
+        .build();
   }
 
   @Bean

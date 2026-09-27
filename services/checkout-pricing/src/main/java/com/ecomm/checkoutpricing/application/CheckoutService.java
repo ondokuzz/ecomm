@@ -9,7 +9,6 @@ import com.ecomm.checkoutpricing.application.port.out.PaymentPort;
 import com.ecomm.checkoutpricing.application.port.out.TaxCalculator;
 import com.ecomm.checkoutpricing.domain.CartLine;
 import com.ecomm.checkoutpricing.domain.CheckoutResult;
-import com.ecomm.checkoutpricing.domain.Customer;
 import com.ecomm.checkoutpricing.domain.EmptyCartException;
 import com.ecomm.checkoutpricing.domain.OrderStatus;
 import com.ecomm.checkoutpricing.domain.PricedCart;
@@ -50,25 +49,31 @@ public class CheckoutService implements CheckoutUseCase {
   }
 
   @Override
-  public CheckoutResult checkout(Customer customer) {
-    var lines = cart.lines(customer);
+  public CheckoutResult checkout(String customerId) {
+    var lines = cart.lines();
     if (lines.isEmpty()) {
       throw new EmptyCartException();
     }
     var priced = price(lines);
-    var total = priced.total(taxes.tax(priced));
+    var tax = taxes.tax(priced);
+    if (tax.amountMinor() != 0) {
+      // An Order can't record tax yet, so its total would fall short of the Payment (#14).
+      throw new IllegalStateException(
+          "Non-zero tax isn't supported until an Order carries its tax (#14)");
+    }
+    var total = priced.total(tax);
 
-    var orderId = orders.place(customer.id(), priced.lines());
+    var orderId = orders.place(customerId, priced.lines());
     try {
       inventory.decrement(lines);
-      payments.authorize(customer.id(), orderId, total);
-      orders.changeStatus(customer.id(), orderId, OrderStatus.PAID);
+      payments.authorize(customerId, orderId, total);
+      orders.changeStatus(customerId, orderId, OrderStatus.PAID);
     } catch (RuntimeException e) {
-      cancel(customer, orderId, e);
+      cancel(customerId, orderId, e);
       throw e;
     }
 
-    clearCart(customer, orderId);
+    clearCart(orderId);
     return new CheckoutResult(orderId, OrderStatus.PAID);
   }
 
@@ -90,9 +95,9 @@ public class CheckoutService implements CheckoutUseCase {
   }
 
   /** Cancels the Order a failed step leaves behind; a failure to cancel rides on {@code cause}. */
-  private void cancel(Customer customer, String orderId, RuntimeException cause) {
+  private void cancel(String customerId, String orderId, RuntimeException cause) {
     try {
-      orders.changeStatus(customer.id(), orderId, OrderStatus.CANCELLED);
+      orders.changeStatus(customerId, orderId, OrderStatus.CANCELLED);
     } catch (RuntimeException e) {
       log.log(System.Logger.Level.ERROR, "Order " + orderId + " could not be cancelled", e);
       cause.addSuppressed(e);
@@ -103,9 +108,9 @@ public class CheckoutService implements CheckoutUseCase {
    * The Order is paid by now, so a Cart that can't be cleared doesn't undo it: the Customer keeps a
    * stale Cart rather than losing a paid Order.
    */
-  private void clearCart(Customer customer, String orderId) {
+  private void clearCart(String orderId) {
     try {
-      cart.clear(customer);
+      cart.clear();
     } catch (RuntimeException e) {
       log.log(
           System.Logger.Level.WARNING, "Cart not cleared after Order " + orderId + " was paid", e);

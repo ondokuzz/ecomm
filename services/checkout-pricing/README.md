@@ -22,7 +22,10 @@ The steps run in order, each against the service that owns it:
 8. return the Order's ID and Order Status.
 
 Tax comes from the `TaxCalculator` port. For now that is `ZeroTaxCalculator`
-([ADR 0005](../../docs/adr/0005-localization-compliance-abstracted.md)).
+([ADR 0005](../../docs/adr/0005-localization-compliance-abstracted.md)). An Order can't record tax
+yet, so a non-zero tax would authorize a Payment larger than the Order's total. Until
+[#14](https://github.com/ondokuzz/ecomm/issues/14), checkout refuses non-zero tax with a 500
+before any Order exists.
 
 Until multi-Variant Products arrive, a Variant ID is its Product's SKU, so a line is priced from
 `GET /products/{variantId}` and the Variant with that ID in it.
@@ -50,7 +53,9 @@ Customer keeps the paid Order either way.
 Checkout calls each service with the identity that service expects
 ([ADR 0002](../identity-access/docs/adr/0002-service-identity-by-client-credentials.md)):
 
-- **Cart** (read, clear): the Customer's own JWT, forwarded as is.
+- **Cart** (read, clear): the Customer's own JWT, forwarded as is. The Cart adapter takes it from
+  the current request's security context, so the use case and its ports only ever see the
+  Customer ID.
 - **Catalog**: no token; reads are public.
 - **Inventory, Order Management, Payment**: Checkout's own token, from the confidential `checkout`
   client (client credentials, `CHECKOUT` role). The Customer goes in the body as `customerId`, on

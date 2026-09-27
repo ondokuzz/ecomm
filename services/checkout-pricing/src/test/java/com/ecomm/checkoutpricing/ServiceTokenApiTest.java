@@ -112,6 +112,22 @@ class ServiceTokenApiTest extends CheckoutApiTest {
   }
 
   @Test
+  void a403KeepsTheCachedTokenAndIsNotRetried() {
+    stubSuccessfulCheckout();
+    stubPayment(
+        aResponse()
+            .withStatus(403)
+            .withHeader("WWW-Authenticate", "Bearer error=\"insufficient_scope\""));
+    checkout().expectStatus().isEqualTo(502);
+
+    stubPayment();
+    checkout().expectStatus().isOk();
+
+    DOWNSTREAM.verify(2, postRequestedFor(urlEqualTo("/payments")));
+    DOWNSTREAM.verify(1, postRequestedFor(urlEqualTo(TOKEN_PATH)));
+  }
+
+  @Test
   void keycloakBeingDownBeforeTheOrderExistsIsA503() {
     stubSuccessfulCheckout();
     DOWNSTREAM.stubFor(

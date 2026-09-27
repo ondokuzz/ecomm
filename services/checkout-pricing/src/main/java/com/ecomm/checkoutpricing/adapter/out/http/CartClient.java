@@ -2,13 +2,15 @@ package com.ecomm.checkoutpricing.adapter.out.http;
 
 import com.ecomm.checkoutpricing.application.port.out.CartPort;
 import com.ecomm.checkoutpricing.domain.CartLine;
-import com.ecomm.checkoutpricing.domain.Customer;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
-/** Cart's {@code /cart}, called with the Customer's own token, since Cart is theirs. */
+/**
+ * Cart's {@code /cart}, called with the Customer's own token, since Cart is theirs; {@link
+ * ForwardCustomerToken} adds it.
+ */
 @Component
 class CartClient implements CartPort {
 
@@ -23,16 +25,9 @@ class CartClient implements CartPort {
   private record Item(String variantId, int quantity) {}
 
   @Override
-  public List<CartLine> lines(Customer customer) {
+  public List<CartLine> lines() {
     var cart =
-        Downstream.call(
-            "Cart",
-            () ->
-                http.get()
-                    .uri("/cart")
-                    .headers(h -> h.setBearerAuth(customer.accessToken()))
-                    .retrieve()
-                    .body(CartBody.class));
+        Downstream.call("Cart", () -> http.get().uri("/cart").retrieve().body(CartBody.class));
     if (cart == null || cart.items() == null) {
       return List.of();
     }
@@ -40,14 +35,7 @@ class CartClient implements CartPort {
   }
 
   @Override
-  public void clear(Customer customer) {
-    Downstream.run(
-        "Cart",
-        () ->
-            http.delete()
-                .uri("/cart")
-                .headers(h -> h.setBearerAuth(customer.accessToken()))
-                .retrieve()
-                .toBodilessEntity());
+  public void clear() {
+    Downstream.run("Cart", () -> http.delete().uri("/cart").retrieve().toBodilessEntity());
   }
 }
