@@ -2,6 +2,7 @@ package com.ecomm.inventory;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.ecomm.commons.security.FakeKeycloak;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -165,6 +166,23 @@ class DecrementStockApiTest extends InventoryApiTest {
     assertThat(quantityOf("TEST-AUTH")).isEqualTo(8);
   }
 
+  @ParameterizedTest
+  @ValueSource(strings = {"CUSTOMER", "STAFF"})
+  void onlyCheckoutCanDecrement(String role) {
+    http.post()
+        .uri("/stock/decrement")
+        .headers(h -> h.setBearerAuth(FakeKeycloak.token("someone-" + role, role)))
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(one("TEST-AUTH", 1))
+        .exchange()
+        .expectStatus()
+        .isForbidden()
+        .expectHeader()
+        .contentType(MediaType.APPLICATION_PROBLEM_JSON);
+
+    assertThat(quantityOf("TEST-AUTH")).isEqualTo(8);
+  }
+
   private static String one(String variantId, int quantity) {
     return """
         {"items": [{"variantId": "%s", "quantity": %d}]}
@@ -175,7 +193,7 @@ class DecrementStockApiTest extends InventoryApiTest {
   private RestTestClient.ResponseSpec decrement(String body) {
     return http.post()
         .uri("/stock/decrement")
-        .headers(h -> h.setBearerAuth(customerToken()))
+        .headers(h -> h.setBearerAuth(checkoutToken()))
         .contentType(MediaType.APPLICATION_JSON)
         .body(body)
         .exchange();

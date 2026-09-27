@@ -1,28 +1,43 @@
 # Exercises every Payment endpoint against the compose stack (`docker compose up -d --build`).
-# Run the requests top to bottom in the IntelliJ HTTP client; the token request stores a token for
-# the ones after it.
+# Run the requests top to bottom in the IntelliJ HTTP client; the token requests store tokens for
+# the ones after them.
 
 @payment = http://localhost:8084
 @keycloak = http://localhost:8180/realms/ecomm/protocol/openid-connect/token
+@userinfo = http://localhost:8180/realms/ecomm/protocol/openid-connect/userinfo
 
 ### Customer token
 POST {{keycloak}}
 Content-Type: application/x-www-form-urlencoded
 
-grant_type=password&client_id=dev-cli&username=demo@ecomm.local&password=demo
+grant_type=password&client_id=dev-cli&username=demo@ecomm.local&password=demo&scope=openid
 
 > {% client.global.set("customerToken", response.body.access_token); %}
 
-### Authorize an Order's payment: 201 with the Payment, AUTHORIZED by the mock gateway
-POST {{payment}}/payments
+### The demo Customer's ID: the sub Checkout names in the body
+GET {{userinfo}}
 Authorization: Bearer {{customerToken}}
+
+> {% client.global.set("customerId", response.body.sub); %}
+
+### Checkout token: Checkout's own identity, for the internal endpoints
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&client_id=checkout&client_secret=checkout-dev-secret
+
+> {% client.global.set("checkoutToken", response.body.access_token); %}
+
+### Checkout authorizes an Order's payment for the Customer: 201, AUTHORIZED by the mock gateway
+POST {{payment}}/payments
+Authorization: Bearer {{checkoutToken}}
 Content-Type: application/json
 
-{"orderId": "order-1", "amount": {"amountMinor": 79900, "currency": "EUR"}}
+{"customerId": "{{customerId}}", "orderId": "order-1", "amount": {"amountMinor": 79900, "currency": "EUR"}}
 
 > {% client.global.set("paymentId", response.body.id); %}
 
-### Read it back
+### The Customer reads it back with their own token
 GET {{payment}}/payments/{{paymentId}}
 Authorization: Bearer {{customerToken}}
 
@@ -32,23 +47,30 @@ Authorization: Bearer {{customerToken}}
 
 ### An amount that isn't positive: 400
 POST {{payment}}/payments
-Authorization: Bearer {{customerToken}}
+Authorization: Bearer {{checkoutToken}}
 Content-Type: application/json
 
-{"orderId": "order-1", "amount": {"amountMinor": 0, "currency": "EUR"}}
+{"customerId": "{{customerId}}", "orderId": "order-1", "amount": {"amountMinor": 0, "currency": "EUR"}}
 
 ### An unknown currency: 400
+POST {{payment}}/payments
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}", "orderId": "order-1", "amount": {"amountMinor": 79900, "currency": "XYZ"}}
+
+### A Customer can't authorize a payment, only Checkout can: 403
 POST {{payment}}/payments
 Authorization: Bearer {{customerToken}}
 Content-Type: application/json
 
-{"orderId": "order-1", "amount": {"amountMinor": 79900, "currency": "XYZ"}}
+{"customerId": "{{customerId}}", "orderId": "order-1", "amount": {"amountMinor": 79900, "currency": "EUR"}}
 
 ### Without a token: 401
 POST {{payment}}/payments
 Content-Type: application/json
 
-{"orderId": "order-1", "amount": {"amountMinor": 79900, "currency": "EUR"}}
+{"customerId": "{{customerId}}", "orderId": "order-1", "amount": {"amountMinor": 79900, "currency": "EUR"}}
 
 ### Staff have no Payments: 403
 POST {{keycloak}}

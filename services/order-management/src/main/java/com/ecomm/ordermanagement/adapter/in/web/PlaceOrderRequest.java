@@ -6,11 +6,11 @@ import com.ecomm.ordermanagement.domain.OrderLine;
 import java.util.List;
 
 /**
- * The Order Lines priced at checkout: {@code {"lines": [{"variantId", "quantity", "unitPrice":
- * {"amountMinor", "currency"}}]}}. The values are taken raw so that {@code 1.5} or {@code "2"} are
- * rejected rather than coerced.
+ * The Customer and the Order Lines priced at checkout: {@code {"customerId", "lines":
+ * [{"variantId", "quantity", "unitPrice": {"amountMinor", "currency"}}]}}. The values are taken raw
+ * so that {@code 1.5} or {@code "2"} are rejected rather than coerced.
  */
-record PlaceOrderRequest(List<Line> lines) {
+record PlaceOrderRequest(Object customerId, List<Line> lines) {
 
   record Line(Object variantId, Object quantity, Amount unitPrice) {
 
@@ -41,6 +41,10 @@ record PlaceOrderRequest(List<Line> lines) {
         throw new InvalidOrderException("unknown currency " + code);
       }
     }
+  }
+
+  String toCustomerId() {
+    return CustomerIds.from(customerId);
   }
 
   List<OrderLine> toOrderLines() {

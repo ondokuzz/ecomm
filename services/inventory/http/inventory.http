@@ -1,6 +1,6 @@
 # Exercises every Inventory endpoint against the compose stack (`docker compose up -d --build`).
-# Run the requests top to bottom in the IntelliJ HTTP client; the token request stores a token for
-# the ones after it.
+# Run the requests top to bottom in the IntelliJ HTTP client; the token requests store tokens for
+# the ones after them.
 
 @inventory = http://localhost:8082
 @keycloak = http://localhost:8180/realms/ecomm/protocol/openid-connect/token
@@ -13,6 +13,14 @@ grant_type=password&client_id=dev-cli&username=demo@ecomm.local&password=demo
 
 > {% client.global.set("customerToken", response.body.access_token); %}
 
+### Checkout token: Checkout's own identity, for the internal endpoints
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&client_id=checkout&client_secret=checkout-dev-secret
+
+> {% client.global.set("checkoutToken", response.body.access_token); %}
+
 ### A Variant's stock, no token needed
 GET {{inventory}}/stock/PHN-PIXEL-9
 
@@ -21,7 +29,7 @@ GET {{inventory}}/stock/NO-SUCH-VARIANT
 
 ### Decrement a batch: 200 with the new stock of each Variant
 POST {{inventory}}/stock/decrement
-Authorization: Bearer {{customerToken}}
+Authorization: Bearer {{checkoutToken}}
 Content-Type: application/json
 
 {"items": [
@@ -31,7 +39,7 @@ Content-Type: application/json
 
 ### A batch that would take a Variant negative: 409, and nothing changes
 POST {{inventory}}/stock/decrement
-Authorization: Bearer {{customerToken}}
+Authorization: Bearer {{checkoutToken}}
 Content-Type: application/json
 
 {"items": [
@@ -41,17 +49,24 @@ Content-Type: application/json
 
 ### A batch with an unknown Variant: 404, and nothing changes
 POST {{inventory}}/stock/decrement
-Authorization: Bearer {{customerToken}}
+Authorization: Bearer {{checkoutToken}}
 Content-Type: application/json
 
 {"items": [{"variantId": "NO-SUCH-VARIANT", "quantity": 1}]}
 
 ### A non-positive quantity: 400
 POST {{inventory}}/stock/decrement
-Authorization: Bearer {{customerToken}}
+Authorization: Bearer {{checkoutToken}}
 Content-Type: application/json
 
 {"items": [{"variantId": "PHN-PIXEL-9", "quantity": 0}]}
+
+### A Customer can't decrement stock, only Checkout can: 403
+POST {{inventory}}/stock/decrement
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"items": [{"variantId": "PHN-PIXEL-9", "quantity": 1}]}
 
 ### Decrementing without a token: 401
 POST {{inventory}}/stock/decrement

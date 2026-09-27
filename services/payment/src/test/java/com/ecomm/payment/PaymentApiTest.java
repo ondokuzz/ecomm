@@ -34,14 +34,24 @@ abstract class PaymentApiTest {
 
   @Autowired RestTestClient http;
 
+  /**
+   * The token of {@code customer-42}, the Customer every test authorizes for unless it names
+   * another.
+   */
   static String customerToken() {
     return FakeKeycloak.token("customer-42", "CUSTOMER");
   }
 
+  /** Checkout's own token: the only caller allowed to authorize a payment. */
+  static String checkoutToken() {
+    return FakeKeycloak.token("checkout", "CHECKOUT");
+  }
+
+  /** Authorizes as Checkout; the body names the Customer. */
   RestTestClient.ResponseSpec authorize(String body) {
     return http.post()
         .uri("/payments")
-        .headers(h -> h.setBearerAuth(customerToken()))
+        .headers(h -> h.setBearerAuth(checkoutToken()))
         .contentType(MediaType.APPLICATION_JSON)
         .body(body)
         .exchange();

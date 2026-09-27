@@ -14,6 +14,10 @@
       { "name": "CUSTOMER", "description": "A Customer who browses, buys and manages Orders." },
       { "name": "STAFF", "description": "A back-office person." },
       {
+        "name": "CHECKOUT",
+        "description": "The Checkout service, calling other services' internal endpoints."
+      },
+      {
         "name": "default-roles-ecomm",
         "description": "Granted to every new user, including self-registered ones.",
         "composite": true,
@@ -62,6 +66,20 @@
       "standardFlowEnabled": false,
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": true
+    },
+    {
+      "clientId": "checkout",
+      "name": "Checkout service",
+      "description": "Client credentials for Checkout's own calls. The secret is for local development only.",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "checkout-dev-secret",
+      "protocol": "openid-connect",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true
     }
   ],
   "users": [
@@ -84,6 +102,12 @@
       "enabled": true,
       "credentials": [{ "type": "password", "value": "staff", "temporary": false }],
       "realmRoles": ["STAFF"]
+    },
+    {
+      "username": "service-account-checkout",
+      "enabled": true,
+      "serviceAccountClientId": "checkout",
+      "realmRoles": ["CHECKOUT"]
     }
   ]
 }

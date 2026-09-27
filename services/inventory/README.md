@@ -13,7 +13,11 @@ Sprint 2, and an event-sourced rebuild in Sprint 4 (see the [roadmap](../../docs
 | Endpoint | Who | |
 |---|---|---|
 | `GET /stock/{variantId}` | anyone | `{"variantId", "quantity"}`; 404 for an unknown Variant |
-| `POST /stock/decrement` | any token | Takes a batch off stock; 200 with each Variant's new stock |
+| `POST /stock/decrement` | Checkout | Takes a batch off stock; 200 with each Variant's new stock |
+
+Decrementing needs Checkout's own token, with the `CHECKOUT` role
+([ADR 0002](../identity-access/docs/adr/0002-service-identity-by-client-credentials.md)). A Customer's
+or Staff token gets 403, and no token gets 401.
 
 A decrement looks like `{"items": [{"variantId": "PHN-PIXEL-9", "quantity": 2}, ...]}`. It applies
 in one transaction, whole or not at all:

@@ -13,7 +13,7 @@ class PaymentSecurityApiTest extends PaymentApiTest {
         .contentType(MediaType.APPLICATION_JSON)
         .body(
             """
-            {"orderId": "order-anon", "amount": {"amountMinor": 100, "currency": "EUR"}}
+            {"customerId": "customer-42", "orderId": "order-anon", "amount": {"amountMinor": 100, "currency": "EUR"}}
             """)
         .exchange()
         .expectStatus()
@@ -27,7 +27,7 @@ class PaymentSecurityApiTest extends PaymentApiTest {
     var id =
         authorize(
                 """
-                {"orderId": "order-anon-read", "amount": {"amountMinor": 100, "currency": "EUR"}}
+                {"customerId": "customer-42", "orderId": "order-anon-read", "amount": {"amountMinor": 100, "currency": "EUR"}}
                 """)
             .expectBody(PaymentView.class)
             .returnResult()

@@ -1,47 +1,69 @@
 # Exercises every Order Management endpoint against the compose stack (`docker compose up -d --build`).
-# Run the requests top to bottom in the IntelliJ HTTP client; the token request stores a token for
-# the ones after it.
+# Run the requests top to bottom in the IntelliJ HTTP client; the token requests store tokens for
+# the ones after them.
 
 @orders = http://localhost:8085
 @keycloak = http://localhost:8180/realms/ecomm/protocol/openid-connect/token
+@userinfo = http://localhost:8180/realms/ecomm/protocol/openid-connect/userinfo
 
 ### Customer token
 POST {{keycloak}}
 Content-Type: application/x-www-form-urlencoded
 
-grant_type=password&client_id=dev-cli&username=demo@ecomm.local&password=demo
+grant_type=password&client_id=dev-cli&username=demo@ecomm.local&password=demo&scope=openid
 
 > {% client.global.set("customerToken", response.body.access_token); %}
 
-### Place an Order, as Checkout does: 201 with the Order in PLACED and its total
-POST {{orders}}/orders
+### The demo Customer's ID: the sub Checkout names in the body
+GET {{userinfo}}
 Authorization: Bearer {{customerToken}}
+
+> {% client.global.set("customerId", response.body.sub); %}
+
+### Checkout token: Checkout's own identity, for the internal endpoints
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&client_id=checkout&client_secret=checkout-dev-secret
+
+> {% client.global.set("checkoutToken", response.body.access_token); %}
+
+### Checkout places an Order for the Customer: 201 with the Order in PLACED and its total
+POST {{orders}}/orders
+Authorization: Bearer {{checkoutToken}}
 Content-Type: application/json
 
-{"lines": [
+{"customerId": "{{customerId}}", "lines": [
   {"variantId": "PHN-PIXEL-9", "quantity": 2, "unitPrice": {"amountMinor": 79900, "currency": "EUR"}},
   {"variantId": "AUD-AIRPODS-PRO-2", "quantity": 1, "unitPrice": {"amountMinor": 14950, "currency": "EUR"}}
 ]}
 
 > {% client.global.set("orderId", response.body.id); %}
 
-### Read it back
+### The Customer reads it back with their own token
 GET {{orders}}/orders/{{orderId}}
 Authorization: Bearer {{customerToken}}
 
-### Mark it paid, as Checkout does after authorizing the payment
+### Checkout marks it paid after authorizing the payment
 PATCH {{orders}}/orders/{{orderId}}/status
-Authorization: Bearer {{customerToken}}
+Authorization: Bearer {{checkoutToken}}
 Content-Type: application/json
 
-{"status": "PAID"}
+{"customerId": "{{customerId}}", "status": "PAID"}
 
 ### An illegal transition, PAID to DELIVERED: 409
 PATCH {{orders}}/orders/{{orderId}}/status
-Authorization: Bearer {{customerToken}}
+Authorization: Bearer {{checkoutToken}}
 Content-Type: application/json
 
-{"status": "DELIVERED"}
+{"customerId": "{{customerId}}", "status": "DELIVERED"}
+
+### Naming a Customer who doesn't own the Order: 404
+PATCH {{orders}}/orders/{{orderId}}/status
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"customerId": "someone-else", "status": "CANCELLED"}
 
 ### The Customer's Orders, newest first
 GET {{orders}}/orders
@@ -53,13 +75,29 @@ Authorization: Bearer {{customerToken}}
 
 ### Lines in two currencies: 400
 POST {{orders}}/orders
-Authorization: Bearer {{customerToken}}
+Authorization: Bearer {{checkoutToken}}
 Content-Type: application/json
 
-{"lines": [
+{"customerId": "{{customerId}}", "lines": [
   {"variantId": "PHN-PIXEL-9", "quantity": 1, "unitPrice": {"amountMinor": 79900, "currency": "EUR"}},
   {"variantId": "AUD-AIRPODS-PRO-2", "quantity": 1, "unitPrice": {"amountMinor": 14950, "currency": "USD"}}
 ]}
+
+### A Customer can't place an Order, only Checkout can: 403
+POST {{orders}}/orders
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}", "lines": [
+  {"variantId": "PHN-PIXEL-9", "quantity": 1, "unitPrice": {"amountMinor": 1, "currency": "EUR"}}
+]}
+
+### A Customer can't change their Order's status, only Checkout can: 403
+PATCH {{orders}}/orders/{{orderId}}/status
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}", "status": "CANCELLED"}
 
 ### Without a token: 401
 GET {{orders}}/orders

@@ -17,11 +17,16 @@ public record Order(
     lines = List.copyOf(lines);
   }
 
+  /** The longest Customer ID an Order can hold. */
+  public static final int MAX_CUSTOMER_ID_LENGTH = 255;
+
   /**
-   * A new Order in {@link OrderStatus#PLACED}. Throws {@link InvalidOrderException} unless it has
-   * at least one line, each Variant appears once, and every line is in the same currency.
+   * A new Order in {@link OrderStatus#PLACED}. Throws {@link InvalidOrderException} unless it names
+   * a valid Customer, has at least one line, each Variant appears once, and every line is in the
+   * same currency.
    */
   public static Order place(UUID id, String customerId, List<OrderLine> lines, Instant placedAt) {
+    requireValidCustomerId(customerId);
     if (lines == null || lines.isEmpty()) {
       throw new InvalidOrderException("an order needs at least one line");
     }
@@ -61,6 +66,20 @@ public record Order(
       }
     }
     return new Money(totalMinor, lines.get(0).unitPrice().currency());
+  }
+
+  /**
+   * Throws {@link InvalidOrderException} unless {@code customerId} could name an Order's owner:
+   * present, not blank, and at most {@link #MAX_CUSTOMER_ID_LENGTH} characters.
+   */
+  public static void requireValidCustomerId(String customerId) {
+    if (customerId == null || customerId.isBlank()) {
+      throw new InvalidOrderException("an order needs a customerId");
+    }
+    if (customerId.length() > MAX_CUSTOMER_ID_LENGTH) {
+      throw new InvalidOrderException(
+          "a customerId is at most " + MAX_CUSTOMER_ID_LENGTH + " characters");
+    }
   }
 
   public boolean belongsTo(String customerId) {

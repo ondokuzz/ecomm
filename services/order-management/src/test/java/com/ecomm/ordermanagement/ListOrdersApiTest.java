@@ -2,7 +2,6 @@ package com.ecomm.ordermanagement;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.ecomm.commons.security.FakeKeycloak;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.ParameterizedTypeReference;
@@ -15,26 +14,25 @@ class ListOrdersApiTest extends OrderApiTest {
 
   @Test
   void aCustomerSeesOnlyTheirOwnOrdersNewestFirst() {
-    var alice = FakeKeycloak.token("customer-alice", "CUSTOMER");
-    var bob = FakeKeycloak.token("customer-bob", "CUSTOMER");
-    var first = placed(alice);
-    placed(bob);
-    var second = placed(alice);
+    var first = placed("customer-alice");
+    placed("customer-bob");
+    var second = placed("customer-alice");
 
-    assertThat(list(alice)).extracting(OrderView::id).containsExactly(second.id(), first.id());
+    assertThat(list(tokenOf("customer-alice")))
+        .extracting(OrderView::id)
+        .containsExactly(second.id(), first.id());
   }
 
   @Test
   void aListedOrderMatchesTheOrderItself() {
-    var carol = FakeKeycloak.token("customer-carol", "CUSTOMER");
-    var order = placed(carol);
+    var order = placed("customer-carol");
 
-    assertThat(list(carol)).containsExactly(order);
+    assertThat(list(tokenOf("customer-carol"))).containsExactly(order);
   }
 
   @Test
   void aCustomerWithoutOrdersGetsAnEmptyList() {
-    assertThat(list(FakeKeycloak.token("customer-new", "CUSTOMER"))).isEmpty();
+    assertThat(list(tokenOf("customer-new"))).isEmpty();
   }
 
   private List<OrderView> list(String token) {

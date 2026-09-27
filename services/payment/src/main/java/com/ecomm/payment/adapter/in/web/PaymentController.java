@@ -20,11 +20,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Authorizes the calling Customer's payments and reads them back. Every endpoint needs a token with
- * the {@code CUSTOMER} role, whose {@code sub} owns the Payment; Staff have no Payments.
+ * Checkout authorizes a Customer's payments with its own {@code CHECKOUT} token, naming the
+ * Customer in the body. The Customer reads them back with a {@code CUSTOMER} token, whose {@code
+ * sub} must own the Payment; Staff have no Payments.
  */
 @RestController
-@PreAuthorize("hasRole('CUSTOMER')")
 @RequestMapping("/payments")
 class PaymentController {
 
@@ -38,9 +38,9 @@ class PaymentController {
 
   /** 201 with the recorded Payment, and its URL in {@code Location}. */
   @PostMapping
-  ResponseEntity<PaymentResponse> authorize(
-      CurrentCustomer customer, @RequestBody AuthorizePaymentRequest request) {
-    var payment = authorize.authorize(customer.id(), request.toAuthorizationRequest());
+  @PreAuthorize("hasRole('CHECKOUT')")
+  ResponseEntity<PaymentResponse> authorize(@RequestBody AuthorizePaymentRequest request) {
+    var payment = authorize.authorize(request.toAuthorizationRequest());
     return ResponseEntity.created(URI.create("/payments/" + payment.id()))
         .body(PaymentResponse.of(payment));
   }
@@ -50,6 +50,7 @@ class PaymentController {
    * never reveals that someone else's Payment exists.
    */
   @GetMapping("/{id}")
+  @PreAuthorize("hasRole('CUSTOMER')")
   PaymentResponse payment(CurrentCustomer customer, @PathVariable String id) {
     return parse(id)
         .flatMap(paymentId -> find.payment(customer.id(), paymentId))

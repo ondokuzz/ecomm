@@ -4,8 +4,8 @@ import com.ecomm.commons.money.Money;
 import java.util.UUID;
 
 /**
- * An Order's payment as recorded after the gateway answered. It belongs to the Customer who
- * authorized it, and only they may see it.
+ * An Order's payment as recorded after the gateway answered. It belongs to the Customer it was
+ * authorized for, and only they may see it.
  */
 public record Payment(
     UUID id,
@@ -16,13 +16,10 @@ public record Payment(
     String gatewayReference) {
 
   public static Payment authorized(
-      UUID id,
-      String customerId,
-      AuthorizationRequest request,
-      GatewayAuthorization authorization) {
+      UUID id, AuthorizationRequest request, GatewayAuthorization authorization) {
     return new Payment(
         id,
-        customerId,
+        request.customerId(),
         request.orderId(),
         request.amount(),
         PaymentStatus.AUTHORIZED,

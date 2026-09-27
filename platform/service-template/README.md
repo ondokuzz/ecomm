@@ -45,6 +45,14 @@ JWTs (`JwtResourceServerAutoConfiguration`):
 - A service that needs other URL rules declares its own `SecurityFilterChain` bean, which replaces
   the default.
 
+An internal endpoint, one that only another service calls, is guarded by the calling service's own
+role, such as `@PreAuthorize("hasRole('CHECKOUT')")`. The caller authenticates with its own
+client-credentials token ([ADR 0002](../../services/identity-access/docs/adr/0002-service-identity-by-client-credentials.md)),
+so the token's `sub` is the service, not a Customer. When the call is about a Customer, it names
+them as a `customerId` in the body. Take the Customer from the body only on endpoints guarded that
+way; everywhere else the Customer is the token's `sub`, via `CurrentCustomer`. Test the allowed
+caller with `FakeKeycloak.token("checkout", "CHECKOUT")`, and test that a `CUSTOMER` token gets 403.
+
 ## Tests
 
 Test from the outside, at the HTTP seam: start the app (`@SpringBootTest(webEnvironment =

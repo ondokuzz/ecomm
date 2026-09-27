@@ -9,5 +9,5 @@ public interface AuthorizePaymentUseCase {
    * Asks the payment gateway to authorize the amount and records the outcome as the Customer's
    * Payment.
    */
-  Payment authorize(String customerId, AuthorizationRequest request);
+  Payment authorize(AuthorizationRequest request);
 }

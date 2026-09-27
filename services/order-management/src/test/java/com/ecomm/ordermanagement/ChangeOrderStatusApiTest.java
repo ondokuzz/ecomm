@@ -2,7 +2,6 @@ package com.ecomm.ordermanagement;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.ecomm.commons.security.FakeKeycloak;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -54,9 +53,29 @@ class ChangeOrderStatusApiTest extends OrderApiTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"{}", "{\"status\": \"LOST\"}", "{\"status\": 1}", "not json"})
-  void anInvalidStatusIsABadRequest(String body) {
-    changeStatus(customerToken(), placed().id(), body)
+  @ValueSource(
+      strings = {
+        "{\"customerId\": \"customer-42\"}",
+        "{\"customerId\": \"customer-42\", \"status\": \"LOST\"}",
+        "{\"customerId\": \"customer-42\", \"status\": 1}",
+        "{\"status\": \"PAID\"}",
+        "{\"customerId\": \" \", \"status\": \"PAID\"}",
+        "{\"customerId\": 42, \"status\": \"PAID\"}",
+        "{\"customerId\": \"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\", \"status\": \"PAID\"}",
+        "not json"
+      })
+  void anInvalidChangeIsABadRequest(String body) {
+    changeStatus(checkoutToken(), placed().id(), body)
+        .expectStatus()
+        .isBadRequest()
+        .expectHeader()
+        .contentType(MediaType.APPLICATION_PROBLEM_JSON);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"6f1c2d3e-0000-4000-8000-000000000000", "not-an-order-id"})
+  void anInvalidCustomerIdIsABadRequestWhateverTheOrder(String id) {
+    changeStatus(checkoutToken(), id, statusChange(" ", "PAID"))
         .expectStatus()
         .isBadRequest()
         .expectHeader()
@@ -74,12 +93,14 @@ class ChangeOrderStatusApiTest extends OrderApiTest {
   }
 
   @Test
-  void anotherCustomerCannotChangeAnOrder() {
+  void checkoutNamingTheWrongCustomerGetsNotFound() {
     var id = placed().id();
 
-    changeStatus(FakeKeycloak.token("customer-7", "CUSTOMER"), id, "{\"status\": \"CANCELLED\"}")
+    changeStatus(checkoutToken(), id, statusChange("customer-7", "CANCELLED"))
         .expectStatus()
-        .isNotFound();
+        .isNotFound()
+        .expectHeader()
+        .contentType(MediaType.APPLICATION_PROBLEM_JSON);
     assertThat(read(id).status()).isEqualTo("PLACED");
   }
 

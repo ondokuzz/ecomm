@@ -33,39 +33,51 @@ abstract class OrderApiTest {
     registry.add("spring.datasource.password", POSTGRES::getPassword);
   }
 
+  /** The Customer every test places Orders for, unless it names another. */
+  static final String CUSTOMER = "customer-42";
+
   /** Two Pixel 9s at 799.00 EUR and one pair of AirPods Pro at 149.50 EUR: 1747.50 EUR in all. */
-  static final String TWO_LINE_ORDER =
-      """
-      {"lines": [
-        {"variantId": "PHN-PIXEL-9", "quantity": 2,
-         "unitPrice": {"amountMinor": 79900, "currency": "EUR"}},
-        {"variantId": "AUD-AIRPODS-PRO-2", "quantity": 1,
-         "unitPrice": {"amountMinor": 14950, "currency": "EUR"}}
-      ]}
-      """;
+  static String twoLineOrder(String customerId) {
+    return """
+        {"customerId": "%s", "lines": [
+          {"variantId": "PHN-PIXEL-9", "quantity": 2,
+           "unitPrice": {"amountMinor": 79900, "currency": "EUR"}},
+          {"variantId": "AUD-AIRPODS-PRO-2", "quantity": 1,
+           "unitPrice": {"amountMinor": 14950, "currency": "EUR"}}
+        ]}
+        """
+        .formatted(customerId);
+  }
 
   @Autowired RestTestClient http;
 
-  static String customerToken() {
-    return FakeKeycloak.token("customer-42", "CUSTOMER");
+  /** The Customer's own token, as the Storefront sends it. */
+  static String tokenOf(String customerId) {
+    return FakeKeycloak.token(customerId, "CUSTOMER");
   }
 
-  RestTestClient.ResponseSpec place(String token, String body) {
+  static String customerToken() {
+    return tokenOf(CUSTOMER);
+  }
+
+  /** Checkout's own token: the only caller allowed to place Orders and change their status. */
+  static String checkoutToken() {
+    return FakeKeycloak.token("checkout", "CHECKOUT");
+  }
+
+  /** Places an Order as Checkout; the body names the Customer. */
+  RestTestClient.ResponseSpec place(String body) {
     return http.post()
         .uri("/orders")
-        .headers(h -> h.setBearerAuth(token))
+        .headers(h -> h.setBearerAuth(checkoutToken()))
         .contentType(MediaType.APPLICATION_JSON)
         .body(body)
         .exchange();
   }
 
-  RestTestClient.ResponseSpec place(String body) {
-    return place(customerToken(), body);
-  }
-
-  /** Places {@link #TWO_LINE_ORDER} as {@code token}'s Customer and returns it. */
-  OrderView placed(String token) {
-    return place(token, TWO_LINE_ORDER)
+  /** Places the two-line Order for {@code customerId} and returns it. */
+  OrderView placed(String customerId) {
+    return place(twoLineOrder(customerId))
         .expectStatus()
         .isCreated()
         .expectBody(OrderView.class)
@@ -74,7 +86,7 @@ abstract class OrderApiTest {
   }
 
   OrderView placed() {
-    return placed(customerToken());
+    return placed(CUSTOMER);
   }
 
   RestTestClient.ResponseSpec changeStatus(String token, String id, String body) {
@@ -86,8 +98,16 @@ abstract class OrderApiTest {
         .exchange();
   }
 
+  /** Moves {@link #CUSTOMER}'s Order to {@code status} as Checkout. */
   RestTestClient.ResponseSpec changeStatus(String id, String status) {
-    return changeStatus(customerToken(), id, "{\"status\": \"" + status + "\"}");
+    return changeStatus(checkoutToken(), id, statusChange(CUSTOMER, status));
+  }
+
+  static String statusChange(String customerId, String status) {
+    return """
+        {"customerId": "%s", "status": "%s"}
+        """
+        .formatted(customerId, status);
   }
 
   /** The parts of an Order a client reads, independent of the service's classes. */

@@ -8,12 +8,13 @@ The `ecomm` realm is defined in [`realm/realm-ecomm.json`](./realm/realm-ecomm.j
 
 | | |
 |---|---|
-| Realm roles | `CUSTOMER`, `STAFF` |
+| Realm roles | `CUSTOMER`, `STAFF`, `CHECKOUT` |
 | Self-registration | on; new users get `CUSTOMER` through `default-roles-ecomm` |
 | Access-token lifespan | 15 minutes |
 | `storefront` | public client, Authorization Code + PKCE S256, redirects `http://localhost:8080/*` and `http://localhost:5173/*` |
 | `admin-console` | public client, reserved for Sprint 2 (no redirect URIs yet) |
 | `dev-cli` | public client with the password grant, **for local development and tests only** |
+| `checkout` | confidential client with client credentials only; its service account holds `CHECKOUT`. Secret `checkout-dev-secret`, **for local development only** |
 | Seeded users | `demo@ecomm.local` / `demo` (CUSTOMER), `staff@ecomm.local` / `staff` (STAFF) |
 
 ## Get a token by hand
@@ -25,3 +26,14 @@ curl -s http://localhost:8180/realms/ecomm/protocol/openid-connect/token \
 ```
 
 The token's `iss` is `http://localhost:8180/realms/ecomm`, `sub` is the Customer ID, and `realm_access.roles` holds the realm roles.
+
+Checkout calls other services' internal endpoints with a token of its own
+([ADR 0002](./docs/adr/0002-service-identity-by-client-credentials.md)). To get one by hand:
+
+```sh
+curl -s http://localhost:8180/realms/ecomm/protocol/openid-connect/token \
+  -d grant_type=client_credentials -d client_id=checkout \
+  -d client_secret=checkout-dev-secret | jq -r .access_token
+```
+
+Its `sub` is the `checkout` service account, not a Customer, and `realm_access.roles` is `["CHECKOUT"]`.

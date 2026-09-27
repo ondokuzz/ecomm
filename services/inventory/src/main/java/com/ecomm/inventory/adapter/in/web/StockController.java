@@ -8,6 +8,7 @@ import com.ecomm.inventory.domain.UnknownVariantException;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -16,7 +17,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Anyone may read stock (see {@code public-read-paths}); decrementing it needs a token. */
+/**
+ * Anyone may read stock (see {@code public-read-paths}); only Checkout, with its own {@code
+ * CHECKOUT} token, may decrement it.
+ */
 @RestController
 @RequestMapping("/stock")
 class StockController {
@@ -38,6 +42,7 @@ class StockController {
 
   /** Returns the new stock of every Variant in the batch. */
   @PostMapping("/decrement")
+  @PreAuthorize("hasRole('CHECKOUT')")
   List<StockResponse> decrement(@RequestBody DecrementRequest request) {
     return decrement.decrement(request.toDecrement()).stream().map(StockResponse::of).toList();
   }

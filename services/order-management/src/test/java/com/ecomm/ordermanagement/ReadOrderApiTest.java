@@ -2,18 +2,17 @@ package com.ecomm.ordermanagement;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.ecomm.commons.security.FakeKeycloak;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.MediaType;
 
-/** A Customer reads back one of their own Orders, and nobody else's. */
+/** A Customer reads back an Order Checkout placed for them, and nobody else's. */
 class ReadOrderApiTest extends OrderApiTest {
 
   @Test
   void aPlacedOrderCanBeReadBackAtItsLocation() {
-    var created = place(TWO_LINE_ORDER).expectBody(OrderView.class).returnResult();
+    var created = place(twoLineOrder(CUSTOMER)).expectBody(OrderView.class).returnResult();
     var location = created.getResponseHeaders().getLocation();
     var order = created.getResponseBody();
 
@@ -47,7 +46,7 @@ class ReadOrderApiTest extends OrderApiTest {
 
     http.get()
         .uri("/orders/{id}", id)
-        .headers(h -> h.setBearerAuth(FakeKeycloak.token("customer-7", "CUSTOMER")))
+        .headers(h -> h.setBearerAuth(tokenOf("customer-7")))
         .exchange()
         .expectStatus()
         .isNotFound()

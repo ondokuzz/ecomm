@@ -36,8 +36,9 @@ abstract class InventoryApiTest {
 
   @Autowired RestTestClient http;
 
-  static String customerToken() {
-    return FakeKeycloak.token("customer-42", "CUSTOMER");
+  /** Checkout's own token: the only caller allowed to decrement stock. */
+  static String checkoutToken() {
+    return FakeKeycloak.token("checkout", "CHECKOUT");
   }
 
   long quantityOf(String variantId) {

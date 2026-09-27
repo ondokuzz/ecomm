@@ -15,7 +15,7 @@ class ReadPaymentApiTest extends PaymentApiTest {
     var created =
         authorize(
                 """
-                {"orderId": "order-read", "amount": {"amountMinor": 4250, "currency": "USD"}}
+                {"customerId": "customer-42", "orderId": "order-read", "amount": {"amountMinor": 4250, "currency": "USD"}}
                 """)
             .expectStatus()
             .isCreated()

@@ -27,11 +27,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The calling Customer's Orders. Every endpoint needs a token with the {@code CUSTOMER} role, whose
- * {@code sub} owns the Order; Staff have no Orders.
+ * Checkout places a Customer's Orders and moves them along their Order Status with its own {@code
+ * CHECKOUT} token, naming the Customer in the body. The Customer reads them with a {@code CUSTOMER}
+ * token, whose {@code sub} must own the Order; Staff have no Orders.
  */
 @RestController
-@PreAuthorize("hasRole('CUSTOMER')")
 @RequestMapping("/orders")
 class OrderController {
 
@@ -48,15 +48,16 @@ class OrderController {
 
   /** 201 with the new Order in {@code PLACED}, and its URL in {@code Location}. */
   @PostMapping
-  ResponseEntity<OrderResponse> place(
-      CurrentCustomer customer, @RequestBody PlaceOrderRequest request) {
-    var order = place.place(customer.id(), request.toOrderLines());
+  @PreAuthorize("hasRole('CHECKOUT')")
+  ResponseEntity<OrderResponse> place(@RequestBody PlaceOrderRequest request) {
+    var order = place.place(request.toCustomerId(), request.toOrderLines());
     return ResponseEntity.created(URI.create("/orders/" + order.id()))
         .body(OrderResponse.of(order));
   }
 
   /** The Customer's Orders, newest first. */
   @GetMapping
+  @PreAuthorize("hasRole('CUSTOMER')")
   List<OrderResponse> orders(CurrentCustomer customer) {
     return find.orders(customer.id()).stream().map(OrderResponse::of).toList();
   }
@@ -66,19 +67,21 @@ class OrderController {
    * reveals that someone else's Order exists.
    */
   @GetMapping("/{id}")
+  @PreAuthorize("hasRole('CUSTOMER')")
   OrderResponse order(CurrentCustomer customer, @PathVariable String id) {
     return ownedOrder(id, orderId -> find.order(customer.id(), orderId));
   }
 
   /**
-   * 200 with the Order in its new status; 409 when its current status can't reach that one, 404 as
-   * for reading it.
+   * 200 with the Order in its new status; 409 when its current status can't reach that one. 404 for
+   * an unknown ID, or when the named Customer doesn't own the Order.
    */
   @PatchMapping("/{id}/status")
-  OrderResponse changeStatus(
-      CurrentCustomer customer, @PathVariable String id, @RequestBody StatusChangeRequest request) {
+  @PreAuthorize("hasRole('CHECKOUT')")
+  OrderResponse changeStatus(@PathVariable String id, @RequestBody StatusChangeRequest request) {
+    var customerId = request.toCustomerId();
     var next = request.toStatus();
-    return ownedOrder(id, orderId -> changeStatus.changeStatus(customer.id(), orderId, next));
+    return ownedOrder(id, orderId -> changeStatus.changeStatus(customerId, orderId, next));
   }
 
   /**

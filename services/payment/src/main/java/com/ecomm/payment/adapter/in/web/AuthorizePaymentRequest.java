@@ -5,10 +5,11 @@ import com.ecomm.payment.domain.AuthorizationRequest;
 import com.ecomm.payment.domain.InvalidPaymentException;
 
 /**
- * An Order's amount to authorize: {@code {"orderId", "amount": {"amountMinor", "currency"}}}. The
- * values are taken raw so that {@code 1.5} or {@code "7990"} are rejected rather than coerced.
+ * An Order's amount to authorize for a Customer: {@code {"customerId", "orderId", "amount":
+ * {"amountMinor", "currency"}}}. The values are taken raw so that {@code 1.5} or {@code "7990"} are
+ * rejected rather than coerced.
  */
-record AuthorizePaymentRequest(Object orderId, Amount amount) {
+record AuthorizePaymentRequest(Object customerId, Object orderId, Amount amount) {
 
   record Amount(Object amountMinor, Object currency) {
 
@@ -28,9 +29,13 @@ record AuthorizePaymentRequest(Object orderId, Amount amount) {
   }
 
   AuthorizationRequest toAuthorizationRequest() {
+    if (customerId != null && !(customerId instanceof String)) {
+      throw new InvalidPaymentException("customerId must be a string");
+    }
     if (orderId != null && !(orderId instanceof String)) {
       throw new InvalidPaymentException("orderId must be a string");
     }
-    return new AuthorizationRequest((String) orderId, amount == null ? null : amount.toMoney());
+    return new AuthorizationRequest(
+        (String) customerId, (String) orderId, amount == null ? null : amount.toMoney());
   }
 }
