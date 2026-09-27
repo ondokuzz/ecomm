@@ -1,0 +1,77 @@
+# Exercises every Order Management endpoint against the compose stack (`docker compose up -d --build`).
+# Run the requests top to bottom in the IntelliJ HTTP client; the token request stores a token for
+# the ones after it.
+
+@orders = http://localhost:8085
+@keycloak = http://localhost:8180/realms/ecomm/protocol/openid-connect/token
+
+### Customer token
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=dev-cli&username=demo@ecomm.local&password=demo
+
+> {% client.global.set("customerToken", response.body.access_token); %}
+
+### Place an Order, as Checkout does: 201 with the Order in PLACED and its total
+POST {{orders}}/orders
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"lines": [
+  {"variantId": "PHN-PIXEL-9", "quantity": 2, "unitPrice": {"amountMinor": 79900, "currency": "EUR"}},
+  {"variantId": "AUD-AIRPODS-PRO-2", "quantity": 1, "unitPrice": {"amountMinor": 14950, "currency": "EUR"}}
+]}
+
+> {% client.global.set("orderId", response.body.id); %}
+
+### Read it back
+GET {{orders}}/orders/{{orderId}}
+Authorization: Bearer {{customerToken}}
+
+### Mark it paid, as Checkout does after authorizing the payment
+PATCH {{orders}}/orders/{{orderId}}/status
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"status": "PAID"}
+
+### An illegal transition, PAID to DELIVERED: 409
+PATCH {{orders}}/orders/{{orderId}}/status
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"status": "DELIVERED"}
+
+### The Customer's Orders, newest first
+GET {{orders}}/orders
+Authorization: Bearer {{customerToken}}
+
+### An unknown Order: 404
+GET {{orders}}/orders/00000000-0000-4000-8000-000000000000
+Authorization: Bearer {{customerToken}}
+
+### Lines in two currencies: 400
+POST {{orders}}/orders
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"lines": [
+  {"variantId": "PHN-PIXEL-9", "quantity": 1, "unitPrice": {"amountMinor": 79900, "currency": "EUR"}},
+  {"variantId": "AUD-AIRPODS-PRO-2", "quantity": 1, "unitPrice": {"amountMinor": 14950, "currency": "USD"}}
+]}
+
+### Without a token: 401
+GET {{orders}}/orders
+
+### Staff have no Orders: 403
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=dev-cli&username=staff@ecomm.local&password=staff
+
+> {% client.global.set("staffToken", response.body.access_token); %}
+
+###
+GET {{orders}}/orders
+Authorization: Bearer {{staffToken}}

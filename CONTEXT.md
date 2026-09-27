@@ -41,11 +41,15 @@ A temporary hold on a Variant's stock, created when checkout starts and either r
 _Avoid_: Lock, Hold
 
 **Order**:
-A Customer's confirmed intent to purchase one or more Variants, tracked through a lifecycle from placement to delivery or return.
+A Customer's confirmed intent to purchase one or more Variants, tracked through a lifecycle from placement to delivery or return. It holds one Order Line per Variant, all in one currency, and its total is the sum of its lines. It belongs to the Customer who placed it, and only they can see it.
 _Avoid_: Purchase, Transaction
 
+**Order Line**:
+One Variant, its quantity, and its unit price captured at checkout. The captured price stays with the Order even if the Variant's Price changes later.
+_Avoid_: Item
+
 **Order Status**:
-The lifecycle stage of an Order: `Placed → Paid → Fulfilled → Shipped → Delivered`, with `Returned` and `Cancelled` as branches off that path.
+The lifecycle stage of an Order: `Placed → Paid → Fulfilled → Shipped → Delivered`, with `Returned` and `Cancelled` as branches off that path. An Order can be `Cancelled` until it is Fulfilled and `Returned` once Delivered; both are final.
 _Avoid_: State (Status is the domain term; state is a general programming concept)
 
 **Payment**:
