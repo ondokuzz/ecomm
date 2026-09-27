@@ -1,0 +1,18 @@
+import { defineConfig, devices } from '@playwright/test'
+
+/**
+ * End-to-end smoke tests against the full compose stack (`make up` from the repo root), which must
+ * already be running: the Storefront on :8080 and Keycloak on :8180.
+ */
+export default defineConfig({
+  testDir: './e2e',
+  timeout: 60_000,
+  expect: { timeout: 15_000 },
+  forbidOnly: !!process.env.CI,
+  reporter: [['list'], ['html', { open: 'never' }]],
+  use: {
+    baseURL: process.env.STOREFRONT_URL ?? 'http://localhost:8080',
+    trace: 'retain-on-failure',
+  },
+  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+})

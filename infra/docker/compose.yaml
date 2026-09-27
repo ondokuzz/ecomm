@@ -8,6 +8,25 @@
 
 name: ecomm
 
+# Every Spring service: a JVM capped at 384 MB, of which its image gives 60% to the heap
+# (-XX:MaxRAMPercentage=60), and healthy once its actuator says UP.
+x-spring-service: &spring-service
+  mem_limit: 384m
+  healthcheck:
+    # The JRE image has no curl, and its sh has no /dev/tcp; talk HTTP over bash's.
+    test:
+      - CMD
+      - bash
+      - -c
+      - >-
+        exec 3<>/dev/tcp/localhost/8080 &&
+        printf 'GET /actuator/health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+        grep -q '"status":"UP"' <&3
+    interval: 10s
+    timeout: 5s
+    retries: 30
+    start_period: 20s
+
 services:
   postgres:
     image: postgres:16
@@ -48,6 +67,10 @@ services:
       KC_HEALTH_ENABLED: "true"
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      # The same heap share as the Spring services. Keycloak starts in their 384 MB but sits at the
+      # limit, so it gets a little more.
+      JAVA_OPTS_KC_HEAP: -XX:MaxRAMPercentage=60 -XX:InitialRAMPercentage=30
+    mem_limit: 512m
     ports: ["${KEYCLOAK_PORT:-8180}:8080"]
     volumes:
       - ../../services/identity-access/realm:/opt/keycloak/data/import:ro
@@ -93,6 +116,7 @@ services:
     restart: "no"
 
   catalog:
+    <<: *spring-service
     build:
       context: ../..
       dockerfile: services/catalog/Dockerfile
@@ -101,22 +125,9 @@ services:
     depends_on:
       couchbase-init: { condition: service_completed_successfully }
       keycloak: { condition: service_healthy }
-    healthcheck:
-      # The JRE image has no curl, and its sh has no /dev/tcp; talk HTTP over bash's.
-      test:
-        - CMD
-        - bash
-        - -c
-        - >-
-          exec 3<>/dev/tcp/localhost/8080 &&
-          printf 'GET /actuator/health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
-          grep -q '"status":"UP"' <&3
-      interval: 10s
-      timeout: 5s
-      retries: 30
-      start_period: 20s
 
   inventory:
+    <<: *spring-service
     build:
       context: ../..
       dockerfile: services/inventory/Dockerfile
@@ -125,22 +136,9 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       keycloak: { condition: service_healthy }
-    healthcheck:
-      # The JRE image has no curl, and its sh has no /dev/tcp; talk HTTP over bash's.
-      test:
-        - CMD
-        - bash
-        - -c
-        - >-
-          exec 3<>/dev/tcp/localhost/8080 &&
-          printf 'GET /actuator/health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
-          grep -q '"status":"UP"' <&3
-      interval: 10s
-      timeout: 5s
-      retries: 30
-      start_period: 20s
 
   cart:
+    <<: *spring-service
     build:
       context: ../..
       dockerfile: services/cart/Dockerfile
@@ -149,22 +147,9 @@ services:
     depends_on:
       redis: { condition: service_healthy }
       keycloak: { condition: service_healthy }
-    healthcheck:
-      # The JRE image has no curl, and its sh has no /dev/tcp; talk HTTP over bash's.
-      test:
-        - CMD
-        - bash
-        - -c
-        - >-
-          exec 3<>/dev/tcp/localhost/8080 &&
-          printf 'GET /actuator/health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
-          grep -q '"status":"UP"' <&3
-      interval: 10s
-      timeout: 5s
-      retries: 30
-      start_period: 20s
 
   payment:
+    <<: *spring-service
     build:
       context: ../..
       dockerfile: services/payment/Dockerfile
@@ -173,22 +158,9 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       keycloak: { condition: service_healthy }
-    healthcheck:
-      # The JRE image has no curl, and its sh has no /dev/tcp; talk HTTP over bash's.
-      test:
-        - CMD
-        - bash
-        - -c
-        - >-
-          exec 3<>/dev/tcp/localhost/8080 &&
-          printf 'GET /actuator/health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
-          grep -q '"status":"UP"' <&3
-      interval: 10s
-      timeout: 5s
-      retries: 30
-      start_period: 20s
 
   order-management:
+    <<: *spring-service
     build:
       context: ../..
       dockerfile: services/order-management/Dockerfile
@@ -197,22 +169,9 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       keycloak: { condition: service_healthy }
-    healthcheck:
-      # The JRE image has no curl, and its sh has no /dev/tcp; talk HTTP over bash's.
-      test:
-        - CMD
-        - bash
-        - -c
-        - >-
-          exec 3<>/dev/tcp/localhost/8080 &&
-          printf 'GET /actuator/health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
-          grep -q '"status":"UP"' <&3
-      interval: 10s
-      timeout: 5s
-      retries: 30
-      start_period: 20s
 
   checkout-pricing:
+    <<: *spring-service
     build:
       context: ../..
       dockerfile: services/checkout-pricing/Dockerfile
@@ -229,20 +188,6 @@ services:
       cart: { condition: service_healthy }
       payment: { condition: service_healthy }
       order-management: { condition: service_healthy }
-    healthcheck:
-      # The JRE image has no curl, and its sh has no /dev/tcp; talk HTTP over bash's.
-      test:
-        - CMD
-        - bash
-        - -c
-        - >-
-          exec 3<>/dev/tcp/localhost/8080 &&
-          printf 'GET /actuator/health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
-          grep -q '"status":"UP"' <&3
-      interval: 10s
-      timeout: 5s
-      retries: 30
-      start_period: 20s
 
   storefront:
     build:
@@ -251,9 +196,20 @@ services:
     # Fixed: http://localhost:8080 is one of the storefront client's redirect origins in the realm
     # file, so login breaks on any other port.
     ports: ["8080:8080"]
+    mem_limit: 64m
     depends_on:
-      # Checkout waits for every service the Storefront proxies to.
+      keycloak: { condition: service_healthy }
+      catalog: { condition: service_healthy }
+      inventory: { condition: service_healthy }
+      cart: { condition: service_healthy }
+      order-management: { condition: service_healthy }
       checkout-pricing: { condition: service_healthy }
+    healthcheck:
+      # nginx listens on IPv4 only, and localhost resolves to ::1 first.
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
 
   kafka:
     image: apache/kafka:4.3.1

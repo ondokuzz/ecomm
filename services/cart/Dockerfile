@@ -7,7 +7,8 @@ ARG MODULE
 WORKDIR /workspace
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 COPY . .
-RUN --mount=type=cache,target=/root/.gradle \
+# Parallel builds share this cache; Gradle cannot lock it across containers, so they take turns.
+RUN --mount=type=cache,target=/root/.gradle,sharing=locked \
     ./gradlew --no-daemon ":${MODULE//\//:}:bootJar" -x test \
  && java -Djarmode=tools -jar "${MODULE}/build/libs/app.jar" extract --layers --launcher --destination /extracted
 

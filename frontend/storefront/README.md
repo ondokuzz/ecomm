@@ -61,4 +61,9 @@ Sign in as `demo@ecomm.local` / `demo`, or register a new Customer.
 npm run typecheck
 npm run lint
 npm test          # Vitest: Money formatting and Cart pricing
+npm run test:e2e  # Playwright smoke test against the running compose stack (`make up`)
 ```
+
+The smoke test ([`e2e/sprint1.spec.ts`](./e2e/sprint1.spec.ts)) signs in on Keycloak for real,
+checks out two Products as the demo Customer and registers a new Customer. It needs Chromium once:
+`npx playwright install chromium`. Set `STOREFRONT_URL` or `KEYCLOAK_URL` to aim it elsewhere.

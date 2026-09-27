@@ -27,11 +27,14 @@ Not bounded contexts — UI layers over the above:
 | Storefront | `frontend/storefront` |
 | Admin Console | `frontend/admin-console` |
 
+In Sprint 1 the Storefront calls Catalog, Inventory, Cart, Checkout & Pricing and Order Management directly, through its own nginx at `/api/<service>/` ([`frontend/storefront`](./frontend/storefront/README.md)); there is no API gateway yet.
+
 ## Relationships
 
 > **Sprint 1:** Checkout calls Inventory, Order Management and Payment directly and synchronously ([`services/checkout-pricing`](./services/checkout-pricing/README.md)). The Saga-based relationships below (Order Management → Inventory and → Payment) arrive in Sprint 3.
 
 - **Cart → Checkout & Pricing**: Checkout reads the Cart's contents to build an Order.
+- **Catalog → Checkout & Pricing**: Checkout prices every line from Catalog's current Price, never from the Cart.
 - **Checkout & Pricing → Order Management**: a successful checkout creates an Order.
 - **Order Management → Inventory**: the fulfillment Saga dispatches Reservation commands; Inventory owns the Reservation lifecycle.
 - **Order Management → Payment**: the fulfillment Saga dispatches payment-capture commands; Payment emits authorization/capture/refund events back.
@@ -40,6 +43,7 @@ Not bounded contexts — UI layers over the above:
 - **Returns & Warranty → Payment**: an approved RMA triggers a refund.
 - **Returns & Warranty → Inventory**: an approved RMA triggers a restock.
 - **Order Management, Payment, Returns & Warranty → AI Support Assistant**: the assistant queries each context's read APIs to ground its answers in real Customer data.
+- **Identity & Access → all contexts**: every service trusts Keycloak-issued JWTs. A Customer's token names the Customer, and Checkout calls other contexts with its own client-credentials identity ([ADR 0002](./services/identity-access/docs/adr/0002-service-identity-by-client-credentials.md)).
 - **All contexts ↔ Kafka**: the shared event backbone — see [ADR 0006](./docs/adr/0006-kafka-as-single-event-backbone.md).
 
 ## Shared vocabulary

@@ -32,6 +32,10 @@ _Avoid_: Inventory (that's the context, not the count)
 What a Variant sells for, as `Money`: an amount in the currency's minor unit. Catalog owns Price. A Cart holds no authoritative price: whatever a Cart shows is a copy, and the Price that counts is always the one Catalog holds now.
 _Avoid_: Cost (what the platform pays a supplier)
 
+**Money**:
+An amount as an integer in its currency's minor unit, with the currency's ISO 4217 code, such as `{"amountMinor": 79900, "currency": "EUR"}` for €799.00. Prices, Order totals and Payments are all Money, and amounts in different currencies are never added together.
+_Avoid_: Amount (on its own), decimal or floating-point prices
+
 **Cart**:
 A Customer's in-progress, unconfirmed selection of Variants and quantities. Ephemeral — it is not an Order until checkout completes, and it lapses 7 days after the Customer last changed it. Each Customer has at most one Cart, and only they can see or change it.
 _Avoid_: Basket, Bag
@@ -41,7 +45,7 @@ The step where a Customer confirms their Cart: its Variants are priced, their St
 _Avoid_: Purchase, Order placement
 
 **Reservation**:
-A temporary hold on a Variant's stock, created when checkout starts and either released on abandonment or converted to a permanent stock decrement on payment success.
+A temporary hold on a Variant's stock, created when checkout starts and either released on abandonment or converted to a permanent stock decrement on payment success. Not built yet: until Sprint 2, checkout decrements Stock directly.
 _Avoid_: Lock, Hold
 
 **Order**:

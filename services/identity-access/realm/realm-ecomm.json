@@ -7,7 +7,7 @@
   "loginWithEmailAllowed": true,
   "duplicateEmailsAllowed": false,
   "verifyEmail": false,
-  "sslRequired": "external",
+  "sslRequired": "none",
   "accessTokenLifespan": 900,
   "roles": {
     "realm": [

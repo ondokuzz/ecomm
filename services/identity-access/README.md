@@ -11,6 +11,7 @@ The `ecomm` realm is defined in [`realm/realm-ecomm.json`](./realm/realm-ecomm.j
 | Realm roles | `CUSTOMER`, `STAFF`, `CHECKOUT` |
 | Self-registration | on; new users get `CUSTOMER` through `default-roles-ecomm` |
 | Access-token lifespan | 15 minutes |
+| SSL | not required (`sslRequired: none`), **for local development only**: Docker can present requests from the host with a public source IP, which the default (`external`) would refuse over plain HTTP |
 | `storefront` | public client, Authorization Code + PKCE S256, redirects `http://localhost:8080/*` and `http://localhost:5173/*` |
 | `admin-console` | public client, reserved for Sprint 2 (no redirect URIs yet) |
 | `dev-cli` | public client with the password grant, **for local development and tests only** |

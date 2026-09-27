@@ -1,6 +1,50 @@
 # Ecomm Platform
 
-A from-scratch e-commerce platform, architected as fifteen bounded contexts across five parallel team tracks, planned over eight two-week sprints for a small (4-5 person) engineering team. This repo currently holds architecture docs and an empty service scaffold — no application code yet.
+A from-scratch e-commerce platform, architected as fifteen bounded contexts across five parallel team tracks, planned over eight two-week sprints for a small (4-5 person) engineering team. Sprint 1's walking skeleton runs locally: browse Products, keep a Cart, check out with a mock payment and follow the Order.
+
+## Run Sprint 1
+
+You need Docker with about 8 GB of memory, `make`, and Node 24 for the smoke test.
+
+```sh
+make up           # build and start the stack; returns once every service is healthy
+```
+
+The first build takes several minutes. Then open http://localhost:8080, where you can:
+
+1. browse the 20 seeded Products by category;
+2. sign in as `demo@ecomm.local` / `demo`, or register a new Customer on Keycloak's page;
+3. add Products to the Cart, go to checkout and press **Pay**. The payment is mocked and always
+   succeeds;
+4. see the Order confirmation with its Order Status, **Paid**, and find the Order under
+   **My Orders**.
+
+The smoke test walks the same path in Chromium against the running stack. As the demo Customer it
+adds two Products, checks out, expects `PAID` on the confirmation page and checks through the
+Inventory API that Stock went down. It also registers a new Customer:
+
+```sh
+cd frontend/storefront
+npm ci && npx playwright install chromium   # once
+npm run test:e2e
+```
+
+| Command | |
+|---|---|
+| `make up` | Build and start the stack, and wait until it is healthy |
+| `make down` | Stop the stack, keeping its data |
+| `make seed-reset` | Put the seed Products and Stock back and drop every Cart, Order and Payment; registered Customers stay |
+
+Every checkout takes Stock, so after many smoke-test runs `make seed-reset` refills it. To wipe
+everything, Keycloak's users included, run `docker compose down -v`.
+
+Each service publishes a host port: Keycloak on 8180 (`admin` / `admin`), Catalog to Checkout on
+8081–8086 (see each service's README). Override one that is already taken, e.g.
+`POSTGRES_PORT=5433 make up`; Couchbase's ports and the Storefront's 8080 are fixed. Kafka and
+Mongo are behind the `full` profile until Sprint 3 (`docker compose --profile full up -d`).
+
+Each Spring service is capped at 384 MB, with 60% of it for the heap, and Keycloak at 512 MB, so
+the default stack fits in about 8 GB of Docker memory.
 
 ## Layout
 
