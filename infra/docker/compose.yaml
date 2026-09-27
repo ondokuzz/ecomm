@@ -244,6 +244,17 @@ services:
       retries: 30
       start_period: 20s
 
+  storefront:
+    build:
+      context: ../../frontend/storefront
+    image: ecomm/storefront
+    # Fixed: http://localhost:8080 is one of the storefront client's redirect origins in the realm
+    # file, so login breaks on any other port.
+    ports: ["8080:8080"]
+    depends_on:
+      # Checkout waits for every service the Storefront proxies to.
+      checkout-pricing: { condition: service_healthy }
+
   kafka:
     image: apache/kafka:4.3.1
     profiles: [full]

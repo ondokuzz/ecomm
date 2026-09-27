@@ -1,0 +1,64 @@
+# Storefront
+
+The Customer-facing React app: browse Products by category, see a Product's Price and Stock, keep a
+Cart, check out with a mock payment, and follow Orders and their Order Status. Built with Vite,
+React, TypeScript, React Router and TanStack Query.
+
+## Pages
+
+| Path | | Login |
+|---|---|---|
+| `/?category=` | Products, filtered by category | no |
+| `/products/{sku}` | A Product with its Price and Stock; add it to the Cart | no (adding needs it) |
+| `/cart` | The Cart, priced from Catalog's current Prices | yes |
+| `/checkout` | The Cart once more, and a mock "Pay" button | yes |
+| `/orders/{id}` | An Order and its Order Status; after checkout, the confirmation | yes |
+| `/orders` | My Orders, newest first | yes |
+
+## Auth
+
+`oidc-client-ts` (through `react-oidc-context`) signs the Customer in with Authorization Code +
+PKCE against the realm's public `storefront` client. Login and registration (`prompt=create`) both
+happen on Keycloak's hosted pages.
+
+Tokens are kept in memory only, never in web storage. A reload drops them, so on start the app
+asks Keycloak for new ones in a hidden iframe at `/silent-renew`; with a live Keycloak session the
+Customer stays signed in, without one they stay signed out. Silent renew refreshes the access token
+before it expires. The protected pages send a signed-out Customer to Keycloak and bring them back
+to the page they asked for.
+
+## Calling the services
+
+The browser reaches each service at `/api/<service>/…` on the Storefront's own origin, since the
+services send no CORS headers: `catalog`, `inventory`, `cart`, `checkout-pricing` and
+`order-management`. In development the Vite dev proxy forwards them to the services' compose host
+ports ([`vite.config.ts`](./vite.config.ts)); in compose, nginx does ([`nginx.conf`](./nginx.conf)).
+
+A Cart holds no prices, so the Cart and checkout pages price it from Catalog for display.
+Checkout prices it again itself; what the Customer pays is what the Order shows.
+
+## Run it
+
+In compose, nginx serves the production build on http://localhost:8080:
+
+```sh
+docker compose up -d --build storefront   # from the repo root
+```
+
+For development, run the stack in compose and Vite on http://localhost:5173 (both origins are
+allowed redirects of the `storefront` client):
+
+```sh
+npm install
+npm run dev
+```
+
+Sign in as `demo@ecomm.local` / `demo`, or register a new Customer.
+
+## Checks
+
+```sh
+npm run typecheck
+npm run lint
+npm test          # Vitest: Money formatting and Cart pricing
+```

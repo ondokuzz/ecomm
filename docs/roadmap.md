@@ -24,7 +24,7 @@ Eight two-week sprints, five tracks running in parallel for a 4-5 person team. S
 
 **Definition of done**: `docker-compose up` → browse seeded products → add to cart → check out with a mock payment → see an order confirmation and status — entirely local.
 
-> **Note (Sprint 1 implementation):** Kafka and Mongo are defined in Compose but sit behind the `full` profile (`docker compose --profile full up`), because nothing uses them until Sprint 3 and the default stack has to fit in about 8 GB of Docker memory. A plain `docker compose up` starts everything the definition of done needs.
+> **Note (Sprint 1 implementation):** Kafka and Mongo are defined in Compose but sit behind the `full` profile (`docker compose --profile full up`), because nothing uses them until Sprint 3 and the default stack has to fit in about 8 GB of Docker memory. A plain `docker compose up` starts everything the definition of done needs, with the [Storefront](../frontend/storefront/README.md) on http://localhost:8080.
 
 ## Sprint 2 (Weeks 3–4) — Harden the Skeleton
 
