@@ -29,6 +29,8 @@ Not bounded contexts — UI layers over the above:
 
 ## Relationships
 
+> **Sprint 1:** Checkout calls Inventory, Order Management and Payment directly and synchronously ([`services/checkout-pricing`](./services/checkout-pricing/README.md)). The Saga-based relationships below (Order Management → Inventory and → Payment) arrive in Sprint 3.
+
 - **Cart → Checkout & Pricing**: Checkout reads the Cart's contents to build an Order.
 - **Checkout & Pricing → Order Management**: a successful checkout creates an Order.
 - **Order Management → Inventory**: the fulfillment Saga dispatches Reservation commands; Inventory owns the Reservation lifecycle.

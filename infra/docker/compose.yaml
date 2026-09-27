@@ -212,6 +212,38 @@ services:
       retries: 30
       start_period: 20s
 
+  checkout-pricing:
+    build:
+      context: ../..
+      dockerfile: services/checkout-pricing/Dockerfile
+    image: ecomm/checkout-pricing
+    ports: ["${CHECKOUT_PRICING_PORT:-8086}:8080"]
+    environment:
+      # Checkout's own client in the ecomm realm (Identity & Access ADR 0002); dev-only, like the
+      # value in the realm file.
+      CHECKOUT_CLIENT_SECRET: checkout-dev-secret
+    depends_on:
+      keycloak: { condition: service_healthy }
+      catalog: { condition: service_healthy }
+      inventory: { condition: service_healthy }
+      cart: { condition: service_healthy }
+      payment: { condition: service_healthy }
+      order-management: { condition: service_healthy }
+    healthcheck:
+      # The JRE image has no curl, and its sh has no /dev/tcp; talk HTTP over bash's.
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/localhost/8080 &&
+          printf 'GET /actuator/health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          grep -q '"status":"UP"' <&3
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
   kafka:
     image: apache/kafka:4.3.1
     profiles: [full]

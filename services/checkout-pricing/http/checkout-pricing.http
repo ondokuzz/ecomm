@@ -1,0 +1,77 @@
+# Checks out the demo Customer's Cart against the compose stack (`docker compose up -d --build`).
+# Run the requests top to bottom in the IntelliJ HTTP client; the token request stores a token for
+# the ones after it.
+
+@checkout = http://localhost:8086
+@cart = http://localhost:8083
+@orders = http://localhost:8085
+@inventory = http://localhost:8082
+@keycloak = http://localhost:8180/realms/ecomm/protocol/openid-connect/token
+
+### Customer token
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=dev-cli&username=demo@ecomm.local&password=demo
+
+> {% client.global.set("customerToken", response.body.access_token); %}
+
+### An empty Cart can't be checked out: 400
+DELETE {{cart}}/cart
+Authorization: Bearer {{customerToken}}
+
+###
+POST {{checkout}}/checkout
+Authorization: Bearer {{customerToken}}
+
+### Fill the Cart
+PUT {{cart}}/cart/items/PHN-PIXEL-9
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"quantity": 2}
+
+###
+PUT {{cart}}/cart/items/AUD-JBL-FLIP-6
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"quantity": 1}
+
+### Stock before checkout
+GET {{inventory}}/stock/PHN-PIXEL-9
+
+### Check out: 200 with the Order in PAID
+POST {{checkout}}/checkout
+Authorization: Bearer {{customerToken}}
+
+> {% client.global.set("orderId", response.body.orderId); %}
+
+### The Order, at Catalog's Prices
+GET {{orders}}/orders/{{orderId}}
+Authorization: Bearer {{customerToken}}
+
+### Two fewer Pixel 9s in stock
+GET {{inventory}}/stock/PHN-PIXEL-9
+
+### The Cart is empty again
+GET {{cart}}/cart
+Authorization: Bearer {{customerToken}}
+
+### More than there is in stock: 409 naming the Variant; the Order is cancelled, the Cart kept
+PUT {{cart}}/cart/items/PHN-PIXEL-9
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"quantity": 10000}
+
+###
+POST {{checkout}}/checkout
+Authorization: Bearer {{customerToken}}
+
+###
+GET {{orders}}/orders
+Authorization: Bearer {{customerToken}}
+
+### Without a token: 401
+POST {{checkout}}/checkout

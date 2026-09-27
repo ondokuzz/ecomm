@@ -1,0 +1,32 @@
+spring:
+  application:
+    name: checkout-pricing
+  security:
+    oauth2:
+      client:
+        # Checkout's own identity for Inventory, Order Management and Payment (Identity & Access
+        # ADR 0002). The secret has no default: set CHECKOUT_CLIENT_SECRET, which compose does.
+        registration:
+          checkout:
+            provider: keycloak
+            client-id: checkout
+            client-secret: ${CHECKOUT_CLIENT_SECRET}
+            authorization-grant-type: client_credentials
+        provider:
+          keycloak:
+            token-uri: http://localhost:8180/realms/ecomm/protocol/openid-connect/token
+
+# Every service on its compose host port.
+ecomm:
+  checkout:
+    catalog-url: http://localhost:8081
+    inventory-url: http://localhost:8082
+    cart-url: http://localhost:8083
+    payment-url: http://localhost:8084
+    order-management-url: http://localhost:8085
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

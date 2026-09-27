@@ -1,0 +1,21 @@
+# Active inside Docker Compose (SPRING_PROFILES_ACTIVE=docker).
+spring:
+  security:
+    oauth2:
+      client:
+        provider:
+          keycloak:
+            # Tokens are fetched over the internal network; they still carry the browser-facing
+            # issuer (KC_HOSTNAME), which is the one every service trusts.
+            token-uri: http://keycloak:8080/realms/ecomm/protocol/openid-connect/token
+
+ecomm:
+  checkout:
+    catalog-url: http://catalog:8080
+    inventory-url: http://inventory:8080
+    cart-url: http://cart:8080
+    payment-url: http://payment:8080
+    order-management-url: http://order-management:8080
+  security:
+    jwt:
+      jwk-set-uri: http://keycloak:8080/realms/ecomm/protocol/openid-connect/certs
