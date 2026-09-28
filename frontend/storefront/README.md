@@ -101,9 +101,11 @@ Checkout prices it again itself; what the Customer pays is what the Order shows.
 The Cart page lists each line with its Product's thumbnail and name, a quantity stepper and a
 remove button, beside an order summary (item count, subtotal, total) that stays in view on wide
 screens and moves below the lines on phones. Checkout adds no tax or shipping yet, so the total is
-the subtotal. "Empty cart" clears it through `DELETE /cart` once the Customer confirms.
+the subtotal. "Empty cart" clears it through `DELETE /cart` once the Customer confirms, then moves
+focus to the empty state, since the button that had it is gone.
 
-Checkout shows where the Customer is (Cart → Payment → Done), the summary with its lines, and a
+Checkout shows where the Customer is (Cart → Payment → Done; the Order confirmation shows Done),
+the summary with its lines, and a
 drawn payment card: there is nothing to type, since the payment is mocked. When Checkout refuses a
 Cart for Products out of Stock or unknown to Catalog, it names their Variants, and the page names
 their Products (`checkoutProblem`, in [`src/domain/checkout.ts`](./src/domain/checkout.ts)).

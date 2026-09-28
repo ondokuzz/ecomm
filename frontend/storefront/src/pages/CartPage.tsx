@@ -17,7 +17,8 @@ export function CartPage() {
 
   if (cart.isPending) return <Loading />
   if (cart.error) return <ErrorMessage error={cart.error} />
-  if (!priced || priced.lines.length === 0) return <EmptyCart />
+  // Emptying the Cart removes the button and dialog that had focus, so focus moves to the empty state.
+  if (!priced || priced.lines.length === 0) return <EmptyCart focusTitle={clear.isSuccess} />
 
   const busy = setQuantity.isPending || remove.isPending || clear.isPending
   return (

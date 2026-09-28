@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { type ReactNode, useEffect, useRef } from 'react'
 import { ApiError } from '../api/http'
 import { Button } from './ui/Button'
 import { Icon } from './ui/Icon'
@@ -60,16 +60,26 @@ export function EmptyState({
   children,
   action,
   illustration,
+  focusTitle,
 }: {
   title: string
   children?: ReactNode
   action?: ReactNode
   illustration?: ReactNode
+  /** Moves focus to the title on arrival, for when the control the Customer used just went away. */
+  focusTitle?: boolean
 }) {
+  const heading = useRef<HTMLHeadingElement>(null)
+  useEffect(() => {
+    if (focusTitle) heading.current?.focus()
+  }, [focusTitle])
+
   return (
     <div className="empty">
       {illustration}
-      <h2>{title}</h2>
+      <h2 ref={heading} tabIndex={focusTitle ? -1 : undefined}>
+        {title}
+      </h2>
       {children && <p>{children}</p>}
       {action}
     </div>

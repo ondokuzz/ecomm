@@ -61,6 +61,7 @@ test('the demo Customer checks out two Products and Stock goes down', async ({ p
 
   await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/)
   await expect(page.getByText('Thank you! Your order is confirmed.')).toBeVisible()
+  await expect(currentStep).toContainText('Done')
   // The badge is how the page renders Order Status PAID; the Order itself must say PAID too.
   await expect(page.locator('.status-paid')).toHaveText('Paid')
   const orderId = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!)
@@ -98,7 +99,7 @@ test('the demo Customer empties their Cart after confirming', async ({ page, req
 
   await page.getByRole('button', { name: 'Empty cart' }).click()
   await dialog.getByRole('button', { name: 'Empty cart' }).click()
-  await expect(page.getByRole('heading', { name: 'Your cart is empty' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Your cart is empty' })).toBeFocused()
   await expect(page.getByRole('link', { name: 'Browse products' })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Cart', exact: true })).toBeVisible()
   const cart = await request.get('/api/cart/cart', { headers: { Authorization: `Bearer ${token}` } })

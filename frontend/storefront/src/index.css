@@ -543,6 +543,10 @@ code {
   text-align: center;
   padding: var(--space-7) var(--space-4);
 }
+/* A title that takes focus only to guide screen readers and the keyboard, not as a control. */
+.empty h2[tabindex='-1']:focus {
+  outline: none;
+}
 .empty p {
   color: var(--color-muted);
   margin: 0 0 var(--space-5);

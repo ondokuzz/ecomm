@@ -12,7 +12,8 @@ export function CheckoutSteps({ current }: { current: CheckoutStep }) {
     <nav aria-label="Checkout steps">
       <ol className="steps">
         {steps.map((step, i) => {
-          const done = i < currentIndex
+          // The last step is done once the Customer reaches it: the Order is placed.
+          const done = i < currentIndex || i === steps.length - 1
           return (
             <li
               key={step}

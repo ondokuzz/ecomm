@@ -1,5 +1,6 @@
 import { Link, useParams, useSearchParams } from 'react-router'
 import { useOrder } from '../api/orders'
+import { CheckoutSteps } from '../components/CheckoutSteps'
 import { OrderStatusBadge } from '../components/OrderStatusBadge'
 import { ErrorMessage, Loading } from '../components/Status'
 import { Card } from '../components/ui/Card'
@@ -18,6 +19,7 @@ export function OrderPage() {
 
   return (
     <section>
+      {params.has('placed') && <CheckoutSteps current="Done" />}
       {params.has('placed') && (
         <p className="alert alert-success" role="status">
           <Icon name="check" size={18} />
