@@ -49,8 +49,15 @@ test('the demo Customer checks out two Products and Stock goes down', async ({ p
   }
 
   await page.getByRole('link', { name: /^Cart/ }).click()
+  const cartLines = page.getByRole('list', { name: 'Cart lines' })
+  for (const { product } of bought) {
+    await expect(cartLines.getByRole('link', { name: product.name })).toBeVisible()
+  }
+  await expect(page.getByRole('region', { name: 'Order summary' })).toContainText('2 items')
   await page.getByRole('link', { name: 'Go to checkout' }).click()
-  await page.getByRole('button', { name: 'Pay' }).click()
+  const currentStep = page.getByRole('navigation', { name: 'Checkout steps' }).locator('[aria-current=step]')
+  await expect(currentStep).toContainText('Payment')
+  await page.getByRole('button', { name: /^Pay/ }).click()
 
   await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/)
   await expect(page.getByText('Thank you! Your order is confirmed.')).toBeVisible()
@@ -67,6 +74,35 @@ test('the demo Customer checks out two Products and Stock goes down', async ({ p
   for (const { variantId, stock } of bought) {
     expect(await stockOf(request, variantId)).toBe(stock - 1)
   }
+})
+
+test('the demo Customer empties their Cart after confirming', async ({ page, request }) => {
+  const token = await tokenFor(request, demoCustomer)
+  await emptyCart(request, token)
+  const [{ variantId }] = await twoProductsInStock(request)
+  const put = await request.put(`/api/cart/cart/items/${encodeURIComponent(variantId)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { quantity: 2 },
+  })
+  expect(put.ok()).toBeTruthy()
+
+  await page.goto('/cart')
+  await signInOnKeycloak(page, demoCustomer)
+  await expect(page.getByRole('link', { name: 'Cart (2)' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Empty cart' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Empty your cart?' })
+  await dialog.getByRole('button', { name: 'Cancel' }).click()
+  await expect(dialog).toBeHidden()
+  await expect(page.getByRole('link', { name: 'Cart (2)' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Empty cart' }).click()
+  await dialog.getByRole('button', { name: 'Empty cart' }).click()
+  await expect(page.getByRole('heading', { name: 'Your cart is empty' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Browse products' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Cart', exact: true })).toBeVisible()
+  const cart = await request.get('/api/cart/cart', { headers: { Authorization: `Bearer ${token}` } })
+  expect(((await cart.json()) as { items: unknown[] }).items).toEqual([])
 })
 
 test('a new Customer registers on Keycloak and comes back signed in', async ({ page, baseURL }) => {

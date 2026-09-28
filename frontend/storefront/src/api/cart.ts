@@ -49,3 +49,13 @@ export function useRemoveFromCart() {
     onSuccess: (cart) => queryClient.setQueryData(cartKey, cart),
   })
 }
+
+/** Empties the Customer's whole Cart. */
+export function useClearCart() {
+  const token = useAuth().user?.access_token
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => api<void>('cart', '/cart', { method: 'DELETE', token }),
+    onSuccess: () => queryClient.setQueryData<Cart>(cartKey, { items: [] }),
+  })
+}

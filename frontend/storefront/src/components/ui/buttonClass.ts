@@ -1,6 +1,6 @@
 import { cx } from './cx'
 
-export type Variant = 'primary' | 'secondary' | 'ghost' | 'outline'
+export type Variant = 'primary' | 'secondary' | 'ghost' | 'outline' | 'danger'
 export type Size = 'sm' | 'md' | 'lg'
 
 export interface Look {

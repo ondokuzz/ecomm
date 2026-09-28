@@ -10,8 +10,8 @@ React, TypeScript, React Router and TanStack Query.
 |---|---|---|
 | `/?category=` | Products, filtered by category | no |
 | `/products/{sku}` | A Product with its image, Price, Stock and specs; add it to the Cart | no (adding needs it) |
-| `/cart` | The Cart, priced from Catalog's current Prices | yes |
-| `/checkout` | The Cart once more, and a mock "Pay" button | yes |
+| `/cart` | The Cart, priced from Catalog's current Prices; change quantities, remove lines or empty it | yes |
+| `/checkout` | The order summary, and a mock payment card with a "Pay" button | yes |
 | `/orders/{id}` | An Order and its Order Status; after checkout, the confirmation | yes |
 | `/orders` | My Orders, newest first | yes |
 
@@ -23,7 +23,7 @@ corner radii, shadows) as CSS custom properties on `:root`, redefined for dark m
 and Bricolage Grotesque for headings, are bundled through Fontsource rather than loaded from a CDN.
 
 The pages build from the shared components in [`src/components/ui`](./src/components/ui): Button,
-Card, Badge, Input, QuantityStepper, Skeleton, Icon and Toast. The header's account menu and the
+Card, Badge, Input, QuantityStepper, Skeleton, Icon, Toast and ConfirmDialog. The header's account menu and the
 small-screen menu are native `popover` elements, so the browser handles closing them on Escape or an
 outside click.
 
@@ -32,6 +32,10 @@ under the `Toaster` in `App` shows one with `useToast()`. Toasts sit in a polite
 so screen readers announce them, and never take focus. Each goes after 5 seconds, or sooner with its
 close button; the countdown waits while a pointer rests on it or focus is inside it. At most three
 show at once.
+
+ConfirmDialog asks before an action that can't be undone, such as "Empty cart", in a native modal
+`<dialog>` rather than the browser's `confirm()`: focus stays inside it, Escape or a click outside
+cancels, and Cancel has focus first so Enter never confirms by accident.
 
 The Product page's Stock indicator reads "In stock", "Only N left" at 5 or fewer
 (`lowStockThreshold` in [`src/domain/stock.ts`](./src/domain/stock.ts)), or "Out of stock", which
@@ -94,6 +98,16 @@ ports ([`vite.config.ts`](./vite.config.ts)); in compose, nginx does ([`nginx.co
 A Cart holds no prices, so the Cart and checkout pages price it from Catalog for display.
 Checkout prices it again itself; what the Customer pays is what the Order shows.
 
+The Cart page lists each line with its Product's thumbnail and name, a quantity stepper and a
+remove button, beside an order summary (item count, subtotal, total) that stays in view on wide
+screens and moves below the lines on phones. Checkout adds no tax or shipping yet, so the total is
+the subtotal. "Empty cart" clears it through `DELETE /cart` once the Customer confirms.
+
+Checkout shows where the Customer is (Cart → Payment → Done), the summary with its lines, and a
+drawn payment card: there is nothing to type, since the payment is mocked. When Checkout refuses a
+Cart for Products out of Stock or unknown to Catalog, it names their Variants, and the page names
+their Products (`checkoutProblem`, in [`src/domain/checkout.ts`](./src/domain/checkout.ts)).
+
 ## Run it
 
 In compose, nginx serves the production build on http://localhost:8080:
@@ -117,10 +131,11 @@ Sign in as `demo@ecomm.local` / `demo`, or register a new Customer.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: Money formatting, Cart pricing, quantities, Stock levels, toasts, category chips, Customer initials, seed Product images
+npm test          # Vitest: Money formatting, Cart pricing, checkout problems, quantities, Stock levels, toasts, category chips, Customer initials, seed Product images
 npm run test:e2e  # Playwright smoke test against the running compose stack (`make up`)
 ```
 
 The smoke test ([`e2e/sprint1.spec.ts`](./e2e/sprint1.spec.ts)) signs in on Keycloak for real,
-checks out two Products as the demo Customer and registers a new Customer. It needs Chromium once:
+checks out two Products as the demo Customer, empties a Cart through the confirmation, and registers a
+new Customer. It needs Chromium once:
 `npx playwright install chromium`. Set `STOREFRONT_URL` or `KEYCLOAK_URL` to aim it elsewhere.

@@ -11,8 +11,9 @@ export interface Cart {
   items: CartItem[]
 }
 
-/** A Cart line with a copy of Catalog's current Price. Unpriced while its Product is loading or gone. */
+/** A Cart line with its Product and a copy of Catalog's current Price. Bare while its Product is loading or gone. */
 export interface CartLine extends CartItem {
+  product?: Product
   name?: string
   unitPrice?: Money
   lineTotal?: Money
@@ -35,6 +36,7 @@ export function priceCart(cart: Cart, productsByVariantId: Record<string, Produc
     if (!product || !variant) return { ...item }
     return {
       ...item,
+      product,
       name: product.name,
       unitPrice: variant.price,
       lineTotal: timesMoney(variant.price, item.quantity),
@@ -47,6 +49,13 @@ export function priceCart(cart: Cart, productsByVariantId: Record<string, Produc
 
 export function itemCount(cart: Cart): number {
   return cart.items.reduce((count, item) => count + item.quantity, 0)
+}
+
+/** How many units a Cart holds, in words. */
+export function itemCountLabel(cart: Cart): string {
+  const count = itemCount(cart)
+  if (count === 0) return 'No items'
+  return count === 1 ? '1 item' : `${count} items`
 }
 
 export function quantityOf(cart: Cart, variantId: string): number {

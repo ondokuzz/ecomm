@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { itemCount, priceCart, quantityOf } from './cart'
+import { itemCount, itemCountLabel, priceCart, quantityOf } from './cart'
 import type { Product } from './catalog'
 
 const eur = (amountMinor: number) => ({ amountMinor, currency: 'EUR' })
@@ -11,11 +11,13 @@ function product(sku: string, price = eur(1000)): Product {
 describe('priceCart', () => {
   it('prices each line from its Variant and totals them', () => {
     const cart = { items: [{ variantId: 'A', quantity: 2 }, { variantId: 'B', quantity: 1 }] }
-    const priced = priceCart(cart, { A: product('A', eur(1000)), B: product('B', eur(250)) })
+    const a = product('A', eur(1000))
+    const b = product('B', eur(250))
+    const priced = priceCart(cart, { A: a, B: b })
 
     expect(priced.lines).toEqual([
-      { variantId: 'A', quantity: 2, name: 'Product A', unitPrice: eur(1000), lineTotal: eur(2000) },
-      { variantId: 'B', quantity: 1, name: 'Product B', unitPrice: eur(250), lineTotal: eur(250) },
+      { variantId: 'A', quantity: 2, product: a, name: 'Product A', unitPrice: eur(1000), lineTotal: eur(2000) },
+      { variantId: 'B', quantity: 1, product: b, name: 'Product B', unitPrice: eur(250), lineTotal: eur(250) },
     ])
     expect(priced.total).toEqual(eur(2250))
   })
@@ -48,6 +50,20 @@ describe('priceCart', () => {
 describe('itemCount', () => {
   it('adds up the quantities', () => {
     expect(itemCount({ items: [{ variantId: 'A', quantity: 2 }, { variantId: 'B', quantity: 3 }] })).toBe(5)
+  })
+})
+
+describe('itemCountLabel', () => {
+  it('counts the units, not the lines', () => {
+    expect(itemCountLabel({ items: [{ variantId: 'A', quantity: 2 }, { variantId: 'B', quantity: 3 }] })).toBe('5 items')
+  })
+
+  it('is singular for one unit', () => {
+    expect(itemCountLabel({ items: [{ variantId: 'A', quantity: 1 }] })).toBe('1 item')
+  })
+
+  it('says so when there is nothing', () => {
+    expect(itemCountLabel({ items: [] })).toBe('No items')
   })
 })
 
