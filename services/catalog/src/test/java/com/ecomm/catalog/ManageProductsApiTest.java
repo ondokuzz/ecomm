@@ -18,7 +18,7 @@ class ManageProductsApiTest extends CatalogApiTest {
           "category": "wearables",
           "attributes": {"brand": "Garmin", "strap": "silicone"},
           "price": {"amountMinor": %d, "currency": "EUR"},
-          "images": ["/images/products/%s/front.jpg"]
+          "images": ["/images/products/%s/front.svg"]
         }
         """
         .formatted(sku, name, amountMinor, sku.toLowerCase());

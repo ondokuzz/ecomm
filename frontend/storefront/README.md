@@ -27,6 +27,36 @@ Card, Badge, Input, QuantityStepper, Skeleton and Icon. The header's account men
 small-screen menu are native `popover` elements, so the browser handles closing them on Escape or an
 outside click.
 
+## Product images
+
+A Product shows its first image through [`ProductImage`](./src/components/ProductImage.tsx). When it
+has no images, or the file fails to load, a placeholder takes its place, so there is never a
+broken-image icon. The image's `alt` text is the Product's name.
+
+The seed Products' images are generated artwork, not photographs, so there is nothing to license: an
+SVG of a phone, laptop, headphones, earbuds or speaker, in the Product's colour on a backdrop in its
+brand's colour from the palette. They live in [`public/images/products/`](./public/images/products)
+at the paths Catalog's seed gives them (`/images/products/<sku-lowercase>/front.svg`), and are
+generated from that seed by [`scripts/generate-product-images.ts`](./scripts/generate-product-images.ts):
+
+```sh
+npm run images   # after changing services/catalog/src/main/resources/seed/products.json
+```
+
+The script is TypeScript run by Node directly, which needs Node 22.18 or later.
+
+The seed originally named them `front.jpg`. Its paths were changed to `front.svg` rather than
+rewriting `.jpg` to `.svg` at the web server, so what Catalog returns is the file that exists and its
+type. Catalog loads the seed only into an empty bucket, so a stack seeded before that change needs
+`make seed-reset` to pick up the new paths (which also drops every Cart, Order and Payment); until
+then every Product shows the placeholder.
+
+Vite serves `public/` as is in development, and the build copies it into `dist/`, which nginx
+serves in compose with a one-day cache (the names don't change when the images are regenerated). A
+missing image is a 404 there, not the app's `index.html`; Vite answers it with `index.html`, which
+fails to load as an image just the same. A test (`npm test`) checks that every seed
+Product has its image at the path Catalog returns, under 50 KB.
+
 ## Auth
 
 `oidc-client-ts` (through `react-oidc-context`) signs the Customer in with Authorization Code +
@@ -72,7 +102,7 @@ Sign in as `demo@ecomm.local` / `demo`, or register a new Customer.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: Money formatting, Cart pricing, quantities and Customer initials
+npm test          # Vitest: Money formatting, Cart pricing, quantities, Customer initials, seed Product images
 npm run test:e2e  # Playwright smoke test against the running compose stack (`make up`)
 ```
 

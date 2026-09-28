@@ -4,6 +4,7 @@ import { useAuth } from 'react-oidc-context'
 import { useCart, useSetQuantity } from '../api/cart'
 import { useProduct, useStock } from '../api/catalog'
 import { useAuthPending, useSignin } from '../auth/session'
+import { ProductImage } from '../components/ProductImage'
 import { EmptyState, ErrorMessage, Loading } from '../components/Status'
 import { Badge } from '../components/ui/Badge'
 import { Button, ButtonLink } from '../components/ui/Button'
@@ -40,6 +41,7 @@ function ProductDetail({ product }: { product: Product }) {
         <Icon name="arrowLeft" size={16} /> {product.category}
       </Link>
       <Card>
+        <ProductImage product={product} />
         <h1>{product.name}</h1>
         <div className="row">
           <p className="price large">{formatMoney(variant.price)}</p>

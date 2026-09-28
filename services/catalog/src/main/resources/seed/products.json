@@ -14,7 +14,7 @@
       "currency": "EUR"
     },
     "images": [
-      "/images/products/phn-pixel-9/front.jpg"
+      "/images/products/phn-pixel-9/front.svg"
     ]
   },
   {
@@ -32,7 +32,7 @@
       "currency": "EUR"
     },
     "images": [
-      "/images/products/phn-pixel-9-pro/front.jpg"
+      "/images/products/phn-pixel-9-pro/front.svg"
     ]
   },
   {
@@ -50,7 +50,7 @@
       "currency": "EUR"
     },
     "images": [
-      "/images/products/phn-iphone-16/front.jpg"
+      "/images/products/phn-iphone-16/front.svg"
     ]
   },
   {
@@ -68,7 +68,7 @@
       "currency": "EUR"
     },
     "images": [
-      "/images/products/phn-iphone-16-pro/front.jpg"
+      "/images/products/phn-iphone-16-pro/front.svg"
     ]
   },
   {
@@ -86,7 +86,7 @@
       "currency": "EUR"
     },
     "images": [
-      "/images/products/phn-galaxy-s24/front.jpg"
+      "/images/products/phn-galaxy-s24/front.svg"
     ]
   },
   {
@@ -104,7 +104,7 @@
       "currency": "EUR"
     },
     "images": [
-      "/images/products/phn-galaxy-a55/front.jpg"
+      "/images/products/phn-galaxy-a55/front.svg"
     ]
   },
   {
@@ -122,7 +122,7 @@
       "currency": "EUR"
     },
     "images": [
-      "/images/products/phn-nothing-2a/front.jpg"
+      "/images/products/phn-nothing-2a/front.svg"
     ]
   },
   {
@@ -141,7 +141,7 @@
       "currency": "EUR"
     },
     "images": [
-      "/images/products/lpt-mba-13-m3/front.jpg"
+      "/images/products/lpt-mba-13-m3/front.svg"
     ]
   },
   {
@@ -160,7 +160,7 @@
       "currency": "EUR"
     },
     "images": [
-      "/images/products/lpt-mbp-14-m4/front.jpg"
+      "/images/products/lpt-mbp-14-m4/front.svg"
     ]
   },
   {
@@ -179,7 +179,7 @@
       "currency": "EUR"
     },
     "images": [
-      "/images/products/lpt-xps-13/front.jpg"
+      "/images/products/lpt-xps-13/front.svg"
     ]
   },
   {
@@ -198,7 +198,7 @@
       "currency": "EUR"
     },
     "images": [
-      "/images/products/lpt-thinkpad-x1/front.jpg"
+      "/images/products/lpt-thinkpad-x1/front.svg"
     ]
   },
   {
@@ -217,7 +217,7 @@
       "currency": "EUR"
     },
     "images": [
-      "/images/products/lpt-zenbook-14/front.jpg"
+      "/images/products/lpt-zenbook-14/front.svg"
     ]
   },
   {
@@ -236,7 +236,7 @@
       "currency": "EUR"
     },
     "images": [
-      "/images/products/lpt-framework-13/front.jpg"
+      "/images/products/lpt-framework-13/front.svg"
     ]
   },
   {
@@ -255,7 +255,7 @@
       "currency": "EUR"
     },
     "images": [
-      "/images/products/lpt-surface-7/front.jpg"
+      "/images/products/lpt-surface-7/front.svg"
     ]
   },
   {
@@ -273,7 +273,7 @@
       "currency": "EUR"
     },
     "images": [
-      "/images/products/aud-airpods-pro-2/front.jpg"
+      "/images/products/aud-airpods-pro-2/front.svg"
     ]
   },
   {
@@ -291,7 +291,7 @@
       "currency": "EUR"
     },
     "images": [
-      "/images/products/aud-sony-wh1000xm5/front.jpg"
+      "/images/products/aud-sony-wh1000xm5/front.svg"
     ]
   },
   {
@@ -309,7 +309,7 @@
       "currency": "EUR"
     },
     "images": [
-      "/images/products/aud-bose-qc-ultra/front.jpg"
+      "/images/products/aud-bose-qc-ultra/front.svg"
     ]
   },
   {
@@ -327,7 +327,7 @@
       "currency": "EUR"
     },
     "images": [
-      "/images/products/aud-sennheiser-mtw4/front.jpg"
+      "/images/products/aud-sennheiser-mtw4/front.svg"
     ]
   },
   {
@@ -345,7 +345,7 @@
       "currency": "EUR"
     },
     "images": [
-      "/images/products/aud-jbl-flip-6/front.jpg"
+      "/images/products/aud-jbl-flip-6/front.svg"
     ]
   },
   {
@@ -362,7 +362,7 @@
       "currency": "EUR"
     },
     "images": [
-      "/images/products/aud-sonos-era-100/front.jpg"
+      "/images/products/aud-sonos-era-100/front.svg"
     ]
   }
 ]

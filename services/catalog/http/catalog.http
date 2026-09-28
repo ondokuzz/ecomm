@@ -47,7 +47,7 @@ Content-Type: application/json
   "category": "audio",
   "attributes": {"brand": "Demo", "type": "In-ear"},
   "price": {"amountMinor": 4999, "currency": "EUR"},
-  "images": ["/images/products/aud-demo-buds/front.jpg"]
+  "images": ["/images/products/aud-demo-buds/front.svg"]
 }
 
 ### Creating it again: 409
@@ -72,7 +72,7 @@ Content-Type: application/json
   "category": "audio",
   "attributes": {"brand": "Demo", "type": "In-ear"},
   "price": {"amountMinor": 3999, "currency": "EUR"},
-  "images": ["/images/products/aud-demo-buds/front.jpg"]
+  "images": ["/images/products/aud-demo-buds/front.svg"]
 }
 
 ### A Customer may not change Products: 403

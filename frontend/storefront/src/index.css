@@ -827,6 +827,28 @@ main {
   flex-direction: column;
   gap: var(--space-1);
 }
+.product-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+}
+.product-image-placeholder {
+  display: grid;
+  place-items: center;
+  background: var(--color-primary-soft);
+  color: var(--color-primary-text);
+}
+.product-card .product-image,
+.product-card .product-image-skeleton {
+  margin-bottom: var(--space-3);
+}
+.product-image-skeleton {
+  aspect-ratio: 4 / 3;
+}
 .product-card .brand-name {
   color: var(--color-muted);
   font-size: var(--text-xs);
@@ -859,6 +881,9 @@ main {
 
 .product-detail {
   max-width: 44rem;
+}
+.product-detail .product-image {
+  margin-bottom: var(--space-5);
 }
 .back-link {
   display: inline-block;

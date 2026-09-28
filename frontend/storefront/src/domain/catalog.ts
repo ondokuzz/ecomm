@@ -25,3 +25,8 @@ export interface Category {
 export function defaultVariant(product: Product): Variant {
   return product.variants[0]
 }
+
+/** The image the Storefront shows a Product by: its first, if it has any. */
+export function productImage(product: Product): string | undefined {
+  return product.images[0]
+}

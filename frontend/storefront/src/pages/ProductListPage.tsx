@@ -1,5 +1,6 @@
 import { Link, useSearchParams } from 'react-router'
 import { useCategories, useProducts } from '../api/catalog'
+import { ProductImage } from '../components/ProductImage'
 import { EmptyState, ErrorMessage } from '../components/Status'
 import { Button, ButtonLink } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -48,6 +49,7 @@ export function ProductListPage() {
             <li key={p.sku}>
               <Link to={`/products/${encodeURIComponent(p.sku)}`} className="card-link">
                 <Card interactive className="product-card">
+                  <ProductImage product={p} />
                   <span className="brand-name">{p.attributes.brand}</span>
                   <span className="product-name">{p.name}</span>
                   <span className="price">{formatMoney(p.price)}</span>
@@ -65,6 +67,7 @@ function ProductCardSkeletons() {
   return Array.from({ length: 8 }, (_, i) => (
     <li key={i}>
       <Card className="product-card">
+        <Skeleton height="auto" radius="var(--radius-md)" className="product-image-skeleton" />
         <Skeleton width="30%" height="0.75rem" />
         <Skeleton width="80%" height="1.25rem" />
         <Skeleton width="40%" height="1.25rem" />

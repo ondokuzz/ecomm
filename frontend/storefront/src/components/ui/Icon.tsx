@@ -10,6 +10,7 @@ const paths = {
   arrowLeft: 'M19 12H5 M11 18l-6-6 6-6',
   logout: 'M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3 M10 17l5-5-5-5 M15 12H4',
   orders: 'M6 7h12l1 13H5L6 7z M9 7a3 3 0 0 1 6 0',
+  image: 'M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z M4 16l5-5 4 4 2-2 5 5 M15 9v.01',
 } as const
 
 export type IconName = keyof typeof paths
