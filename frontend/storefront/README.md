@@ -47,9 +47,14 @@ The script is TypeScript run by Node directly, which needs Node 22.18 or later.
 
 The seed originally named them `front.jpg`. Its paths were changed to `front.svg` rather than
 rewriting `.jpg` to `.svg` at the web server, so what Catalog returns is the file that exists and its
-type. Catalog loads the seed only into an empty bucket, so a stack seeded before that change needs
-`make seed-reset` to pick up the new paths (which also drops every Cart, Order and Payment); until
-then every Product shows the placeholder.
+type. Catalog loads the seed only into an empty bucket, and the seed is built into its image, so a
+stack seeded before that change needs both to pick up the new paths; until then every Product shows
+the placeholder. `make seed-reset` also drops every Cart, Order and Payment:
+
+```sh
+docker compose build catalog   # from the repo root; seed-reset doesn't rebuild images
+make seed-reset
+```
 
 Vite serves `public/` as is in development, and the build copies it into `dist/`, which nginx
 serves in compose with a one-day cache (the names don't change when the images are regenerated). A
