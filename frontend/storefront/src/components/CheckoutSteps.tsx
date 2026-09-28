@@ -13,7 +13,7 @@ export function CheckoutSteps({ current }: { current: CheckoutStep }) {
       <ol className="steps">
         {steps.map((step, i) => {
           // The last step is done once the Customer reaches it: the Order is placed.
-          const done = i < currentIndex || i === steps.length - 1
+          const done = i < currentIndex || (i === currentIndex && i === steps.length - 1)
           return (
             <li
               key={step}

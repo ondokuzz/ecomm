@@ -55,13 +55,18 @@ test('the demo Customer checks out two Products and Stock goes down', async ({ p
   }
   await expect(page.getByRole('region', { name: 'Order summary' })).toContainText('2 items')
   await page.getByRole('link', { name: 'Go to checkout' }).click()
-  const currentStep = page.getByRole('navigation', { name: 'Checkout steps' }).locator('[aria-current=step]')
+  const steps = page.getByRole('navigation', { name: 'Checkout steps' })
+  const currentStep = steps.locator('[aria-current=step]')
+  // Screen readers hear "(done)" after each step that is done.
+  const doneSteps = steps.getByRole('listitem').filter({ hasText: '(done)' })
   await expect(currentStep).toContainText('Payment')
+  await expect(doneSteps).toHaveText([/^Cart/])
   await page.getByRole('button', { name: /^Pay/ }).click()
 
   await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/)
   await expect(page.getByText('Thank you! Your order is confirmed.')).toBeVisible()
   await expect(currentStep).toContainText('Done')
+  await expect(doneSteps).toHaveText([/^Cart/, /^Payment/, /^Done/])
   // The badge is how the page renders Order Status PAID; the Order itself must say PAID too.
   await expect(page.locator('.status-paid')).toHaveText('Paid')
   const orderId = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!)

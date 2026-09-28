@@ -1572,8 +1572,11 @@ main {
 }
 .step-current .step-marker {
   border-color: var(--color-primary);
-  color: var(--color-primary-text);
   box-shadow: 0 0 0 4px var(--color-primary-soft);
+}
+/* A done step keeps its check on the filled marker even when it is current, as Done is. */
+.step-current:not(.step-done) .step-marker {
+  color: var(--color-primary-text);
 }
 
 /* The mock payment card */
