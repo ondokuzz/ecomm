@@ -80,9 +80,9 @@ test('a new Customer registers on Keycloak and comes back signed in', async ({ p
   await expectSignedIn(page, email)
 })
 
-/** The account menu, behind the Customer's avatar, names them and offers to log out. */
+/** The Customer menu, behind the Customer's avatar, names them and offers to log out. */
 async function expectSignedIn(page: Page, email: string) {
-  await page.getByRole('button', { name: 'Account menu' }).click()
+  await page.getByRole('button', { name: 'Customer menu' }).click()
   await expect(page.getByText(email)).toBeVisible()
   await expect(page.getByRole('button', { name: 'Log out' })).toBeVisible()
   await page.keyboard.press('Escape')

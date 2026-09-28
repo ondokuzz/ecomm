@@ -1,6 +1,7 @@
 import { Link } from 'react-router'
 import type { PricedCart } from '../domain/cart'
 import { formatMoney } from '../domain/money'
+import { parseQuantity } from '../domain/quantity'
 import { Button } from './ui/Button'
 import { Card } from './ui/Card'
 import { Input } from './ui/Input'
@@ -48,8 +49,8 @@ export function CartLines({
                     defaultValue={line.quantity}
                     disabled={disabled}
                     onBlur={(e) => {
-                      const quantity = Math.floor(Number(e.target.value))
-                      if (quantity >= 1 && quantity !== line.quantity) onChange(line.variantId, quantity)
+                      const quantity = parseQuantity(e.target.value, { min: 1 })
+                      if (quantity !== undefined && quantity !== line.quantity) onChange(line.variantId, quantity)
                       else e.target.value = String(line.quantity)
                     }}
                   />

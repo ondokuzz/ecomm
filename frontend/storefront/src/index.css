@@ -69,7 +69,10 @@
   --shadow-sm: 0 1px 2px #2a124f14, 0 1px 1px #2a124f0a;
   --shadow-md: 0 6px 16px -4px #2a124f24, 0 2px 4px #2a124f0f;
   --shadow-lg: 0 18px 40px -12px #3b1a7a40, 0 4px 10px #2a124f14;
-  --focus-ring: 0 0 0 3px var(--color-bg), 0 0 0 5px var(--color-primary);
+  --shadow-primary: 0 6px 18px -6px var(--color-primary);
+  --shadow-primary-hover: 0 10px 24px -8px var(--color-primary);
+  --focus-width: 2px;
+  --focus-offset: 2px;
 
   --header-height: 4rem;
   --content-width: 1200px;
@@ -187,10 +190,10 @@ code {
   border-radius: var(--radius-sm);
 }
 
+/* An outline, not a box-shadow, so components that cast their own shadow keep the ring. */
 :focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
-  border-radius: var(--radius-sm);
+  outline: var(--focus-width) solid var(--color-primary);
+  outline-offset: var(--focus-offset);
 }
 
 ::selection {
@@ -272,12 +275,12 @@ code {
   --btn-bg: var(--color-primary);
   --btn-fg: var(--color-on-primary);
   --btn-border: var(--color-primary);
-  box-shadow: 0 6px 18px -6px var(--color-primary);
+  box-shadow: var(--shadow-primary);
 }
 .btn-primary:hover:not(:disabled) {
   --btn-bg: var(--color-primary-hover);
   --btn-border: var(--color-primary-hover);
-  box-shadow: 0 10px 24px -8px var(--color-primary);
+  box-shadow: var(--shadow-primary-hover);
 }
 .btn-secondary {
   --btn-bg: var(--color-primary-soft);
@@ -362,7 +365,7 @@ code {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  padding: 0.15rem 0.6rem;
+  padding: var(--space-1) var(--space-3);
   font-size: var(--text-xs);
   font-weight: 700;
   line-height: 1.5;
@@ -375,10 +378,6 @@ code {
 .badge-primary {
   background: var(--color-primary-soft);
   color: var(--color-primary-text);
-}
-.badge-accent {
-  background: var(--color-accent);
-  color: var(--color-on-accent);
 }
 .badge-success {
   background: var(--color-success-soft);
@@ -421,7 +420,6 @@ code {
 }
 .input:focus-visible {
   border-color: var(--color-primary);
-  border-radius: var(--radius-md);
 }
 .input:disabled {
   opacity: 0.55;
@@ -440,7 +438,7 @@ code {
   background: var(--color-surface);
   border: 1.5px solid var(--color-line-strong);
   border-radius: var(--radius-pill);
-  padding: 2px;
+  padding: calc(var(--space-1) / 2);
 }
 .stepper:focus-within {
   border-color: var(--color-primary);
@@ -574,7 +572,7 @@ code {
   place-items: center;
   width: 2rem;
   height: 2rem;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--gradient-brand);
   color: var(--color-on-gradient);
   font-size: var(--text-lg);
@@ -623,10 +621,10 @@ code {
   right: -4px;
   min-width: 1.25rem;
   height: 1.25rem;
-  padding: 0 0.3rem;
+  padding: 0 var(--space-1);
   display: grid;
   place-items: center;
-  font-size: 0.7rem;
+  font-size: var(--text-xs);
   font-weight: 800;
   color: var(--color-on-accent);
   background: var(--color-accent);
@@ -660,9 +658,6 @@ code {
   font-weight: 800;
   cursor: pointer;
   box-shadow: var(--shadow-md);
-}
-.avatar:focus-visible {
-  border-radius: 50%;
 }
 .menu-toggle {
   display: none;
@@ -715,6 +710,9 @@ code {
   left: var(--gutter);
   right: var(--gutter);
   width: auto;
+}
+.mobile-nav .btn-ghost {
+  justify-content: flex-start;
 }
 
 main {

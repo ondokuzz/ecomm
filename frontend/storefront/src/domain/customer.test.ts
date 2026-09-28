@@ -29,6 +29,6 @@ describe('customerLabel', () => {
   it('prefers the email, then the username', () => {
     expect(customerLabel({ email: 'demo@ecomm.local', preferred_username: 'demo' })).toBe('demo@ecomm.local')
     expect(customerLabel({ preferred_username: 'demo' })).toBe('demo')
-    expect(customerLabel({})).toBe('Your account')
+    expect(customerLabel({})).toBe('Customer')
   })
 })

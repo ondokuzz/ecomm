@@ -1,7 +1,7 @@
 import type { OrderStatus } from '../domain/order'
 import { Badge, type Tone } from './ui/Badge'
 
-const looks: Record<OrderStatus, { label: string; tone: Tone }> = {
+const badges: Record<OrderStatus, { label: string; tone: Tone }> = {
   PLACED: { label: 'Placed', tone: 'info' },
   PAID: { label: 'Paid', tone: 'success' },
   FULFILLED: { label: 'Fulfilled', tone: 'primary' },
@@ -12,8 +12,9 @@ const looks: Record<OrderStatus, { label: string; tone: Tone }> = {
 }
 
 export function OrderStatusBadge({ status }: { status: OrderStatus }) {
-  const { label, tone } = looks[status]
+  const { label, tone } = badges[status]
   return (
+    // The smoke test finds the Order Status by its `status-*` class.
     <Badge tone={tone} dot className={`status-${status.toLowerCase()}`}>
       {label}
     </Badge>

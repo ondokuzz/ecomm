@@ -6,6 +6,7 @@ import { useAuthPending, useSignin, useSignout } from '../auth/session'
 import { itemCount } from '../domain/cart'
 import { customerInitials, customerLabel } from '../domain/customer'
 import { Button } from './ui/Button'
+import { buttonClass } from './ui/buttonClass'
 import { Icon } from './ui/Icon'
 import { cx } from './ui/cx'
 
@@ -53,14 +54,17 @@ function Brand() {
   )
 }
 
-/** The Cart icon, with the Cart's item count popping in whenever it changes. */
+/** The Cart icon, with the Cart's count popping in whenever it changes. */
 function CartLink() {
   const cart = useCart()
   const count = cart.data ? itemCount(cart.data) : 0
   return (
-    <NavLink to="/cart" className={({ isActive }) => cx('btn btn-ghost btn-icon cart-link', isActive && 'active')}>
+    <NavLink
+      to="/cart"
+      className={({ isActive }) => buttonClass({ variant: 'ghost', icon: true }, cx('cart-link', isActive && 'active'))}
+    >
       <Icon name="cart" size={22} />
-      <span className="visually-hidden">Cart{count > 0 && `, ${count} ${count === 1 ? 'item' : 'items'}`}</span>
+      <span className="visually-hidden">Cart{count > 0 && ` (${count})`}</span>
       {count > 0 && (
         // Keyed by the count, so the pop animation runs again on each change.
         <span key={count} className="cart-count" aria-hidden="true">
@@ -75,7 +79,6 @@ function CartLink() {
 function CustomerMenu() {
   const auth = useAuth()
   const pending = useAuthPending()
-  const { signin, register } = useSignin()
   const signout = useSignout()
   const menu = useRef<HTMLDivElement>(null)
 
@@ -83,12 +86,7 @@ function CustomerMenu() {
   if (!auth.user) {
     return (
       <div className="row signed-out-actions">
-        <Button variant="ghost" onClick={signin}>
-          Log in
-        </Button>
-        <Button variant="primary" onClick={register}>
-          Register
-        </Button>
+        <SignInButtons />
       </div>
     )
   }
@@ -96,16 +94,25 @@ function CustomerMenu() {
   const profile = auth.user.profile
   return (
     <>
-      <button className="avatar" popoverTarget="account-menu" aria-label="Account menu" title={customerLabel(profile)}>
+      <button
+        className="avatar"
+        popoverTarget="customer-menu"
+        aria-label="Customer menu"
+        title={customerLabel(profile)}
+      >
         {customerInitials(profile)}
       </button>
-      <div id="account-menu" ref={menu} popover="auto" className="popover-panel">
+      <div id="customer-menu" ref={menu} popover="auto" className="popover-panel">
         <div className="menu-header">
           <small>Signed in as</small>
           <strong>{customerLabel(profile)}</strong>
         </div>
-        <Link to="/orders" className="btn btn-ghost menu-item" onClick={() => menu.current?.hidePopover()}>
-          <Icon name="bag" size={18} />
+        <Link
+          to="/orders"
+          className={buttonClass({ variant: 'ghost' }, 'menu-item')}
+          onClick={() => menu.current?.hidePopover()}
+        >
+          <Icon name="orders" size={18} />
           My Orders
         </Link>
         <Button variant="ghost" className="menu-item" onClick={signout}>
@@ -121,8 +128,7 @@ function CustomerMenu() {
 function MobileNav() {
   const auth = useAuth()
   const pending = useAuthPending()
-  const { signin, register } = useSignin()
-  const panel = useRef<HTMLDivElement>(null)
+  const panel = useRef<HTMLElement>(null)
   const close = () => panel.current?.hidePopover()
 
   return (
@@ -130,29 +136,41 @@ function MobileNav() {
       <Button variant="ghost" icon className="menu-toggle" popoverTarget="mobile-nav" aria-label="Menu">
         <Icon name="menu" size={22} />
       </Button>
-      <nav id="mobile-nav" ref={panel} popover="auto" className="popover-panel mobile-nav" aria-label="Main">
+      <nav
+        id="mobile-nav"
+        ref={panel}
+        popover="auto"
+        className="popover-panel mobile-nav"
+        aria-label="Main, small screens"
+      >
         {navLinks.map((link) => (
           <NavLink
             key={link.to}
             to={link.to}
             end={link.end}
-            className={({ isActive }) => cx('btn btn-ghost menu-item', isActive && 'btn-secondary')}
+            className={({ isActive }) => buttonClass({ variant: isActive ? 'secondary' : 'ghost' }, 'menu-item')}
             onClick={close}
           >
             {link.label}
           </NavLink>
         ))}
-        {!pending && !auth.user && (
-          <>
-            <Button variant="ghost" className="menu-item" onClick={signin}>
-              Log in
-            </Button>
-            <Button variant="primary" onClick={register}>
-              Register
-            </Button>
-          </>
-        )}
+        {!pending && !auth.user && <SignInButtons />}
       </nav>
+    </>
+  )
+}
+
+/** Sign-in and registration both happen on Keycloak's hosted pages. */
+function SignInButtons() {
+  const { signin, register } = useSignin()
+  return (
+    <>
+      <Button variant="ghost" onClick={signin}>
+        Log in
+      </Button>
+      <Button variant="primary" onClick={register}>
+        Register
+      </Button>
     </>
   )
 }

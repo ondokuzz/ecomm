@@ -1,26 +1,6 @@
 import type { ButtonHTMLAttributes } from 'react'
 import { Link, type LinkProps } from 'react-router'
-import { cx } from './cx'
-
-type Variant = 'primary' | 'secondary' | 'ghost' | 'outline'
-type Size = 'sm' | 'md' | 'lg'
-
-interface Look {
-  variant?: Variant
-  size?: Size
-  /** Square, for a button that holds only an icon; give it an `aria-label`. */
-  icon?: boolean
-}
-
-function buttonClass({ variant = 'outline', size = 'md', icon }: Look, className?: string) {
-  return cx(
-    'btn',
-    variant !== 'outline' && `btn-${variant}`,
-    size !== 'md' && `btn-${size}`,
-    icon && 'btn-icon',
-    className,
-  )
-}
+import { type Look, buttonClass } from './buttonClass'
 
 export function Button({
   variant,

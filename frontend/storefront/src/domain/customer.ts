@@ -14,22 +14,20 @@ export function customerInitials(profile: CustomerProfile): string {
   if (given || family) return initials([given, family])
 
   const name = profile.name?.trim()
-  if (name) {
-    const words = name.split(/\s+/)
-    return initials([words[0], words.length > 1 ? words[words.length - 1] : undefined])
-  }
+  if (name) return initials(firstAndLast(name.split(/\s+/)))
 
   const handle = (profile.email?.split('@')[0] ?? profile.preferred_username)?.trim()
-  if (handle) {
-    const parts = handle.split(/[._-]+/).filter(Boolean)
-    return initials([parts[0], parts.length > 1 ? parts[parts.length - 1] : undefined])
-  }
+  if (handle) return initials(firstAndLast(handle.split(/[._-]+/).filter(Boolean)))
   return '?'
 }
 
 /** How the Storefront names the signed-in Customer. */
 export function customerLabel(profile: CustomerProfile): string {
-  return profile.email ?? profile.preferred_username ?? 'Your account'
+  return profile.email ?? profile.preferred_username ?? 'Customer'
+}
+
+function firstAndLast(words: string[]): (string | undefined)[] {
+  return [words[0], words.length > 1 ? words[words.length - 1] : undefined]
 }
 
 function initials(words: (string | undefined)[]): string {
