@@ -41,9 +41,9 @@ export interface CategoryChip {
 
 /** "All", counting every Product, then each category, with the chosen one (none means "All") selected. */
 export function categoryChips(categories: Category[], chosen: string | undefined): CategoryChip[] {
-  const all = categories.reduce((sum, c) => sum + c.productCount, 0)
+  const total = categories.reduce((sum, c) => sum + c.productCount, 0)
   return [
-    { category: undefined, label: 'All', productCount: all, selected: chosen === undefined },
+    { category: undefined, label: 'All', productCount: total, selected: chosen === undefined },
     ...categories.map((c) => ({
       category: c.category,
       label: c.category,
@@ -53,6 +53,7 @@ export function categoryChips(categories: Category[], chosen: string | undefined
   ]
 }
 
+/** How many Products a list holds, in words. */
 export function productCountLabel(count: number): string {
   if (count === 0) return 'No products'
   return count === 1 ? '1 product' : `${count} products`

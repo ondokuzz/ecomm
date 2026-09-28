@@ -353,10 +353,13 @@ code {
 .card-link:hover {
   text-decoration: none;
 }
-.card-link:hover .card-interactive {
-  transform: translateY(-3px);
-  box-shadow: var(--shadow-lg);
-  border-color: var(--color-primary);
+/* Only where a pointer hovers, so a tap on a touch screen doesn't leave the card lifted. */
+@media (hover: hover) {
+  .card-link:hover .card-interactive {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--color-primary);
+  }
 }
 
 /* Badge */
@@ -909,10 +912,6 @@ main {
   display: flex;
   gap: var(--space-2);
   overflow-x: auto;
-  scrollbar-width: none;
-}
-.chips::-webkit-scrollbar {
-  display: none;
 }
 .chips li {
   flex: none;
@@ -969,6 +968,10 @@ main {
     margin: 0 calc(-1 * var(--gutter));
     padding-inline: var(--gutter);
     scroll-padding-inline: var(--gutter);
+    scrollbar-width: none;
+  }
+  .chips::-webkit-scrollbar {
+    display: none;
   }
 }
 
@@ -1027,8 +1030,10 @@ main {
 .product-card-media .product-image {
   transition: transform calc(var(--duration) * 2) var(--ease);
 }
-.card-link:hover .product-card-media .product-image {
-  transform: scale(1.06);
+@media (hover: hover) {
+  .card-link:hover .product-card-media .product-image {
+    transform: scale(1.06);
+  }
 }
 .product-image-skeleton {
   aspect-ratio: 4 / 3;

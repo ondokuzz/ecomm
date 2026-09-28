@@ -30,14 +30,19 @@ export function ProductListPage() {
       )}
       <CategoryChips category={category} />
       {products.error ? (
-        <ErrorState title="We couldn't load the products" error={products.error} onRetry={() => products.refetch()} />
+        <ErrorState
+          title="We couldn't load the products"
+          error={products.error}
+          retrying={products.isFetching}
+          onRetry={() => products.refetch()}
+        />
       ) : products.data?.length === 0 ? (
         <EmptyState
           title="Nothing here yet"
           illustration={<EmptyShelf />}
-          action={<ButtonLink to="/">See all products</ButtonLink>}
+          action={category && <ButtonLink to="/">See all products</ButtonLink>}
         >
-          We have no products in this category.
+          {category ? 'We have no products in this category.' : 'We have no products yet. Check back soon.'}
         </EmptyState>
       ) : (
         <ul className="product-grid" aria-busy={products.isPending} aria-label="Products">

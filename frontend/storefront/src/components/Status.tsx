@@ -29,7 +29,17 @@ export function ErrorMessage({ error }: { error: unknown }) {
 }
 
 /** A request that failed in place of a page's main content, with the reason and a way to try again. */
-export function ErrorState({ title, error, onRetry }: { title: string; error: unknown; onRetry: () => void }) {
+export function ErrorState({
+  title,
+  error,
+  retrying,
+  onRetry,
+}: {
+  title: string
+  error: unknown
+  retrying: boolean
+  onRetry: () => void
+}) {
   return (
     <div className="empty error-state" role="alert">
       <span className="error-state-icon">
@@ -37,7 +47,7 @@ export function ErrorState({ title, error, onRetry }: { title: string; error: un
       </span>
       <h2>{title}</h2>
       <p>{errorText(error)}</p>
-      <Button variant="primary" onClick={onRetry}>
+      <Button variant="primary" loading={retrying} onClick={onRetry}>
         Try again
       </Button>
     </div>
