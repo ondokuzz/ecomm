@@ -2,7 +2,7 @@ import { Link, useNavigate } from 'react-router'
 import { usePricedCart } from '../api/cart'
 import { ApiError } from '../api/http'
 import { useCheckout } from '../api/orders'
-import { CartLines } from '../components/CartLines'
+import { ProductLines } from '../components/ProductLines'
 import { CheckoutSteps } from '../components/CheckoutSteps'
 import { EmptyCart } from '../components/EmptyCart'
 import { OrderSummary } from '../components/OrderSummary'
@@ -48,7 +48,7 @@ export function CheckoutPage() {
           </Card>
         </div>
         <OrderSummary cart={cart.data} priced={priced}>
-          <CartLines priced={priced} compact />
+          <ProductLines lines={priced.lines} label="Cart lines" compact />
           <Link to="/cart" className="order-summary-edit">
             Edit cart
           </Link>

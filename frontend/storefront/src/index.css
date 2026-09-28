@@ -20,6 +20,7 @@
   --color-primary-text: #5a1ee6;
   --color-accent: #db1664;
   --color-accent-soft: #ffe3ee;
+  --color-accent-text: #b8104f;
   --color-on-accent: #ffffff;
   --color-sun: #ffc233;
   --color-on-sun: #2b1a00;
@@ -101,6 +102,7 @@
     --color-primary-text: #bda9ff;
     --color-accent: #ff5c9a;
     --color-accent-soft: #4a1630;
+    --color-accent-text: #ff8ab6;
     --color-on-accent: #24030f;
     --color-sun: #ffcc4d;
     --color-on-sun: #2b1a00;
@@ -393,6 +395,10 @@ code {
 .badge-primary {
   background: var(--color-primary-soft);
   color: var(--color-primary-text);
+}
+.badge-accent {
+  background: var(--color-accent-soft);
+  color: var(--color-accent-text);
 }
 .badge-success {
   background: var(--color-success-soft);
@@ -1639,6 +1645,286 @@ main {
 }
 .pay-button {
   align-self: stretch;
+}
+
+/* Orders: the confirmation after checkout, an Order's progress, and My Orders as cards */
+
+.card-title {
+  font-size: var(--text-lg);
+  margin: 0 0 var(--space-4);
+}
+.card-title + .cart-lines.compact {
+  margin-top: 0;
+  padding: 0;
+  border-top: none;
+}
+.order-heading {
+  justify-content: flex-start;
+}
+.order-heading h2 {
+  margin: 0;
+}
+.order-id {
+  margin: var(--space-3) 0 0;
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.confirmation {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+  padding: var(--space-7) var(--space-4) var(--space-6);
+  text-align: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+.confirmation h1 {
+  margin: 0;
+  font-size: clamp(var(--text-2xl), 4vw, var(--text-3xl));
+}
+.confirmation-check {
+  display: grid;
+  place-items: center;
+  width: 5.5rem;
+  height: 5.5rem;
+  margin-bottom: var(--space-2);
+  border-radius: 50%;
+  background: var(--gradient-brand);
+  color: var(--color-on-gradient);
+  box-shadow: var(--shadow-primary);
+  animation: pop calc(var(--duration) * 4) var(--ease);
+}
+.confirmation-summary {
+  margin: 0;
+  color: var(--color-muted);
+}
+.confirmation-summary strong {
+  color: var(--color-fg);
+}
+.confirmation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+/* Confetti falls once from the top of the confirmation and fades; not at all with reduced motion. */
+.confetti {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.confetti span {
+  position: absolute;
+  top: -1rem;
+  left: var(--x);
+  width: 0.5rem;
+  height: 0.85rem;
+  border-radius: 2px;
+  opacity: 0;
+  background: var(--color-primary);
+  animation: confetti-fall calc(var(--duration) * 11) var(--delay) var(--ease) forwards;
+}
+.confetti span:nth-child(4n + 1) {
+  background: var(--color-accent);
+}
+.confetti span:nth-child(4n + 2) {
+  background: var(--color-sun);
+}
+.confetti span:nth-child(4n + 3) {
+  background: var(--color-info);
+  border-radius: 50%;
+  height: 0.5rem;
+}
+@keyframes confetti-fall {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0);
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--drift), 16rem) rotate(var(--spin));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .confetti {
+    display: none;
+  }
+}
+
+/* An Order's progress: Placed → Paid → … → Delivered, or ending at Cancelled or Returned. */
+.timeline {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  font-size: var(--text-sm);
+  font-weight: 650;
+  color: var(--color-muted);
+}
+.timeline-step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.timeline-step + .timeline-step::before {
+  content: '';
+  width: clamp(1rem, 3vw, 2.5rem);
+  height: 2px;
+  border-radius: 1px;
+  background: var(--color-line-strong);
+}
+.timeline-done + .timeline-step::before {
+  background: var(--color-primary);
+}
+.timeline-marker {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  border: 2px solid var(--color-line-strong);
+  font-size: var(--text-xs);
+  font-weight: 800;
+}
+.timeline-done,
+.timeline-current {
+  color: var(--color-fg);
+}
+.timeline-done .timeline-marker,
+.timeline-current .timeline-marker {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+.timeline-current .timeline-marker {
+  box-shadow: 0 0 0 4px var(--color-primary-soft);
+}
+.timeline-cancelled {
+  color: var(--color-danger);
+}
+.timeline-cancelled .timeline-marker {
+  border-color: var(--color-danger);
+  background: var(--color-danger);
+  color: var(--color-surface);
+  box-shadow: 0 0 0 4px var(--color-danger-soft);
+}
+.timeline-returned {
+  color: var(--color-warning);
+}
+.timeline-returned .timeline-marker {
+  border-color: var(--color-warning);
+  background: var(--color-warning);
+  color: var(--color-surface);
+  box-shadow: 0 0 0 4px var(--color-warning-soft);
+}
+/* On phones the steps run down the card, each joined to the one before by a short line above its marker. */
+@media (max-width: 600px) {
+  .timeline {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+  }
+  .timeline-step {
+    display: grid;
+    grid-template-columns: 1.75rem auto;
+    justify-content: start;
+    column-gap: var(--space-3);
+    row-gap: 0;
+  }
+  .timeline-step + .timeline-step::before {
+    grid-column: 1;
+    justify-self: center;
+    width: 2px;
+    height: 1rem;
+  }
+  .timeline-marker {
+    grid-column: 1;
+  }
+}
+
+.order-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
+  gap: var(--space-4);
+}
+.order-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.order-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+.order-card-reference {
+  display: block;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 800;
+}
+.order-card-date {
+  font-size: var(--text-sm);
+}
+.order-card-thumbs {
+  list-style: none;
+  display: flex;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+}
+.order-card-thumbs > li {
+  width: 4.5rem;
+}
+.order-card-more {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  color: var(--color-muted);
+  font-weight: 800;
+}
+.order-card-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-top: auto;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-line);
+}
+.empty-flap {
+  fill: var(--color-sun);
+  stroke: var(--color-on-sun);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  opacity: 0.8;
 }
 
 /* Confirm dialog */

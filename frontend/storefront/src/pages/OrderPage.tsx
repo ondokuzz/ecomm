@@ -1,71 +1,85 @@
+import { useId } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
+import { useProductsByVariantId } from '../api/catalog'
 import { useOrder } from '../api/orders'
 import { CheckoutSteps } from '../components/CheckoutSteps'
+import { OrderConfirmation } from '../components/OrderConfirmation'
 import { OrderStatusBadge } from '../components/OrderStatusBadge'
+import { OrderTimeline } from '../components/OrderTimeline'
+import { ProductLines } from '../components/ProductLines'
 import { ErrorMessage, Loading } from '../components/Status'
 import { Card } from '../components/ui/Card'
 import { Icon } from '../components/ui/Icon'
-import { formatMoney, timesMoney } from '../domain/money'
+import { formatMoney } from '../domain/money'
+import { type Order, nameOrderLines, orderItemCountLabel, orderReference } from '../domain/order'
 
-/** An Order and its Order Status, read from Order Management; also the confirmation after checkout. */
+/** An Order, its Order Status and its lines, read from Order Management; after checkout, the confirmation first. */
 export function OrderPage() {
   const { id = '' } = useParams()
   const [params] = useSearchParams()
   const query = useOrder(id)
+  const products = useProductsByVariantId(query.data?.lines.map((line) => line.variantId) ?? [])
 
   if (query.isPending) return <Loading />
   if (query.error) return <ErrorMessage error={query.error} />
   const order = query.data
+  const placed = params.has('placed')
+  const Heading = placed ? 'h2' : 'h1'
 
   return (
     <section>
-      {params.has('placed') && <CheckoutSteps current="Done" />}
-      {params.has('placed') && (
-        <p className="alert alert-success" role="status">
-          <Icon name="check" size={18} />
-          <span>Thank you! Your order is confirmed.</span>
-        </p>
+      {placed && <CheckoutSteps current="Done" />}
+      {placed && <OrderConfirmation order={order} />}
+      {!placed && (
+        <Link to="/orders" className="back-link">
+          <Icon name="arrowLeft" size={16} />
+          All my orders
+        </Link>
       )}
-      <h1>
-        Order <code>{order.id}</code>
-      </h1>
-      <p className="row">
+      <div className="page-heading order-heading">
+        <Heading>Order #{orderReference(order)}</Heading>
         <OrderStatusBadge status={order.status} />
-        <span className="muted">Placed {new Date(order.placedAt).toLocaleString()}</span>
-      </p>
-      <Card flush className="table-scroll">
-        <table className="lines">
-          <thead>
-            <tr>
-              <th>Product</th>
-              <th className="num">Price</th>
-              <th className="num">Quantity</th>
-              <th className="num">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {order.lines.map((line) => (
-              <tr key={line.variantId}>
-                <td>
-                  <Link to={`/products/${encodeURIComponent(line.variantId)}`}>{line.variantId}</Link>
-                </td>
-                <td className="num">{formatMoney(line.unitPrice)}</td>
-                <td className="num">{line.quantity}</td>
-                <td className="num">{formatMoney(timesMoney(line.unitPrice, line.quantity))}</td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr>
-              <th colSpan={3}>Total</th>
-              <th className="num">{formatMoney(order.total)}</th>
-            </tr>
-          </tfoot>
-        </table>
-      </Card>
-      <p>
-        <Link to="/orders">All my orders</Link>
-      </p>
+      </div>
+      <div className="cart-layout">
+        <div className="cart-main stack">
+          <Card>
+            <h2 className="card-title">Order progress</h2>
+            <OrderTimeline status={order.status} />
+          </Card>
+          <Card>
+            <h2 className="card-title">Products</h2>
+            <ProductLines lines={nameOrderLines(order, products)} label="Order lines" compact />
+          </Card>
+        </div>
+        <OrderFacts order={order} />
+      </div>
     </section>
+  )
+}
+
+/** The Order in brief, beside its lines: when it was placed, how many items, the total, and its full ID. */
+function OrderFacts({ order }: { order: Order }) {
+  const headingId = useId()
+  return (
+    <Card className="order-summary" aria-labelledby={headingId} role="region">
+      <h2 id={headingId}>Order summary</h2>
+      <dl>
+        <div>
+          <dt>Placed</dt>
+          <dd>{new Date(order.placedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</dd>
+        </div>
+        <div>
+          <dt>Items</dt>
+          <dd>{orderItemCountLabel(order)}</dd>
+        </div>
+        <div className="order-summary-total">
+          <dt>Total</dt>
+          <dd>{formatMoney(order.total)}</dd>
+        </div>
+      </dl>
+      <p className="muted order-id">
+        Order ID <code>{order.id}</code>
+      </p>
+    </Card>
   )
 }

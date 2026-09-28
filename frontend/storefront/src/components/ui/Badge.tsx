@@ -1,7 +1,7 @@
 import type { HTMLAttributes } from 'react'
 import { cx } from './cx'
 
-export type Tone = 'neutral' | 'primary' | 'success' | 'danger' | 'warning' | 'info'
+export type Tone = 'neutral' | 'primary' | 'accent' | 'success' | 'danger' | 'warning' | 'info'
 
 /** A small pill of status or count; `dot` leads it with a dot in its colour. */
 export function Badge({

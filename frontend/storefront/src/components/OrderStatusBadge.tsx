@@ -1,22 +1,12 @@
-import type { OrderStatus } from '../domain/order'
-import { Badge, type Tone } from './ui/Badge'
-
-const badges: Record<OrderStatus, { label: string; tone: Tone }> = {
-  PLACED: { label: 'Placed', tone: 'info' },
-  PAID: { label: 'Paid', tone: 'success' },
-  FULFILLED: { label: 'Fulfilled', tone: 'primary' },
-  SHIPPED: { label: 'Shipped', tone: 'primary' },
-  DELIVERED: { label: 'Delivered', tone: 'success' },
-  CANCELLED: { label: 'Cancelled', tone: 'danger' },
-  RETURNED: { label: 'Returned', tone: 'warning' },
-}
+import { type OrderStatus, orderStatusLabel } from '../domain/order'
+import { orderStatusTones } from './orderStatusTones'
+import { Badge } from './ui/Badge'
 
 export function OrderStatusBadge({ status }: { status: OrderStatus }) {
-  const { label, tone } = badges[status]
   return (
     // The smoke test finds the Order Status by its `status-*` class.
-    <Badge tone={tone} dot className={`status-${status.toLowerCase()}`}>
-      {label}
+    <Badge tone={orderStatusTones[status]} dot className={`status-${status.toLowerCase()}`}>
+      {orderStatusLabel(status)}
     </Badge>
   )
 }

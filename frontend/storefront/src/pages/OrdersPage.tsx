@@ -1,13 +1,24 @@
 import { Link } from 'react-router'
+import { useProductsByVariantId } from '../api/catalog'
 import { useOrders } from '../api/orders'
 import { OrderStatusBadge } from '../components/OrderStatusBadge'
+import { ProductThumb } from '../components/ProductImage'
 import { EmptyState, ErrorMessage, Loading } from '../components/Status'
 import { ButtonLink } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
+import type { Product } from '../domain/catalog'
 import { formatMoney } from '../domain/money'
+import { type Order, orderItemCountLabel, orderReference } from '../domain/order'
 
+/** How many of an Order's Products its card shows; the rest are counted. */
+const maxThumbnails = 3
+
+/** The Customer's Orders as cards, newest first. */
 export function OrdersPage() {
   const orders = useOrders()
+  const products = useProductsByVariantId(
+    (orders.data ?? []).flatMap((order) => order.lines.slice(0, maxThumbnails).map((line) => line.variantId)),
+  )
 
   if (orders.isPending) return <Loading />
   if (orders.error) return <ErrorMessage error={orders.error} />
@@ -18,44 +29,75 @@ export function OrdersPage() {
       {orders.data.length === 0 ? (
         <EmptyState
           title="No orders yet"
+          illustration={<NoOrdersIllustration />}
           action={
-            <ButtonLink variant="primary" to="/">
-              Browse products
+            <ButtonLink variant="primary" size="lg" to="/">
+              Start shopping
             </ButtonLink>
           }
         >
-          Your Orders show up here once you check out.
+          Your orders show up here once you check out.
         </EmptyState>
       ) : (
-        <Card flush className="table-scroll">
-          <table className="lines">
-            <thead>
-              <tr>
-                <th>Placed</th>
-                <th>Order</th>
-                <th>Status</th>
-                <th className="num">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {orders.data.map((order) => (
-                <tr key={order.id}>
-                  <td>{new Date(order.placedAt).toLocaleString()}</td>
-                  <td>
-                    <Link to={`/orders/${encodeURIComponent(order.id)}`}>
-                      <code>{order.id}</code>
-                    </Link>
-                  </td>
-                  <td>
-                    <OrderStatusBadge status={order.status} />
-                  </td>
-                  <td className="num">{formatMoney(order.total)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
+        <ul className="order-cards" aria-label="Orders">
+          {orders.data.map((order) => (
+            <OrderCard key={order.id} order={order} products={products} />
+          ))}
+        </ul>
       )}
     </section>
+  )
+}
+
+function OrderCard({ order, products }: { order: Order; products: Record<string, Product | undefined> }) {
+  const more = order.lines.length - maxThumbnails
+  return (
+    <li>
+      <Link to={`/orders/${encodeURIComponent(order.id)}`} className="card-link">
+        <Card interactive className="order-card">
+          <div className="order-card-top">
+            <div>
+              <span className="order-card-reference">Order #{orderReference(order)}</span>
+              <span className="muted order-card-date">
+                {new Date(order.placedAt).toLocaleDateString(undefined, { dateStyle: 'medium' })}
+              </span>
+            </div>
+            <OrderStatusBadge status={order.status} />
+          </div>
+          <ul className="order-card-thumbs">
+            {order.lines.slice(0, maxThumbnails).map((line) => (
+              <li key={line.variantId}>
+                {/* The Variant ID names a Product Catalog no longer has. */}
+                <ProductThumb product={products[line.variantId]} label={line.variantId} />
+              </li>
+            ))}
+            {more > 0 && (
+              <li className="order-card-more" aria-label={`and ${more} more`}>
+                +{more}
+              </li>
+            )}
+          </ul>
+          <div className="order-card-bottom">
+            <span className="muted">{orderItemCountLabel(order)}</span>
+            <span className="price">{formatMoney(order.total)}</span>
+          </div>
+        </Card>
+      </Link>
+    </li>
+  )
+}
+
+/** An empty parcel box with its flaps open and a couple of sparkles. */
+function NoOrdersIllustration() {
+  return (
+    <svg viewBox="0 0 200 140" width="200" height="140" aria-hidden="true" className="empty-illustration">
+      <ellipse cx="100" cy="126" rx="70" ry="8" className="empty-shadow" />
+      <path d="M52 56h96v62H52z" className="empty-box" />
+      <path d="M52 56l-16-20h52l22 20 M148 56l16-20h-52l-12 20" className="empty-flap" />
+      <path d="M100 56v62" className="empty-tape" />
+      <circle cx="160" cy="18" r="5" className="empty-spark" />
+      <circle cx="34" cy="74" r="4" className="empty-spark-2" />
+      <path d="M100 6l3.5 7 7 3.5-7 3.5-3.5 7-3.5-7-7-3.5 7-3.5z" className="empty-spark" />
+    </svg>
   )
 }

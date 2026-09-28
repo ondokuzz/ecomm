@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useClearCart, usePricedCart, useRemoveFromCart, useSetQuantity } from '../api/cart'
-import { CartLines } from '../components/CartLines'
+import { ProductLines } from '../components/ProductLines'
 import { EmptyCart } from '../components/EmptyCart'
 import { OrderSummary } from '../components/OrderSummary'
 import { ErrorMessage, Loading } from '../components/Status'
@@ -33,8 +33,9 @@ export function CartPage() {
       {clear.error && <ErrorMessage error={clear.error} />}
       <div className="cart-layout">
         <div className="cart-main">
-          <CartLines
-            priced={priced}
+          <ProductLines
+            lines={priced.lines}
+            label="Cart lines"
             onChange={(variantId, quantity) => setQuantity.mutate({ variantId, quantity })}
             onRemove={(variantId) => remove.mutate(variantId)}
             disabled={busy}

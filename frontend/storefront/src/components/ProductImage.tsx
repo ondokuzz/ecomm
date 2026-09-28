@@ -28,3 +28,21 @@ export function ProductImage({ product, className }: { product: Product; classNa
     />
   )
 }
+
+/**
+ * A Product's image as a thumbnail, or a placeholder while it loads or when Catalog doesn't have
+ * it; `label` names the placeholder, such as by the Variant ID, where the thumbnail isn't decorative.
+ */
+export function ProductThumb({ product, label }: { product?: Product; label?: string }) {
+  if (product) return <ProductImage product={product} />
+  return (
+    <div
+      className="product-image product-image-placeholder"
+      role={label ? 'img' : undefined}
+      aria-label={label}
+      title={label}
+    >
+      <Icon name="image" size={24} />
+    </div>
+  )
+}

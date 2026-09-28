@@ -1,8 +1,7 @@
-import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from 'react-oidc-context'
 import { type Cart, type PricedCart, priceCart } from '../domain/cart'
-import type { Product } from '../domain/catalog'
-import { productQuery } from './catalog'
+import { useProductsByVariantId } from './catalog'
 import { api } from './http'
 
 export const cartKey = ['cart']
@@ -20,14 +19,9 @@ export function useCart() {
 /** The Cart priced from Catalog's current Prices, while each line's Product loads. */
 export function usePricedCart(): { cart: ReturnType<typeof useCart>; priced?: PricedCart } {
   const cart = useCart()
-  // Until multi-Variant Products arrive, a Variant ID is its Product's SKU.
-  const products = useQueries({
-    queries: (cart.data?.items ?? []).map((item) => productQuery(item.variantId)),
-  })
+  const products = useProductsByVariantId((cart.data?.items ?? []).map((item) => item.variantId))
   if (!cart.data) return { cart }
-  const productsByVariantId: Record<string, Product | undefined> = {}
-  cart.data.items.forEach((item, i) => (productsByVariantId[item.variantId] = products[i]?.data ?? undefined))
-  return { cart, priced: priceCart(cart.data, productsByVariantId) }
+  return { cart, priced: priceCart(cart.data, products) }
 }
 
 export function useSetQuantity() {

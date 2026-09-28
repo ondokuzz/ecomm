@@ -12,8 +12,8 @@ React, TypeScript, React Router and TanStack Query.
 | `/products/{sku}` | A Product with its image, Price, Stock and specs; add it to the Cart | no (adding needs it) |
 | `/cart` | The Cart, priced from Catalog's current Prices; change quantities, remove lines or empty it | yes |
 | `/checkout` | The order summary, and a mock payment card with a "Pay" button | yes |
-| `/orders/{id}` | An Order and its Order Status; after checkout, the confirmation | yes |
-| `/orders` | My Orders, newest first | yes |
+| `/orders/{id}` | An Order: its Order Status timeline, its lines and summary; after checkout, the confirmation first | yes |
+| `/orders` | My Orders as cards, newest first | yes |
 
 ## Design
 
@@ -40,6 +40,24 @@ cancels, and Cancel has focus first so Enter never confirms by accident.
 The Product page's Stock indicator reads "In stock", "Only N left" at 5 or fewer
 (`lowStockThreshold` in [`src/domain/stock.ts`](./src/domain/stock.ts)), or "Out of stock", which
 also disables "Add to cart".
+
+## Orders
+
+After checkout the Order page opens with a confirmation: a big check, confetti that falls once, the
+Order's reference, item count and total, and "Continue shopping" / "View my orders". The confetti
+is decorative and hidden outright when the Customer prefers reduced motion.
+
+An Order is shown by its Order reference (`#3F2A9C1B`, the start of its ID; the full ID is in its
+summary). Its page has an Order Status timeline, Placed → Paid → Fulfilled → Shipped → Delivered
+with the current step marked; a cancelled Order ends at Cancelled after Placed, in red, since its
+Order Status doesn't say whether it was paid, and a returned one at Returned after Delivered, in
+amber. Its lines name their Products and show their thumbnails, looked up from Catalog, and fall back
+to the Variant ID when Catalog no longer has the Product.
+
+My Orders lists them as cards: reference, date, the first three Products' thumbnails (and how many
+more), item count, total and Order Status badge. Each Order Status badge has a colour of its own
+([`orderStatusTones`](./src/components/orderStatusTones.ts)), always with its name, so colour is
+never the only cue.
 
 ## Product images
 
@@ -133,11 +151,12 @@ Sign in as `demo@ecomm.local` / `demo`, or register a new Customer.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: Money formatting, Cart pricing, checkout problems, quantities, Stock levels, toasts, category chips, Customer initials, seed Product images
+npm test          # Vitest: Money formatting, Cart pricing, checkout problems, quantities, Stock levels, toasts, category chips, Customer initials, Orders and their timeline, Order Status colours, seed Product images
 npm run test:e2e  # Playwright smoke test against the running compose stack (`make up`)
 ```
 
 The smoke test ([`e2e/sprint1.spec.ts`](./e2e/sprint1.spec.ts)) signs in on Keycloak for real,
-checks out two Products as the demo Customer, empties a Cart through the confirmation, and registers a
-new Customer. It needs Chromium once:
+checks out two Products as the demo Customer (the confirmation, the confetti gone under reduced
+motion, the Order's lines by Product name, its timeline and its card on My Orders), empties a Cart
+through the confirmation, and registers a new Customer. It needs Chromium once:
 `npx playwright install chromium`. Set `STOREFRONT_URL` or `KEYCLOAK_URL` to aim it elsewhere.

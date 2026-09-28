@@ -67,14 +67,30 @@ test('the demo Customer checks out two Products and Stock goes down', async ({ p
   await expect(page.getByText('Thank you! Your order is confirmed.')).toBeVisible()
   await expect(currentStep).toContainText('Done')
   await expect(doneSteps).toHaveText([/^Cart/, /^Payment/, /^Done/])
+  // The confetti falls, unless the Customer prefers reduced motion.
+  const confetti = page.locator('.confetti')
+  await expect(confetti).toBeVisible()
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await expect(confetti).toBeHidden()
   // The badge is how the page renders Order Status PAID; the Order itself must say PAID too.
   await expect(page.locator('.status-paid')).toHaveText('Paid')
+  await expect(page.getByRole('list', { name: 'Order progress' }).locator('[aria-current=step]')).toHaveText('Paid')
   const orderId = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!)
   const order = await orderOf(request, token, orderId)
   expect(order.status).toBe('PAID')
-  for (const { variantId } of bought) {
-    await expect(page.getByRole('link', { name: variantId })).toBeVisible()
+  const orderLines = page.getByRole('list', { name: 'Order lines' })
+  for (const { product, variantId } of bought) {
+    await expect(orderLines.getByRole('link', { name: product.name })).toBeVisible()
     expect(order.lines.find((line) => line.variantId === variantId)?.quantity).toBe(1)
+  }
+
+  await page.getByRole('link', { name: 'View my orders' }).click()
+  const card = page.locator(`a[href="/orders/${encodeURIComponent(orderId)}"]`)
+  await expect(card).toContainText(`Order #${orderId.slice(0, 8).toUpperCase()}`)
+  await expect(card.locator('.status-paid')).toHaveText('Paid')
+  await expect(card).toContainText('2 items')
+  for (const { product } of bought) {
+    await expect(card.getByRole('img', { name: product.name })).toBeVisible()
   }
 
   for (const { variantId, stock } of bought) {

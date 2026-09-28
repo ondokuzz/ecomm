@@ -52,6 +52,9 @@ _Avoid_: Lock, Hold
 A Customer's confirmed intent to purchase one or more Variants, tracked through a lifecycle from placement to delivery or return. It holds one Order Line per Variant, all in one currency, and its total is the sum of its lines. It belongs to the Customer who placed it, and only they can see it.
 _Avoid_: Purchase, Transaction
 
+**Order reference**:
+The short handle the Storefront shows an Order by, such as `#3F2A9C1B`: the first eight characters of its ID, upper-cased. Order IDs are random UUIDs, so it tells a Customer's Orders apart; the full ID stays on the Order page. Display only; no service looks an Order up by it.
+
 **Order Line**:
 One Variant, its quantity, and its unit price captured at checkout. The captured price stays with the Order even if the Variant's Price changes later.
 _Avoid_: Item

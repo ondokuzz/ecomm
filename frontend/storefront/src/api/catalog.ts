@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQueries, useQuery } from '@tanstack/react-query'
 import type { Category, Product } from '../domain/catalog'
 import { ApiError, api } from './http'
 
@@ -24,6 +24,17 @@ export function productQuery(sku: string) {
 
 export function useProduct(sku: string) {
   return useQuery(productQuery(sku))
+}
+
+/**
+ * The Products some Variants belong to, as each loads; a Variant maps to undefined while its
+ * Product loads, or when Catalog doesn't have it.
+ */
+export function useProductsByVariantId(variantIds: string[]): Record<string, Product | undefined> {
+  const unique = [...new Set(variantIds)]
+  // Until multi-Variant Products arrive, a Variant ID is its Product's SKU.
+  const products = useQueries({ queries: unique.map((variantId) => productQuery(variantId)) })
+  return Object.fromEntries(unique.map((variantId, i) => [variantId, products[i]?.data ?? undefined]))
 }
 
 /** How many units of a Variant Inventory has; null data once loaded means it has no Stock record. */
