@@ -14,11 +14,11 @@ export function useProducts(category?: string) {
   })
 }
 
-/** One Product; undefined data once loaded means Catalog doesn't have it. */
+/** One Product; null data once loaded means Catalog doesn't have it. */
 export function productQuery(sku: string) {
   return {
     queryKey: ['product', sku],
-    queryFn: () => api<Product>('catalog', `/products/${encodeURIComponent(sku)}`).catch(orUndefinedOn404),
+    queryFn: () => api<Product>('catalog', `/products/${encodeURIComponent(sku)}`).catch(orNullOn404),
   }
 }
 
@@ -26,7 +26,7 @@ export function useProduct(sku: string) {
   return useQuery(productQuery(sku))
 }
 
-/** How many units of a Variant Inventory has; undefined data once loaded means it has no Stock record. */
+/** How many units of a Variant Inventory has; null data once loaded means it has no Stock record. */
 export const stockKey = ['stock']
 
 export function useStock(variantId: string | undefined) {
@@ -35,12 +35,13 @@ export function useStock(variantId: string | undefined) {
     queryFn: () =>
       api<{ quantity: number }>('inventory', `/stock/${encodeURIComponent(variantId!)}`)
         .then((stock) => stock.quantity)
-        .catch(orUndefinedOn404),
+        .catch(orNullOn404),
     enabled: variantId !== undefined,
   })
 }
 
-function orUndefinedOn404(error: unknown): undefined {
-  if (error instanceof ApiError && error.status === 404) return undefined
+// Null rather than undefined: TanStack Query treats a query that resolves to undefined as failed.
+function orNullOn404(error: unknown): null {
+  if (error instanceof ApiError && error.status === 404) return null
   throw error
 }

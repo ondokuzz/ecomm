@@ -34,13 +34,18 @@ test('the demo Customer checks out two Products and Stock goes down', async ({ p
   await signInOnKeycloak(page, demoCustomer)
   await expectSignedIn(page, demoCustomer.email)
 
-  for (const { product } of bought) {
-    await page.getByRole('link', { name: 'Products', exact: true }).click()
+  for (const [i, { product }] of bought.entries()) {
+    await page.getByRole('navigation', { name: 'Main', exact: true }).getByRole('link', { name: 'Products' }).click()
     await page.locator(`a[href="/products/${encodeURIComponent(product.sku)}"]`).click()
     await expect(page.getByRole('heading', { name: product.name })).toBeVisible()
-    await expect(page.getByText(/^In stock: \d+$/)).toBeVisible()
+    await expect(page.getByText(/^(In stock|Only \d+ left)$/)).toBeVisible()
     await page.getByRole('button', { name: 'Add to cart' }).click()
+    const toast = page.locator('.toast').filter({ hasText: 'Added to cart' })
+    await expect(toast.getByRole('link', { name: 'View cart' })).toHaveAttribute('href', '/cart')
     await expect(page.getByText('1 in your cart')).toBeVisible()
+    await expect(page.getByRole('link', { name: `Cart (${i + 1})` })).toBeVisible()
+    await toast.getByRole('button', { name: 'Dismiss' }).click()
+    await expect(toast).toHaveCount(0)
   }
 
   await page.getByRole('link', { name: /^Cart/ }).click()

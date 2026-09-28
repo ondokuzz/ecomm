@@ -9,7 +9,7 @@ React, TypeScript, React Router and TanStack Query.
 | Path | | Login |
 |---|---|---|
 | `/?category=` | Products, filtered by category | no |
-| `/products/{sku}` | A Product with its Price and Stock; add it to the Cart | no (adding needs it) |
+| `/products/{sku}` | A Product with its image, Price, Stock and specs; add it to the Cart | no (adding needs it) |
 | `/cart` | The Cart, priced from Catalog's current Prices | yes |
 | `/checkout` | The Cart once more, and a mock "Pay" button | yes |
 | `/orders/{id}` | An Order and its Order Status; after checkout, the confirmation | yes |
@@ -23,9 +23,19 @@ corner radii, shadows) as CSS custom properties on `:root`, redefined for dark m
 and Bricolage Grotesque for headings, are bundled through Fontsource rather than loaded from a CDN.
 
 The pages build from the shared components in [`src/components/ui`](./src/components/ui): Button,
-Card, Badge, Input, QuantityStepper, Skeleton and Icon. The header's account menu and the
+Card, Badge, Input, QuantityStepper, Skeleton, Icon and Toast. The header's account menu and the
 small-screen menu are native `popover` elements, so the browser handles closing them on Escape or an
 outside click.
+
+A toast is a short message in the corner, such as "Added to cart" with a "View cart" link: any page
+under the `Toaster` in `App` shows one with `useToast()`. Toasts sit in a polite `aria-live` region,
+so screen readers announce them, and never take focus. Each goes after 5 seconds, or sooner with its
+close button; the countdown waits while a pointer rests on it or focus is inside it. At most three
+show at once.
+
+The Product page's Stock indicator reads "In stock", "Only N left" at 5 or fewer
+(`lowStockThreshold` in [`src/domain/stock.ts`](./src/domain/stock.ts)), or "Out of stock", which
+also disables "Add to cart".
 
 ## Product images
 
@@ -107,7 +117,7 @@ Sign in as `demo@ecomm.local` / `demo`, or register a new Customer.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: Money formatting, Cart pricing, quantities, category chips, Customer initials, seed Product images
+npm test          # Vitest: Money formatting, Cart pricing, quantities, Stock levels, toasts, category chips, Customer initials, seed Product images
 npm run test:e2e  # Playwright smoke test against the running compose stack (`make up`)
 ```
 

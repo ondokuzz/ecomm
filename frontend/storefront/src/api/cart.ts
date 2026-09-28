@@ -26,7 +26,7 @@ export function usePricedCart(): { cart: ReturnType<typeof useCart>; priced?: Pr
   })
   if (!cart.data) return { cart }
   const productsByVariantId: Record<string, Product | undefined> = {}
-  cart.data.items.forEach((item, i) => (productsByVariantId[item.variantId] = products[i]?.data))
+  cart.data.items.forEach((item, i) => (productsByVariantId[item.variantId] = products[i]?.data ?? undefined))
   return { cart, priced: priceCart(cart.data, productsByVariantId) }
 }
 
