@@ -9,6 +9,7 @@
   "verifyEmail": false,
   "sslRequired": "none",
   "accessTokenLifespan": 900,
+  "loginTheme": "ecomm",
   "roles": {
     "realm": [
       { "name": "CUSTOMER", "description": "A Customer who browses, buys and manages Orders." },

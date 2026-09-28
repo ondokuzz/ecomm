@@ -74,6 +74,8 @@ services:
     ports: ["${KEYCLOAK_PORT:-8180}:8080"]
     volumes:
       - ../../services/identity-access/realm:/opt/keycloak/data/import:ro
+      # The ecomm realm's login theme. start-dev doesn't cache themes, so edits show on reload.
+      - ../../services/identity-access/themes/ecomm:/opt/keycloak/themes/ecomm:ro
     depends_on:
       postgres: { condition: service_healthy }
     healthcheck:

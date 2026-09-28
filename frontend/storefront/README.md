@@ -98,7 +98,14 @@ Product has its image at the path Catalog returns, under 50 KB.
 
 `oidc-client-ts` (through `react-oidc-context`) signs the Customer in with Authorization Code +
 PKCE against the realm's public `storefront` client. Login and registration (`prompt=create`) both
-happen on Keycloak's hosted pages.
+happen on Keycloak's hosted pages, which wear the Storefront's brand through the realm's `ecomm`
+login theme ([Identity & Access](../../services/identity-access/README.md#login-theme)). The theme
+takes its tokens, fonts and favicon from here, copied by
+[`scripts/keycloak-theme.ts`](./scripts/keycloak-theme.ts):
+
+```sh
+npm run keycloak-theme   # after changing the tokens in src/index.css, the fonts or public/favicon.svg
+```
 
 Tokens are kept in memory only, never in web storage. A reload drops them, so on start the app
 asks Keycloak for new ones in a hidden iframe at `/silent-renew`; with a live Keycloak session the
@@ -151,7 +158,7 @@ Sign in as `demo@ecomm.local` / `demo`, or register a new Customer.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: Money formatting, Cart pricing, checkout problems, quantities, Stock levels, toasts, category chips, Customer initials, Orders and their timeline, Order Status colours, seed Product images
+npm test          # Vitest: Money formatting, Cart pricing, checkout problems, quantities, Stock levels, toasts, category chips, Customer initials, Orders and their timeline, Order Status colours, seed Product images, the Keycloak theme's copy of the tokens
 npm run test:e2e  # Playwright smoke test against the running compose stack (`make up`)
 ```
 

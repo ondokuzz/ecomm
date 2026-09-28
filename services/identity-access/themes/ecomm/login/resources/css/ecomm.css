@@ -1,0 +1,282 @@
+/*
+ * The Storefront's brand on keycloak.v2's PatternFly login pages. Every value comes from the
+ * Storefront's design tokens in tokens.css, and its fonts from fonts.css. Dark mode needs nothing
+ * here, as the tokens switch with Keycloak's dark-mode class.
+ */
+
+/*
+ * PatternFly's globals, in the Storefront's terms. PatternFly's dark theme sets them under
+ * :where(.pf-v5-theme-dark), which :root outranks.
+ */
+:root {
+  --pf-v5-global--FontFamily--text: var(--font-body);
+  --pf-v5-global--FontFamily--text--vf: var(--font-body);
+  --pf-v5-global--FontFamily--heading: var(--font-display);
+  --pf-v5-global--FontFamily--heading--vf: var(--font-display);
+  --pf-v5-global--FontFamily--monospace: var(--font-mono);
+  --pf-v5-global--FontFamily--monospace--vf: var(--font-mono);
+
+  --pf-v5-global--Color--100: var(--color-fg);
+  --pf-v5-global--Color--200: var(--color-muted);
+  --pf-v5-global--BackgroundColor--100: var(--color-surface);
+  --pf-v5-global--BorderColor--100: var(--color-line);
+  --pf-v5-global--BorderColor--200: var(--color-line-strong);
+  --pf-v5-global--BorderColor--300: var(--color-line-strong);
+
+  --pf-v5-global--primary-color--100: var(--color-primary);
+  --pf-v5-global--primary-color--200: var(--color-primary-hover);
+  --pf-v5-global--active-color--100: var(--color-primary);
+  --pf-v5-global--link--Color: var(--color-primary-text);
+  --pf-v5-global--link--Color--hover: var(--color-primary-text);
+  --pf-v5-global--danger-color--100: var(--color-danger);
+  --pf-v5-global--success-color--100: var(--color-success);
+
+  --pf-v5-global--BorderRadius--sm: var(--radius-md);
+}
+
+/* The page */
+
+/* Fixed, so the glow stays at the top instead of repeating below a page taller than the window. */
+.login-pf body {
+  font-family: var(--font-body);
+  color: var(--color-fg);
+  background: var(--gradient-glow) no-repeat fixed, var(--color-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* PatternFly runs the card edge to edge on a phone; keep the Storefront's gutter. */
+@media (max-width: 36rem) {
+  .pf-v5-c-login__container {
+    padding-inline: var(--gutter);
+  }
+}
+
+/* The Storefront header's gradient stripe, along the top of the page. */
+.login-pf body::before {
+  content: '';
+  position: fixed;
+  inset: 0 0 auto;
+  height: 4px;
+  background: var(--gradient-brand);
+}
+
+/* The wordmark: the gradient "e" and the realm's name, as in the Storefront's header. */
+#kc-header-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  font-family: var(--font-display);
+  font-size: var(--text-3xl);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  text-transform: none;
+  /* keycloak.v2 sets the header's colour with !important. */
+  color: var(--color-fg) !important;
+}
+#kc-header-wrapper::before {
+  content: 'e';
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: var(--radius-md);
+  background: var(--gradient-brand);
+  color: var(--color-on-gradient);
+  font-size: var(--text-2xl);
+  box-shadow: var(--shadow-md);
+}
+
+/* The card */
+
+.pf-v5-c-login__main {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+.pf-v5-c-login__main::before {
+  content: '';
+  display: block;
+  height: 4px;
+  background: var(--gradient-brand);
+}
+.pf-v5-c-login__main-header {
+  border-top: 0;
+}
+#kc-page-title {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: var(--color-fg);
+}
+.pf-v5-c-login__main-footer-band {
+  border-color: var(--color-line);
+}
+
+a {
+  color: var(--color-primary-text);
+  font-weight: 500;
+}
+a:hover {
+  color: var(--color-primary-text);
+  text-underline-offset: 3px;
+}
+
+/* Fields */
+
+.pf-v5-c-form__label-text {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-fg);
+}
+.pf-v5-c-form__label-required {
+  color: var(--color-accent-text);
+}
+
+.pf-v5-c-form-control {
+  --pf-v5-c-form-control--Color: var(--color-fg);
+  --pf-v5-c-form-control--BackgroundColor: var(--color-surface);
+  --pf-v5-c-form-control--m-readonly--BackgroundColor: var(--color-surface-2);
+  min-height: 2.75rem;
+  border-radius: var(--radius-md);
+}
+/* One rounded border in place of PatternFly's three sides plus an underline. */
+.pf-v5-c-form-control::before {
+  border: 1.5px solid var(--color-line-strong);
+  border-radius: inherit;
+  transition: border-color var(--duration) var(--ease);
+}
+.pf-v5-c-form-control::after {
+  border: 0;
+}
+.pf-v5-c-form-control:hover::before,
+.pf-v5-c-form-control:focus-within::before {
+  border-color: var(--color-primary);
+}
+.pf-v5-c-form-control.pf-m-error::before {
+  border-color: var(--color-danger);
+}
+.pf-v5-c-form-control > :is(input, select, textarea):focus-visible {
+  outline: none;
+}
+.pf-v5-c-form-control:focus-within {
+  outline: var(--focus-width) solid var(--color-primary);
+  outline-offset: var(--focus-offset);
+}
+.pf-v5-c-helper-text__item.pf-m-error,
+.pf-v5-c-helper-text__item-text.pf-m-error {
+  color: var(--color-danger);
+}
+
+/* A password field and its show/hide button read as one control. */
+.pf-v5-c-input-group > .pf-v5-c-input-group__item:not(:last-child) .pf-v5-c-form-control {
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+}
+.pf-v5-c-input-group > .pf-v5-c-input-group__item:last-child .pf-v5-c-button.pf-m-control {
+  --pf-v5-c-button--m-control--BackgroundColor: var(--color-surface);
+  --pf-v5-c-button--m-control--hover--BackgroundColor: var(--color-surface-2);
+  --pf-v5-c-button--m-control--Color: var(--color-muted);
+  --pf-v5-c-button--m-control--hover--Color: var(--color-fg);
+  height: 100%;
+  border-start-end-radius: var(--radius-md);
+  border-end-end-radius: var(--radius-md);
+}
+.pf-v5-c-button.pf-m-control::after {
+  border: 1.5px solid var(--color-line-strong);
+  border-inline-start: 0;
+  border-radius: inherit;
+}
+
+/* Buttons, as the Storefront's pill buttons */
+
+.pf-v5-c-button {
+  --pf-v5-c-button--BorderRadius: var(--radius-pill);
+  --pf-v5-c-button--after--BorderRadius: var(--radius-pill);
+  font-weight: 650;
+  transition:
+    background var(--duration) var(--ease),
+    box-shadow var(--duration) var(--ease),
+    transform var(--duration) var(--ease);
+}
+.pf-v5-c-button:active:not(:disabled) {
+  transform: translateY(1px) scale(0.98);
+}
+.pf-v5-c-button.pf-m-primary {
+  --pf-v5-c-button--m-primary--BackgroundColor: var(--color-primary);
+  --pf-v5-c-button--m-primary--Color: var(--color-on-primary);
+  --pf-v5-c-button--m-primary--hover--BackgroundColor: var(--color-primary-hover);
+  --pf-v5-c-button--m-primary--hover--Color: var(--color-on-primary);
+  --pf-v5-c-button--m-primary--focus--BackgroundColor: var(--color-primary-hover);
+  --pf-v5-c-button--m-primary--focus--Color: var(--color-on-primary);
+  --pf-v5-c-button--m-primary--active--BackgroundColor: var(--color-primary-hover);
+  --pf-v5-c-button--m-primary--active--Color: var(--color-on-primary);
+  min-height: 3rem;
+  font-size: var(--text-base);
+  box-shadow: var(--shadow-primary);
+}
+.pf-v5-c-button.pf-m-primary:hover {
+  box-shadow: var(--shadow-primary-hover);
+}
+.pf-v5-c-button.pf-m-secondary {
+  --pf-v5-c-button--m-secondary--BackgroundColor: var(--color-primary-soft);
+  --pf-v5-c-button--m-secondary--Color: var(--color-primary-text);
+  --pf-v5-c-button--m-secondary--hover--BackgroundColor: var(--color-primary-soft);
+  --pf-v5-c-button--m-secondary--hover--Color: var(--color-primary-text);
+  --pf-v5-c-button--m-secondary--after--BorderColor: transparent;
+  --pf-v5-c-button--m-secondary--hover--after--BorderColor: var(--color-primary);
+}
+.pf-v5-c-button.pf-m-link {
+  --pf-v5-c-button--m-link--Color: var(--color-primary-text);
+  --pf-v5-c-button--m-link--hover--Color: var(--color-primary-text);
+}
+.pf-v5-c-button:focus-visible {
+  outline: var(--focus-width) solid var(--color-primary);
+  outline-offset: var(--focus-offset);
+}
+
+/* Messages, as the Storefront's alerts */
+
+.pf-v5-c-alert.pf-m-inline {
+  border: 0;
+  border-radius: var(--radius-md);
+  box-shadow: none;
+  font-weight: 600;
+}
+.pf-v5-c-alert.pf-m-inline::before {
+  display: none;
+}
+.pf-v5-c-alert.pf-m-danger {
+  background: var(--color-danger-soft);
+  --pf-v5-c-alert__icon--Color: var(--color-danger);
+  --pf-v5-c-alert__title--Color: var(--color-danger);
+}
+.pf-v5-c-alert.pf-m-success {
+  background: var(--color-success-soft);
+  --pf-v5-c-alert__icon--Color: var(--color-success);
+  --pf-v5-c-alert__title--Color: var(--color-success);
+}
+.pf-v5-c-alert.pf-m-warning {
+  background: var(--color-warning-soft);
+  --pf-v5-c-alert__icon--Color: var(--color-warning);
+  --pf-v5-c-alert__title--Color: var(--color-warning);
+}
+.pf-v5-c-alert.pf-m-info {
+  background: var(--color-info-soft);
+  --pf-v5-c-alert__icon--Color: var(--color-info);
+  --pf-v5-c-alert__title--Color: var(--color-info);
+}
+
+/* The error page: the reason, and the way back to the Storefront. */
+#kc-error-message .instruction {
+  font-weight: 600;
+  color: var(--color-fg);
+}
+#backToApplication {
+  font-weight: 650;
+}

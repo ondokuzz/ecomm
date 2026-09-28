@@ -18,6 +18,39 @@ The `ecomm` realm is defined in [`realm/realm-ecomm.json`](./realm/realm-ecomm.j
 | `checkout` | confidential client with client credentials only; its service account holds `CHECKOUT`. Secret `checkout-dev-secret`, **for local development only** |
 | Seeded users | `demo@ecomm.local` / `demo` (CUSTOMER), `staff@ecomm.local` / `staff` (STAFF) |
 
+## Login theme
+
+The `ecomm` realm's login, registration and error pages wear the Storefront's brand through the
+`ecomm` login theme in [`themes/ecomm/`](./themes/ecomm). It extends Keycloak's stock `keycloak.v2`
+theme with stylesheets only, so the templates, messages and scripts stay Keycloak's own and an
+upgrade needs no template merge:
+
+| | |
+|---|---|
+| `resources/css/ecomm.css` | Written by hand: maps PatternFly onto the Storefront's tokens and restyles the header, card, fields, buttons and messages |
+| `resources/css/tokens.css`, `resources/css/fonts.css`, `resources/fonts/`, `resources/img/favicon.svg` | Generated from the Storefront's design tokens, fonts and favicon. Don't edit them; after changing those in the Storefront, run `npm run keycloak-theme` in `frontend/storefront` (its tests fail until you do) |
+
+Dark mode follows the operating system, as in the Storefront, through the class keycloak.v2 puts on
+the page while the realm's dark mode is on (the default). The master realm, and so the admin
+console, keeps Keycloak's own theme.
+
+`ecomm.css` styles keycloak.v2's PatternFly 5 classes and variables. If a Keycloak upgrade moves the
+login pages to another PatternFly version, the pages fall back to the stock look and the rules need
+porting; check the login, register and error pages after upgrading.
+
+Compose mounts the theme at `/opt/keycloak/themes/ecomm`, and the realm file sets it as the
+`loginTheme`, so a fresh stack shows it. `start-dev` doesn't cache themes: edits to the CSS show on
+the next page load.
+
+A realm imported before the theme existed keeps the stock one, since the import skips an existing
+realm. Set it on the running realm, either in the admin console (Realm settings → Themes → Login
+theme → `ecomm`) or with:
+
+```sh
+docker compose exec keycloak /opt/keycloak/bin/kcadm.sh update realms/ecomm -s loginTheme=ecomm \
+  --no-config --server http://localhost:8080 --realm master --user admin --password admin
+```
+
 ## Get a token by hand
 
 ```sh
