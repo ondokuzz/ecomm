@@ -30,3 +30,30 @@ export function defaultVariant(product: Product): Variant {
 export function productImage(product: Product): string | undefined {
   return product.images[0]
 }
+
+/** A chip on the Product list that filters it by category; `category` is undefined for "All". */
+export interface CategoryChip {
+  category: string | undefined
+  label: string
+  productCount: number
+  selected: boolean
+}
+
+/** "All", counting every Product, then each category, with the chosen one (none means "All") selected. */
+export function categoryChips(categories: Category[], chosen: string | undefined): CategoryChip[] {
+  const all = categories.reduce((sum, c) => sum + c.productCount, 0)
+  return [
+    { category: undefined, label: 'All', productCount: all, selected: chosen === undefined },
+    ...categories.map((c) => ({
+      category: c.category,
+      label: c.category,
+      productCount: c.productCount,
+      selected: c.category === chosen,
+    })),
+  ]
+}
+
+export function productCountLabel(count: number): string {
+  if (count === 0) return 'No products'
+  return count === 1 ? '1 product' : `${count} products`
+}

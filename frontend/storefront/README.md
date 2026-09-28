@@ -107,7 +107,7 @@ Sign in as `demo@ecomm.local` / `demo`, or register a new Customer.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: Money formatting, Cart pricing, quantities, Customer initials, seed Product images
+npm test          # Vitest: Money formatting, Cart pricing, quantities, category chips, Customer initials, seed Product images
 npm run test:e2e  # Playwright smoke test against the running compose stack (`make up`)
 ```
 
