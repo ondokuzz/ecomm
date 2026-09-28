@@ -3,7 +3,9 @@ import { usePricedCart } from '../api/cart'
 import { ApiError } from '../api/http'
 import { useCheckout } from '../api/orders'
 import { CartLines } from '../components/CartLines'
-import { ErrorMessage, Loading } from '../components/Status'
+import { EmptyState, ErrorMessage, Loading } from '../components/Status'
+import { Button, ButtonLink } from '../components/ui/Button'
+import { Card } from '../components/ui/Card'
 
 export function CheckoutPage() {
   const { cart, priced } = usePricedCart()
@@ -14,9 +16,16 @@ export function CheckoutPage() {
   if (cart.error) return <ErrorMessage error={cart.error} />
   if (!priced || priced.lines.length === 0) {
     return (
-      <p>
-        Your cart is empty. <Link to="/">Browse products</Link>
-      </p>
+      <EmptyState
+        title="Your cart is empty"
+        action={
+          <ButtonLink variant="primary" to="/">
+            Browse products
+          </ButtonLink>
+        }
+      >
+        There is nothing to check out yet.
+      </EmptyState>
     )
   }
 
@@ -29,14 +38,14 @@ export function CheckoutPage() {
     <section>
       <h1>Checkout</h1>
       <CartLines priced={priced} />
-      <div className="payment">
+      <Card className="payment">
         <h2>Payment</h2>
         <p className="muted">This is a demo: the payment is mocked and always succeeds.</p>
-        <button className="primary" onClick={pay} disabled={checkout.isPending}>
+        <Button variant="primary" size="lg" onClick={pay} loading={checkout.isPending}>
           {checkout.isPending ? 'Paying…' : 'Pay'}
-        </button>
+        </Button>
         {checkout.error && <CheckoutError error={checkout.error} />}
-      </div>
+      </Card>
     </section>
   )
 }

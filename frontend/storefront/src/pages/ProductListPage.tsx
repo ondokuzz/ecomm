@@ -1,6 +1,9 @@
 import { Link, useSearchParams } from 'react-router'
 import { useCategories, useProducts } from '../api/catalog'
-import { ErrorMessage, Loading } from '../components/Status'
+import { EmptyState, ErrorMessage } from '../components/Status'
+import { Button, ButtonLink } from '../components/ui/Button'
+import { Card } from '../components/ui/Card'
+import { Skeleton } from '../components/ui/Skeleton'
 import { formatMoney } from '../domain/money'
 
 export function ProductListPage() {
@@ -17,15 +20,15 @@ export function ProductListPage() {
         <h2>Categories</h2>
         <ul className="categories">
           <li>
-            <button className={category ? '' : 'selected'} onClick={() => choose()}>
+            <Button variant="ghost" aria-pressed={!category} onClick={() => choose()}>
               All
-            </button>
+            </Button>
           </li>
           {categories.data?.map((c) => (
             <li key={c.category}>
-              <button className={c.category === category ? 'selected' : ''} onClick={() => choose(c.category)}>
-                {c.category} <span className="muted">({c.productCount})</span>
-              </button>
+              <Button variant="ghost" aria-pressed={c.category === category} onClick={() => choose(c.category)}>
+                {c.category} <span className="badge">{c.productCount}</span>
+              </Button>
             </li>
           ))}
         </ul>
@@ -33,16 +36,22 @@ export function ProductListPage() {
       </aside>
       <section>
         <h1 className="capitalize">{category ?? 'All products'}</h1>
-        {products.isPending && <Loading />}
         {products.error && <ErrorMessage error={products.error} />}
-        {products.data?.length === 0 && <p className="muted">No products here.</p>}
-        <ul className="product-grid">
+        {products.data?.length === 0 && (
+          <EmptyState title="Nothing here yet" action={<ButtonLink to="/">See all products</ButtonLink>}>
+            We have no products in this category.
+          </EmptyState>
+        )}
+        <ul className="product-grid" aria-busy={products.isPending}>
+          {products.isPending && <ProductCardSkeletons />}
           {products.data?.map((p) => (
             <li key={p.sku}>
-              <Link to={`/products/${encodeURIComponent(p.sku)}`} className="product-card">
-                <span className="product-name">{p.name}</span>
-                <span className="muted">{p.attributes.brand}</span>
-                <span className="price">{formatMoney(p.price)}</span>
+              <Link to={`/products/${encodeURIComponent(p.sku)}`} className="card-link">
+                <Card interactive className="product-card">
+                  <span className="brand-name">{p.attributes.brand}</span>
+                  <span className="product-name">{p.name}</span>
+                  <span className="price">{formatMoney(p.price)}</span>
+                </Card>
               </Link>
             </li>
           ))}
@@ -50,4 +59,16 @@ export function ProductListPage() {
       </section>
     </div>
   )
+}
+
+function ProductCardSkeletons() {
+  return Array.from({ length: 8 }, (_, i) => (
+    <li key={i}>
+      <Card className="product-card">
+        <Skeleton width="30%" height="0.75rem" />
+        <Skeleton width="80%" height="1.25rem" />
+        <Skeleton width="40%" height="1.25rem" />
+      </Card>
+    </li>
+  ))
 }

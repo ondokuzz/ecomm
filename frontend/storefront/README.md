@@ -15,6 +15,18 @@ React, TypeScript, React Router and TanStack Query.
 | `/orders/{id}` | An Order and its Order Status; after checkout, the confirmation | yes |
 | `/orders` | My Orders, newest first | yes |
 
+## Design
+
+The look lives in [`src/index.css`](./src/index.css): design tokens (colours, gradients, fonts, spacing,
+corner radii, shadows) as CSS custom properties on `:root`, redefined for dark mode, which follows
+`prefers-color-scheme`. Everything else reads the tokens rather than one-off values. The fonts, Inter,
+and Bricolage Grotesque for headings, are bundled through Fontsource rather than loaded from a CDN.
+
+The pages build from the shared components in [`src/components/ui`](./src/components/ui): Button,
+Card, Badge, Input, QuantityStepper, Skeleton and Icon. The header's account menu and the
+small-screen menu are native `popover` elements, so the browser handles closing them on Escape or an
+outside click.
+
 ## Auth
 
 `oidc-client-ts` (through `react-oidc-context`) signs the Customer in with Authorization Code +
@@ -60,7 +72,7 @@ Sign in as `demo@ecomm.local` / `demo`, or register a new Customer.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: Money formatting and Cart pricing
+npm test          # Vitest: Money formatting, Cart pricing, quantities and Customer initials
 npm run test:e2e  # Playwright smoke test against the running compose stack (`make up`)
 ```
 

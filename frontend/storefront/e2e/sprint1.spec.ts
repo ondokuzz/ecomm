@@ -32,7 +32,7 @@ test('the demo Customer checks out two Products and Stock goes down', async ({ p
   await page.goto('/')
   await page.getByRole('button', { name: 'Log in' }).click()
   await signInOnKeycloak(page, demoCustomer)
-  await expect(page.getByRole('button', { name: 'Log out' })).toBeVisible()
+  await expectSignedIn(page, demoCustomer.email)
 
   for (const { product } of bought) {
     await page.getByRole('link', { name: 'Products', exact: true }).click()
@@ -77,9 +77,16 @@ test('a new Customer registers on Keycloak and comes back signed in', async ({ p
   await page.locator('[type=submit]').click()
 
   await expect(page).toHaveURL((url) => url.origin === new URL(baseURL!).origin)
+  await expectSignedIn(page, email)
+})
+
+/** The account menu, behind the Customer's avatar, names them and offers to log out. */
+async function expectSignedIn(page: Page, email: string) {
+  await page.getByRole('button', { name: 'Account menu' }).click()
   await expect(page.getByText(email)).toBeVisible()
   await expect(page.getByRole('button', { name: 'Log out' })).toBeVisible()
-})
+  await page.keyboard.press('Escape')
+}
 
 async function signInOnKeycloak(page: Page, user: Credentials) {
   await page.locator('#username').fill(user.email)

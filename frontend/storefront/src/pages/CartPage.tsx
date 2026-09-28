@@ -1,7 +1,7 @@
-import { Link } from 'react-router'
 import { usePricedCart, useRemoveFromCart, useSetQuantity } from '../api/cart'
 import { CartLines } from '../components/CartLines'
-import { ErrorMessage, Loading } from '../components/Status'
+import { EmptyState, ErrorMessage, Loading } from '../components/Status'
+import { ButtonLink } from '../components/ui/Button'
 
 export function CartPage() {
   const { cart, priced } = usePricedCart()
@@ -15,9 +15,16 @@ export function CartPage() {
     <section>
       <h1>Your cart</h1>
       {!priced || priced.lines.length === 0 ? (
-        <p>
-          Your cart is empty. <Link to="/">Browse products</Link>
-        </p>
+        <EmptyState
+          title="Your cart is empty"
+          action={
+            <ButtonLink variant="primary" to="/">
+              Browse products
+            </ButtonLink>
+          }
+        >
+          Find something you like and add it here.
+        </EmptyState>
       ) : (
         <>
           <CartLines
@@ -28,10 +35,12 @@ export function CartPage() {
           />
           {setQuantity.error && <ErrorMessage error={setQuantity.error} />}
           {remove.error && <ErrorMessage error={remove.error} />}
-          <p className="muted">Prices are Catalog's current ones; checkout confirms them.</p>
-          <Link to="/checkout" className="button primary">
-            Go to checkout
-          </Link>
+          <div className="page-actions">
+            <p className="muted">Prices are Catalog's current ones; checkout confirms them.</p>
+            <ButtonLink variant="primary" size="lg" to="/checkout">
+              Go to checkout
+            </ButtonLink>
+          </div>
         </>
       )}
     </section>

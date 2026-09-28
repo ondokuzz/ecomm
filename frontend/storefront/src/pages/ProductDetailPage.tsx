@@ -4,7 +4,12 @@ import { useAuth } from 'react-oidc-context'
 import { useCart, useSetQuantity } from '../api/cart'
 import { useProduct, useStock } from '../api/catalog'
 import { useAuthPending, useSignin } from '../auth/session'
-import { ErrorMessage, Loading } from '../components/Status'
+import { EmptyState, ErrorMessage, Loading } from '../components/Status'
+import { Badge } from '../components/ui/Badge'
+import { Button, ButtonLink } from '../components/ui/Button'
+import { Card } from '../components/ui/Card'
+import { Icon } from '../components/ui/Icon'
+import { QuantityStepper } from '../components/ui/QuantityStepper'
 import { quantityOf } from '../domain/cart'
 import { type Product, defaultVariant } from '../domain/catalog'
 import { formatMoney } from '../domain/money'
@@ -17,9 +22,9 @@ export function ProductDetailPage() {
   if (product.error) return <ErrorMessage error={product.error} />
   if (!product.data) {
     return (
-      <p>
-        We don't have that product. <Link to="/">Back to products</Link>
-      </p>
+      <EmptyState title="We don't have that product" action={<ButtonLink to="/">Back to products</ButtonLink>}>
+        It may have been removed from the Catalog.
+      </EmptyState>
     )
   }
   return <ProductDetail product={product.data} />
@@ -31,31 +36,37 @@ function ProductDetail({ product }: { product: Product }) {
 
   return (
     <article className="product-detail">
-      <Link to={`/?category=${encodeURIComponent(product.category)}`} className="muted">
-        ← {product.category}
+      <Link to={`/?category=${encodeURIComponent(product.category)}`} className="back-link">
+        <Icon name="arrowLeft" size={16} /> {product.category}
       </Link>
-      <h1>{product.name}</h1>
-      <p className="price large">{formatMoney(variant.price)}</p>
-      <p>
-        {stock.isPending ? (
-          <span className="muted">Checking stock…</span>
-        ) : stock.data === undefined ? (
-          <span className="muted">Stock unknown</span>
-        ) : stock.data > 0 ? (
-          <span className="in-stock">In stock: {stock.data}</span>
-        ) : (
-          <span className="out-of-stock">Out of stock</span>
-        )}
-      </p>
-      <dl className="attributes">
-        {Object.entries(product.attributes).map(([name, value]) => (
-          <div key={name}>
-            <dt>{name}</dt>
-            <dd>{value}</dd>
-          </div>
-        ))}
-      </dl>
-      <AddToCart variantId={variant.id} available={stock.data} />
+      <Card>
+        <h1>{product.name}</h1>
+        <div className="row">
+          <p className="price large">{formatMoney(variant.price)}</p>
+          {stock.isPending ? (
+            <Badge>Checking stock…</Badge>
+          ) : stock.data === undefined ? (
+            <Badge>Stock unknown</Badge>
+          ) : stock.data > 0 ? (
+            <Badge tone="success" dot>
+              In stock: {stock.data}
+            </Badge>
+          ) : (
+            <Badge tone="danger" dot>
+              Out of stock
+            </Badge>
+          )}
+        </div>
+        <dl className="attributes">
+          {Object.entries(product.attributes).map(([name, value]) => (
+            <div key={name}>
+              <dt>{name}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+        <AddToCart variantId={variant.id} available={stock.data} />
+      </Card>
     </article>
   )
 }
@@ -71,11 +82,11 @@ function AddToCart({ variantId, available }: { variantId: string; available?: nu
   if (pending) return null
   if (!auth.isAuthenticated) {
     return (
-      <p>
-        <button className="primary" onClick={signin}>
+      <div className="add-to-cart">
+        <Button variant="primary" size="lg" onClick={signin}>
           Log in to add to cart
-        </button>
-      </p>
+        </Button>
+      </div>
     )
   }
 
@@ -84,18 +95,17 @@ function AddToCart({ variantId, available }: { variantId: string; available?: nu
 
   return (
     <div className="add-to-cart">
-      <label>
-        Quantity{' '}
-        <input
-          type="number"
-          min={1}
-          value={quantity}
-          onChange={(e) => setQuantityInput(Math.max(1, Math.floor(Number(e.target.value)) || 1))}
-        />
-      </label>
-      <button className="primary" onClick={add} disabled={!cart.data || setQuantity.isPending || available === 0}>
+      <QuantityStepper value={quantity} onChange={setQuantityInput} disabled={available === 0} />
+      <Button
+        variant="primary"
+        size="lg"
+        onClick={add}
+        loading={setQuantity.isPending}
+        disabled={!cart.data || available === 0}
+      >
+        <Icon name="cart" size={18} />
         Add to cart
-      </button>
+      </Button>
       {inCart > 0 && (
         <span className="muted">
           {inCart} in your <Link to="/cart">cart</Link>
