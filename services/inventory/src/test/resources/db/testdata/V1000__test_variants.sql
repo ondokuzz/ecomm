@@ -1,5 +1,5 @@
 -- Test-only Variants, so tests that change stock never touch the seed or each other.
-INSERT INTO stock (variant_id, quantity) VALUES
+INSERT INTO stock (variant_id, on_hand) VALUES
   ('TEST-BATCH-A', 10),
   ('TEST-BATCH-B', 5),
   ('TEST-REJECT-A', 10),

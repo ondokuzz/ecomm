@@ -28,6 +28,10 @@ class ReadStockApiTest extends InventoryApiTest {
         .jsonPath("$.variantId")
         .isEqualTo("PHN-PIXEL-9")
         .jsonPath("$.quantity")
+        .isNumber()
+        .jsonPath("$.onHand")
+        .isNumber()
+        .jsonPath("$.reserved")
         .isNumber();
   }
 

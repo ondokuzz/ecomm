@@ -1,21 +1,29 @@
 package com.ecomm.inventory.application.port.out;
 
-import com.ecomm.inventory.domain.Stock;
 import java.util.Collection;
-import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
+/**
+ * The on-hand count of each Variant Inventory stocks. What Reservations hold is worked out apart.
+ */
 public interface StockRepository {
 
-  Optional<Stock> find(String variantId);
+  Optional<Integer> onHand(String variantId);
 
   /**
-   * The stock of those Variants that exist, locked until the surrounding transaction ends, so no
-   * concurrent decrement can change it in between. Always locks in the same order, so two
+   * The on-hand counts of those Variants that exist, locked until the surrounding transaction ends,
+   * so no concurrent change can touch them in between. Always locks in Variant ID order, so two
    * overlapping batches cannot deadlock.
    */
-  List<Stock> lockAll(Collection<String> variantIds);
+  Map<String, Integer> lockOnHand(Collection<String> variantIds);
 
-  /** Overwrites the quantities of existing Variants. */
-  void updateAll(List<Stock> stock);
+  /**
+   * Adds a Variant with this on-hand count; {@code false}, changing nothing, when it already
+   * exists.
+   */
+  boolean insertIfAbsent(String variantId, int onHand);
+
+  /** Overwrites the on-hand counts of existing Variants. */
+  void setOnHand(Map<String, Integer> onHandByVariant);
 }

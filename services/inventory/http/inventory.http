@@ -21,7 +21,15 @@ grant_type=client_credentials&client_id=checkout&client_secret=checkout-dev-secr
 
 > {% client.global.set("checkoutToken", response.body.access_token); %}
 
-### A Variant's stock, no token needed
+### Staff token: for setting on-hand Stock
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=dev-cli&username=staff@ecomm.local&password=staff
+
+> {% client.global.set("staffToken", response.body.access_token); %}
+
+### A Variant's stock, no token needed: quantity (available), onHand and reserved
 GET {{inventory}}/stock/PHN-PIXEL-9
 
 ### An unknown Variant: 404
@@ -73,3 +81,128 @@ POST {{inventory}}/stock/decrement
 Content-Type: application/json
 
 {"items": [{"variantId": "PHN-PIXEL-9", "quantity": 1}]}
+
+### Staff set a Variant's on-hand Stock: 200, or 201 for a Variant Inventory didn't stock yet
+PUT {{inventory}}/stock/PHN-PIXEL-9
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{"onHand": 30}
+
+### A negative on-hand count: 400
+PUT {{inventory}}/stock/PHN-PIXEL-9
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{"onHand": -1}
+
+### Only Staff set on-hand Stock; Checkout's token gets 403
+PUT {{inventory}}/stock/PHN-PIXEL-9
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"onHand": 30}
+
+### Reserve a batch for a Customer: 201, and the Variants' reserved counts go up
+# Inventory doesn't look Customers up; Checkout names the one it acts for.
+POST {{inventory}}/reservations
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"customerId": "http-file-customer", "expiresAt": "2030-01-01T00:00:00Z", "items": [
+  {"variantId": "PHN-PIXEL-9", "quantity": 2},
+  {"variantId": "AUD-JBL-FLIP-6", "quantity": 1}
+]}
+
+> {% client.global.set("reservationId", response.body.id); %}
+
+### Now reserved: 2
+GET {{inventory}}/stock/PHN-PIXEL-9
+
+### Staff can't set on-hand below what's reserved: 409 with reserved
+PUT {{inventory}}/stock/PHN-PIXEL-9
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{"onHand": 1}
+
+### Another Customer's Reservation: 404
+POST {{inventory}}/reservations/{{reservationId}}/commit
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"customerId": "someone-else"}
+
+### Commit it: 200, COMMITTED, and on-hand goes down by what it held
+POST {{inventory}}/reservations/{{reservationId}}/commit
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"customerId": "http-file-customer"}
+
+### A committed Reservation can't be released: 409 with reservationCommitted
+POST {{inventory}}/reservations/{{reservationId}}/release
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"customerId": "http-file-customer"}
+
+### Reserve again, to release this one
+POST {{inventory}}/reservations
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"customerId": "http-file-customer", "expiresAt": "2030-01-01T00:00:00Z", "items": [
+  {"variantId": "PHN-PIXEL-9", "quantity": 1}
+]}
+
+> {% client.global.set("reservationId", response.body.id); %}
+
+### Release it: 200, RELEASED; releasing again is the same 200
+POST {{inventory}}/reservations/{{reservationId}}/release
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"customerId": "http-file-customer"}
+
+### A released Reservation can't be committed: 409 with reservationReleased
+POST {{inventory}}/reservations/{{reservationId}}/commit
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"customerId": "http-file-customer"}
+
+### More than is available: 409 with insufficientStock, and nothing is held
+POST {{inventory}}/reservations
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"customerId": "http-file-customer", "expiresAt": "2030-01-01T00:00:00Z", "items": [
+  {"variantId": "AUD-SONOS-ERA-100", "quantity": 1000}
+]}
+
+### An expiresAt in the past: 400
+POST {{inventory}}/reservations
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"customerId": "http-file-customer", "expiresAt": "2020-01-01T00:00:00Z", "items": [
+  {"variantId": "PHN-PIXEL-9", "quantity": 1}
+]}
+
+### A Customer can't reserve Stock, only Checkout can: 403
+POST {{inventory}}/reservations
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"customerId": "http-file-customer", "expiresAt": "2030-01-01T00:00:00Z", "items": [
+  {"variantId": "PHN-PIXEL-9", "quantity": 1}
+]}
+
+### Reserving without a token: 401
+POST {{inventory}}/reservations
+Content-Type: application/json
+
+{"customerId": "http-file-customer", "expiresAt": "2030-01-01T00:00:00Z", "items": [
+  {"variantId": "PHN-PIXEL-9", "quantity": 1}
+]}

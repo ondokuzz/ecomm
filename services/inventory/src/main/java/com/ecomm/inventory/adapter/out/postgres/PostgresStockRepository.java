@@ -1,20 +1,16 @@
 package com.ecomm.inventory.adapter.out.postgres;
 
 import com.ecomm.inventory.application.port.out.StockRepository;
-import com.ecomm.inventory.domain.Stock;
 import java.util.Collection;
-import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
-import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 
-/** Stock as rows of the {@code stock} table, one per Variant (see {@code db/migration}). */
+/** On-hand Stock as rows of the {@code stock} table, one per Variant (see {@code db/migration}). */
 @Component
 class PostgresStockRepository implements StockRepository {
-
-  private static final RowMapper<Stock> STOCK =
-      (rs, row) -> new Stock(rs.getString("variant_id"), rs.getInt("quantity"));
 
   private final JdbcClient jdbc;
 
@@ -23,34 +19,51 @@ class PostgresStockRepository implements StockRepository {
   }
 
   @Override
-  public Optional<Stock> find(String variantId) {
-    return jdbc.sql("SELECT variant_id, quantity FROM stock WHERE variant_id = :id")
+  public Optional<Integer> onHand(String variantId) {
+    return jdbc.sql("SELECT on_hand FROM stock WHERE variant_id = :id")
         .param("id", variantId)
-        .query(STOCK)
+        .query(Integer.class)
         .optional();
   }
 
   @Override
-  public List<Stock> lockAll(Collection<String> variantIds) {
-    return jdbc.sql(
+  public Map<String, Integer> lockOnHand(Collection<String> variantIds) {
+    var onHand = new LinkedHashMap<String, Integer>();
+    jdbc.sql(
             """
-            SELECT variant_id, quantity FROM stock
+            SELECT variant_id, on_hand FROM stock
             WHERE variant_id IN (:ids)
             ORDER BY variant_id
             FOR UPDATE
             """)
         .param("ids", variantIds)
-        .query(STOCK)
-        .list();
+        .query(
+            rs -> {
+              onHand.put(rs.getString("variant_id"), rs.getInt("on_hand"));
+            });
+    return onHand;
   }
 
   @Override
-  public void updateAll(List<Stock> stock) {
-    for (var s : stock) {
-      jdbc.sql("UPDATE stock SET quantity = :quantity WHERE variant_id = :id")
-          .param("quantity", s.quantity())
-          .param("id", s.variantId())
-          .update();
-    }
+  public boolean insertIfAbsent(String variantId, int onHand) {
+    return jdbc.sql(
+                """
+                INSERT INTO stock (variant_id, on_hand) VALUES (:id, :onHand)
+                ON CONFLICT (variant_id) DO NOTHING
+                """)
+            .param("id", variantId)
+            .param("onHand", onHand)
+            .update()
+        == 1;
+  }
+
+  @Override
+  public void setOnHand(Map<String, Integer> onHandByVariant) {
+    onHandByVariant.forEach(
+        (variantId, onHand) ->
+            jdbc.sql("UPDATE stock SET on_hand = :onHand WHERE variant_id = :id")
+                .param("onHand", onHand)
+                .param("id", variantId)
+                .update());
   }
 }

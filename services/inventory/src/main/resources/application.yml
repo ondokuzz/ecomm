@@ -9,7 +9,7 @@ spring:
 
 ecomm:
   security:
-    # Anyone may read a Variant's stock; decrementing it still needs a token.
+    # Anyone may read a Variant's stock; changing it or reserving it still needs a token.
     public-read-paths: /stock/*
 
 management:

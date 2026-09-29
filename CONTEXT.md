@@ -33,8 +33,12 @@ A specific purchasable version of a Product (e.g. a color/storage combination), 
 _Avoid_: Option, Configuration
 
 **Stock**:
-How many units of a Variant are available to sell, counted per Variant ID and never negative. Inventory owns Stock. A checkout decrements the Stock of several Variants as one batch that applies whole or not at all.
+How many units of a Variant are available to sell, counted per Variant ID and never negative: its On-hand units less what active Reservations hold of them. Inventory owns Stock. A checkout takes the Stock of several Variants as one batch that applies whole or not at all.
 _Avoid_: Inventory (that's the context, not the count)
+
+**On-hand**:
+How many units of a Variant Inventory physically has, whether or not Reservations hold them. Staff set it, never below what Reservations hold; committing a Reservation takes its units off it.
+_Avoid_: Stock (Stock is what's left to sell), Physical stock
 
 **Price**:
 What a Variant sells for, as `Money`: an amount in the currency's minor unit. Catalog owns Price. A Cart holds no authoritative price: whatever a Cart shows is a copy, and the Price that counts is always the one Catalog holds now.
@@ -53,7 +57,7 @@ The step where a Customer confirms their Cart: its Variants are priced, their St
 _Avoid_: Purchase, Order placement
 
 **Reservation**:
-A temporary hold on a Variant's stock, created when checkout starts and either released on abandonment or converted to a permanent stock decrement on payment success. Not built yet: until Sprint 2, checkout decrements Stock directly.
+A temporary, all-or-nothing hold on the Stock of several Variants for one Customer, created when checkout starts. It is `ACTIVE` until it is committed, which takes its units off On-hand for good on payment success, or released, which gives them back on abandonment. It holds Stock only while `ACTIVE` and before its `expiresAt`: from that moment it holds nothing, even before a sweep marks it `RELEASED`, and it can no longer be committed. Only its Customer's checkout can commit or release it.
 _Avoid_: Lock, Hold
 
 **Order**:

@@ -67,6 +67,24 @@ class DecrementStockApiTest extends InventoryApiTest {
   }
 
   @Test
+  void aDecrementCannotTakeReservedStock() {
+    var variant = newVariant(5);
+    reserved(item(variant, 3));
+
+    decrement(one(variant, 3)).expectStatus().isEqualTo(409);
+    decrement(one(variant, 2))
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .jsonPath("$[0].quantity")
+        .isEqualTo(0)
+        .jsonPath("$[0].onHand")
+        .isEqualTo(3);
+
+    assertThat(stockOf(variant)).isEqualTo(new StockView(variant, 0, 3, 3));
+  }
+
+  @Test
   void aVariantListedTwiceIsDecrementedByTheTotal() {
     decrement(
             """
