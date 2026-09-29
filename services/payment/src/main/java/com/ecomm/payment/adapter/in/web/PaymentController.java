@@ -7,6 +7,8 @@ import com.ecomm.payment.domain.InvalidPaymentException;
 import java.net.URI;
 import java.util.Optional;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
@@ -28,6 +30,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/payments")
 class PaymentController {
 
+  private static final Logger log = LoggerFactory.getLogger(PaymentController.class);
+
   private final AuthorizePaymentUseCase authorize;
   private final FindPaymentUseCase find;
 
@@ -41,6 +45,11 @@ class PaymentController {
   @PreAuthorize("hasRole('CHECKOUT')")
   ResponseEntity<PaymentResponse> authorize(@RequestBody AuthorizePaymentRequest request) {
     var payment = authorize.authorize(request.toAuthorizationRequest());
+    log.info(
+        "Recorded Payment {} for Order {} as {}",
+        payment.id(),
+        payment.orderId(),
+        payment.status());
     return ResponseEntity.created(URI.create("/payments/" + payment.id()))
         .body(PaymentResponse.of(payment));
   }

@@ -23,6 +23,39 @@ Spring annotations. Adapters are ordinary Spring components. `ArchitectureTest` 
 Errors come back as RFC 7807 problem details via `service-commons`; don't write a per-service
 `@ControllerAdvice` for framework errors.
 
+## Correlation IDs and logs
+
+Every request has a Correlation ID, set up by `service-commons` with no code in the service:
+
+- It comes from the `X-Correlation-Id` request header if that has at most 64 characters of
+  `[A-Za-z0-9-]`. Otherwise, including when the header is missing, the service generates a UUID.
+- It is echoed in the `X-Correlation-Id` response header.
+- It is in the MDC under `correlationId` for the rest of the request, so every log line written
+  while serving it carries it.
+- Every problem detail carries it as `correlationId`, 401 and 403 included, whichever handler
+  rendered it, a service's own `@ExceptionHandler` included. That is the support reference a
+  Customer sees.
+- Every `RestClient` built from Boot's `RestClient.Builder` sends it downstream in
+  `X-Correlation-Id`. Build clients from the injected builder (`builder.clone()`), not
+  `RestClient.create()`. A call made off the request thread, such as from `@Async` code, has no
+  Correlation ID to send.
+
+The Correlation ID is not a security boundary; never use it to decide anything.
+
+Logs are plain text locally and in tests. Under the `docker` profile, `application-docker.yml`
+turns on Spring Boot's structured console logging in ECS format (`logging.structured.format.console:
+ecs`): one JSON object per line, with the service name (`service.name`, from
+`spring.application.name`) and every MDC entry, including `correlationId`. To follow one request
+through the compose stack:
+
+```sh
+docker compose logs --no-log-prefix | jq -cR 'fromjson? | select(.correlationId == "<id>")'
+```
+
+Services write no access log; that belongs to the API gateway. To make a request's path through
+the services visible, log a line at `INFO` when it changes something worth following, as Checkout,
+Cart, Inventory, Order Management and Payment do for each step of a checkout.
+
 ## Security
 
 `service-commons` makes every service an OAuth2 resource server that accepts only Keycloak-issued

@@ -9,6 +9,7 @@ plugins {
 dependencies {
   compileOnly("org.springframework.boot:spring-boot-autoconfigure")
   compileOnly("org.springframework:spring-webmvc")
+  compileOnly("org.springframework.boot:spring-boot-restclient")
   compileOnly("jakarta.servlet:jakarta.servlet-api")
   compileOnly("org.slf4j:slf4j-api")
   compileOnly("org.springframework.boot:spring-boot-starter-security-oauth2-resource-server")

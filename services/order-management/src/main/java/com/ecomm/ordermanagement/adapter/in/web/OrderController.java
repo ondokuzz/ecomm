@@ -13,6 +13,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
@@ -35,6 +37,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/orders")
 class OrderController {
 
+  private static final Logger log = LoggerFactory.getLogger(OrderController.class);
+
   private final PlaceOrderUseCase place;
   private final FindOrdersUseCase find;
   private final ChangeOrderStatusUseCase changeStatus;
@@ -51,6 +55,7 @@ class OrderController {
   @PreAuthorize("hasRole('CHECKOUT')")
   ResponseEntity<OrderResponse> place(@RequestBody PlaceOrderRequest request) {
     var order = place.place(request.toCustomerId(), request.toOrderLines());
+    log.info("Placed Order {}", order.id());
     return ResponseEntity.created(URI.create("/orders/" + order.id()))
         .body(OrderResponse.of(order));
   }
@@ -81,7 +86,9 @@ class OrderController {
   OrderResponse changeStatus(@PathVariable String id, @RequestBody StatusChangeRequest request) {
     var customerId = request.toCustomerId();
     var next = request.toStatus();
-    return ownedOrder(id, orderId -> changeStatus.changeStatus(customerId, orderId, next));
+    var order = ownedOrder(id, orderId -> changeStatus.changeStatus(customerId, orderId, next));
+    log.info("Moved Order {} to {}", id, next);
+    return order;
   }
 
   /**

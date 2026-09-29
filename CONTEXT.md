@@ -82,3 +82,7 @@ _Avoid_: Return Period (Return Period is broader/retailer-set; Warranty Window i
 **Support Assistant**:
 The AI-driven conversational agent that answers a Customer's questions about their own Order, Payment, or RMA, grounded in that Customer's real data.
 _Avoid_: Chatbot, Bot
+
+**Correlation ID**:
+The ID that names one request as it passes from service to service, carried in the `X-Correlation-Id` header. It is taken from the caller when well-formed (at most 64 characters of `[A-Za-z0-9-]`) and generated otherwise. Every log line written while serving the request carries it, and so does every problem detail, where a Customer sees it as the support reference for an error. It is never used to decide anything.
+_Avoid_: Request ID, Trace ID (tracing is a separate concern)

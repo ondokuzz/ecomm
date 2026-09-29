@@ -37,7 +37,9 @@ class CheckoutController {
   @PostMapping
   @PreAuthorize("hasRole('CUSTOMER')")
   CheckoutResponse checkout(CurrentCustomer customer) {
-    return CheckoutResponse.of(checkout.checkout(customer.id()));
+    var result = checkout.checkout(customer.id());
+    log.info("Checked out Order {} as {}", result.orderId(), result.status());
+    return CheckoutResponse.of(result);
   }
 
   @ExceptionHandler(EmptyCartException.class)

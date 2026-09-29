@@ -6,6 +6,8 @@ import com.ecomm.cart.application.port.in.SetQuantityUseCase;
 import com.ecomm.cart.application.port.in.ViewCartUseCase;
 import com.ecomm.cart.domain.InvalidCartItemException;
 import com.ecomm.commons.security.CurrentCustomer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -27,6 +29,8 @@ import org.springframework.web.bind.annotation.RestController;
 @PreAuthorize("hasRole('CUSTOMER')")
 @RequestMapping("/cart")
 class CartController {
+
+  private static final Logger log = LoggerFactory.getLogger(CartController.class);
 
   private final ViewCartUseCase view;
   private final SetQuantityUseCase setQuantity;
@@ -66,6 +70,7 @@ class CartController {
   @ResponseStatus(HttpStatus.NO_CONTENT)
   void clear(CurrentCustomer customer) {
     clear.clear(customer.id());
+    log.info("Cleared the Cart");
   }
 
   @ExceptionHandler(InvalidCartItemException.class)
