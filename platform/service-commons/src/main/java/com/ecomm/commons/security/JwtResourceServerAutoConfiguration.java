@@ -12,16 +12,10 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
-import org.springframework.security.oauth2.server.resource.web.BearerTokenAuthenticationEntryPoint;
-import org.springframework.security.oauth2.server.resource.web.access.BearerTokenAccessDeniedHandler;
-import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
@@ -40,7 +34,8 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  *   <li>401 and 403 come back as problem details.
  * </ul>
  *
- * A service that needs different URL rules can declare its own {@link SecurityFilterChain}.
+ * A service that needs different URL rules can declare its own {@link SecurityFilterChain}, built
+ * on {@link ResourceServerSecurity#configure} to keep everything but the rules.
  */
 @AutoConfiguration(
     beforeName = {
@@ -71,15 +66,10 @@ public class JwtResourceServerAutoConfiguration {
       PublicReadProperties publicReads,
       @Qualifier("handlerExceptionResolver") HandlerExceptionResolver exceptionResolver)
       throws Exception {
-    AuthenticationEntryPoint entryPoint = problemDetailEntryPoint(exceptionResolver);
-    AccessDeniedHandler accessDeniedHandler = problemDetailAccessDeniedHandler(exceptionResolver);
-
-    var authenticationConverter = new JwtAuthenticationConverter();
-    authenticationConverter.setJwtGrantedAuthoritiesConverter(new KeycloakRealmRoleConverter());
-
     var publicReadPaths = publicReads.publicReadPaths().toArray(String[]::new);
 
-    return http.authorizeHttpRequests(
+    return ResourceServerSecurity.configure(http, exceptionResolver)
+        .authorizeHttpRequests(
             requests -> {
               requests.requestMatchers("/actuator/health/**").permitAll();
               if (publicReadPaths.length > 0) {
@@ -87,20 +77,6 @@ public class JwtResourceServerAutoConfiguration {
               }
               requests.anyRequest().authenticated();
             })
-        .oauth2ResourceServer(
-            server ->
-                server
-                    .jwt(jwt -> jwt.jwtAuthenticationConverter(authenticationConverter))
-                    .authenticationEntryPoint(entryPoint)
-                    .accessDeniedHandler(accessDeniedHandler))
-        .exceptionHandling(
-            exceptions ->
-                exceptions
-                    .authenticationEntryPoint(entryPoint)
-                    .accessDeniedHandler(accessDeniedHandler))
-        .sessionManagement(
-            sessions -> sessions.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-        .csrf(csrf -> csrf.disable())
         .build();
   }
 
@@ -111,25 +87,6 @@ public class JwtResourceServerAutoConfiguration {
       public void addArgumentResolvers(List<HandlerMethodArgumentResolver> resolvers) {
         resolvers.add(new CurrentCustomerArgumentResolver());
       }
-    };
-  }
-
-  /** Keeps the {@code WWW-Authenticate} header, then renders the body via the MVC handlers. */
-  private static AuthenticationEntryPoint problemDetailEntryPoint(
-      HandlerExceptionResolver exceptionResolver) {
-    var bearer = new BearerTokenAuthenticationEntryPoint();
-    return (request, response, e) -> {
-      bearer.commence(request, response, e);
-      exceptionResolver.resolveException(request, response, null, e);
-    };
-  }
-
-  private static AccessDeniedHandler problemDetailAccessDeniedHandler(
-      HandlerExceptionResolver exceptionResolver) {
-    var bearer = new BearerTokenAccessDeniedHandler();
-    return (request, response, e) -> {
-      bearer.handle(request, response, e);
-      exceptionResolver.resolveException(request, response, null, e);
     };
   }
 }

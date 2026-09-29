@@ -49,6 +49,9 @@ seed. To reset stock, drop and recreate the `inventory` database.
 docker compose up -d --build inventory   # from the repo root; listens on localhost:8082
 ```
 
+That host port bypasses the [API gateway](../../platform/api-gateway/README.md), for development
+only. Browsers reach the service through the gateway, at `/api/inventory/`.
+
 Or run Postgres and Keycloak in compose (`docker compose up -d keycloak`) and start the service
 with `./gradlew :services:inventory:bootRun` on port 8080. Set `POSTGRES_PORT` for both when
 something else holds 5432.

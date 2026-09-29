@@ -48,6 +48,9 @@ Idempotency comes with the Sprint 4 rebuild.
 docker compose up -d --build payment   # from the repo root; listens on localhost:8084
 ```
 
+That host port bypasses the [API gateway](../../platform/api-gateway/README.md), for development
+only. Payment has no route through the gateway: only Checkout calls it.
+
 Or run Postgres and Keycloak in compose (`docker compose up -d keycloak`) and start the service
 with `./gradlew :services:payment:bootRun` on port 8080. Set `POSTGRES_PORT` for both when
 something else holds 5432.

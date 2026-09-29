@@ -27,7 +27,7 @@ Not bounded contexts — UI layers over the above:
 | Storefront | `frontend/storefront` |
 | Admin Console | `frontend/admin-console` |
 
-In Sprint 1 the Storefront calls Catalog, Inventory, Cart, Checkout & Pricing and Order Management directly, through its own nginx at `/api/<service>/` ([`frontend/storefront`](./frontend/storefront/README.md)); there is no API gateway yet.
+Browsers reach the services only through the API gateway ([`platform/api-gateway`](./platform/api-gateway/README.md)), which the Storefront's nginx sends everything under `/api/` to. The gateway routes `/api/<service>/` to Catalog, Inventory, Cart, Checkout & Pricing and Order Management, rejects a missing or invalid token at the edge, and never routes internal endpoints; each service still authorizes every request itself ([ADR 0010](./docs/adr/0010-api-gateway-authenticates-at-the-edge.md)).
 
 ## Relationships
 

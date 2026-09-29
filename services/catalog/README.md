@@ -43,5 +43,8 @@ undoes Staff changes. To reload them, flush the bucket or drop the `couchbase-da
 docker compose up -d --build catalog   # from the repo root; listens on localhost:8081
 ```
 
+That host port bypasses the [API gateway](../../platform/api-gateway/README.md), for development
+only. Browsers reach the service through the gateway, at `/api/catalog/`.
+
 Or run Couchbase and Keycloak in compose (`docker compose up -d couchbase-init keycloak`) and
 start the service with `./gradlew :services:catalog:bootRun` on port 8080.

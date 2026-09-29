@@ -194,6 +194,23 @@ services:
       payment: { condition: service_healthy }
       order-management: { condition: service_healthy }
 
+  # The one way in for browsers: authenticates at the edge and routes /api/<service>/** to the
+  # services (platform/api-gateway). The services' own host ports above bypass it, for development.
+  api-gateway:
+    <<: *spring-service
+    build:
+      context: ../..
+      dockerfile: platform/api-gateway/Dockerfile
+    image: ${IMAGE_PREFIX:-ecomm}/api-gateway:${IMAGE_TAG:-latest}
+    ports: ["${API_GATEWAY_PORT:-8000}:8080"]
+    depends_on:
+      keycloak: { condition: service_healthy }
+      catalog: { condition: service_healthy }
+      inventory: { condition: service_healthy }
+      cart: { condition: service_healthy }
+      order-management: { condition: service_healthy }
+      checkout-pricing: { condition: service_healthy }
+
   storefront:
     build:
       context: ../../frontend/storefront
@@ -204,11 +221,7 @@ services:
     mem_limit: 64m
     depends_on:
       keycloak: { condition: service_healthy }
-      catalog: { condition: service_healthy }
-      inventory: { condition: service_healthy }
-      cart: { condition: service_healthy }
-      order-management: { condition: service_healthy }
-      checkout-pricing: { condition: service_healthy }
+      api-gateway: { condition: service_healthy }
     healthcheck:
       # nginx listens on IPv4 only, and localhost resolves to ::1 first.
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/"]

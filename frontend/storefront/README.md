@@ -115,10 +115,12 @@ to the page they asked for.
 
 ## Calling the services
 
-The browser reaches each service at `/api/<service>/…` on the Storefront's own origin, since the
-services send no CORS headers: `catalog`, `inventory`, `cart`, `checkout-pricing` and
-`order-management`. In development the Vite dev proxy forwards them to the services' compose host
-ports ([`vite.config.ts`](./vite.config.ts)); in compose, nginx does ([`nginx.conf`](./nginx.conf)).
+The browser reaches each service at `/api/<service>/…` on the Storefront's own origin: `catalog`,
+`inventory`, `cart`, `checkout-pricing` and `order-management`. Everything under `/api/` goes to the
+[API gateway](../../platform/api-gateway/README.md), which checks the token and routes it; it sends
+no CORS headers. In development the Vite dev proxy forwards `/api` to the gateway's compose host
+port, 8000 ([`vite.config.ts`](./vite.config.ts)); in compose, nginx does
+([`nginx.conf`](./nginx.conf)).
 
 A Cart holds no prices, so the Cart and checkout pages price it from Catalog for display.
 Checkout prices it again itself; what the Customer pays is what the Order shows.

@@ -88,6 +88,9 @@ against the compose stack.
 docker compose up -d --build checkout-pricing   # from the repo root; listens on localhost:8086
 ```
 
+That host port bypasses the [API gateway](../../platform/api-gateway/README.md), for development
+only. Browsers reach the service through the gateway, at `/api/checkout-pricing/`.
+
 Or run the rest of the stack in compose and start the service with
 `CHECKOUT_CLIENT_SECRET=checkout-dev-secret ./gradlew :services:checkout-pricing:bootRun` on port
 8080. It finds the other services on their compose host ports.

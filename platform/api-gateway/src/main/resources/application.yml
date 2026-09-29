@@ -1,0 +1,35 @@
+spring:
+  application:
+    name: api-gateway
+
+# The routed services, at /api/<name>/**. The URIs are the services' dev host ports;
+# application-docker.yml points them at the compose network. Every other method and path under a
+# service's prefix needs a token; internal endpoints get a 404.
+ecomm:
+  gateway:
+    services:
+      catalog:
+        uri: http://localhost:8081
+        public-reads: [/products/**, /variants/**, /categories/**]
+      inventory:
+        uri: http://localhost:8082
+        public-reads: [/stock/*]
+        internal: [/stock/decrement, /reservations/**]
+      cart:
+        uri: http://localhost:8083
+      checkout-pricing:
+        uri: http://localhost:8086
+      order-management:
+        uri: http://localhost:8085
+        internal: [POST /orders, PATCH /orders/*/status]
+
+# Plain-text logs name the Correlation ID too, so the access log reads the same outside Docker.
+logging:
+  pattern:
+    correlation: "[%X{correlationId:-}] "
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

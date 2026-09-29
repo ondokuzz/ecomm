@@ -38,8 +38,10 @@ npm run test:e2e
 Every checkout takes Stock, so after many smoke-test runs `make seed-reset` refills it. To wipe
 everything, Keycloak's users included, run `docker compose down -v`.
 
-Each service publishes a host port: Keycloak on 8180 (`admin` / `admin`), Catalog to Checkout on
-8081–8086 (see each service's README). Override one that is already taken, e.g.
+The browser reaches the services only through the [API gateway](./platform/api-gateway/README.md),
+on 8000, which the Storefront's nginx sends `/api/` to. Each service also publishes a host port:
+Keycloak on 8180 (`admin` / `admin`), Catalog to Checkout on 8081–8086 (see each service's README).
+Those bypass the gateway, for development only. Override one that is already taken, e.g.
 `POSTGRES_PORT=5433 make up`; Couchbase's ports and the Storefront's 8080 are fixed. Kafka and
 Mongo are behind the `full` profile until Sprint 3 (`docker compose --profile full up -d`).
 
@@ -71,7 +73,7 @@ once. On a private repository, branch protection needs a paid GitHub plan.
 
 - `services/` — one directory per bounded context (see `CONTEXT.md` for the domain terms, `docs/adr/` for why each is shaped the way it is)
 - `frontend/storefront`, `frontend/admin-console` — the two customer/staff-facing React apps
-- `platform/` — shared, cross-service concerns: the event-schema library and the hexagonal-architecture service starter template
+- `platform/` — shared, cross-service concerns: `service-commons`, the hexagonal-architecture service starter template, and the API gateway
 - `infra/terraform` — infrastructure-as-code for the eventual AWS deployment
 
 ## Docs

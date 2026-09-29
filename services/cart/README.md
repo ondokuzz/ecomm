@@ -37,6 +37,9 @@ same Lua script as the change so a Cart is never left without one. Reading a Car
 docker compose up -d --build cart   # from the repo root; listens on localhost:8083
 ```
 
+That host port bypasses the [API gateway](../../platform/api-gateway/README.md), for development
+only. Browsers reach the service through the gateway, at `/api/cart/`.
+
 Or run Redis and Keycloak in compose (`docker compose up -d redis keycloak`) and start the service
 with `./gradlew :services:cart:bootRun` on port 8080. Set `REDIS_PORT` for both when something else
 holds 6379.

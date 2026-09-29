@@ -63,7 +63,7 @@ A request's path through the services shows up in three kinds of line:
   Checkout, Cart, Inventory, Order Management and Payment do for each step of a checkout.
 - **Errors:** unexpected failures are logged by the shared problem-detail handler.
 
-Services don't log the requests they receive; that access log belongs to the API gateway.
+Services don't log the requests they receive; that access log belongs to the [API gateway](../api-gateway/README.md).
 
 ## Security
 
@@ -85,7 +85,12 @@ JWTs (`JwtResourceServerAutoConfiguration`):
   path patterns under `ecomm.security.public-read-paths`. Other methods on those paths still need
   a token.
 - A service that needs other URL rules declares its own `SecurityFilterChain` bean, which replaces
-  the default.
+  the default. Build it on `ResourceServerSecurity.configure(http, handlerExceptionResolver)` to
+  keep the token validation and problem-detail 401s and 403s, and add only the rules.
+- Behind the [API gateway](../api-gateway/README.md), a browser's request has already had its token
+  checked, but the service checks it again and makes every role and ownership decision itself
+  ([ADR 0010](../../docs/adr/0010-api-gateway-authenticates-at-the-edge.md)). List a new public read
+  or internal endpoint in the gateway's route table too.
 
 An internal endpoint, one that only another service calls, is guarded by the calling service's own
 role, such as `@PreAuthorize("hasRole('CHECKOUT')")`. The caller authenticates with its own

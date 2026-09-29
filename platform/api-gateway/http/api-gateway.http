@@ -1,0 +1,54 @@
+# Exercises the API gateway against the compose stack (`make up`): what it routes, what it rejects
+# at the edge and what it hides. Run the requests top to bottom in the IntelliJ HTTP client; the
+# token request stores a token for the ones after it.
+
+@gateway = http://localhost:8000
+@keycloak = http://localhost:8180/realms/ecomm/protocol/openid-connect/token
+
+### Customer token
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=dev-cli&username=demo@ecomm.local&password=demo
+
+> {% client.global.set("customerToken", response.body.access_token); %}
+
+### A public read, no token needed: Catalog's GET /products?category=phones
+GET {{gateway}}/api/catalog/products?category=phones
+
+### Another: Inventory's GET /stock/PHN-PIXEL-9
+GET {{gateway}}/api/inventory/stock/PHN-PIXEL-9
+
+### An authenticated route without a token: 401 at the gateway; Cart never sees it
+GET {{gateway}}/api/cart/cart
+
+### With a token: forwarded to Cart's GET /cart, Authorization untouched
+GET {{gateway}}/api/cart/cart
+Authorization: Bearer {{customerToken}}
+
+### A Correlation ID of your own is kept, and comes back in X-Correlation-Id
+GET {{gateway}}/api/order-management/orders
+Authorization: Bearer {{customerToken}}
+X-Correlation-Id: http-file-1
+
+### A malformed one is replaced with a new UUID
+GET {{gateway}}/api/catalog/categories
+X-Correlation-Id: not valid!
+
+### An internal endpoint: 404, token or not
+POST {{gateway}}/api/inventory/stock/decrement
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"items": [{"variantId": "PHN-PIXEL-9", "quantity": 1}]}
+
+### Order placement is internal too: 404
+POST {{gateway}}/api/order-management/orders
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{}
+
+### Payment has no routes at all: 404
+GET {{gateway}}/api/payment/payments/00000000-0000-0000-0000-000000000000
+Authorization: Bearer {{customerToken}}

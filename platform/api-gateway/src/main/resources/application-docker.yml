@@ -1,0 +1,25 @@
+# Active inside Docker Compose (SPRING_PROFILES_ACTIVE=docker).
+
+ecomm:
+  # Keys come over the internal network; the issuer stays the browser-facing one tokens carry.
+  security:
+    jwt:
+      jwk-set-uri: http://keycloak:8080/realms/ecomm/protocol/openid-connect/certs
+  gateway:
+    services:
+      catalog:
+        uri: http://catalog:8080
+      inventory:
+        uri: http://inventory:8080
+      cart:
+        uri: http://cart:8080
+      checkout-pricing:
+        uri: http://checkout-pricing:8080
+      order-management:
+        uri: http://order-management:8080
+
+# One JSON (ECS) object per line, with the service name and the MDC, including correlationId.
+logging:
+  structured:
+    format:
+      console: ecs
