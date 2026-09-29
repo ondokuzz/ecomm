@@ -9,11 +9,13 @@ spring:
 ecomm:
   catalog:
     bucket: catalog
-    # Loaded on startup, only into an empty bucket.
-    seed: classpath:seed/products.json
+    # Loaded on startup, only into an empty bucket: Categories first, then their Products.
+    seed:
+      categories: classpath:seed/categories.json
+      products: classpath:seed/products.json
   security:
     # Customers browse the Catalog without logging in; changes still need a Staff token.
-    public-read-paths: /products/**, /categories
+    public-read-paths: /products/**, /categories/**
 
 management:
   endpoints:

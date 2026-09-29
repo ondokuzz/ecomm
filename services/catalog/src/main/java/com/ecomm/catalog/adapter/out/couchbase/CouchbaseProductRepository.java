@@ -12,7 +12,6 @@ import com.couchbase.client.java.json.JsonObject;
 import com.couchbase.client.java.query.QueryOptions;
 import com.couchbase.client.java.query.QueryScanConsistency;
 import com.ecomm.catalog.application.port.out.ProductRepository;
-import com.ecomm.catalog.domain.CategorySummary;
 import com.ecomm.catalog.domain.Product;
 import com.ecomm.commons.money.Money;
 import java.time.Duration;
@@ -73,17 +72,28 @@ class CouchbaseProductRepository implements ProductRepository {
   }
 
   @Override
-  public List<CategorySummary> categories() {
+  public Map<String, Long> countByCategory() {
     return scope
         .query(
             "SELECT p.category, COUNT(*) AS productCount FROM `_default` p"
                 + " WHERE p.type = 'product' AND p.category IS NOT MISSING"
-                + " GROUP BY p.category ORDER BY p.category",
+                + " GROUP BY p.category",
             consistent())
         .rowsAsObject()
         .stream()
-        .map(row -> new CategorySummary(row.getString("category"), row.getLong("productCount")))
-        .toList();
+        .collect(
+            Collectors.toMap(row -> row.getString("category"), row -> row.getLong("productCount")));
+  }
+
+  @Override
+  public long countInCategory(String category) {
+    return scope
+        .query(
+            "SELECT RAW COUNT(*) FROM `_default` p WHERE p.type = 'product' AND p.category ="
+                + " $category",
+            consistent().parameters(JsonObject.create().put("category", category)))
+        .rowsAs(Long.class)
+        .getFirst();
   }
 
   @Override

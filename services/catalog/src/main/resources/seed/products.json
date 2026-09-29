@@ -265,8 +265,8 @@
     "attributes": {
       "brand": "Apple",
       "type": "In-ear",
-      "wireless": "yes",
-      "noiseCancelling": "yes"
+      "wireless": "true",
+      "noiseCancelling": "true"
     },
     "price": {
       "amountMinor": 27900,
@@ -283,8 +283,8 @@
     "attributes": {
       "brand": "Sony",
       "type": "Over-ear",
-      "wireless": "yes",
-      "noiseCancelling": "yes"
+      "wireless": "true",
+      "noiseCancelling": "true"
     },
     "price": {
       "amountMinor": 37900,
@@ -301,8 +301,8 @@
     "attributes": {
       "brand": "Bose",
       "type": "Over-ear",
-      "wireless": "yes",
-      "noiseCancelling": "yes"
+      "wireless": "true",
+      "noiseCancelling": "true"
     },
     "price": {
       "amountMinor": 44900,
@@ -319,8 +319,8 @@
     "attributes": {
       "brand": "Sennheiser",
       "type": "In-ear",
-      "wireless": "yes",
-      "noiseCancelling": "yes"
+      "wireless": "true",
+      "noiseCancelling": "true"
     },
     "price": {
       "amountMinor": 29900,
@@ -337,7 +337,7 @@
     "attributes": {
       "brand": "JBL",
       "type": "Portable speaker",
-      "wireless": "yes",
+      "wireless": "true",
       "waterproof": "IP67"
     },
     "price": {
@@ -355,7 +355,7 @@
     "attributes": {
       "brand": "Sonos",
       "type": "Smart speaker",
-      "wireless": "yes"
+      "wireless": "true"
     },
     "price": {
       "amountMinor": 27900,

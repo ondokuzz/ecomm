@@ -9,7 +9,7 @@ React, TypeScript, React Router and TanStack Query.
 | Path | | Login |
 |---|---|---|
 | `/?category=` | Products, filtered by category | no |
-| `/products/{sku}` | A Product with its image, Price, Stock and specs; add it to the Cart | no (adding needs it) |
+| `/products/{sku}` | A Product with its image, Price, Stock and specs, laid out by its Category's attribute definitions; add it to the Cart | no (adding needs it) |
 | `/cart` | The Cart, priced from Catalog's current Prices; change quantities, remove lines or empty it | yes |
 | `/checkout` | The order summary, and a mock payment card with a "Pay" button | yes |
 | `/orders/{id}` | An Order: its Order Status timeline, its lines and summary; after checkout, the confirmation first | yes |
@@ -162,7 +162,7 @@ Sign in as `demo@ecomm.local` / `demo`, or register a new Customer.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: Money formatting, Cart pricing, checkout problems, quantities, Stock levels, toasts, category chips, Customer initials, Orders and their timeline, Order Status colours, seed Product images, the Keycloak theme's copy of the tokens
+npm test          # Vitest: Money formatting, Cart pricing, checkout problems, quantities, Stock levels, toasts, category chips, Product specs by their Category's definitions, Customer initials, Orders and their timeline, Order Status colours, seed Product images, the Keycloak theme's copy of the tokens
 npm run test:e2e  # Playwright smoke test against the running compose stack (`make up`)
 ```
 

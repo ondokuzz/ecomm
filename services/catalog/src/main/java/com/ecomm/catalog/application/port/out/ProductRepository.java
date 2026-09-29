@@ -1,8 +1,8 @@
 package com.ecomm.catalog.application.port.out;
 
-import com.ecomm.catalog.domain.CategorySummary;
 import com.ecomm.catalog.domain.Product;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 public interface ProductRepository {
@@ -15,9 +15,12 @@ public interface ProductRepository {
   /** Ordered by name. */
   List<Product> findByCategory(String category);
 
-  /** Ordered by category. */
-  List<CategorySummary> categories();
+  /** How many Products each category slug has; a category with none is left out. */
+  Map<String, Long> countByCategory();
 
+  long countInCategory(String category);
+
+  /** Whether the Catalog holds nothing at all: no Products and no Categories. */
   boolean isEmpty();
 
   /** Stores a new Product; returns false, storing nothing, when the SKU is already taken. */

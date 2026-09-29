@@ -13,7 +13,7 @@ class BrowseProductsApiTest extends CatalogApiTest {
   /** The parts of a Product and a category a client reads, independent of the service's classes. */
   record ProductView(String sku, String name, String category) {}
 
-  record CategoryView(String category, long productCount) {}
+  record CategoryView(String slug, String name, long productCount) {}
 
   @Test
   void anyoneCanViewASeededProductsDetail() {
@@ -106,9 +106,11 @@ class BrowseProductsApiTest extends CatalogApiTest {
             .getResponseBody();
 
     assertThat(categories)
-        .extracting(CategoryView::category)
+        .extracting(CategoryView::slug)
         .containsSubsequence("audio", "laptops", "phones");
-    assertThat(categories).allSatisfy(c -> assertThat(c.productCount()).isPositive());
+    assertThat(categories)
+        .filteredOn(c -> List.of("audio", "laptops", "phones").contains(c.slug()))
+        .allSatisfy(c -> assertThat(c.productCount()).isPositive());
   }
 
   private List<ProductView> products(String uri) {

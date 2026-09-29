@@ -3,10 +3,10 @@ package com.ecomm.catalog.domain;
 import com.ecomm.commons.money.Money;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Pattern;
 
 /**
- * A sellable item in the Catalog, identified by its SKU. Catalog owns its Price.
+ * A sellable item in the Catalog, identified by its SKU. Catalog owns its Price. Its attributes
+ * must satisfy its Category's definitions whenever it is written; see {@link Category#violations}.
  *
  * <p>For now every Product has exactly one implicit Variant whose ID is the SKU; see {@link
  * #variants()}.
@@ -19,13 +19,11 @@ public record Product(
     Money price,
     List<String> images) {
 
-  private static final Pattern CATEGORY = Pattern.compile("[a-z0-9]+(-[a-z0-9]+)*");
-
   public Product {
     requireText(sku, "sku");
     requireText(name, "name");
     requireText(category, "category");
-    if (!CATEGORY.matcher(category).matches()) {
+    if (!Category.isSlug(category)) {
       throw new InvalidProductException(
           "category must be lowercase letters, digits and hyphens, e.g. 'phones'");
     }

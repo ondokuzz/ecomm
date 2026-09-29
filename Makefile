@@ -12,8 +12,8 @@ up:
 down:
 	$(COMPOSE) down
 
-## Put the seed Products and Stock back and drop every Cart, Order and Payment. Keycloak is left
-## alone, so registered Customers stay.
+## Put the seed Categories, Products and Stock back and drop every Cart, Order and Payment.
+## Keycloak is left alone, so registered Customers stay.
 seed-reset:
 	$(COMPOSE) up -d --wait couchbase postgres redis
 	$(COMPOSE) stop storefront checkout-pricing catalog inventory cart payment order-management

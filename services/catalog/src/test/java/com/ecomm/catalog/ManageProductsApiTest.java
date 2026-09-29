@@ -1,7 +1,12 @@
 package com.ecomm.catalog;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
@@ -9,6 +14,29 @@ import org.springframework.test.web.servlet.client.RestTestClient;
 
 /** Staff create, update and delete Products; nobody else may. */
 class ManageProductsApiTest extends CatalogApiTest {
+
+  /** The Category these tests' Products belong to; a 409 means an earlier test created it. */
+  @BeforeEach
+  void wearablesCategory() {
+    http.post()
+        .uri("/categories")
+        .headers(h -> h.setBearerAuth(staffToken()))
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(
+            """
+            {"slug": "wearables", "name": "Wearables", "attributes": [
+              {"name": "brand", "type": "TEXT", "required": true, "variantAxis": false},
+              {"name": "strap", "type": "ENUM", "values": ["silicone", "leather", "metal"],
+               "required": true, "variantAxis": false},
+              {"name": "waterResistance", "type": "NUMBER", "required": false,
+               "variantAxis": false},
+              {"name": "gps", "type": "BOOLEAN", "required": false, "variantAxis": false},
+              {"name": "colour", "type": "TEXT", "required": true, "variantAxis": true}]}
+            """)
+        .exchange()
+        .expectStatus()
+        .value(status -> assertThat(status).isIn(201, 409));
+  }
 
   private static String product(String sku, String name, long amountMinor) {
     return """
@@ -109,6 +137,112 @@ class ManageProductsApiTest extends CatalogApiTest {
         .contentType(MediaType.APPLICATION_PROBLEM_JSON);
 
     http.get().uri("/products/WRB-BAD").exchange().expectStatus().isNotFound();
+  }
+
+  @ParameterizedTest
+  @CsvSource(
+      delimiter = '|',
+      value = {
+        "{\"brand\": \"Garmin\"}                                      | attributes.strap",
+        "{\"brand\": \"Garmin\", \"strap\": \"nylon\"}                 | attributes.strap",
+        "{\"brand\": \"Garmin\", \"strap\": \"metal\", \"gps\": \"yes\"}  | attributes.gps",
+        "{\"brand\": \"Garmin\", \"strap\": \"metal\", \"waterResistance\": \"deep\"}"
+            + " | attributes.waterResistance",
+        "{\"brand\": \"Garmin\", \"strap\": \"metal\", \"heartRate\": \"yes\"}"
+            + " | attributes.heartRate",
+      })
+  void attributesBreakingTheCategorysDefinitionsAreABadRequestNamingTheField(
+      String attributes, String field) {
+    http.post()
+        .uri("/products")
+        .headers(h -> h.setBearerAuth(staffToken()))
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(
+            """
+            {"sku": "WRB-INVALID", "name": "Invalid", "category": "wearables", "attributes": %s,
+             "price": {"amountMinor": 100, "currency": "EUR"}}
+            """
+                .formatted(attributes))
+        .exchange()
+        .expectStatus()
+        .isBadRequest()
+        .expectHeader()
+        .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+        .expectBody()
+        .jsonPath("$.errors.length()")
+        .isEqualTo(1)
+        .jsonPath("$.errors[0].field")
+        .isEqualTo(field)
+        .jsonPath("$.errors[0].message")
+        .exists();
+
+    http.get().uri("/products/WRB-INVALID").exchange().expectStatus().isNotFound();
+  }
+
+  @Test
+  void everyOffendingAttributeIsNamed() {
+    http.post()
+        .uri("/products")
+        .headers(h -> h.setBearerAuth(staffToken()))
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(
+            """
+            {"sku": "WRB-INVALID", "name": "Invalid", "category": "wearables",
+             "attributes": {"strap": "nylon", "gps": "maybe"},
+             "price": {"amountMinor": 100, "currency": "EUR"}}
+            """)
+        .exchange()
+        .expectStatus()
+        .isBadRequest()
+        .expectBody()
+        .jsonPath("$.errors[*].field")
+        .isEqualTo(List.of("attributes.brand", "attributes.strap", "attributes.gps"));
+  }
+
+  @Test
+  void aProductInACategoryThatDoesNotExistIsABadRequest() {
+    http.post()
+        .uri("/products")
+        .headers(h -> h.setBearerAuth(staffToken()))
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(
+            """
+            {"sku": "GRD-BENCH", "name": "Bench", "category": "garden-furniture",
+             "price": {"amountMinor": 100, "currency": "EUR"}}
+            """)
+        .exchange()
+        .expectStatus()
+        .isBadRequest()
+        .expectBody()
+        .jsonPath("$.errors[0].field")
+        .isEqualTo("category");
+
+    http.get().uri("/products/GRD-BENCH").exchange().expectStatus().isNotFound();
+  }
+
+  @Test
+  void updatingIsValidatedToo() {
+    create("WRB-EPIX-2", "Garmin Epix 2", 59900);
+
+    http.put()
+        .uri("/products/WRB-EPIX-2")
+        .headers(h -> h.setBearerAuth(staffToken()))
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(
+            """
+            {"name": "Garmin Epix 2", "category": "wearables", "attributes": {"brand": "Garmin"},
+             "price": {"amountMinor": 59900, "currency": "EUR"}}
+            """)
+        .exchange()
+        .expectStatus()
+        .isBadRequest();
+
+    http.get()
+        .uri("/products/WRB-EPIX-2")
+        .exchange()
+        .expectBody()
+        .jsonPath("$.attributes.strap")
+        .isEqualTo("silicone");
   }
 
   @Test

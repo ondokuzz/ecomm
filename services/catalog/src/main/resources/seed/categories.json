@@ -1,0 +1,58 @@
+[
+  {
+    "slug": "phones",
+    "name": "Phones",
+    "attributes": [
+      {"name": "brand", "type": "TEXT", "required": true, "variantAxis": false},
+      {"name": "color", "type": "TEXT", "required": true, "variantAxis": true},
+      {
+        "name": "storage",
+        "type": "ENUM",
+        "values": ["128 GB", "256 GB", "512 GB", "1 TB"],
+        "required": true,
+        "variantAxis": true
+      },
+      {"name": "screen", "type": "TEXT", "required": true, "variantAxis": false}
+    ]
+  },
+  {
+    "slug": "laptops",
+    "name": "Laptops",
+    "attributes": [
+      {"name": "brand", "type": "TEXT", "required": true, "variantAxis": false},
+      {"name": "cpu", "type": "TEXT", "required": true, "variantAxis": false},
+      {
+        "name": "ram",
+        "type": "ENUM",
+        "values": ["8 GB", "16 GB", "32 GB", "64 GB"],
+        "required": true,
+        "variantAxis": true
+      },
+      {
+        "name": "storage",
+        "type": "ENUM",
+        "values": ["256 GB SSD", "512 GB SSD", "1 TB SSD", "2 TB SSD"],
+        "required": true,
+        "variantAxis": true
+      },
+      {"name": "screen", "type": "TEXT", "required": true, "variantAxis": false}
+    ]
+  },
+  {
+    "slug": "audio",
+    "name": "Audio",
+    "attributes": [
+      {"name": "brand", "type": "TEXT", "required": true, "variantAxis": false},
+      {
+        "name": "type",
+        "type": "ENUM",
+        "values": ["In-ear", "Over-ear", "Portable speaker", "Smart speaker"],
+        "required": true,
+        "variantAxis": false
+      },
+      {"name": "wireless", "type": "BOOLEAN", "required": true, "variantAxis": false},
+      {"name": "noiseCancelling", "type": "BOOLEAN", "required": false, "variantAxis": false},
+      {"name": "waterproof", "type": "TEXT", "required": false, "variantAxis": false}
+    ]
+  }
+]

@@ -21,8 +21,14 @@ grant_type=password&client_id=dev-cli&username=demo@ecomm.local&password=demo
 
 > {% client.global.set("customerToken", response.body.access_token); %}
 
-### Categories, no token needed
+### Categories with their attribute definitions, no token needed
 GET {{catalog}}/categories
+
+### One Category
+GET {{catalog}}/categories/phones
+
+### A missing Category: 404
+GET {{catalog}}/categories/garden-furniture
 
 ### Every Product, no token needed
 GET {{catalog}}/products
@@ -45,9 +51,34 @@ Content-Type: application/json
   "sku": "AUD-DEMO-BUDS",
   "name": "Demo Buds",
   "category": "audio",
-  "attributes": {"brand": "Demo", "type": "In-ear"},
+  "attributes": {"brand": "Demo", "type": "In-ear", "wireless": "true"},
   "price": {"amountMinor": 4999, "currency": "EUR"},
   "images": ["/images/products/aud-demo-buds/front.svg"]
+}
+
+### A Product breaking its Category's definitions: 400 naming each field in `errors`
+POST {{catalog}}/products
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{
+  "sku": "AUD-DEMO-BAD",
+  "name": "Bad Buds",
+  "category": "audio",
+  "attributes": {"type": "Earbuds", "wireless": "yes", "colour": "Pink"},
+  "price": {"amountMinor": 4999, "currency": "EUR"}
+}
+
+### A Product in a Category that doesn't exist: 400
+POST {{catalog}}/products
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{
+  "sku": "GRD-DEMO-BENCH",
+  "name": "Demo Bench",
+  "category": "garden-furniture",
+  "price": {"amountMinor": 4999, "currency": "EUR"}
 }
 
 ### Creating it again: 409
@@ -59,6 +90,7 @@ Content-Type: application/json
   "sku": "AUD-DEMO-BUDS",
   "name": "Demo Buds",
   "category": "audio",
+  "attributes": {"brand": "Demo", "type": "In-ear", "wireless": "true"},
   "price": {"amountMinor": 4999, "currency": "EUR"}
 }
 
@@ -70,7 +102,7 @@ Content-Type: application/json
 {
   "name": "Demo Buds 2",
   "category": "audio",
-  "attributes": {"brand": "Demo", "type": "In-ear"},
+  "attributes": {"brand": "Demo", "type": "In-ear", "wireless": "true"},
   "price": {"amountMinor": 3999, "currency": "EUR"},
   "images": ["/images/products/aud-demo-buds/front.svg"]
 }
@@ -91,3 +123,52 @@ Authorization: Bearer {{staffToken}}
 
 ### Gone: 404
 GET {{catalog}}/products/AUD-DEMO-BUDS
+
+### Staff create a Category: 201
+POST {{catalog}}/categories
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{
+  "slug": "demo-cameras",
+  "name": "Demo cameras",
+  "attributes": [
+    {"name": "brand", "type": "TEXT", "required": true, "variantAxis": false},
+    {"name": "megapixels", "type": "NUMBER", "required": true, "variantAxis": false},
+    {"name": "mount", "type": "ENUM", "values": ["E", "RF", "Z"], "required": false, "variantAxis": false},
+    {"name": "color", "type": "TEXT", "required": true, "variantAxis": true}
+  ]
+}
+
+### Creating it again: 409
+POST {{catalog}}/categories
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{"slug": "demo-cameras", "name": "Demo cameras"}
+
+### Staff change its name and definitions: 200. Existing Products are untouched until next written
+PUT {{catalog}}/categories/demo-cameras
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{
+  "name": "Demo mirrorless cameras",
+  "attributes": [
+    {"name": "brand", "type": "TEXT", "required": true, "variantAxis": false},
+    {"name": "megapixels", "type": "NUMBER", "required": true, "variantAxis": false},
+    {"name": "weatherSealed", "type": "BOOLEAN", "required": false, "variantAxis": false}
+  ]
+}
+
+### A Customer may not change Categories: 403
+DELETE {{catalog}}/categories/demo-cameras
+Authorization: Bearer {{customerToken}}
+
+### Deleting a Category that still has Products: 409
+DELETE {{catalog}}/categories/phones
+Authorization: Bearer {{staffToken}}
+
+### Staff delete an empty Category: 204
+DELETE {{catalog}}/categories/demo-cameras
+Authorization: Bearer {{staffToken}}

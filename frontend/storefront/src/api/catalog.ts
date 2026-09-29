@@ -6,6 +6,14 @@ export function useCategories() {
   return useQuery({ queryKey: ['categories'], queryFn: () => api<Category[]>('catalog', '/categories') })
 }
 
+/** One Category; null data once loaded means Catalog doesn't have it. */
+export function useCategory(slug: string) {
+  return useQuery({
+    queryKey: ['category', slug],
+    queryFn: () => api<Category>('catalog', `/categories/${encodeURIComponent(slug)}`).catch(orNullOn404),
+  })
+}
+
 export function useProducts(category?: string) {
   return useQuery({
     queryKey: ['products', { category }],

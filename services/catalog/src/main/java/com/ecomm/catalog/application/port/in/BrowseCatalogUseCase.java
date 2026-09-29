@@ -12,6 +12,9 @@ public interface BrowseCatalogUseCase {
   /** Products ordered by name; every Product when {@code category} is empty. */
   List<Product> products(Optional<String> category);
 
-  /** Categories ordered by name. */
+  /** Every Category, with its Product count, ordered by slug. */
   List<CategorySummary> categories();
+
+  /** The Category with its Product count; empty when there is none with the slug. */
+  Optional<CategorySummary> category(String slug);
 }

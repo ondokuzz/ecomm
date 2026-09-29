@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { useAuth } from 'react-oidc-context'
 import { useCart, useSetQuantity } from '../api/cart'
-import { useProduct, useStock } from '../api/catalog'
+import { useCategory, useProduct, useStock } from '../api/catalog'
 import { useAuthPending, useSignin } from '../auth/session'
 import { ProductImage } from '../components/ProductImage'
 import { EmptyState, ErrorMessage, ErrorState } from '../components/Status'
@@ -14,7 +14,7 @@ import { QuantityStepper } from '../components/ui/QuantityStepper'
 import { Skeleton } from '../components/ui/Skeleton'
 import { useToast } from '../components/ui/toasts'
 import { quantityOf } from '../domain/cart'
-import { type Product, defaultVariant } from '../domain/catalog'
+import { type Product, defaultVariant, specs } from '../domain/catalog'
 import { formatMoney } from '../domain/money'
 import { type StockLevel, stockLevel } from '../domain/stock'
 
@@ -60,7 +60,9 @@ function ProductDetail({ product }: { product: Product }) {
   const stock = useStock(variant.id)
   // How many units Inventory has; undefined while unknown, or when it has no Stock record.
   const available = stock.data ?? undefined
-  const attributes = Object.entries(product.attributes)
+  // Until the Category loads (or if it fails to), the specs keep the Product's own order.
+  const category = useCategory(product.category)
+  const rows = specs(product.attributes, category.data?.attributes)
 
   return (
     <article className="product-page">
@@ -76,12 +78,12 @@ function ProductDetail({ product }: { product: Product }) {
           {stock.isPending ? <Badge>Checking stock…</Badge> : <StockIndicator quantity={available} />}
           <AddToCart productName={product.name} variantId={variant.id} available={available} />
         </Card>
-        {attributes.length > 0 && (
+        {rows.length > 0 && (
           <section className="specs" aria-labelledby="specs-heading">
             <h2 id="specs-heading">Specifications</h2>
             <table className="spec-table">
               <tbody>
-                {attributes.map(([name, value]) => (
+                {rows.map(({ name, value }) => (
                   <tr key={name}>
                     <th scope="row">{name}</th>
                     <td>{value}</td>

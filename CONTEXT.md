@@ -17,8 +17,16 @@ A sellable item in the Catalog, identified by SKU, with category-specific attrib
 _Avoid_: Item, SKU (SKU is an identifier, not the concept)
 
 **Category**:
-A grouping of Products that Customers browse by, such as `phones`, `laptops` or `audio`, named by a lowercase slug. A category exists as long as at least one Product is in it.
+A Staff-managed grouping of Products that Customers browse by, such as `phones`, `laptops` or `audio`, named by a lowercase slug and a display name. It defines the attributes its Products carry through its Attribute definitions, so every Product in it is described the same way. Every Product belongs to a Category that exists, and a Category can't be deleted while it still has Products. Changing its definitions never rewrites existing Products; the new rules apply on each Product's next write.
 _Avoid_: Department, Collection
+
+**Attribute definition**:
+One attribute a Category's Products carry: its name, its type (`TEXT`, `NUMBER`, `BOOLEAN`, or `ENUM` with its allowed values), whether it is required, and whether it is a Variant axis. A Product's attributes must satisfy its Category's non-axis definitions: every required one present, values of the right type, and nothing the Category doesn't define.
+_Avoid_: Property, Field, Spec (a spec is how the Storefront shows an attribute)
+
+**Variant axis**:
+An Attribute definition that tells a Product's Variants apart rather than describing the Product, such as color or storage for `phones`. Each Variant has one value per axis of its Category.
+_Avoid_: Option, Dimension
 
 **Variant**:
 A specific purchasable version of a Product (e.g. a color/storage combination), each with its own stock level, identified by its Variant ID. Until multi-Variant Products arrive, every Product has exactly one Variant, whose Variant ID is the Product's SKU.

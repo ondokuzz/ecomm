@@ -1,6 +1,9 @@
 package com.ecomm.catalog.adapter.in.seed;
 
 import com.ecomm.catalog.application.port.in.SeedCatalogUseCase;
+import com.ecomm.catalog.domain.AttributeDefinition;
+import com.ecomm.catalog.domain.AttributeType;
+import com.ecomm.catalog.domain.Category;
 import com.ecomm.catalog.domain.Product;
 import com.ecomm.commons.money.Money;
 import java.io.IOException;
@@ -17,7 +20,7 @@ import org.springframework.stereotype.Component;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
 
-/** On startup, loads the seed Products into the Catalog if it is empty. */
+/** On startup, loads the seed Categories and Products into the Catalog if it is empty. */
 @Component
 class SeedDataLoader implements ApplicationRunner {
 
@@ -25,27 +28,55 @@ class SeedDataLoader implements ApplicationRunner {
 
   private final SeedCatalogUseCase seedCatalog;
   private final JsonMapper json;
-  private final Resource seed;
+  private final Resource categories;
+  private final Resource products;
 
   SeedDataLoader(
       SeedCatalogUseCase seedCatalog,
       JsonMapper json,
-      @Value("${ecomm.catalog.seed}") Resource seed) {
+      @Value("${ecomm.catalog.seed.categories}") Resource categories,
+      @Value("${ecomm.catalog.seed.products}") Resource products) {
     this.seedCatalog = seedCatalog;
     this.json = json;
-    this.seed = seed;
+    this.categories = categories;
+    this.products = products;
   }
 
   @Override
   public void run(ApplicationArguments args) throws IOException {
-    List<SeedProduct> products;
-    try (InputStream in = seed.getInputStream()) {
-      products = json.readValue(in, new TypeReference<>() {});
-    }
-    if (seedCatalog.seedIfEmpty(products.stream().map(SeedProduct::toProduct).toList())) {
-      log.info("Seeded the Catalog with {} Products", products.size());
+    List<SeedCategory> categories = read(this.categories, new TypeReference<>() {});
+    List<SeedProduct> products = read(this.products, new TypeReference<>() {});
+    if (seedCatalog.seedIfEmpty(
+        categories.stream().map(SeedCategory::toCategory).toList(),
+        products.stream().map(SeedProduct::toProduct).toList())) {
+      log.info(
+          "Seeded the Catalog with {} Categories and {} Products",
+          categories.size(),
+          products.size());
     } else {
-      log.info("Catalog already holds Products; skipped seeding");
+      log.info("Catalog already holds data; skipped seeding");
+    }
+  }
+
+  private <T> T read(Resource resource, TypeReference<T> type) throws IOException {
+    try (InputStream in = resource.getInputStream()) {
+      return json.readValue(in, type);
+    }
+  }
+
+  record SeedCategory(String slug, String name, List<SeedDefinition> attributes) {
+
+    Category toCategory() {
+      return new Category(
+          slug, name, attributes.stream().map(SeedDefinition::toDefinition).toList());
+    }
+  }
+
+  record SeedDefinition(
+      String name, AttributeType type, List<String> values, boolean required, boolean variantAxis) {
+
+    AttributeDefinition toDefinition() {
+      return new AttributeDefinition(name, type, values, required, variantAxis);
     }
   }
 

@@ -89,6 +89,10 @@ class ProductController {
 
   @ExceptionHandler(InvalidProductException.class)
   ProblemDetail invalid(InvalidProductException e) {
-    return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+    var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+    if (!e.violations().isEmpty()) {
+      problem.setProperty("errors", e.violations());
+    }
+    return problem;
   }
 }
