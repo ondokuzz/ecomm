@@ -65,7 +65,8 @@ Checkout calls each service with the identity that service expects
 The client secret comes from `CHECKOUT_CLIENT_SECRET`, which compose sets; there is no default.
 
 Every call, to every service, also carries the checkout request's Correlation ID in
-`X-Correlation-Id`, so one checkout can be followed through all their logs (see the
+`X-Correlation-Id`, and Checkout logs each one with its status and duration. So one checkout can
+be followed through all their logs, Catalog and Cart reads included (see the
 [service template](../../platform/service-template/README.md#correlation-ids-and-logs)).
 
 Spring Security's OAuth2 client fetches the token and caches it in memory. It fetches a new one

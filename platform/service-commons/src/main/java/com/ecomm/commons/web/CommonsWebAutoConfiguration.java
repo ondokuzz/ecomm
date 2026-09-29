@@ -11,8 +11,9 @@ import org.springframework.context.annotation.Import;
 import org.springframework.core.Ordered;
 
 /**
- * Problem details for every error, and a Correlation ID on every request, its problem details and
- * every call it makes through a {@code RestClient} built from Boot's {@code RestClient.Builder}.
+ * Problem details for every error, and a Correlation ID on every request and its problem details.
+ * Every call made through a {@code RestClient} built from Boot's {@code RestClient.Builder} sends
+ * the Correlation ID and is logged.
  */
 @AutoConfiguration
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
@@ -33,7 +34,10 @@ public class CommonsWebAutoConfiguration {
 
     @Bean
     RestClientCustomizer correlationIdRestClientCustomizer() {
-      return builder -> builder.requestInterceptor(new CorrelationIdInterceptor());
+      return builder ->
+          builder
+              .requestInterceptor(new OutboundCallLogInterceptor())
+              .requestInterceptor(new CorrelationIdInterceptor());
     }
   }
 }

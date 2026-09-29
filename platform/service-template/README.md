@@ -36,9 +36,9 @@ Every request has a Correlation ID, set up by `service-commons` with no code in 
   rendered it, a service's own `@ExceptionHandler` included. That is the support reference a
   Customer sees.
 - Every `RestClient` built from Boot's `RestClient.Builder` sends it downstream in
-  `X-Correlation-Id`. Build clients from the injected builder (`builder.clone()`), not
-  `RestClient.create()`. A call made off the request thread, such as from `@Async` code, has no
-  Correlation ID to send.
+  `X-Correlation-Id`, and logs the call (see below). Build clients from the injected builder
+  (`builder.clone()`), not `RestClient.create()`. A call made off the request thread, such as
+  from `@Async` code, has no Correlation ID to send.
 
 The Correlation ID is not a security boundary; never use it to decide anything.
 
@@ -52,9 +52,18 @@ through the compose stack:
 docker compose logs --no-log-prefix | jq -cR 'fromjson? | select(.correlationId == "<id>")'
 ```
 
-Services write no access log; that belongs to the API gateway. To make a request's path through
-the services visible, log a line at `INFO` when it changes something worth following, as Checkout,
-Cart, Inventory, Order Management and Payment do for each step of a checkout.
+A request's path through the services shows up in three kinds of line:
+
+- **Outbound calls:** every call to another service through such a `RestClient` logs one line
+  from `OutboundCallLogInterceptor`, such as `POST http://inventory:8080/stock/decrement -> 409 in
+  12 ms`. The query string is left out. A call that gets no response, such as a refused
+  connection or a timeout, logs a warning. A client's own retries happen inside the call, so a
+  retried call is one line with its final status.
+- **State changes:** log a line at `INFO` when a request changes something worth following, as
+  Checkout, Cart, Inventory, Order Management and Payment do for each step of a checkout.
+- **Errors:** unexpected failures are logged by the shared problem-detail handler.
+
+Services don't log the requests they receive; that access log belongs to the API gateway.
 
 ## Security
 
