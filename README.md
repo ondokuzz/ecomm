@@ -48,8 +48,8 @@ the default stack fits in about 8 GB of Docker memory.
 
 ## CI
 
-[`.github/workflows/ci.yml`](./.github/workflows/ci.yml) checks every push and pull request with
-four jobs:
+[`.github/workflows/ci.yml`](./.github/workflows/ci.yml) checks every pull request and every push
+to `main`, with four jobs:
 
 | Job | What it checks |
 |---|---|

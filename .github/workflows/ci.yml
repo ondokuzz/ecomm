@@ -1,15 +1,17 @@
-# Checks every push and pull request: the backend, each frontend app, every image, and the
-# Playwright suite against the compose stack. On main it also publishes the images to GHCR.
+# Checks every pull request and every push to main: the backend, each frontend app, every image,
+# and the Playwright suite against the compose stack. On main it also publishes the images to GHCR.
 name: CI
 
+# Pushes to other branches aren't checked on their own, so a pull request's commits run once.
 on:
   push:
+    branches: [main]
   pull_request:
 
-# A newer commit on the same branch or pull request supersedes a running check; main runs them all,
+# A newer commit on the same pull request supersedes a running check; main runs them all,
 # so every commit on it gets its images.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
