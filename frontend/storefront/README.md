@@ -1,7 +1,7 @@
 # Storefront
 
-The Customer-facing React app: browse Products by category, see a Product's Price and Stock, keep a
-Cart, check out with a mock payment, and follow Orders and their Order Status. Built with Vite,
+The Customer-facing React app: browse Products by category, pick a Variant and see its Price and
+Stock, keep a Cart, check out with a mock payment, and follow Orders and their Order Status. Built with Vite,
 React, TypeScript, React Router and TanStack Query.
 
 ## Pages
@@ -9,7 +9,7 @@ React, TypeScript, React Router and TanStack Query.
 | Path | | Login |
 |---|---|---|
 | `/?category=` | Products, filtered by category | no |
-| `/products/{sku}` | A Product with its image, Price, Stock and specs, laid out by its Category's attribute definitions; add it to the Cart | no (adding needs it) |
+| `/products/{sku}?variant=` | A Product with a Variant picker, and the chosen Variant's image, Price, Stock and specs, laid out by its Category's attribute definitions; add it to the Cart | no (adding needs it) |
 | `/cart` | The Cart, priced from Catalog's current Prices; change quantities, remove lines or empty it | yes |
 | `/checkout` | The order summary, and a mock payment card with a "Pay" button | yes |
 | `/orders/{id}` | An Order: its Order Status timeline, its lines and summary; after checkout, the confirmation first | yes |
@@ -41,6 +41,23 @@ The Product page's Stock indicator reads "In stock", "Only N left" at 5 or fewer
 (`lowStockThreshold` in [`src/domain/stock.ts`](./src/domain/stock.ts)), or "Out of stock", which
 also disables "Add to cart".
 
+## Variants
+
+A Product with more than one Variant gets a Variant picker: a group of radio chips per Variant axis,
+in its Category's order, built by `variantAxes` in [`src/domain/catalog.ts`](./src/domain/catalog.ts).
+Picking a value keeps the chosen Variant's other axis values, so a value no Variant has alongside
+them (Porcelain in 256 GB, say) is disabled rather than jumping somewhere unexpected. A value whose
+Variant is sold out stays pickable and is marked "Sold out". The Price, the Stock indicator, the
+image (the Variant's own, when it has one) and the axis rows of the specs all follow the chosen
+Variant. The choice lives in `?variant=`, so a reload or a shared link keeps it; without one, or
+with one the Product doesn't have, the page shows the first Variant.
+
+Product cards show Catalog's `priceFrom`, prefixed "From" when the Variants' Prices differ.
+
+Cart and Order lines hold Variant IDs, so each is looked up through Catalog's
+`GET /variants/{id}` and named by its Product and axis values, such as "Google Pixel 9 · Obsidian ·
+256 GB"; it links to the Product page with that Variant chosen.
+
 ## Orders
 
 After checkout the Order page opens with a confirmation: a big check, confetti that falls once, the
@@ -51,8 +68,8 @@ An Order is shown by its Order reference (`#3F2A9C1B`, the start of its ID; the 
 summary). Its page has an Order Status timeline, Placed → Paid → Fulfilled → Shipped → Delivered
 with the current step marked; a cancelled Order ends at Cancelled after Placed, in red, since its
 Order Status doesn't say whether it was paid, and a returned one at Returned after Delivered, in
-amber. Its lines name their Products and show their thumbnails, looked up from Catalog, and fall back
-to the Variant ID when Catalog no longer has the Product. Its summary shows what it comes to, as
+amber. Its lines name their Products and Variants and show their thumbnails, looked up from Catalog,
+and fall back to the Variant ID when Catalog no longer has the Variant. Its summary shows what it comes to, as
 Order Management worked it out: the subtotal, a Discount line naming its Coupon when there is one,
 the tax and the total.
 
@@ -63,14 +80,17 @@ never the only cue.
 
 ## Product images
 
-A Product shows its first image through [`ProductImage`](./src/components/ProductImage.tsx). When it
-has no images, or the file fails to load, a placeholder takes its place, so there is never a
+A Product shows its first image through [`ProductImage`](./src/components/ProductImage.tsx), or its
+chosen Variant's first when the Variant has images of its own. When there are no images, or the file
+fails to load, a placeholder takes its place, so there is never a
 broken-image icon. The image's `alt` text is the Product's name.
 
 The seed Products' images are generated artwork, not photographs, so there is nothing to license: an
-SVG of a phone, laptop, headphones, earbuds or speaker, in the Product's colour on a backdrop in its
-brand's colour from the palette. They live in [`public/images/products/`](./public/images/products)
-at the paths Catalog's seed gives them (`/images/products/<sku-lowercase>/front.svg`), and are
+SVG of a phone, laptop, headphones, earbuds or speaker, in its first Variant's colour on a backdrop
+in its brand's colour from the palette. A Variant with images of its own, such as the Porcelain
+Pixel 9, gets one in its own colour. They live in [`public/images/products/`](./public/images/products)
+at the paths Catalog's seed gives them (`/images/products/<sku-lowercase>/front.svg`, and beside it
+for a Variant, such as `porcelain.svg`), and are
 generated from that seed by [`scripts/generate-product-images.ts`](./scripts/generate-product-images.ts):
 
 ```sh
@@ -94,7 +114,8 @@ Vite serves `public/` as is in development, and the build copies it into `dist/`
 serves in compose with a one-day cache (the names don't change when the images are regenerated). A
 missing image is a 404 there, not the app's `index.html`; Vite answers it with `index.html`, which
 fails to load as an image just the same. A test (`npm test`) checks that every seed
-Product has its image at the path Catalog returns, under 50 KB.
+Product, and every seed Variant with images of its own, has its image at the path Catalog returns,
+under 50 KB.
 
 ## Auth
 
@@ -127,7 +148,7 @@ port, 8000 ([`vite.config.ts`](./vite.config.ts)); in compose, nginx does
 A Cart holds no prices, so the Cart and checkout pages price it from Catalog for display.
 Checkout prices it again itself; what the Customer pays is what the Order shows.
 
-The Cart page lists each line with its Product's thumbnail and name, a quantity stepper and a
+The Cart page lists each line with its Variant's thumbnail and name, a quantity stepper and a
 remove button, beside an order summary (item count, subtotal, total) that stays in view on wide
 screens and moves below the lines on phones. Checkout adds no tax or shipping yet, so the total is
 the subtotal. "Empty cart" clears it through `DELETE /cart` once the Customer confirms, then moves

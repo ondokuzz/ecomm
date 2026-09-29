@@ -24,8 +24,8 @@ Authorization: Bearer {{customerToken}}
 POST {{checkout}}/checkout
 Authorization: Bearer {{customerToken}}
 
-### Fill the Cart
-PUT {{cart}}/cart/items/PHN-PIXEL-9
+### Fill the Cart: two of one Pixel 9 Variant (Obsidian, 256 GB), by its Variant ID
+PUT {{cart}}/cart/items/PHN-PIXEL-9-OBSIDIAN-256
 Authorization: Bearer {{customerToken}}
 Content-Type: application/json
 
@@ -39,7 +39,7 @@ Content-Type: application/json
 {"quantity": 1}
 
 ### Stock before checkout
-GET {{inventory}}/stock/PHN-PIXEL-9
+GET {{inventory}}/stock/PHN-PIXEL-9-OBSIDIAN-256
 
 ### Check out: 200 with the Order in PAID
 POST {{checkout}}/checkout
@@ -47,12 +47,13 @@ Authorization: Bearer {{customerToken}}
 
 > {% client.global.set("orderId", response.body.orderId); %}
 
-### The Order, at Catalog's Prices, with its tax (zero for now) and the total its Payment was for
+### The Order, at each Variant's Price in Catalog, with its tax (zero for now) and the total its
+### Payment was for
 GET {{orders}}/orders/{{orderId}}
 Authorization: Bearer {{customerToken}}
 
-### Two fewer Pixel 9s in stock
-GET {{inventory}}/stock/PHN-PIXEL-9
+### Two fewer of that Variant in stock
+GET {{inventory}}/stock/PHN-PIXEL-9-OBSIDIAN-256
 
 ### The Cart is empty again
 GET {{cart}}/cart

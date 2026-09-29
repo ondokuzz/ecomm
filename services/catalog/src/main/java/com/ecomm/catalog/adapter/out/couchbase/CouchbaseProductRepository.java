@@ -13,8 +13,12 @@ import com.couchbase.client.java.query.QueryOptions;
 import com.couchbase.client.java.query.QueryScanConsistency;
 import com.ecomm.catalog.application.port.out.ProductRepository;
 import com.ecomm.catalog.domain.Product;
+import com.ecomm.catalog.domain.Variant;
 import com.ecomm.commons.money.Money;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -23,10 +27,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
- * Stores each Product as a JSON document keyed by its SKU in the bucket's default collection. Reads
- * by SKU are key-value lookups; listings go through a query index on {@code category}, created on
- * startup if missing. Queries wait for the index to catch up, so a change is visible to the next
- * listing.
+ * Stores each Product, its Variants inside it, as a JSON document keyed by its SKU in the bucket's
+ * default collection. Reads by SKU are key-value lookups; listings go through a query index on
+ * {@code category}, and lookups by Variant ID through an array index on the Variants' IDs, both
+ * created on startup if missing. Queries wait for the indexes to catch up, so a change is visible
+ * to the next query.
  */
 @Component
 class CouchbaseProductRepository implements ProductRepository {
@@ -44,6 +49,9 @@ class CouchbaseProductRepository implements ProductRepository {
     scope.query(
         "CREATE INDEX idx_product_category IF NOT EXISTS ON `_default`(category, name)"
             + " WHERE type = 'product'");
+    scope.query(
+        "CREATE INDEX idx_product_variant_id IF NOT EXISTS"
+            + " ON `_default`(DISTINCT ARRAY v.id FOR v IN variants END) WHERE type = 'product'");
   }
 
   @Override
@@ -53,6 +61,34 @@ class CouchbaseProductRepository implements ProductRepository {
     } catch (DocumentNotFoundException e) {
       return Optional.empty();
     }
+  }
+
+  @Override
+  public Optional<Product> findByVariantId(String variantId) {
+    return query(
+            "SELECT RAW p FROM `_default` p WHERE p.type = 'product'"
+                + " AND ANY v IN p.variants SATISFIES v.id = $id END",
+            consistent().parameters(JsonObject.create().put("id", variantId)))
+        .stream()
+        .findFirst();
+  }
+
+  @Override
+  public List<String> variantIdsOfOtherProducts(String sku, List<String> variantIds) {
+    var taken =
+        scope
+            .query(
+                "SELECT RAW ARRAY v.id FOR v IN p.variants END FROM `_default` p"
+                    + " WHERE p.type = 'product' AND ANY v IN p.variants SATISFIES v.id IN $ids END"
+                    + " AND p.sku != $sku",
+                consistent()
+                    .parameters(
+                        JsonObject.create().put("ids", JsonArray.from(variantIds)).put("sku", sku)))
+            .rowsAs(String[].class)
+            .stream()
+            .flatMap(Arrays::stream)
+            .collect(Collectors.toSet());
+    return variantIds.stream().filter(taken::contains).toList();
   }
 
   @Override
@@ -153,26 +189,64 @@ class CouchbaseProductRepository implements ProductRepository {
         .put("name", product.name())
         .put("category", product.category())
         .put("attributes", JsonObject.from(Map.copyOf(product.attributes())))
+        .put("images", JsonArray.from(List.copyOf(product.images())))
+        .put(
+            "variants",
+            JsonArray.from(
+                product.variants().stream().map(CouchbaseProductRepository::toDocument).toList()));
+  }
+
+  /** Axis values are stored as a list of name-value pairs, since a JSON object keeps no order. */
+  private static JsonObject toDocument(Variant variant) {
+    var axisValues = JsonArray.create();
+    variant
+        .axisValues()
+        .forEach(
+            (name, value) ->
+                axisValues.add(JsonObject.create().put("name", name).put("value", value)));
+    return JsonObject.create()
+        .put("id", variant.id())
+        .put("axisValues", axisValues)
         .put(
             "price",
             JsonObject.create()
-                .put("amountMinor", product.price().amountMinor())
-                .put("currency", product.price().currency().getCurrencyCode()))
-        .put("images", JsonArray.from(List.copyOf(product.images())));
+                .put("amountMinor", variant.price().amountMinor())
+                .put("currency", variant.price().currency().getCurrencyCode()))
+        .put("images", JsonArray.from(List.copyOf(variant.images())));
   }
 
   private static Product fromDocument(JsonObject document) {
-    var price = document.getObject("price");
     var attributes =
         document.getObject("attributes").toMap().entrySet().stream()
             .collect(Collectors.toMap(Map.Entry::getKey, e -> String.valueOf(e.getValue())));
-    var images = document.getArray("images").toList().stream().map(String::valueOf).toList();
+    var variants = new ArrayList<Variant>();
+    for (var variant : document.getArray("variants")) {
+      variants.add(variantFrom((JsonObject) variant));
+    }
     return new Product(
         document.getString("sku"),
         document.getString("name"),
         document.getString("category"),
         attributes,
+        strings(document.getArray("images")),
+        variants);
+  }
+
+  private static Variant variantFrom(JsonObject document) {
+    var axisValues = new LinkedHashMap<String, String>();
+    for (var pair : document.getArray("axisValues")) {
+      var axisValue = (JsonObject) pair;
+      axisValues.put(axisValue.getString("name"), axisValue.getString("value"));
+    }
+    var price = document.getObject("price");
+    return new Variant(
+        document.getString("id"),
+        axisValues,
         Money.of(price.getLong("amountMinor"), price.getString("currency")),
-        images);
+        strings(document.getArray("images")));
+  }
+
+  private static List<String> strings(JsonArray array) {
+    return array.toList().stream().map(String::valueOf).toList();
   }
 }

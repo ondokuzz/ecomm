@@ -1,4 +1,4 @@
-import type { Product } from './catalog'
+import { type VariantDetail, variantName } from './catalog'
 import { type Money, timesMoney } from './money'
 
 export type OrderStatus = 'PLACED' | 'PAID' | 'FULFILLED' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED' | 'RETURNED'
@@ -75,18 +75,18 @@ export function orderSummaryRows(order: Order): OrderSummaryRow[] {
   ]
 }
 
-/** An Order Line with its total at the captured price, and its Product when Catalog still has it. */
+/** An Order Line with its total at the captured price, and its Variant when Catalog still has it. */
 export interface NamedOrderLine extends OrderLine {
   lineTotal: Money
-  product?: Product
+  variant?: VariantDetail
   name?: string
 }
 
-export function nameOrderLines(order: Order, productsByVariantId: Record<string, Product | undefined>): NamedOrderLine[] {
+export function nameOrderLines(order: Order, variantsById: Record<string, VariantDetail | undefined>): NamedOrderLine[] {
   return order.lines.map((line) => {
     const named: NamedOrderLine = { ...line, lineTotal: timesMoney(line.unitPrice, line.quantity) }
-    const product = productsByVariantId[line.variantId]
-    return product ? { ...named, product, name: product.name } : named
+    const variant = variantsById[line.variantId]
+    return variant ? { ...named, variant, name: variantName(variant) } : named
   })
 }
 

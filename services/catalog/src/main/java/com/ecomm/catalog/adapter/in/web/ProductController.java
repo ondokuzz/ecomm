@@ -5,6 +5,7 @@ import com.ecomm.catalog.application.port.in.ManageProductsUseCase;
 import com.ecomm.catalog.domain.InvalidProductException;
 import com.ecomm.catalog.domain.ProductAlreadyExistsException;
 import com.ecomm.catalog.domain.ProductNotFoundException;
+import com.ecomm.catalog.domain.VariantIdTakenException;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.http.HttpStatus;
@@ -84,6 +85,11 @@ class ProductController {
 
   @ExceptionHandler(ProductAlreadyExistsException.class)
   ProblemDetail alreadyExists(ProductAlreadyExistsException e) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
+  }
+
+  @ExceptionHandler(VariantIdTakenException.class)
+  ProblemDetail variantIdTaken(VariantIdTakenException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
   }
 

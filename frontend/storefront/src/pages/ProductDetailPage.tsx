@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { Link, useParams } from 'react-router'
+import { Link, useParams, useSearchParams } from 'react-router'
 import { useAuth } from 'react-oidc-context'
 import { useCart, useSetQuantity } from '../api/cart'
-import { useCategory, useProduct, useStock } from '../api/catalog'
+import { useCategory, useProduct, useStock, useStocks } from '../api/catalog'
 import { useAuthPending, useSignin } from '../auth/session'
 import { ProductImage } from '../components/ProductImage'
 import { EmptyState, ErrorMessage, ErrorState } from '../components/Status'
+import { VariantPicker } from '../components/VariantPicker'
 import { Badge, type Tone } from '../components/ui/Badge'
 import { Button, ButtonLink } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -14,7 +15,7 @@ import { QuantityStepper } from '../components/ui/QuantityStepper'
 import { Skeleton } from '../components/ui/Skeleton'
 import { useToast } from '../components/ui/toasts'
 import { quantityOf } from '../domain/cart'
-import { type Product, defaultVariant, specs } from '../domain/catalog'
+import { type Product, chosenVariant, specs, variantAxes } from '../domain/catalog'
 import { formatMoney } from '../domain/money'
 import { type StockLevel, stockLevel } from '../domain/stock'
 
@@ -56,18 +57,23 @@ export function ProductDetailPage() {
 }
 
 function ProductDetail({ product }: { product: Product }) {
-  const variant = defaultVariant(product)
+  // The chosen Variant lives in the URL, so a reload or a shared link keeps it.
+  const [params, setParams] = useSearchParams()
+  const variant = chosenVariant(product, params.get('variant'))
   const stock = useStock(variant.id)
+  const stocks = useStocks(product.variants.map((v) => v.id))
   // How many units Inventory has; undefined while unknown, or when it has no Stock record.
   const available = stock.data ?? undefined
   // Until the Category loads (or if it fails to), the specs keep the Product's own order.
   const category = useCategory(product.category)
-  const rows = specs(product.attributes, category.data?.attributes)
+  const definitions = category.data?.attributes
+  const rows = specs({ ...product.attributes, ...variant.axisValues }, definitions)
+  const axes = variantAxes(product, variant, definitions, stocks)
 
   return (
     <article className="product-page">
       <div className="product-media">
-        <ProductImage product={product} />
+        <ProductImage product={product} variant={variant} />
       </div>
       <div className="product-info">
         <Card className="purchase-panel">
@@ -75,8 +81,15 @@ function ProductDetail({ product }: { product: Product }) {
           {product.attributes.brand && <span className="brand-name">{product.attributes.brand}</span>}
           <h1>{product.name}</h1>
           <p className="price large">{formatMoney(variant.price)}</p>
+          {axes.length > 0 && (
+            <VariantPicker
+              axes={axes}
+              onChoose={(chosen) => setParams({ variant: chosen.id }, { replace: true, preventScrollReset: true })}
+            />
+          )}
           {stock.isPending ? <Badge>Checking stock…</Badge> : <StockIndicator quantity={available} />}
-          <AddToCart productName={product.name} variantId={variant.id} available={available} />
+          {/* A fresh quantity for each Variant. */}
+          <AddToCart key={variant.id} productName={product.name} variantId={variant.id} available={available} />
         </Card>
         {rows.length > 0 && (
           <section className="specs" aria-labelledby="specs-heading">

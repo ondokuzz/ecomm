@@ -5,9 +5,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.regex.Pattern;
+import java.util.ArrayList;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
+import tools.jackson.databind.json.JsonMapper;
 
 /** Anyone can read a Variant's stock without logging in. */
 class ReadStockApiTest extends InventoryApiTest {
@@ -46,15 +47,18 @@ class ReadStockApiTest extends InventoryApiTest {
 
   @Test
   void everyCatalogSeedVariantHasSeedStock() throws IOException {
-    var skus =
-        Pattern.compile("\"sku\"\\s*:\\s*\"([^\"]+)\"")
-            .matcher(Files.readString(CATALOG_SEED))
-            .results()
-            .map(m -> m.group(1))
-            .toList();
+    var products = JsonMapper.shared().readTree(Files.readString(CATALOG_SEED));
+    var variantIds = new ArrayList<String>();
+    for (var product : products) {
+      var variants = product.get("variants");
+      // A seed Product's first Variant keeps its SKU as its ID, so Carts and Orders stay valid.
+      assertThat(variants.get(0).get("id").asString()).isEqualTo(product.get("sku").asString());
+      variants.forEach(variant -> variantIds.add(variant.get("id").asString()));
+    }
 
-    assertThat(skus).hasSize(20);
-    // Until multi-Variant Products arrive, a seed Product's only Variant ID is its SKU.
-    assertThat(skus).allSatisfy(sku -> assertThat(quantityOf(sku)).isPositive());
+    assertThat(products).hasSize(20);
+    assertThat(variantIds).hasSizeGreaterThan(20).doesNotHaveDuplicates();
+    assertThat(variantIds).allSatisfy(id -> assertThat(quantityOf(id)).isNotNegative());
+    assertThat(variantIds).filteredOn(id -> quantityOf(id) > 0).hasSizeGreaterThan(20);
   }
 }

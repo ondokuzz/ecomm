@@ -36,8 +36,8 @@ npm run test:e2e
 | `make seed-reset` | Put the seed Categories, Products and Stock back and drop every Cart, Order and Payment; registered Customers stay |
 
 Every checkout takes Stock, so after many smoke-test runs `make seed-reset` refills it. A stack
-first seeded before Catalog had Categories needs it once too, since the seed only loads into an
-empty Catalog ([Catalog README](./services/catalog/README.md#seed-data)). To wipe
+first seeded before Catalog had multi-Variant Products needs it once too, since the seed only loads
+into an empty Catalog ([Catalog README](./services/catalog/README.md#seed-data)). To wipe
 everything, Keycloak's users included, run `docker compose down -v`.
 
 The browser reaches the services only through the [API gateway](./platform/api-gateway/README.md),

@@ -1,4 +1,4 @@
-import type { Product } from './catalog'
+import { type VariantDetail, variantName } from './catalog'
 import { type Money, sumMoney, timesMoney } from './money'
 
 export interface CartItem {
@@ -11,9 +11,9 @@ export interface Cart {
   items: CartItem[]
 }
 
-/** A Cart line with its Product and a copy of Catalog's current Price. Bare while its Product is loading or gone. */
+/** A Cart line with its Variant and a copy of Catalog's current Price. Bare while its Variant is loading or gone. */
 export interface CartLine extends CartItem {
-  product?: Product
+  variant?: VariantDetail
   name?: string
   unitPrice?: Money
   lineTotal?: Money
@@ -26,18 +26,17 @@ export interface PricedCart {
 }
 
 /**
- * Prices a Cart for display from the Products its Variants belong to. Checkout prices it again
- * from Catalog, so this is only what the Customer can expect to pay.
+ * Prices a Cart for display from its Variants, and names each line by its Product and axis values.
+ * Checkout prices it again from Catalog, so this is only what the Customer can expect to pay.
  */
-export function priceCart(cart: Cart, productsByVariantId: Record<string, Product | undefined>): PricedCart {
+export function priceCart(cart: Cart, variantsById: Record<string, VariantDetail | undefined>): PricedCart {
   const lines = cart.items.map((item): CartLine => {
-    const product = productsByVariantId[item.variantId]
-    const variant = product?.variants.find((v) => v.id === item.variantId)
-    if (!product || !variant) return { ...item }
+    const variant = variantsById[item.variantId]
+    if (!variant) return { ...item }
     return {
       ...item,
-      product,
-      name: product.name,
+      variant,
+      name: variantName(variant),
       unitPrice: variant.price,
       lineTotal: timesMoney(variant.price, item.quantity),
     }

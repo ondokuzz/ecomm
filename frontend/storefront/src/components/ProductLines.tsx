@@ -1,5 +1,5 @@
 import { Link } from 'react-router'
-import type { Product } from '../domain/catalog'
+import type { VariantDetail } from '../domain/catalog'
 import { type Money, formatMoney } from '../domain/money'
 import { ProductThumb } from './ProductImage'
 import { Button } from './ui/Button'
@@ -11,7 +11,7 @@ import { cx } from './ui/cx'
 export interface ProductLine {
   variantId: string
   quantity: number
-  product?: Product
+  variant?: VariantDetail
   name?: string
   unitPrice?: Money
   lineTotal?: Money
@@ -40,16 +40,15 @@ export function ProductLines({
   return (
     <ul className={cx('cart-lines', compact && 'compact')} aria-label={label}>
       {lines.map((line) => {
-        // The Variant ID stands in while the Product loads, or when Catalog doesn't have it.
+        // The Variant ID stands in while the Variant loads, or when Catalog doesn't have it.
         const name = line.name ?? line.variantId
-        const href = `/products/${encodeURIComponent(line.variantId)}`
+        const href = variantHref(line)
         return (
           <li key={line.variantId} className="cart-line">
             <Link to={href} className="cart-line-thumb" tabIndex={-1} aria-hidden="true">
-              <ProductThumb product={line.product} />
+              <ProductThumb variant={line.variant} />
             </Link>
             <div className="cart-line-info">
-              {line.product?.attributes.brand && <span className="brand-name">{line.product.attributes.brand}</span>}
               <Link to={href} className="cart-line-name">
                 {name}
               </Link>
@@ -90,3 +89,8 @@ export function ProductLines({
   )
 }
 
+/** The line's Product page with its Variant chosen; by Variant ID, a first Variant's SKU, while the Variant is unknown. */
+function variantHref({ variantId, variant }: ProductLine): string {
+  if (!variant) return `/products/${encodeURIComponent(variantId)}`
+  return `/products/${encodeURIComponent(variant.product.sku)}?${new URLSearchParams({ variant: variantId })}`
+}

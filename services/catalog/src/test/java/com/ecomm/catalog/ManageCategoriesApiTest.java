@@ -201,7 +201,9 @@ class ManageCategoriesApiTest extends CatalogApiTest {
     var speaker =
         """
         {"sku": "SPK-DEMO", "name": "Demo speaker", "category": "speakers",
-         "attributes": {"brand": "Demo"}, "price": {"amountMinor": 100, "currency": "EUR"}}
+         "attributes": {"brand": "Demo"},
+         "variants": [{"id": "SPK-DEMO", "axisValues": {"colour": "Black"},
+                       "price": {"amountMinor": 100, "currency": "EUR"}}]}
         """;
     http.post()
         .uri("/products")

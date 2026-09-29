@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from 'react-oidc-context'
 import { type Cart, type PricedCart, priceCart } from '../domain/cart'
-import { useProductsByVariantId } from './catalog'
+import { useVariants } from './catalog'
 import { api } from './http'
 
 export const cartKey = ['cart']
@@ -16,12 +16,12 @@ export function useCart() {
   })
 }
 
-/** The Cart priced from Catalog's current Prices, while each line's Product loads. */
+/** The Cart priced from Catalog's current Prices, while each line's Variant loads. */
 export function usePricedCart(): { cart: ReturnType<typeof useCart>; priced?: PricedCart } {
   const cart = useCart()
-  const products = useProductsByVariantId((cart.data?.items ?? []).map((item) => item.variantId))
+  const variants = useVariants((cart.data?.items ?? []).map((item) => item.variantId))
   if (!cart.data) return { cart }
-  return { cart, priced: priceCart(cart.data, products) }
+  return { cart, priced: priceCart(cart.data, variants) }
 }
 
 export function useSetQuantity() {

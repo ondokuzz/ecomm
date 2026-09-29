@@ -9,6 +9,9 @@ public interface BrowseCatalogUseCase {
 
   Optional<Product> product(String sku);
 
+  /** The Product one of whose Variants has the ID {@code variantId}. */
+  Optional<Product> productWithVariant(String variantId);
+
   /** Products ordered by name; every Product when {@code category} is empty. */
   List<Product> products(Optional<String> category);
 

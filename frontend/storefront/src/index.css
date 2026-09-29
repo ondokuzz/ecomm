@@ -1002,6 +1002,79 @@ main {
   color: var(--color-primary-text);
 }
 
+.variant-picker {
+  display: grid;
+  gap: var(--space-4);
+}
+.variant-axis {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.variant-axis legend {
+  margin-bottom: var(--space-2);
+  padding: 0;
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+.variant-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.variant-option {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 2.5rem;
+  padding: 0 var(--space-4);
+  border: 1.5px solid var(--color-line-strong);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  font-size: var(--text-sm);
+  font-weight: 650;
+  cursor: pointer;
+}
+.variant-option:hover {
+  border-color: var(--color-primary);
+}
+/* The radio covers its whole chip, invisibly, so a click anywhere on the chip lands on it. */
+.variant-option-input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: inherit;
+}
+.variant-option:has(input:checked) {
+  border-color: var(--color-primary);
+  box-shadow: inset 0 0 0 1px var(--color-primary);
+  color: var(--color-primary-text);
+}
+.variant-option:has(input:focus-visible) {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+.variant-option.unavailable {
+  border-style: dashed;
+  color: var(--color-muted);
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.variant-option.unavailable:hover {
+  border-color: var(--color-line-strong);
+}
+.variant-option.out-of-stock {
+  color: var(--color-muted);
+}
+.variant-option-note {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--color-danger);
+}
+
 @media (max-width: 720px) {
   .hero {
     padding: var(--space-6) var(--space-5);
@@ -1098,6 +1171,12 @@ main {
   font-family: var(--font-display);
   font-weight: 800;
   color: var(--color-primary-text);
+}
+.price-from {
+  font-family: var(--font-body);
+  font-size: 0.75em;
+  font-weight: 600;
+  color: var(--color-muted);
 }
 .product-card .price {
   margin-top: auto;

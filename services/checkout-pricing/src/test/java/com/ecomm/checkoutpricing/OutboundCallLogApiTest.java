@@ -20,7 +20,7 @@ class OutboundCallLogApiTest extends CheckoutApiTest {
 
     assertThat(output)
         .contains("GET " + DOWNSTREAM.baseUrl() + "/cart -> 200")
-        .contains("GET " + DOWNSTREAM.baseUrl() + "/products/PHN-PIXEL-9 -> 200")
+        .contains("GET " + DOWNSTREAM.baseUrl() + "/variants/PHN-PIXEL-9 -> 200")
         .contains("POST " + DOWNSTREAM.baseUrl() + "/orders -> 201")
         .contains("POST " + DOWNSTREAM.baseUrl() + "/stock/decrement -> 200")
         .contains("POST " + DOWNSTREAM.baseUrl() + "/payments -> 201")

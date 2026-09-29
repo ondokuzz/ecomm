@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Product } from './catalog'
+import type { VariantDetail } from './catalog'
 import {
   type Order,
   type OrderStatus,
@@ -13,8 +13,8 @@ import {
 
 const eur = (amountMinor: number) => ({ amountMinor, currency: 'EUR' })
 
-function product(sku: string): Product {
-  return { sku, name: `Product ${sku}`, category: 'phones', attributes: {}, price: eur(1000), images: [], variants: [{ id: sku, price: eur(1000) }] }
+function variant(id: string): VariantDetail {
+  return { id, axisValues: { color: 'Black' }, price: eur(1000), images: [], product: { sku: id, name: `Product ${id}`, images: [] } }
 }
 
 function order(overrides: Partial<Order> = {}): Order {
@@ -51,15 +51,15 @@ describe('orderItemCountLabel', () => {
 })
 
 describe('nameOrderLines', () => {
-  it('names each line by its Product and totals it at the captured price', () => {
-    const a = product('A')
+  it('names each line by its Product and axis values, and totals it at the captured price', () => {
+    const a = variant('A')
     const lines = nameOrderLines(order(), { A: a })
 
-    expect(lines[0]).toEqual({ variantId: 'A', quantity: 2, unitPrice: eur(1000), lineTotal: eur(2000), product: a, name: 'Product A' })
+    expect(lines[0]).toEqual({ variantId: 'A', quantity: 2, unitPrice: eur(1000), lineTotal: eur(2000), variant: a, name: 'Product A · Black' })
   })
 
-  it('leaves a line bare of Product and name when Catalog has none', () => {
-    const lines = nameOrderLines(order(), { A: product('A') })
+  it('leaves a line bare of Variant and name when Catalog has none', () => {
+    const lines = nameOrderLines(order(), { A: variant('A') })
 
     expect(lines[1]).toEqual({ variantId: 'B', quantity: 1, unitPrice: eur(250), lineTotal: eur(250) })
   })

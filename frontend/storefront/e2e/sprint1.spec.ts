@@ -1,10 +1,11 @@
 import { type APIRequestContext, type Page, expect, test } from '@playwright/test'
-import { type Product, defaultVariant } from '../src/domain/catalog'
+import { type Product, type Variant, defaultVariant } from '../src/domain/catalog'
+import { formatMoney } from '../src/domain/money'
 import type { Order } from '../src/domain/order'
 
 /**
- * The Sprint 1 definition of done, end to end: browse seeded Products, add them to the Cart, check
- * out with the mock payment, and see the Order confirmation and its Order Status.
+ * The Sprint 1 definition of done, end to end: browse seeded Products, pick a Variant, add them to
+ * the Cart, check out with the mock payment, and see the Order confirmation and its Order Status.
  */
 
 // The demo checkout compares Stock before and after, so nothing else may check out meanwhile.
@@ -17,27 +18,42 @@ interface Credentials {
 
 interface ProductInStock {
   product: Product
+  variant: Variant
   variantId: string
   stock: number
+  /** The axis value to pick on the Product page to reach `variant`; none for the default Variant. */
+  pick?: { axis: string; value: string }
 }
 
 const keycloakUrl = process.env.KEYCLOAK_URL ?? 'http://localhost:8180'
 const demoCustomer: Credentials = { email: 'demo@ecomm.local', password: 'demo' }
 
-test('the demo Customer checks out two Products and Stock goes down', async ({ page, request }) => {
+test('the demo Customer checks out a picked Variant and another Product, and Stock goes down', async ({ page, request }) => {
   const token = await tokenFor(request, demoCustomer)
   await emptyCart(request, token)
-  const bought = await twoProductsInStock(request)
+  const picked = await aNonDefaultVariantInStock(request)
+  const bought = [picked, await aProductInStock(request, picked.product.sku)]
 
   await page.goto('/')
   await page.getByRole('button', { name: 'Log in' }).click()
   await signInOnKeycloak(page, demoCustomer)
   await expectSignedIn(page, demoCustomer.email)
 
-  for (const [i, { product }] of bought.entries()) {
+  // Variant Prices differ, so the card shows the lowest, "from".
+  await expect(page.locator(`a[href="/products/${encodeURIComponent(picked.product.sku)}"]`)).toContainText('From')
+
+  for (const [i, { product, variant, pick }] of bought.entries()) {
     await page.getByRole('navigation', { name: 'Main', exact: true }).getByRole('link', { name: 'Products' }).click()
     await page.locator(`a[href="/products/${encodeURIComponent(product.sku)}"]`).click()
     await expect(page.getByRole('heading', { name: product.name })).toBeVisible()
+    if (pick) {
+      // The choice lives in the URL, so the radio shows checked once the navigation lands, not on the click itself.
+      const option = page.getByRole('group', { name: pick.axis }).getByRole('radio', { name: pick.value })
+      await option.click()
+      await expect(option).toBeChecked()
+      await expect(page).toHaveURL(new RegExp(`[?&]variant=${encodeURIComponent(variant.id)}$`))
+      await expect(page.locator('.purchase-panel .price')).toHaveText(formatMoney(variant.price, 'en-US'))
+    }
     await expect(page.getByText(/^(In stock|Only \d+ left)$/)).toBeVisible()
     await page.getByRole('button', { name: 'Add to cart' }).click()
     const toast = page.locator('.toast').filter({ hasText: 'Added to cart' })
@@ -49,9 +65,10 @@ test('the demo Customer checks out two Products and Stock goes down', async ({ p
   }
 
   await page.getByRole('link', { name: /^Cart/ }).click()
+  // Each line names its Product and the Variant's axis values.
   const cartLines = page.getByRole('list', { name: 'Cart lines' })
-  for (const { product } of bought) {
-    await expect(cartLines.getByRole('link', { name: product.name })).toBeVisible()
+  for (const line of bought) {
+    await expect(cartLines.getByRole('link', { name: lineName(line), exact: true })).toBeVisible()
   }
   await expect(page.getByRole('region', { name: 'Order summary' })).toContainText('2 items')
   await page.getByRole('link', { name: 'Go to checkout' }).click()
@@ -79,9 +96,9 @@ test('the demo Customer checks out two Products and Stock goes down', async ({ p
   const order = await orderOf(request, token, orderId)
   expect(order.status).toBe('PAID')
   const orderLines = page.getByRole('list', { name: 'Order lines' })
-  for (const { product, variantId } of bought) {
-    await expect(orderLines.getByRole('link', { name: product.name })).toBeVisible()
-    expect(order.lines.find((line) => line.variantId === variantId)?.quantity).toBe(1)
+  for (const line of bought) {
+    await expect(orderLines.getByRole('link', { name: lineName(line), exact: true })).toBeVisible()
+    expect(order.lines.find((orderLine) => orderLine.variantId === line.variantId)?.quantity).toBe(1)
   }
 
   await page.getByRole('link', { name: 'View my orders' }).click()
@@ -90,7 +107,7 @@ test('the demo Customer checks out two Products and Stock goes down', async ({ p
   await expect(card.locator('.status-paid')).toHaveText('Paid')
   await expect(card).toContainText('2 items')
   for (const { product } of bought) {
-    await expect(card.getByRole('img', { name: product.name })).toBeVisible()
+    await expect(card.getByRole('img', { name: product.name, exact: true })).toBeVisible()
   }
 
   for (const { variantId, stock } of bought) {
@@ -101,7 +118,7 @@ test('the demo Customer checks out two Products and Stock goes down', async ({ p
 test('the demo Customer empties their Cart after confirming', async ({ page, request }) => {
   const token = await tokenFor(request, demoCustomer)
   await emptyCart(request, token)
-  const [{ variantId }] = await twoProductsInStock(request)
+  const { variantId } = await aProductInStock(request)
   const put = await request.put(`/api/cart/cart/items/${encodeURIComponent(variantId)}`, {
     headers: { Authorization: `Bearer ${token}` },
     data: { quantity: 2 },
@@ -186,16 +203,42 @@ async function stockOf(request: APIRequestContext, variantId: string) {
   return ((await response.json()) as { quantity: number }).quantity
 }
 
-/** The first two seeded Products with Stock left; earlier runs may have sold some out. */
-async function twoProductsInStock(request: APIRequestContext): Promise<ProductInStock[]> {
+async function products(request: APIRequestContext): Promise<Product[]> {
   const response = await request.get('/api/catalog/products')
   expect(response.ok()).toBeTruthy()
-  const inStock: ProductInStock[] = []
-  for (const product of (await response.json()) as Product[]) {
-    const variantId = defaultVariant(product).id
-    const stock = await stockOf(request, variantId)
-    if (stock > 0) inStock.push({ product, variantId, stock })
-    if (inStock.length === 2) return inStock
+  return (await response.json()) as Product[]
+}
+
+/**
+ * A seeded Variant other than its Product's first, with Stock left, that differs from the first in
+ * one axis value, so picking that value on the Product page reaches it.
+ */
+async function aNonDefaultVariantInStock(request: APIRequestContext): Promise<ProductInStock> {
+  for (const product of await products(request)) {
+    const first = defaultVariant(product)
+    for (const variant of product.variants.slice(1)) {
+      const differing = Object.keys(variant.axisValues).filter((axis) => variant.axisValues[axis] !== first.axisValues[axis])
+      if (differing.length !== 1 || variant.price.amountMinor === first.price.amountMinor) continue
+      const stock = await stockOf(request, variant.id)
+      const [axis] = differing
+      if (stock > 0) return { product, variant, variantId: variant.id, stock, pick: { axis, value: variant.axisValues[axis] } }
+    }
   }
-  throw new Error('Fewer than two Products have Stock left; run `make seed-reset`')
+  throw new Error('No seeded non-default Variant has Stock left; run `make seed-reset`')
+}
+
+/** The first seeded Product (other than `exceptSku`) whose first Variant has Stock left; earlier runs may have sold some out. */
+async function aProductInStock(request: APIRequestContext, exceptSku?: string): Promise<ProductInStock> {
+  for (const product of await products(request)) {
+    if (product.sku === exceptSku) continue
+    const variant = defaultVariant(product)
+    const stock = await stockOf(request, variant.id)
+    if (stock > 0) return { product, variant, variantId: variant.id, stock }
+  }
+  throw new Error('No seeded Product has Stock left; run `make seed-reset`')
+}
+
+/** How a Cart or Order line names a Variant: its Product, then its axis values. */
+function lineName({ product, variant }: ProductInStock): string {
+  return [product.name, ...Object.values(variant.axisValues)].join(' · ')
 }

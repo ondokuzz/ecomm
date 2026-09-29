@@ -9,6 +9,12 @@ public interface ProductRepository {
 
   Optional<Product> find(String sku);
 
+  /** The Product one of whose Variants has the ID {@code variantId}. */
+  Optional<Product> findByVariantId(String variantId);
+
+  /** Which of {@code variantIds} belong to a Product other than the one with SKU {@code sku}. */
+  List<String> variantIdsOfOtherProducts(String sku, List<String> variantIds);
+
   /** Ordered by name. */
   List<Product> findAll();
 

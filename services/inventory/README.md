@@ -38,10 +38,11 @@ deadlock), checks the whole batch, then writes it.
 
 ## Seed data
 
-`V2__seed_stock.sql` gives stock to every Variant of Catalog's
-[seed Products](../catalog/src/main/resources/seed/products.json). It is a migration, so it runs
-once and a restart never undoes a decrement; `ReadStockApiTest` fails if it drifts from Catalog's
-seed. To reset stock, drop and recreate the `inventory` database.
+`V2__seed_stock.sql` gives stock to the first Variant of each of Catalog's
+[seed Products](../catalog/src/main/resources/seed/products.json), whose Variant ID is its SKU, and
+`V3__seed_variant_stock.sql` to the extra Variants of its multi-Variant ones, one of them sold out.
+They are migrations, so each runs once and a restart never undoes a decrement; `ReadStockApiTest`
+fails if they drift from Catalog's seed. To reset stock, drop and recreate the `inventory` database.
 
 ## Run it
 

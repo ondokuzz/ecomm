@@ -42,7 +42,7 @@ class OutboundIdentityApiTest extends CheckoutApiTest {
     checkout().expectStatus().isOk();
 
     DOWNSTREAM.verify(
-        getRequestedFor(urlEqualTo("/products/PHN-PIXEL-9")).withHeader("Authorization", absent()));
+        getRequestedFor(urlEqualTo("/variants/PHN-PIXEL-9")).withHeader("Authorization", absent()));
   }
 
   @Test

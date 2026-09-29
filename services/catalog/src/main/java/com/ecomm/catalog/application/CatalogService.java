@@ -12,6 +12,7 @@ import com.ecomm.catalog.domain.InvalidProductException;
 import com.ecomm.catalog.domain.Product;
 import com.ecomm.catalog.domain.ProductAlreadyExistsException;
 import com.ecomm.catalog.domain.ProductNotFoundException;
+import com.ecomm.catalog.domain.VariantIdTakenException;
 import java.util.List;
 import java.util.Optional;
 
@@ -29,6 +30,11 @@ public class CatalogService
   @Override
   public Optional<Product> product(String sku) {
     return products.find(sku);
+  }
+
+  @Override
+  public Optional<Product> productWithVariant(String variantId) {
+    return products.findByVariantId(variantId);
   }
 
   @Override
@@ -51,7 +57,8 @@ public class CatalogService
 
   @Override
   public Product create(Product product) {
-    validate(product);
+    product = validate(product);
+    requireOwnVariantIds(product);
     if (!products.insert(product)) {
       throw new ProductAlreadyExistsException(product.sku());
     }
@@ -60,7 +67,8 @@ public class CatalogService
 
   @Override
   public Product update(Product product) {
-    validate(product);
+    product = validate(product);
+    requireOwnVariantIds(product);
     if (!products.replace(product)) {
       throw new ProductNotFoundException(product.sku());
     }
@@ -84,8 +92,11 @@ public class CatalogService
     return true;
   }
 
-  /** Checks {@code product} against its Category's definitions as they are now. */
-  private void validate(Product product) {
+  /**
+   * Checks {@code product} against its Category's definitions as they are now, and returns it with
+   * its axis values in the Category's order.
+   */
+  private Product validate(Product product) {
     var category =
         categories
             .find(product.category())
@@ -96,9 +107,21 @@ public class CatalogService
                             new FieldViolation(
                                 "category",
                                 "names no Category; create " + product.category() + " first"))));
-    var violations = category.violations(product.attributes());
+    var violations = category.violations(product);
     if (!violations.isEmpty()) {
       throw new InvalidProductException(violations);
+    }
+    return category.arrange(product);
+  }
+
+  /**
+   * Refuses Variant IDs another Product already has. Two Products written at once with the same new
+   * Variant ID can both pass; Staff edit too rarely for that to be worth a lock.
+   */
+  private void requireOwnVariantIds(Product product) {
+    var taken = products.variantIdsOfOtherProducts(product.sku(), product.variantIds());
+    if (!taken.isEmpty()) {
+      throw new VariantIdTakenException(taken);
     }
   }
 }

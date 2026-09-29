@@ -7,6 +7,14 @@ export interface SeedProduct {
   category: string
   attributes: Record<string, string>
   images: string[]
+  variants: SeedVariant[]
+}
+
+/** A seed Variant; `images` only when it has its own. */
+export interface SeedVariant {
+  id: string
+  axisValues: Record<string, string>
+  images?: string[]
 }
 
 const seedUrl = new URL('../../../services/catalog/src/main/resources/seed/products.json', import.meta.url)

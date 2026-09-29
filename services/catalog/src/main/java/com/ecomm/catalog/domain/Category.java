@@ -1,6 +1,7 @@
 package com.ecomm.catalog.domain;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -39,23 +40,43 @@ public record Category(String slug, String name, List<AttributeDefinition> attri
   }
 
   /**
+   * How {@code product} breaks this Category's definitions: its attributes, as {@link
+   * #violations(Map)} checks them, then each Variant's axis values. A Variant must carry a value
+   * for every Variant axis and nothing else, each fitting its axis's type, and no two Variants may
+   * share axis values.
+   */
+  public List<FieldViolation> violations(Product product) {
+    var violations = new ArrayList<>(violations(product.attributes()));
+    var variants = product.variants();
+    var seen = new HashMap<Map<String, String>, Integer>();
+    for (var i = 0; i < variants.size(); i++) {
+      var axisValues = variants.get(i).axisValues();
+      var field = "variants[" + i + "].axisValues";
+      var problems = axisViolations(field, axisValues);
+      violations.addAll(problems);
+      var twin = seen.putIfAbsent(axisValues, i);
+      if (problems.isEmpty() && twin != null) {
+        violations.add(
+            new FieldViolation(field, "repeats the axis values of variants[" + twin + "]"));
+      }
+    }
+    return violations;
+  }
+
+  /**
    * How a Product's {@code attributes} break this Category's non-axis definitions: missing required
-   * ones, values of the wrong type or outside an {@code ENUM}, and ones nothing defines. An
-   * attribute named after a Variant axis is let through unchecked; axis values belong on Variants.
+   * ones, values of the wrong type or outside an {@code ENUM}, ones nothing defines, and ones named
+   * after a Variant axis, whose values belong on each Variant instead.
    */
   public List<FieldViolation> violations(Map<String, String> attributes) {
     var violations = new ArrayList<FieldViolation>();
     for (var definition : this.attributes) {
       var value = attributes.get(definition.name());
-      // Axis values belong on Variants, so a Product need not carry one; one it does is checked.
-      var required = definition.required() && !definition.variantAxis();
       String problem;
-      if (value == null) {
-        problem = required ? "is required" : null;
-      } else if (value.isBlank() && required) {
-        problem = "is required";
+      if (definition.variantAxis()) {
+        problem = value == null ? null : "is a Variant axis; give each Variant its value instead";
       } else {
-        problem = definition.problemWith(value);
+        problem = problemWith(definition, value);
       }
       if (problem != null) {
         violations.add(new FieldViolation("attributes." + definition.name(), problem));
@@ -72,5 +93,50 @@ public record Category(String slug, String name, List<AttributeDefinition> attri
                     new FieldViolation(
                         "attributes." + attribute, "is not defined by Category " + slug)));
     return violations;
+  }
+
+  /**
+   * {@code product} with each Variant's axis values in the order this Category defines its axes.
+   */
+  public Product arrange(Product product) {
+    return product.withAxisValuesIn(axes().stream().map(AttributeDefinition::name).toList());
+  }
+
+  private List<AttributeDefinition> axes() {
+    return attributes.stream().filter(AttributeDefinition::variantAxis).toList();
+  }
+
+  private List<FieldViolation> axisViolations(String field, Map<String, String> axisValues) {
+    var violations = new ArrayList<FieldViolation>();
+    var axes = axes();
+    for (var axis : axes) {
+      // Every axis is required of a Variant, whatever its definition says.
+      var value = axisValues.get(axis.name());
+      var problem = value == null || value.isBlank() ? "is required" : axis.problemWith(value);
+      if (problem != null) {
+        violations.add(new FieldViolation(field + "." + axis.name(), problem));
+      }
+    }
+    var axisNames = axes.stream().map(AttributeDefinition::name).collect(Collectors.toSet());
+    axisValues.keySet().stream()
+        .filter(name -> !axisNames.contains(name))
+        .sorted()
+        .forEach(
+            name ->
+                violations.add(
+                    new FieldViolation(
+                        field + "." + name, "is not a Variant axis of Category " + slug)));
+    return violations;
+  }
+
+  /** Why a non-axis attribute's {@code value} (null when missing) breaks {@code definition}. */
+  private static String problemWith(AttributeDefinition definition, String value) {
+    if (value == null) {
+      return definition.required() ? "is required" : null;
+    }
+    if (value.isBlank() && definition.required()) {
+      return "is required";
+    }
+    return definition.problemWith(value);
   }
 }

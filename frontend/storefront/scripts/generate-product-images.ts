@@ -1,15 +1,16 @@
 /**
  * Draws an SVG illustration for each of Catalog's seed Products and writes it to public/ at the
- * image path the seed gives it, so Vite (dev) and nginx (compose) serve it on that path. The art is
- * generated, not photographed: a device shape per kind of Product, in the Product's colour, on a
- * backdrop in its brand's colour from the Storefront's palette.
+ * image path the seed gives it, so Vite (dev) and nginx (compose) serve it on that path, and one for
+ * each Variant with images of its own. The art is generated, not photographed: a device shape per
+ * kind of Product, in the colour of its first Variant (or the Variant's own), on a backdrop in its
+ * brand's colour from the Storefront's palette.
  *
  * Run it after changing the seed: `npm run images`.
  */
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { type SeedProduct, publicFile, seedProducts } from './seed.ts'
+import { type SeedProduct, type SeedVariant, publicFile, seedProducts } from './seed.ts'
 
 /** Bold colours from the design tokens in src/index.css, one per brand. */
 const brandColors: Record<string, string> = {
@@ -29,18 +30,19 @@ const brandColors: Record<string, string> = {
   Sonos: '#127a3e',
 }
 
-/** The device's own colour, by its `color` attribute. */
+/** The device's own colour, by its Variant's `color` axis value. */
 const finishColors: Record<string, string> = {
   Obsidian: '#2a2a33',
   Porcelain: '#efe9df',
   Black: '#1f1f24',
+  Ultramarine: '#5a6fd6',
   'Desert Titanium': '#c9a88a',
   'Onyx Black': '#202028',
   'Awesome Navy': '#26345c',
   White: '#f4f4f6',
 }
 
-/** The device's colour, by SKU, for Products without a `color` attribute. */
+/** The device's colour, by SKU, for Products whose Variants have no `color`. */
 const finishBySku: Record<string, string> = {
   'LPT-MBA-13-M3': '#d7d9df',
   'LPT-MBP-14-M4': '#3a3a42',
@@ -144,9 +146,9 @@ function mix(a: string, b: string, amount: number): string {
   )
 }
 
-function productSvg(product: SeedProduct): string {
+function productSvg(product: SeedProduct, variant: SeedVariant): string {
   const brand = brandColors[product.attributes.brand]
-  const finish = finishColors[product.attributes.color] ?? finishBySku[product.sku]
+  const finish = finishColors[variant.axisValues.color] ?? finishBySku[product.sku]
   if (!brand || !finish) throw new Error(`No colours for ${product.sku}`)
   const colors: Colors = { brand, finish, edge: mix(finish, '#000000', 0.3) }
   return (
@@ -167,11 +169,15 @@ function productSvg(product: SeedProduct): string {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const seed = seedProducts()
+  const write = (image: string, svg: string) => {
+    const file = publicFile(image)
+    mkdirSync(dirname(file), { recursive: true })
+    writeFileSync(file, svg)
+  }
   for (const product of seed) {
-    for (const image of product.images) {
-      const file = publicFile(image)
-      mkdirSync(dirname(file), { recursive: true })
-      writeFileSync(file, productSvg(product))
+    for (const image of product.images) write(image, productSvg(product, product.variants[0]))
+    for (const variant of product.variants) {
+      for (const image of variant.images ?? []) write(image, productSvg(product, variant))
     }
   }
   console.log(`Wrote images for ${seed.length} Products to public/images/products/`)

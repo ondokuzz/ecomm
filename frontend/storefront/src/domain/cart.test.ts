@@ -1,35 +1,36 @@
 import { describe, expect, it } from 'vitest'
 import { itemCount, itemCountLabel, priceCart, quantityOf } from './cart'
-import type { Product } from './catalog'
+import type { VariantDetail } from './catalog'
 
 const eur = (amountMinor: number) => ({ amountMinor, currency: 'EUR' })
 
-function product(sku: string, price = eur(1000)): Product {
-  return { sku, name: `Product ${sku}`, category: 'phones', attributes: {}, price, images: [], variants: [{ id: sku, price }] }
+function variant(id: string, price = eur(1000), axisValues: Record<string, string> = {}): VariantDetail {
+  return { id, axisValues, price, images: [], product: { sku: id, name: `Product ${id}`, images: [] } }
 }
 
 describe('priceCart', () => {
   it('prices each line from its Variant and totals them', () => {
     const cart = { items: [{ variantId: 'A', quantity: 2 }, { variantId: 'B', quantity: 1 }] }
-    const a = product('A', eur(1000))
-    const b = product('B', eur(250))
+    const a = variant('A', eur(1000))
+    const b = variant('B', eur(250))
     const priced = priceCart(cart, { A: a, B: b })
 
     expect(priced.lines).toEqual([
-      { variantId: 'A', quantity: 2, product: a, name: 'Product A', unitPrice: eur(1000), lineTotal: eur(2000) },
-      { variantId: 'B', quantity: 1, product: b, name: 'Product B', unitPrice: eur(250), lineTotal: eur(250) },
+      { variantId: 'A', quantity: 2, variant: a, name: 'Product A', unitPrice: eur(1000), lineTotal: eur(2000) },
+      { variantId: 'B', quantity: 1, variant: b, name: 'Product B', unitPrice: eur(250), lineTotal: eur(250) },
     ])
     expect(priced.total).toEqual(eur(2250))
   })
 
-  it('uses the Variant price, not the Product price', () => {
-    const p = { ...product('A', eur(1000)), variants: [{ id: 'A', price: eur(900) }] }
-    expect(priceCart({ items: [{ variantId: 'A', quantity: 1 }] }, { A: p }).total).toEqual(eur(900))
+  it('names a line by its Product and its axis values', () => {
+    const cart = { items: [{ variantId: 'A-256', quantity: 1 }] }
+    const a = variant('A-256', eur(1000), { color: 'Obsidian', storage: '256 GB' })
+    expect(priceCart(cart, { 'A-256': a }).lines[0].name).toBe('Product A-256 · Obsidian · 256 GB')
   })
 
   it('has no total while a line is not priced yet', () => {
     const cart = { items: [{ variantId: 'A', quantity: 1 }, { variantId: 'GONE', quantity: 1 }] }
-    const priced = priceCart(cart, { A: product('A') })
+    const priced = priceCart(cart, { A: variant('A') })
 
     expect(priced.lines[1]).toEqual({ variantId: 'GONE', quantity: 1 })
     expect(priced.total).toBeUndefined()
@@ -37,7 +38,7 @@ describe('priceCart', () => {
 
   it('has no total across currencies', () => {
     const cart = { items: [{ variantId: 'A', quantity: 1 }, { variantId: 'B', quantity: 1 }] }
-    const priced = priceCart(cart, { A: product('A'), B: product('B', { amountMinor: 1000, currency: 'USD' }) })
+    const priced = priceCart(cart, { A: variant('A'), B: variant('B', { amountMinor: 1000, currency: 'USD' }) })
 
     expect(priced.total).toBeUndefined()
   })

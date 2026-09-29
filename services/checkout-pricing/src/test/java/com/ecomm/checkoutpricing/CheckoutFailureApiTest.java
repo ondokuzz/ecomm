@@ -43,7 +43,7 @@ class CheckoutFailureApiTest extends CheckoutApiTest {
         """
         {"variantId": "PHN-PIXEL-9", "quantity": 1}, {"variantId": "PHN-GONE", "quantity": 1}
         """);
-    DOWNSTREAM.stubFor(get("/products/PHN-GONE").willReturn(notFound()));
+    DOWNSTREAM.stubFor(get("/variants/PHN-GONE").willReturn(notFound()));
 
     checkout()
         .expectStatus()

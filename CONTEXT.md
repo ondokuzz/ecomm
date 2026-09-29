@@ -29,7 +29,7 @@ An Attribute definition that tells a Product's Variants apart rather than descri
 _Avoid_: Option, Dimension
 
 **Variant**:
-A specific purchasable version of a Product (e.g. a color/storage combination), each with its own stock level, identified by its Variant ID. Until multi-Variant Products arrive, every Product has exactly one Variant, whose Variant ID is the Product's SKU.
+A specific purchasable version of a Product (e.g. a color/storage combination), with its own Price, Stock and, optionally, images. A Product has one or more, told apart by their axis values: one value per Variant axis of its Category, no two Variants of a Product alike. Each is identified by its Variant ID, unique across the Catalog and never changed; a Product's first Variant usually has the Product's SKU as its ID. Carts, Orders and Stock name Variants, never Products.
 _Avoid_: Option, Configuration
 
 **Stock**:

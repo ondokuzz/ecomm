@@ -5,16 +5,48 @@
     "category": "phones",
     "attributes": {
       "brand": "Google",
-      "storage": "128 GB",
-      "color": "Obsidian",
       "screen": "6.3 in"
-    },
-    "price": {
-      "amountMinor": 79900,
-      "currency": "EUR"
     },
     "images": [
       "/images/products/phn-pixel-9/front.svg"
+    ],
+    "variants": [
+      {
+        "id": "PHN-PIXEL-9",
+        "axisValues": {
+          "color": "Obsidian",
+          "storage": "128 GB"
+        },
+        "price": {
+          "amountMinor": 79900,
+          "currency": "EUR"
+        }
+      },
+      {
+        "id": "PHN-PIXEL-9-OBSIDIAN-256",
+        "axisValues": {
+          "color": "Obsidian",
+          "storage": "256 GB"
+        },
+        "price": {
+          "amountMinor": 89900,
+          "currency": "EUR"
+        }
+      },
+      {
+        "id": "PHN-PIXEL-9-PORCELAIN-128",
+        "axisValues": {
+          "color": "Porcelain",
+          "storage": "128 GB"
+        },
+        "price": {
+          "amountMinor": 79900,
+          "currency": "EUR"
+        },
+        "images": [
+          "/images/products/phn-pixel-9/porcelain.svg"
+        ]
+      }
     ]
   },
   {
@@ -23,16 +55,23 @@
     "category": "phones",
     "attributes": {
       "brand": "Google",
-      "storage": "256 GB",
-      "color": "Porcelain",
       "screen": "6.3 in"
-    },
-    "price": {
-      "amountMinor": 109900,
-      "currency": "EUR"
     },
     "images": [
       "/images/products/phn-pixel-9-pro/front.svg"
+    ],
+    "variants": [
+      {
+        "id": "PHN-PIXEL-9-PRO",
+        "axisValues": {
+          "color": "Porcelain",
+          "storage": "256 GB"
+        },
+        "price": {
+          "amountMinor": 109900,
+          "currency": "EUR"
+        }
+      }
     ]
   },
   {
@@ -41,16 +80,62 @@
     "category": "phones",
     "attributes": {
       "brand": "Apple",
-      "storage": "128 GB",
-      "color": "Black",
       "screen": "6.1 in"
-    },
-    "price": {
-      "amountMinor": 94900,
-      "currency": "EUR"
     },
     "images": [
       "/images/products/phn-iphone-16/front.svg"
+    ],
+    "variants": [
+      {
+        "id": "PHN-IPHONE-16",
+        "axisValues": {
+          "color": "Black",
+          "storage": "128 GB"
+        },
+        "price": {
+          "amountMinor": 94900,
+          "currency": "EUR"
+        }
+      },
+      {
+        "id": "PHN-IPHONE-16-BLACK-256",
+        "axisValues": {
+          "color": "Black",
+          "storage": "256 GB"
+        },
+        "price": {
+          "amountMinor": 106900,
+          "currency": "EUR"
+        }
+      },
+      {
+        "id": "PHN-IPHONE-16-ULTRAMARINE-128",
+        "axisValues": {
+          "color": "Ultramarine",
+          "storage": "128 GB"
+        },
+        "price": {
+          "amountMinor": 94900,
+          "currency": "EUR"
+        },
+        "images": [
+          "/images/products/phn-iphone-16/ultramarine.svg"
+        ]
+      },
+      {
+        "id": "PHN-IPHONE-16-ULTRAMARINE-256",
+        "axisValues": {
+          "color": "Ultramarine",
+          "storage": "256 GB"
+        },
+        "price": {
+          "amountMinor": 106900,
+          "currency": "EUR"
+        },
+        "images": [
+          "/images/products/phn-iphone-16/ultramarine.svg"
+        ]
+      }
     ]
   },
   {
@@ -59,16 +144,23 @@
     "category": "phones",
     "attributes": {
       "brand": "Apple",
-      "storage": "256 GB",
-      "color": "Desert Titanium",
       "screen": "6.3 in"
-    },
-    "price": {
-      "amountMinor": 119900,
-      "currency": "EUR"
     },
     "images": [
       "/images/products/phn-iphone-16-pro/front.svg"
+    ],
+    "variants": [
+      {
+        "id": "PHN-IPHONE-16-PRO",
+        "axisValues": {
+          "color": "Desert Titanium",
+          "storage": "256 GB"
+        },
+        "price": {
+          "amountMinor": 119900,
+          "currency": "EUR"
+        }
+      }
     ]
   },
   {
@@ -77,16 +169,23 @@
     "category": "phones",
     "attributes": {
       "brand": "Samsung",
-      "storage": "128 GB",
-      "color": "Onyx Black",
       "screen": "6.2 in"
-    },
-    "price": {
-      "amountMinor": 84900,
-      "currency": "EUR"
     },
     "images": [
       "/images/products/phn-galaxy-s24/front.svg"
+    ],
+    "variants": [
+      {
+        "id": "PHN-GALAXY-S24",
+        "axisValues": {
+          "color": "Onyx Black",
+          "storage": "128 GB"
+        },
+        "price": {
+          "amountMinor": 84900,
+          "currency": "EUR"
+        }
+      }
     ]
   },
   {
@@ -95,16 +194,23 @@
     "category": "phones",
     "attributes": {
       "brand": "Samsung",
-      "storage": "128 GB",
-      "color": "Awesome Navy",
       "screen": "6.6 in"
-    },
-    "price": {
-      "amountMinor": 42900,
-      "currency": "EUR"
     },
     "images": [
       "/images/products/phn-galaxy-a55/front.svg"
+    ],
+    "variants": [
+      {
+        "id": "PHN-GALAXY-A55",
+        "axisValues": {
+          "color": "Awesome Navy",
+          "storage": "128 GB"
+        },
+        "price": {
+          "amountMinor": 42900,
+          "currency": "EUR"
+        }
+      }
     ]
   },
   {
@@ -113,16 +219,23 @@
     "category": "phones",
     "attributes": {
       "brand": "Nothing",
-      "storage": "128 GB",
-      "color": "White",
       "screen": "6.7 in"
-    },
-    "price": {
-      "amountMinor": 32900,
-      "currency": "EUR"
     },
     "images": [
       "/images/products/phn-nothing-2a/front.svg"
+    ],
+    "variants": [
+      {
+        "id": "PHN-NOTHING-2A",
+        "axisValues": {
+          "color": "White",
+          "storage": "128 GB"
+        },
+        "price": {
+          "amountMinor": 32900,
+          "currency": "EUR"
+        }
+      }
     ]
   },
   {
@@ -132,16 +245,45 @@
     "attributes": {
       "brand": "Apple",
       "cpu": "Apple M3",
-      "ram": "16 GB",
-      "storage": "256 GB SSD",
       "screen": "13.6 in"
-    },
-    "price": {
-      "amountMinor": 129900,
-      "currency": "EUR"
     },
     "images": [
       "/images/products/lpt-mba-13-m3/front.svg"
+    ],
+    "variants": [
+      {
+        "id": "LPT-MBA-13-M3",
+        "axisValues": {
+          "ram": "16 GB",
+          "storage": "256 GB SSD"
+        },
+        "price": {
+          "amountMinor": 129900,
+          "currency": "EUR"
+        }
+      },
+      {
+        "id": "LPT-MBA-13-M3-16-512",
+        "axisValues": {
+          "ram": "16 GB",
+          "storage": "512 GB SSD"
+        },
+        "price": {
+          "amountMinor": 152900,
+          "currency": "EUR"
+        }
+      },
+      {
+        "id": "LPT-MBA-13-M3-8-256",
+        "axisValues": {
+          "ram": "8 GB",
+          "storage": "256 GB SSD"
+        },
+        "price": {
+          "amountMinor": 119900,
+          "currency": "EUR"
+        }
+      }
     ]
   },
   {
@@ -151,16 +293,23 @@
     "attributes": {
       "brand": "Apple",
       "cpu": "Apple M4",
-      "ram": "16 GB",
-      "storage": "512 GB SSD",
       "screen": "14.2 in"
-    },
-    "price": {
-      "amountMinor": 199900,
-      "currency": "EUR"
     },
     "images": [
       "/images/products/lpt-mbp-14-m4/front.svg"
+    ],
+    "variants": [
+      {
+        "id": "LPT-MBP-14-M4",
+        "axisValues": {
+          "ram": "16 GB",
+          "storage": "512 GB SSD"
+        },
+        "price": {
+          "amountMinor": 199900,
+          "currency": "EUR"
+        }
+      }
     ]
   },
   {
@@ -170,16 +319,23 @@
     "attributes": {
       "brand": "Dell",
       "cpu": "Intel Core Ultra 7",
-      "ram": "16 GB",
-      "storage": "512 GB SSD",
       "screen": "13.4 in"
-    },
-    "price": {
-      "amountMinor": 139900,
-      "currency": "EUR"
     },
     "images": [
       "/images/products/lpt-xps-13/front.svg"
+    ],
+    "variants": [
+      {
+        "id": "LPT-XPS-13",
+        "axisValues": {
+          "ram": "16 GB",
+          "storage": "512 GB SSD"
+        },
+        "price": {
+          "amountMinor": 139900,
+          "currency": "EUR"
+        }
+      }
     ]
   },
   {
@@ -189,16 +345,23 @@
     "attributes": {
       "brand": "Lenovo",
       "cpu": "Intel Core Ultra 7",
-      "ram": "32 GB",
-      "storage": "1 TB SSD",
       "screen": "14 in"
-    },
-    "price": {
-      "amountMinor": 189900,
-      "currency": "EUR"
     },
     "images": [
       "/images/products/lpt-thinkpad-x1/front.svg"
+    ],
+    "variants": [
+      {
+        "id": "LPT-THINKPAD-X1",
+        "axisValues": {
+          "ram": "32 GB",
+          "storage": "1 TB SSD"
+        },
+        "price": {
+          "amountMinor": 189900,
+          "currency": "EUR"
+        }
+      }
     ]
   },
   {
@@ -208,16 +371,23 @@
     "attributes": {
       "brand": "ASUS",
       "cpu": "Intel Core Ultra 5",
-      "ram": "16 GB",
-      "storage": "512 GB SSD",
       "screen": "14 in"
-    },
-    "price": {
-      "amountMinor": 99900,
-      "currency": "EUR"
     },
     "images": [
       "/images/products/lpt-zenbook-14/front.svg"
+    ],
+    "variants": [
+      {
+        "id": "LPT-ZENBOOK-14",
+        "axisValues": {
+          "ram": "16 GB",
+          "storage": "512 GB SSD"
+        },
+        "price": {
+          "amountMinor": 99900,
+          "currency": "EUR"
+        }
+      }
     ]
   },
   {
@@ -227,16 +397,23 @@
     "attributes": {
       "brand": "Framework",
       "cpu": "AMD Ryzen 7 7840U",
-      "ram": "16 GB",
-      "storage": "512 GB SSD",
       "screen": "13.5 in"
-    },
-    "price": {
-      "amountMinor": 109900,
-      "currency": "EUR"
     },
     "images": [
       "/images/products/lpt-framework-13/front.svg"
+    ],
+    "variants": [
+      {
+        "id": "LPT-FRAMEWORK-13",
+        "axisValues": {
+          "ram": "16 GB",
+          "storage": "512 GB SSD"
+        },
+        "price": {
+          "amountMinor": 109900,
+          "currency": "EUR"
+        }
+      }
     ]
   },
   {
@@ -246,16 +423,23 @@
     "attributes": {
       "brand": "Microsoft",
       "cpu": "Snapdragon X Elite",
-      "ram": "16 GB",
-      "storage": "512 GB SSD",
       "screen": "13.8 in"
-    },
-    "price": {
-      "amountMinor": 119900,
-      "currency": "EUR"
     },
     "images": [
       "/images/products/lpt-surface-7/front.svg"
+    ],
+    "variants": [
+      {
+        "id": "LPT-SURFACE-7",
+        "axisValues": {
+          "ram": "16 GB",
+          "storage": "512 GB SSD"
+        },
+        "price": {
+          "amountMinor": 119900,
+          "currency": "EUR"
+        }
+      }
     ]
   },
   {
@@ -268,12 +452,18 @@
       "wireless": "true",
       "noiseCancelling": "true"
     },
-    "price": {
-      "amountMinor": 27900,
-      "currency": "EUR"
-    },
     "images": [
       "/images/products/aud-airpods-pro-2/front.svg"
+    ],
+    "variants": [
+      {
+        "id": "AUD-AIRPODS-PRO-2",
+        "axisValues": {},
+        "price": {
+          "amountMinor": 27900,
+          "currency": "EUR"
+        }
+      }
     ]
   },
   {
@@ -286,12 +476,18 @@
       "wireless": "true",
       "noiseCancelling": "true"
     },
-    "price": {
-      "amountMinor": 37900,
-      "currency": "EUR"
-    },
     "images": [
       "/images/products/aud-sony-wh1000xm5/front.svg"
+    ],
+    "variants": [
+      {
+        "id": "AUD-SONY-WH1000XM5",
+        "axisValues": {},
+        "price": {
+          "amountMinor": 37900,
+          "currency": "EUR"
+        }
+      }
     ]
   },
   {
@@ -304,12 +500,18 @@
       "wireless": "true",
       "noiseCancelling": "true"
     },
-    "price": {
-      "amountMinor": 44900,
-      "currency": "EUR"
-    },
     "images": [
       "/images/products/aud-bose-qc-ultra/front.svg"
+    ],
+    "variants": [
+      {
+        "id": "AUD-BOSE-QC-ULTRA",
+        "axisValues": {},
+        "price": {
+          "amountMinor": 44900,
+          "currency": "EUR"
+        }
+      }
     ]
   },
   {
@@ -322,12 +524,18 @@
       "wireless": "true",
       "noiseCancelling": "true"
     },
-    "price": {
-      "amountMinor": 29900,
-      "currency": "EUR"
-    },
     "images": [
       "/images/products/aud-sennheiser-mtw4/front.svg"
+    ],
+    "variants": [
+      {
+        "id": "AUD-SENNHEISER-MTW4",
+        "axisValues": {},
+        "price": {
+          "amountMinor": 29900,
+          "currency": "EUR"
+        }
+      }
     ]
   },
   {
@@ -340,12 +548,18 @@
       "wireless": "true",
       "waterproof": "IP67"
     },
-    "price": {
-      "amountMinor": 12900,
-      "currency": "EUR"
-    },
     "images": [
       "/images/products/aud-jbl-flip-6/front.svg"
+    ],
+    "variants": [
+      {
+        "id": "AUD-JBL-FLIP-6",
+        "axisValues": {},
+        "price": {
+          "amountMinor": 12900,
+          "currency": "EUR"
+        }
+      }
     ]
   },
   {
@@ -357,12 +571,18 @@
       "type": "Smart speaker",
       "wireless": "true"
     },
-    "price": {
-      "amountMinor": 27900,
-      "currency": "EUR"
-    },
     "images": [
       "/images/products/aud-sonos-era-100/front.svg"
+    ],
+    "variants": [
+      {
+        "id": "AUD-SONOS-ERA-100",
+        "axisValues": {},
+        "price": {
+          "amountMinor": 27900,
+          "currency": "EUR"
+        }
+      }
     ]
   }
 ]

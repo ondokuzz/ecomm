@@ -6,7 +6,7 @@ import { EmptyState, ErrorMessage, ErrorState } from '../components/Status'
 import { ButtonLink } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { Skeleton } from '../components/ui/Skeleton'
-import { type CategoryChip, type Product, categoryChips, productCountLabel } from '../domain/catalog'
+import { type CategoryChip, type Product, cardPrice, categoryChips, productCountLabel } from '../domain/catalog'
 import { formatMoney } from '../domain/money'
 
 export function ProductListPage() {
@@ -110,10 +110,21 @@ function ProductCard({ product }: { product: Product }) {
           </div>
           <span className="brand-name">{product.attributes.brand}</span>
           <span className="product-name">{product.name}</span>
-          <span className="price">{formatMoney(product.price)}</span>
+          <CardPrice product={product} />
         </Card>
       </Link>
     </li>
+  )
+}
+
+/** The card's Price: "From" the lowest when the Variants' Prices differ. */
+function CardPrice({ product }: { product: Product }) {
+  const { price, from } = cardPrice(product)
+  return (
+    <span className="price">
+      {from && <span className="price-from">From </span>}
+      {formatMoney(price)}
+    </span>
   )
 }
 

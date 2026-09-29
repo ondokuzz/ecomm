@@ -45,11 +45,12 @@ class ManageProductsApiTest extends CatalogApiTest {
           "name": "%s",
           "category": "wearables",
           "attributes": {"brand": "Garmin", "strap": "silicone"},
-          "price": {"amountMinor": %d, "currency": "EUR"},
-          "images": ["/images/products/%s/front.svg"]
+          "images": ["/images/products/%s/front.svg"],
+          "variants": [{"id": "%s", "axisValues": {"colour": "Black"},
+                        "price": {"amountMinor": %d, "currency": "EUR"}}]
         }
         """
-        .formatted(sku, name, amountMinor, sku.toLowerCase());
+        .formatted(sku, name, sku.toLowerCase(), sku, amountMinor);
   }
 
   @Test
@@ -105,22 +106,28 @@ class ManageProductsApiTest extends CatalogApiTest {
   @ValueSource(
       strings = {
         """
-        {"sku": "WRB-BAD", "category": "wearables", "price": {"amountMinor": 100, "currency": "EUR"}}
+        {"sku": "WRB-BAD", "category": "wearables", "variants": [{"id": "WRB-BAD",
+         "axisValues": {"colour": "Black"}, "price": {"amountMinor": 100, "currency": "EUR"}}]}
         """,
         """
-        {"sku": "WRB-BAD", "name": "No price", "category": "wearables"}
+        {"sku": "WRB-BAD", "name": "No price", "category": "wearables", "variants": [{"id": "WRB-BAD",
+         "axisValues": {"colour": "Black"}}]}
         """,
         """
-        {"sku": "WRB-BAD", "name": "Negative", "category": "wearables",
-         "price": {"amountMinor": -1, "currency": "EUR"}}
+        {"sku": "WRB-BAD", "name": "Negative", "category": "wearables", "variants": [{"id": "WRB-BAD",
+         "axisValues": {"colour": "Black"}, "price": {"amountMinor": -1, "currency": "EUR"}}]}
         """,
         """
-        {"sku": "WRB-BAD", "name": "Bad currency", "category": "wearables",
-         "price": {"amountMinor": 100, "currency": "EURO"}}
+        {"sku": "WRB-BAD", "name": "Bad currency", "category": "wearables", "variants": [{"id": "WRB-BAD",
+         "axisValues": {"colour": "Black"}, "price": {"amountMinor": 100, "currency": "EURO"}}]}
         """,
         """
-        {"sku": "WRB-BAD", "name": "Bad category", "category": "Smart Watches",
-         "price": {"amountMinor": 100, "currency": "EUR"}}
+        {"sku": "WRB-BAD", "name": "No Variant ID", "category": "wearables", "variants": [{
+         "axisValues": {"colour": "Black"}, "price": {"amountMinor": 100, "currency": "EUR"}}]}
+        """,
+        """
+        {"sku": "WRB-BAD", "name": "Bad category", "category": "Smart Watches", "variants": [{"id": "WRB-BAD",
+         "axisValues": {"colour": "Black"}, "price": {"amountMinor": 100, "currency": "EUR"}}]}
         """,
         "not json"
       })
@@ -160,7 +167,8 @@ class ManageProductsApiTest extends CatalogApiTest {
         .body(
             """
             {"sku": "WRB-INVALID", "name": "Invalid", "category": "wearables", "attributes": %s,
-             "price": {"amountMinor": 100, "currency": "EUR"}}
+             "variants": [{"id": "WRB-INVALID", "axisValues": {"colour": "Black"},
+              "price": {"amountMinor": 100, "currency": "EUR"}}]}
             """
                 .formatted(attributes))
         .exchange()
@@ -189,7 +197,8 @@ class ManageProductsApiTest extends CatalogApiTest {
             """
             {"sku": "WRB-INVALID", "name": "Invalid", "category": "wearables",
              "attributes": {"strap": "nylon", "gps": "maybe"},
-             "price": {"amountMinor": 100, "currency": "EUR"}}
+             "variants": [{"id": "WRB-INVALID", "axisValues": {"colour": "Black"},
+              "price": {"amountMinor": 100, "currency": "EUR"}}]}
             """)
         .exchange()
         .expectStatus()
@@ -208,7 +217,7 @@ class ManageProductsApiTest extends CatalogApiTest {
         .body(
             """
             {"sku": "GRD-BENCH", "name": "Bench", "category": "garden-furniture",
-             "price": {"amountMinor": 100, "currency": "EUR"}}
+             "variants": [{"id": "GRD-BENCH", "price": {"amountMinor": 100, "currency": "EUR"}}]}
             """)
         .exchange()
         .expectStatus()
@@ -231,7 +240,8 @@ class ManageProductsApiTest extends CatalogApiTest {
         .body(
             """
             {"name": "Garmin Epix 2", "category": "wearables", "attributes": {"brand": "Garmin"},
-             "price": {"amountMinor": 59900, "currency": "EUR"}}
+             "variants": [{"id": "WRB-EPIX-2", "axisValues": {"colour": "Black"},
+                           "price": {"amountMinor": 59900, "currency": "EUR"}}]}
             """)
         .exchange()
         .expectStatus()
@@ -266,7 +276,7 @@ class ManageProductsApiTest extends CatalogApiTest {
         .expectBody()
         .jsonPath("$.name")
         .isEqualTo("Garmin Forerunner 265S")
-        .jsonPath("$.price.amountMinor")
+        .jsonPath("$.priceFrom.amountMinor")
         .isEqualTo(39900)
         .jsonPath("$.variants[0].price.amountMinor")
         .isEqualTo(39900);

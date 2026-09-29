@@ -130,18 +130,23 @@ abstract class CheckoutApiTest {
 
   // --- Catalog ---
 
-  /** A Product whose one Variant's ID is its SKU, as Catalog serves it. */
-  static void stubProduct(String sku, long amountMinor) {
+  /** A Variant of the Product {@code sku}, as Catalog's {@code /variants/{id}} serves it. */
+  static void stubVariant(String variantId, String sku, long amountMinor) {
     DOWNSTREAM.stubFor(
-        get("/products/" + sku)
+        get("/variants/" + variantId)
             .willReturn(
                 okJson(
                     """
-                    {"sku": "%1$s", "name": "%1$s", "category": "phones", "attributes": {},
-                     "price": {"amountMinor": %2$d, "currency": "EUR"}, "images": [],
-                     "variants": [{"id": "%1$s", "price": {"amountMinor": %2$d, "currency": "EUR"}}]}
+                    {"id": "%s", "axisValues": {"color": "Obsidian"},
+                     "price": {"amountMinor": %d, "currency": "EUR"}, "images": [],
+                     "product": {"sku": "%s", "name": "%3$s", "images": []}}
                     """
-                        .formatted(sku, amountMinor))));
+                        .formatted(variantId, amountMinor, sku))));
+  }
+
+  /** A Product's first Variant, whose ID is its SKU. */
+  static void stubVariant(String variantId, long amountMinor) {
+    stubVariant(variantId, variantId, amountMinor);
   }
 
   // --- Inventory ---
@@ -214,7 +219,7 @@ abstract class CheckoutApiTest {
   static void stubSuccessfulCheckout() {
     stubServiceToken("checkout-token-1");
     stubCart("{\"variantId\": \"PHN-PIXEL-9\", \"quantity\": 2}");
-    stubProduct("PHN-PIXEL-9", 79900);
+    stubVariant("PHN-PIXEL-9", 79900);
     stubPlaceOrder();
     stubDecrement();
     stubPayment();

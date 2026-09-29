@@ -36,11 +36,17 @@ GET {{catalog}}/products
 ### Products in a category
 GET {{catalog}}/products?category=phones
 
-### A Product's detail; variants[0].id is the Variant ID a Cart takes
+### A Product with several Variants; each variants[].id is a Variant ID a Cart takes
 GET {{catalog}}/products/PHN-PIXEL-9
 
 ### A missing Product: 404
 GET {{catalog}}/products/NO-SUCH-SKU
+
+### One Variant, its Price and axis values, with its Product's SKU, name and images
+GET {{catalog}}/variants/PHN-PIXEL-9-OBSIDIAN-256
+
+### A missing Variant: 404
+GET {{catalog}}/variants/NO-SUCH-VARIANT
 
 ### Staff create a Product: 201
 POST {{catalog}}/products
@@ -52,9 +58,71 @@ Content-Type: application/json
   "name": "Demo Buds",
   "category": "audio",
   "attributes": {"brand": "Demo", "type": "In-ear", "wireless": "true"},
-  "price": {"amountMinor": 4999, "currency": "EUR"},
-  "images": ["/images/products/aud-demo-buds/front.svg"]
+  "images": ["/images/products/aud-demo-buds/front.svg"],
+  "variants": [
+    {"id": "AUD-DEMO-BUDS", "axisValues": {}, "price": {"amountMinor": 4999, "currency": "EUR"}}
+  ]
 }
+
+### Staff create a Product with two Variants along the phones' axes: 201
+POST {{catalog}}/products
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{
+  "sku": "PHN-DEMO-PHONE",
+  "name": "Demo Phone",
+  "category": "phones",
+  "attributes": {"brand": "Demo", "screen": "6.1 in"},
+  "images": ["/images/products/phn-demo-phone/front.svg"],
+  "variants": [
+    {"id": "PHN-DEMO-PHONE", "axisValues": {"color": "Black", "storage": "128 GB"},
+     "price": {"amountMinor": 49900, "currency": "EUR"}},
+    {"id": "PHN-DEMO-PHONE-BLACK-256", "axisValues": {"color": "Black", "storage": "256 GB"},
+     "price": {"amountMinor": 59900, "currency": "EUR"},
+     "images": ["/images/products/phn-demo-phone/black-256.svg"]}
+  ]
+}
+
+### Variants missing an axis value, or sharing one combination: 400 naming each Variant's field
+POST {{catalog}}/products
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{
+  "sku": "PHN-DEMO-BAD",
+  "name": "Bad Phone",
+  "category": "phones",
+  "attributes": {"brand": "Demo", "screen": "6.1 in"},
+  "variants": [
+    {"id": "PHN-DEMO-BAD-1", "axisValues": {"color": "Black", "storage": "128 GB"},
+     "price": {"amountMinor": 100, "currency": "EUR"}},
+    {"id": "PHN-DEMO-BAD-2", "axisValues": {"color": "Black"},
+     "price": {"amountMinor": 100, "currency": "EUR"}},
+    {"id": "PHN-DEMO-BAD-3", "axisValues": {"color": "Black", "storage": "128 GB"},
+     "price": {"amountMinor": 100, "currency": "EUR"}}
+  ]
+}
+
+### A Variant ID another Product already has: 409
+POST {{catalog}}/products
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{
+  "sku": "PHN-DEMO-COPY",
+  "name": "Copy Phone",
+  "category": "phones",
+  "attributes": {"brand": "Demo", "screen": "6.1 in"},
+  "variants": [
+    {"id": "PHN-PIXEL-9", "axisValues": {"color": "Black", "storage": "128 GB"},
+     "price": {"amountMinor": 100, "currency": "EUR"}}
+  ]
+}
+
+### Staff delete the demo phone: 204
+DELETE {{catalog}}/products/PHN-DEMO-PHONE
+Authorization: Bearer {{staffToken}}
 
 ### A Product breaking its Category's definitions: 400 naming each field in `errors`
 POST {{catalog}}/products
@@ -66,7 +134,9 @@ Content-Type: application/json
   "name": "Bad Buds",
   "category": "audio",
   "attributes": {"type": "Earbuds", "wireless": "yes", "colour": "Pink"},
-  "price": {"amountMinor": 4999, "currency": "EUR"}
+  "variants": [
+    {"id": "AUD-DEMO-BAD", "axisValues": {}, "price": {"amountMinor": 4999, "currency": "EUR"}}
+  ]
 }
 
 ### A Product in a Category that doesn't exist: 400
@@ -78,7 +148,7 @@ Content-Type: application/json
   "sku": "GRD-DEMO-BENCH",
   "name": "Demo Bench",
   "category": "garden-furniture",
-  "price": {"amountMinor": 4999, "currency": "EUR"}
+  "variants": [{"id": "GRD-DEMO-BENCH", "price": {"amountMinor": 4999, "currency": "EUR"}}]
 }
 
 ### Creating it again: 409
@@ -91,7 +161,9 @@ Content-Type: application/json
   "name": "Demo Buds",
   "category": "audio",
   "attributes": {"brand": "Demo", "type": "In-ear", "wireless": "true"},
-  "price": {"amountMinor": 4999, "currency": "EUR"}
+  "variants": [
+    {"id": "AUD-DEMO-BUDS", "axisValues": {}, "price": {"amountMinor": 4999, "currency": "EUR"}}
+  ]
 }
 
 ### Staff update it: 200
@@ -103,8 +175,10 @@ Content-Type: application/json
   "name": "Demo Buds 2",
   "category": "audio",
   "attributes": {"brand": "Demo", "type": "In-ear", "wireless": "true"},
-  "price": {"amountMinor": 3999, "currency": "EUR"},
-  "images": ["/images/products/aud-demo-buds/front.svg"]
+  "images": ["/images/products/aud-demo-buds/front.svg"],
+  "variants": [
+    {"id": "AUD-DEMO-BUDS", "axisValues": {}, "price": {"amountMinor": 3999, "currency": "EUR"}}
+  ]
 }
 
 ### A Customer may not change Products: 403
@@ -112,7 +186,8 @@ PUT {{catalog}}/products/AUD-DEMO-BUDS
 Authorization: Bearer {{customerToken}}
 Content-Type: application/json
 
-{"name": "Hijacked", "category": "audio", "price": {"amountMinor": 1, "currency": "EUR"}}
+{"name": "Hijacked", "category": "audio",
+ "variants": [{"id": "AUD-DEMO-BUDS", "price": {"amountMinor": 1, "currency": "EUR"}}]}
 
 ### Nor may anyone without a token: 401
 DELETE {{catalog}}/products/AUD-DEMO-BUDS

@@ -3,20 +3,34 @@ import {
   type AttributeDefinition,
   type Category,
   type Product,
+  type Variant,
+  cardPrice,
   categoryChips,
+  chosenVariant,
   productCountLabel,
   productImage,
   specs,
+  variantAxes,
+  variantName,
 } from './catalog'
 
-const product = (images: string[]): Product => ({
+const eur = (amountMinor: number) => ({ amountMinor, currency: 'EUR' })
+
+const variant = (id: string, color: string, storage: string, amountMinor = 79900, images: string[] = []): Variant => ({
+  id,
+  axisValues: { color, storage },
+  price: eur(amountMinor),
+  images,
+})
+
+const product = (images: string[], variants: Variant[] = [variant('PHN-PIXEL-9', 'Obsidian', '128 GB')]): Product => ({
   sku: 'PHN-PIXEL-9',
   name: 'Google Pixel 9',
   category: 'phones',
   attributes: {},
-  price: { amountMinor: 79900, currency: 'EUR' },
+  priceFrom: eur(79900),
   images,
-  variants: [],
+  variants,
 })
 
 describe('productImage', () => {
@@ -26,6 +40,124 @@ describe('productImage', () => {
 
   it('is undefined when the Product has no images', () => {
     expect(productImage(product([]))).toBeUndefined()
+  })
+
+  it("is the Variant's own first image when it has one", () => {
+    const porcelain = variant('P', 'Porcelain', '128 GB', 79900, ['/images/a/porcelain.svg'])
+    expect(productImage(product(['/images/a/front.svg']), porcelain)).toBe('/images/a/porcelain.svg')
+  })
+
+  it("falls back to the Product's image for a Variant without its own", () => {
+    expect(productImage(product(['/images/a/front.svg']), variant('O', 'Obsidian', '128 GB'))).toBe('/images/a/front.svg')
+  })
+})
+
+describe('cardPrice', () => {
+  it('is the one Price, not "from", when every Variant costs the same', () => {
+    const p = product([], [variant('A', 'Obsidian', '128 GB', 79900), variant('B', 'Porcelain', '128 GB', 79900)])
+    expect(cardPrice(p)).toEqual({ price: eur(79900), from: false })
+  })
+
+  it('is "from" the lowest Price when Variant Prices differ', () => {
+    const p = {
+      ...product([], [variant('A', 'Obsidian', '256 GB', 89900), variant('B', 'Obsidian', '128 GB', 79900)]),
+      priceFrom: eur(79900),
+    }
+    expect(cardPrice(p)).toEqual({ price: eur(79900), from: true })
+  })
+})
+
+describe('chosenVariant', () => {
+  const p = product([], [variant('A', 'Obsidian', '128 GB'), variant('B', 'Obsidian', '256 GB')])
+
+  it('is the Variant the URL names', () => {
+    expect(chosenVariant(p, 'B').id).toBe('B')
+  })
+
+  it("is the Product's first Variant when the URL names none, or one it doesn't have", () => {
+    expect(chosenVariant(p, null).id).toBe('A')
+    expect(chosenVariant(p, 'NOPE').id).toBe('A')
+  })
+})
+
+describe('variantAxes', () => {
+  const definitions: AttributeDefinition[] = [
+    { name: 'brand', type: 'TEXT', values: [], required: true, variantAxis: false },
+    { name: 'color', type: 'TEXT', values: [], required: true, variantAxis: true },
+    { name: 'storage', type: 'ENUM', values: ['128 GB', '256 GB', '512 GB'], required: true, variantAxis: true },
+  ]
+  // Porcelain comes only in 128 GB.
+  const obsidian128 = variant('O-128', 'Obsidian', '128 GB')
+  const obsidian256 = variant('O-256', 'Obsidian', '256 GB', 89900)
+  const porcelain128 = variant('P-128', 'Porcelain', '128 GB')
+  const pixel = product([], [obsidian128, obsidian256, porcelain128])
+  const inStock = { 'O-128': 5, 'O-256': 5, 'P-128': 5 }
+
+  const summary = (axes: ReturnType<typeof variantAxes>) =>
+    axes.map((axis) => ({
+      name: axis.name,
+      options: axis.options.map(
+        (o) => `${o.value}${o.selected ? '*' : ''}${o.variant ? `->${o.variant.id}` : ' (none)'}${o.outOfStock ? ' (out)' : ''}`,
+      ),
+    }))
+
+  it("offers each axis's values in the Category's order, the chosen Variant's selected", () => {
+    expect(summary(variantAxes(pixel, obsidian128, definitions, inStock))).toEqual([
+      { name: 'color', options: ['Obsidian*->O-128', 'Porcelain->P-128'] },
+      { name: 'storage', options: ['128 GB*->O-128', '256 GB->O-256'] },
+    ])
+  })
+
+  it("disables a value whose combination with the chosen Variant's other axis values doesn't exist", () => {
+    expect(summary(variantAxes(pixel, obsidian256, definitions, inStock))).toEqual([
+      { name: 'color', options: ['Obsidian*->O-256', 'Porcelain (none)'] },
+      { name: 'storage', options: ['128 GB->O-128', '256 GB*->O-256'] },
+    ])
+  })
+
+  it('marks a value that leads to a sold-out Variant', () => {
+    expect(summary(variantAxes(pixel, obsidian128, definitions, { ...inStock, 'O-256': 0 }))[1].options).toEqual([
+      '128 GB*->O-128',
+      '256 GB->O-256 (out)',
+    ])
+  })
+
+  it("doesn't mark a Variant whose Stock is unknown", () => {
+    expect(summary(variantAxes(pixel, obsidian128, definitions, {}))[1].options).toEqual(['128 GB*->O-128', '256 GB->O-256'])
+  })
+
+  it("takes the axes from the Variants while the Category's definitions are unknown", () => {
+    expect(summary(variantAxes(pixel, porcelain128, undefined, inStock))).toEqual([
+      { name: 'color', options: ['Obsidian->O-128', 'Porcelain*->P-128'] },
+      { name: 'storage', options: ['128 GB*->P-128', '256 GB (none)'] },
+    ])
+  })
+
+  it('has no axes for a Product with one Variant', () => {
+    expect(variantAxes(product([]), obsidian128, definitions, inStock)).toEqual([])
+  })
+})
+
+describe('variantName', () => {
+  it('names the Product and its axis values', () => {
+    expect(
+      variantName({
+        ...variant('O-256', 'Obsidian', '256 GB'),
+        product: { sku: 'PHN-PIXEL-9', name: 'Google Pixel 9', images: [] },
+      }),
+    ).toBe('Google Pixel 9 · Obsidian · 256 GB')
+  })
+
+  it('is just the Product name when the Variant has no axis values', () => {
+    expect(
+      variantName({
+        id: 'AUD-JBL-FLIP-6',
+        axisValues: {},
+        price: eur(12900),
+        images: [],
+        product: { sku: 'AUD-JBL-FLIP-6', name: 'JBL Flip 6', images: [] },
+      }),
+    ).toBe('JBL Flip 6')
   })
 })
 

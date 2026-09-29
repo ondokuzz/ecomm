@@ -5,6 +5,7 @@ import com.ecomm.catalog.domain.AttributeDefinition;
 import com.ecomm.catalog.domain.AttributeType;
 import com.ecomm.catalog.domain.Category;
 import com.ecomm.catalog.domain.Product;
+import com.ecomm.catalog.domain.Variant;
 import com.ecomm.commons.money.Money;
 import java.io.IOException;
 import java.io.InputStream;
@@ -85,12 +86,25 @@ class SeedDataLoader implements ApplicationRunner {
       String name,
       String category,
       Map<String, String> attributes,
-      SeedPrice price,
-      List<String> images) {
+      List<String> images,
+      List<SeedVariant> variants) {
 
     Product toProduct() {
       return new Product(
-          sku, name, category, attributes, Money.of(price.amountMinor, price.currency), images);
+          sku,
+          name,
+          category,
+          attributes,
+          images,
+          variants.stream().map(SeedVariant::toVariant).toList());
+    }
+  }
+
+  record SeedVariant(
+      String id, Map<String, String> axisValues, SeedPrice price, List<String> images) {
+
+    Variant toVariant() {
+      return new Variant(id, axisValues, Money.of(price.amountMinor, price.currency), images);
     }
   }
 

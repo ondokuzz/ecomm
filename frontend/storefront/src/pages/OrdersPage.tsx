@@ -1,22 +1,22 @@
 import { Link } from 'react-router'
-import { useProductsByVariantId } from '../api/catalog'
+import { useVariants } from '../api/catalog'
 import { useOrders } from '../api/orders'
 import { OrderStatusBadge } from '../components/OrderStatusBadge'
 import { ProductThumb } from '../components/ProductImage'
 import { EmptyState, ErrorMessage, Loading } from '../components/Status'
 import { ButtonLink } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
-import type { Product } from '../domain/catalog'
+import type { VariantDetail } from '../domain/catalog'
 import { formatMoney } from '../domain/money'
 import { type Order, orderItemCountLabel, orderReference } from '../domain/order'
 
-/** How many of an Order's Products its card shows; the rest are counted. */
+/** How many of an Order's lines its card shows a thumbnail for; the rest are counted. */
 const maxThumbnails = 3
 
 /** The Customer's Orders as cards, newest first. */
 export function OrdersPage() {
   const orders = useOrders()
-  const products = useProductsByVariantId(
+  const variants = useVariants(
     (orders.data ?? []).flatMap((order) => order.lines.slice(0, maxThumbnails).map((line) => line.variantId)),
   )
 
@@ -41,7 +41,7 @@ export function OrdersPage() {
       ) : (
         <ul className="order-cards" aria-label="Orders">
           {orders.data.map((order) => (
-            <OrderCard key={order.id} order={order} products={products} />
+            <OrderCard key={order.id} order={order} variants={variants} />
           ))}
         </ul>
       )}
@@ -49,7 +49,7 @@ export function OrdersPage() {
   )
 }
 
-function OrderCard({ order, products }: { order: Order; products: Record<string, Product | undefined> }) {
+function OrderCard({ order, variants }: { order: Order; variants: Record<string, VariantDetail | undefined> }) {
   const more = order.lines.length - maxThumbnails
   return (
     <li>
@@ -67,8 +67,8 @@ function OrderCard({ order, products }: { order: Order; products: Record<string,
           <ul className="order-card-thumbs">
             {order.lines.slice(0, maxThumbnails).map((line) => (
               <li key={line.variantId}>
-                {/* The Variant ID names a Product Catalog no longer has. */}
-                <ProductThumb product={products[line.variantId]} label={line.variantId} />
+                {/* The Variant ID names a Variant Catalog no longer has. */}
+                <ProductThumb variant={variants[line.variantId]} label={line.variantId} />
               </li>
             ))}
             {more > 0 && (

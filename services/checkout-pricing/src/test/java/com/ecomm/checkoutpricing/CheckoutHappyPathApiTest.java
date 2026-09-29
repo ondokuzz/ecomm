@@ -41,7 +41,7 @@ class CheckoutHappyPathApiTest extends CheckoutApiTest {
     assertThat(steps)
         .containsExactly(
             "GET /cart",
-            "GET /products/PHN-PIXEL-9",
+            "GET /variants/PHN-PIXEL-9",
             "POST /orders",
             "POST /stock/decrement",
             "POST /payments",

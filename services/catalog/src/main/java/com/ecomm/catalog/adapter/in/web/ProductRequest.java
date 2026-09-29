@@ -2,6 +2,7 @@ package com.ecomm.catalog.adapter.in.web;
 
 import com.ecomm.catalog.domain.InvalidProductException;
 import com.ecomm.catalog.domain.Product;
+import com.ecomm.catalog.domain.Variant;
 import com.ecomm.commons.money.Money;
 import java.util.List;
 import java.util.Map;
@@ -12,8 +13,16 @@ record ProductRequest(
     String name,
     String category,
     Map<String, String> attributes,
-    PriceRequest price,
-    List<String> images) {
+    List<String> images,
+    List<VariantRequest> variants) {
+
+  record VariantRequest(
+      String id, Map<String, String> axisValues, PriceRequest price, List<String> images) {
+
+    Variant toVariant() {
+      return new Variant(id, axisValues, price == null ? null : price.toMoney(), images);
+    }
+  }
 
   record PriceRequest(Long amountMinor, String currency) {
 
@@ -42,6 +51,11 @@ record ProductRequest(
 
   private Product toProduct(String sku) {
     return new Product(
-        sku, name, category, attributes, price == null ? null : price.toMoney(), images);
+        sku,
+        name,
+        category,
+        attributes,
+        images,
+        variants == null ? null : variants.stream().map(VariantRequest::toVariant).toList());
   }
 }

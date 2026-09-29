@@ -1,6 +1,6 @@
 import { useId } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
-import { useProductsByVariantId } from '../api/catalog'
+import { useVariants } from '../api/catalog'
 import { useOrder } from '../api/orders'
 import { CheckoutSteps } from '../components/CheckoutSteps'
 import { OrderConfirmation } from '../components/OrderConfirmation'
@@ -18,7 +18,7 @@ export function OrderPage() {
   const { id = '' } = useParams()
   const [params] = useSearchParams()
   const query = useOrder(id)
-  const products = useProductsByVariantId(query.data?.lines.map((line) => line.variantId) ?? [])
+  const variants = useVariants(query.data?.lines.map((line) => line.variantId) ?? [])
 
   if (query.isPending) return <Loading />
   if (query.error) return <ErrorMessage error={query.error} />
@@ -48,7 +48,7 @@ export function OrderPage() {
           </Card>
           <Card>
             <h2 className="card-title">Products</h2>
-            <ProductLines lines={nameOrderLines(order, products)} label="Order lines" compact />
+            <ProductLines lines={nameOrderLines(order, variants)} label="Order lines" compact />
           </Card>
         </div>
         <OrderFacts order={order} />

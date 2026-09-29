@@ -11,7 +11,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 /**
  * A Product's attributes against its Category's non-axis attribute definitions: every required one
- * present, types matching, {@code ENUM} values allowed, and no unknown attributes.
+ * present, types matching, {@code ENUM} values allowed, and no unknown or Variant-axis attributes.
  */
 class AttributeValidationTest {
 
@@ -109,28 +109,18 @@ class AttributeValidationTest {
   }
 
   @Test
-  void anAttributeNamingAVariantAxisIsNeitherRequiredNorUnknown() {
-    // Axis values belong on Variants; until Variants carry them, a Product may still hold one.
+  void aVariantAxisIsNotRequiredOfTheProductItself() {
     assertThat(violations(Map.of("brand", "Sony", "type", "In-ear", "wireless", "true"))).isEmpty();
-    assertThat(
-            violations(
-                Map.of("brand", "Sony", "type", "In-ear", "wireless", "true", "colour", "Black")))
-        .isEmpty();
   }
 
   @Test
-  void anAxisValueAProductStillCarriesMustFitItsType() {
-    var phones =
-        new Category(
-            "phones",
-            "Phones",
-            List.of(
-                new AttributeDefinition(
-                    "storage", AttributeType.ENUM, List.of("128 GB", "256 GB"), true, true)));
-
-    assertThat(phones.violations(Map.of("storage", "9 TB")))
-        .containsExactly(new FieldViolation("attributes.storage", "must be one of 128 GB, 256 GB"));
-    assertThat(phones.violations(Map.of("storage", "256 GB"))).isEmpty();
+  void anAttributeNamingAVariantAxisBelongsOnTheVariantsInstead() {
+    assertThat(
+            violations(
+                Map.of("brand", "Sony", "type", "In-ear", "wireless", "true", "colour", "Black")))
+        .containsExactly(
+            new FieldViolation(
+                "attributes.colour", "is a Variant axis; give each Variant its value instead"));
   }
 
   @Test
