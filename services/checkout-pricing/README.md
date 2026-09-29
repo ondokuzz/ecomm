@@ -14,18 +14,18 @@ The steps run in order, each against the service that owns it:
 
 1. read the Cart;
 2. price every line from Catalog, ignoring any price the Cart shows;
-3. place the Order in `PLACED` in Order Management;
+3. place the Order in `PLACED` in Order Management, with its tax;
 4. decrement Stock in Inventory;
-5. authorize the payment for the total (lines plus tax) in Payment;
+5. authorize the payment for the Order's total (lines plus tax), as Order Management answers it;
 6. set the Order to `PAID`;
 7. clear the Cart;
 8. return the Order's ID and Order Status.
 
 Tax comes from the `TaxCalculator` port. For now that is `ZeroTaxCalculator`
-([ADR 0005](../../docs/adr/0005-localization-compliance-abstracted.md)). An Order can't record tax
-yet, so a non-zero tax would authorize a Payment larger than the Order's total. Until
-[#14](https://github.com/ondokuzz/ecomm/issues/14), checkout refuses non-zero tax with a 500
-before any Order exists.
+([ADR 0005](../../docs/adr/0005-localization-compliance-abstracted.md)). It is sent on
+`POST /orders`, even when zero, and the Order records it. The Payment is authorized for the total
+Order Management gives the Order, never one Checkout works out itself, so the two always match.
+Checkout applies no Discount yet.
 
 Until multi-Variant Products arrive, a Variant ID is its Product's SKU, so a line is priced from
 `GET /products/{variantId}` and the Variant with that ID in it.

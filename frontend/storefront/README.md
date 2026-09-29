@@ -52,7 +52,9 @@ summary). Its page has an Order Status timeline, Placed → Paid → Fulfilled �
 with the current step marked; a cancelled Order ends at Cancelled after Placed, in red, since its
 Order Status doesn't say whether it was paid, and a returned one at Returned after Delivered, in
 amber. Its lines name their Products and show their thumbnails, looked up from Catalog, and fall back
-to the Variant ID when Catalog no longer has the Product.
+to the Variant ID when Catalog no longer has the Product. Its summary shows what it comes to, as
+Order Management worked it out: the subtotal, a Discount line naming its Coupon when there is one,
+the tax and the total.
 
 My Orders lists them as cards: reference, date, the first three Products' thumbnails (and how many
 more), item count, total and Order Status badge. Each Order Status badge has a colour of its own

@@ -156,14 +156,29 @@ abstract class CheckoutApiTest {
 
   // --- Order Management ---
 
+  /** Order Management places the Order, with the total a checkout of two Pixel 9s comes to. */
   static void stubPlaceOrder() {
-    DOWNSTREAM.stubFor(
-        post("/orders")
-            .willReturn(
-                aResponse()
-                    .withStatus(201)
-                    .withHeader("Content-Type", "application/json")
-                    .withBody("{\"id\": \"" + ORDER_ID + "\", \"status\": \"PLACED\"}")));
+    DOWNSTREAM.stubFor(post("/orders").willReturn(placedOrder()));
+  }
+
+  /** Order Management's answer to {@code POST /orders}: an Order for 1598.00 EUR. */
+  static ResponseDefinitionBuilder placedOrder() {
+    return placedOrder(159800);
+  }
+
+  /**
+   * Order Management's answer to {@code POST /orders}: an Order whose total is {@code totalMinor}
+   * EUR.
+   */
+  static ResponseDefinitionBuilder placedOrder(long totalMinor) {
+    return aResponse()
+        .withStatus(201)
+        .withHeader("Content-Type", "application/json")
+        .withBody(
+            """
+            {"id": "%s", "status": "PLACED", "total": {"amountMinor": %d, "currency": "EUR"}}
+            """
+                .formatted(ORDER_ID, totalMinor));
   }
 
   static void stubStatusChange() {

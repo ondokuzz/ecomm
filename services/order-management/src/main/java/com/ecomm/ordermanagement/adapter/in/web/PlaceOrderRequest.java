@@ -1,16 +1,19 @@
 package com.ecomm.ordermanagement.adapter.in.web;
 
 import com.ecomm.commons.money.Money;
+import com.ecomm.ordermanagement.domain.Discount;
 import com.ecomm.ordermanagement.domain.InvalidOrderException;
 import com.ecomm.ordermanagement.domain.OrderLine;
 import java.util.List;
+import java.util.Optional;
 
 /**
- * The Customer and the Order Lines priced at checkout: {@code {"customerId", "lines":
- * [{"variantId", "quantity", "unitPrice": {"amountMinor", "currency"}}]}}. The values are taken raw
- * so that {@code 1.5} or {@code "2"} are rejected rather than coerced.
+ * The Customer, the Order Lines priced at checkout, an optional discount and the tax: {@code
+ * {"customerId", "lines": [{"variantId", "quantity", "unitPrice": {"amountMinor", "currency"}}],
+ * "discount": {"couponCode", "amount"}, "tax": {"amountMinor", "currency"}}}. The values are taken
+ * raw so that {@code 1.5} or {@code "2"} are rejected rather than coerced.
  */
-record PlaceOrderRequest(Object customerId, List<Line> lines) {
+record PlaceOrderRequest(Object customerId, List<Line> lines, DiscountBody discount, Amount tax) {
 
   record Line(Object variantId, Object quantity, Amount unitPrice) {
 
@@ -23,6 +26,16 @@ record PlaceOrderRequest(Object customerId, List<Line> lines) {
       }
       return new OrderLine(
           (String) variantId, count, unitPrice == null ? null : unitPrice.toMoney());
+    }
+  }
+
+  record DiscountBody(Object couponCode, Amount amount) {
+
+    Discount toDiscount() {
+      if (couponCode != null && !(couponCode instanceof String)) {
+        throw new InvalidOrderException("couponCode must be a string");
+      }
+      return new Discount((String) couponCode, amount == null ? null : amount.toMoney());
     }
   }
 
@@ -45,6 +58,17 @@ record PlaceOrderRequest(Object customerId, List<Line> lines) {
 
   String toCustomerId() {
     return CustomerIds.from(customerId);
+  }
+
+  Optional<Discount> toDiscount() {
+    return Optional.ofNullable(discount).map(DiscountBody::toDiscount);
+  }
+
+  /**
+   * The tax, which Checkout always sends, even when it is zero; the Order rejects a missing one.
+   */
+  Money toTax() {
+    return tax == null ? null : tax.toMoney();
   }
 
   List<OrderLine> toOrderLines() {

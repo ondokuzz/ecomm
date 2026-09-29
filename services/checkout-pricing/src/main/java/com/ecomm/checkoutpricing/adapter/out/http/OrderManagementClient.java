@@ -3,7 +3,9 @@ package com.ecomm.checkoutpricing.adapter.out.http;
 import com.ecomm.checkoutpricing.application.port.in.DownstreamFailureException;
 import com.ecomm.checkoutpricing.application.port.out.OrderPort;
 import com.ecomm.checkoutpricing.domain.OrderStatus;
+import com.ecomm.checkoutpricing.domain.PlacedOrder;
 import com.ecomm.checkoutpricing.domain.PricedLine;
+import com.ecomm.commons.money.Money;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -22,31 +24,34 @@ class OrderManagementClient implements OrderPort {
     this.http = http;
   }
 
-  private record PlaceOrderBody(String customerId, List<Line> lines) {}
+  private record PlaceOrderBody(String customerId, List<Line> lines, Amount tax) {}
 
   private record Line(String variantId, int quantity, Amount unitPrice) {}
 
-  private record Amount(long amountMinor, String currency) {}
+  private record Amount(long amountMinor, String currency) {
+
+    static Amount of(Money money) {
+      return new Amount(money.amountMinor(), money.currency().getCurrencyCode());
+    }
+
+    Money toMoney() {
+      return Money.of(amountMinor, currency);
+    }
+  }
 
   private record StatusChangeBody(String customerId, String status) {}
 
-  private record OrderBody(String id) {}
+  private record OrderBody(String id, Amount total) {}
 
   @Override
-  public String place(String customerId, List<PricedLine> lines) {
+  public PlacedOrder place(String customerId, List<PricedLine> lines, Money tax) {
     var body =
         new PlaceOrderBody(
             customerId,
             lines.stream()
-                .map(
-                    l ->
-                        new Line(
-                            l.variantId(),
-                            l.quantity(),
-                            new Amount(
-                                l.unitPrice().amountMinor(),
-                                l.unitPrice().currency().getCurrencyCode())))
-                .toList());
+                .map(l -> new Line(l.variantId(), l.quantity(), Amount.of(l.unitPrice())))
+                .toList(),
+            Amount.of(tax));
     var order =
         Downstream.call(
             "Order Management",
@@ -54,7 +59,11 @@ class OrderManagementClient implements OrderPort {
     if (order == null || order.id() == null) {
       throw new DownstreamFailureException("Order Management placed an Order without an ID", null);
     }
-    return order.id();
+    if (order.total() == null) {
+      throw new DownstreamFailureException(
+          "Order Management placed Order " + order.id() + " without a total", null);
+    }
+    return new PlacedOrder(order.id(), order.total().toMoney());
   }
 
   @Override

@@ -24,27 +24,40 @@ own the Order. Any other token gets 403, and no token gets 401. Staff have no Or
 | `GET /orders/{id}` | Customer | The Customer's Order; 404 for an unknown ID or another Customer's |
 | `GET /orders` | Customer | The Customer's Orders, newest first |
 
-An Order is placed for a Customer from the lines Checkout priced:
+An Order is placed for a Customer from the lines Checkout priced, an optional Discount and the tax:
 
 ```json
 {"customerId": "…",
  "lines": [{"variantId": "PHN-PIXEL-9", "quantity": 2,
-            "unitPrice": {"amountMinor": 79900, "currency": "EUR"}}]}
+            "unitPrice": {"amountMinor": 79900, "currency": "EUR"}}],
+ "discount": {"couponCode": "WELCOME10", "amount": {"amountMinor": 15980, "currency": "EUR"}},
+ "tax": {"amountMinor": 28764, "currency": "EUR"}}
 ```
 
-and comes back with its total, the sum of each line's unit price times its quantity:
+and comes back with what it comes to. The `subtotal` is the sum of each line's unit price times its
+quantity, and the `total` is the subtotal, less the discount, plus the tax: what Checkout authorizes
+the Payment for.
 
 ```json
 {"id": "…", "status": "PLACED",
  "lines": [{"variantId": "PHN-PIXEL-9", "quantity": 2,
             "unitPrice": {"amountMinor": 79900, "currency": "EUR"}}],
- "total": {"amountMinor": 159800, "currency": "EUR"}, "placedAt": "2026-09-27T14:00:00.123456Z"}
+ "subtotal": {"amountMinor": 159800, "currency": "EUR"},
+ "discount": {"couponCode": "WELCOME10", "amount": {"amountMinor": 15980, "currency": "EUR"}},
+ "tax": {"amountMinor": 28764, "currency": "EUR"},
+ "total": {"amountMinor": 172584, "currency": "EUR"}, "placedAt": "2026-09-27T14:00:00.123456Z"}
 ```
+
+An Order without a Discount has `"discount": null`. Orders placed before Orders recorded their
+Discount and tax read back with none and a zero tax, which is what they were charged.
 
 An Order needs a `customerId` of at most 255 characters and at least one line. Each line needs a
 `variantId` of at most 64 characters, a positive integer `quantity` and a `unitPrice` as `Money`
 that isn't negative. Every line must be in the same currency, and a Variant may appear on only one
-line. Anything else, including a total too large to hold, is a 400. Every error is a problem detail.
+line. The `tax` is required, even when zero, and can't be negative. A `discount` needs a
+`couponCode` of at most 64 characters and an `amount` that isn't negative. Both are in the lines'
+currency, and the discount can bring the total to zero but not below. Anything else, including a
+total too large to hold, is a 400. Every error is a problem detail.
 
 ## Order Status
 

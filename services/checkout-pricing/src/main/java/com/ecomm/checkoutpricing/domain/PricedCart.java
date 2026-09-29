@@ -20,7 +20,7 @@ public record PricedCart(List<PricedLine> lines) {
     }
   }
 
-  /** The sum of the lines, before tax. */
+  /** The sum of the lines, before any discount or tax. */
   public Money subtotal() {
     var currency = lines.getFirst().unitPrice().currency();
     long sum = 0;
@@ -28,14 +28,5 @@ public record PricedCart(List<PricedLine> lines) {
       sum = Math.addExact(sum, line.lineTotal().amountMinor());
     }
     return new Money(sum, currency);
-  }
-
-  /** What the Customer pays: the subtotal plus {@code tax}, which must be in the same currency. */
-  public Money total(Money tax) {
-    var subtotal = subtotal();
-    if (!tax.currency().equals(subtotal.currency())) {
-      throw new MixedCurrencyException();
-    }
-    return new Money(Math.addExact(subtotal.amountMinor(), tax.amountMinor()), subtotal.currency());
   }
 }

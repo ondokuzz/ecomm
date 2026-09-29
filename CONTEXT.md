@@ -49,8 +49,20 @@ A temporary hold on a Variant's stock, created when checkout starts and either r
 _Avoid_: Lock, Hold
 
 **Order**:
-A Customer's confirmed intent to purchase one or more Variants, tracked through a lifecycle from placement to delivery or return. It holds one Order Line per Variant, all in one currency, and its total is the sum of its lines. It belongs to the Customer who placed it, and only they can see it.
+A Customer's confirmed intent to purchase one or more Variants, tracked through a lifecycle from placement to delivery or return. It holds one Order Line per Variant, an optional Discount and its tax, all in one currency. Its total is the sum of its lines, less the Discount, plus the tax; never negative. That total is what its Payment is authorized for. It belongs to the Customer who placed it, and only they can see it.
 _Avoid_: Purchase, Transaction
+
+**Coupon**:
+A code a Customer enters at checkout for a Discount, under a Promotions campaign's rules. An Order records the code of the Coupon behind its Discount.
+_Avoid_: Voucher, Promo code
+
+**Discount**:
+The amount a Coupon took off an Order, recorded on it with the Coupon's code. It can bring the total to zero, but not below.
+_Avoid_: Rebate, Markdown
+
+**Tax**:
+What a market's tax rules add to an Order's lines, worked out by Checkout's `TaxCalculator` (zero for now, ADR 0005) and recorded on the Order, even when zero.
+_Avoid_: VAT (one kind of it)
 
 **Order reference**:
 The short handle the Storefront shows an Order by, such as `#3F2A9C1B`: the first eight characters of its ID, upper-cased. Order IDs are random UUIDs, so it tells a Customer's Orders apart; the full ID stays on the Order page. Display only; no service looks an Order up by it.

@@ -56,17 +56,14 @@ public class CheckoutService implements CheckoutUseCase {
     }
     var priced = price(lines);
     var tax = taxes.tax(priced);
-    if (tax.amountMinor() != 0) {
-      // An Order can't record tax yet, so its total would fall short of the Payment (#14).
-      throw new IllegalStateException(
-          "Non-zero tax isn't supported until an Order carries its tax (#14)");
-    }
-    var total = priced.total(tax);
 
-    var orderId = orders.place(customerId, priced.lines());
+    // The Payment is for the Order's total, as Order Management records it, so the two always
+    // match.
+    var order = orders.place(customerId, priced.lines(), tax);
+    var orderId = order.id();
     try {
       inventory.decrement(lines);
-      payments.authorize(customerId, orderId, total);
+      payments.authorize(customerId, orderId, order.total());
       orders.changeStatus(customerId, orderId, OrderStatus.PAID);
     } catch (RuntimeException e) {
       cancel(customerId, orderId, e);

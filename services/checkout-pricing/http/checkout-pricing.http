@@ -47,7 +47,7 @@ Authorization: Bearer {{customerToken}}
 
 > {% client.global.set("orderId", response.body.orderId); %}
 
-### The Order, at Catalog's Prices
+### The Order, at Catalog's Prices, with its tax (zero for now) and the total its Payment was for
 GET {{orders}}/orders/{{orderId}}
 Authorization: Bearer {{customerToken}}
 

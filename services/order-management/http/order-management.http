@@ -28,7 +28,7 @@ grant_type=client_credentials&client_id=checkout&client_secret=checkout-dev-secr
 
 > {% client.global.set("checkoutToken", response.body.access_token); %}
 
-### Checkout places an Order for the Customer: 201 with the Order in PLACED and its total
+### Checkout places an Order for the Customer: 201 with the Order in PLACED, its subtotal, tax and total
 POST {{orders}}/orders
 Authorization: Bearer {{checkoutToken}}
 Content-Type: application/json
@@ -36,11 +36,23 @@ Content-Type: application/json
 {"customerId": "{{customerId}}", "lines": [
   {"variantId": "PHN-PIXEL-9", "quantity": 2, "unitPrice": {"amountMinor": 79900, "currency": "EUR"}},
   {"variantId": "AUD-AIRPODS-PRO-2", "quantity": 1, "unitPrice": {"amountMinor": 14950, "currency": "EUR"}}
-]}
+],
+ "tax": {"amountMinor": 34950, "currency": "EUR"}}
 
 > {% client.global.set("orderId", response.body.id); %}
 
-### The Customer reads it back with their own token
+### With a Discount: the total is the lines, less the discount, plus the tax
+POST {{orders}}/orders
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}", "lines": [
+  {"variantId": "PHN-PIXEL-9", "quantity": 1, "unitPrice": {"amountMinor": 79900, "currency": "EUR"}}
+],
+ "discount": {"couponCode": "WELCOME10", "amount": {"amountMinor": 7990, "currency": "EUR"}},
+ "tax": {"amountMinor": 14382, "currency": "EUR"}}
+
+### The Customer reads the first one back with their own token
 GET {{orders}}/orders/{{orderId}}
 Authorization: Bearer {{customerToken}}
 
@@ -81,6 +93,27 @@ Content-Type: application/json
 {"customerId": "{{customerId}}", "lines": [
   {"variantId": "PHN-PIXEL-9", "quantity": 1, "unitPrice": {"amountMinor": 79900, "currency": "EUR"}},
   {"variantId": "AUD-AIRPODS-PRO-2", "quantity": 1, "unitPrice": {"amountMinor": 14950, "currency": "USD"}}
+],
+ "tax": {"amountMinor": 0, "currency": "EUR"}}
+
+### A discount larger than the lines plus the tax: 400
+POST {{orders}}/orders
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}", "lines": [
+  {"variantId": "PHN-PIXEL-9", "quantity": 1, "unitPrice": {"amountMinor": 79900, "currency": "EUR"}}
+],
+ "discount": {"couponCode": "TOOMUCH", "amount": {"amountMinor": 99999, "currency": "EUR"}},
+ "tax": {"amountMinor": 0, "currency": "EUR"}}
+
+### No tax: 400; Checkout always sends it, even when zero
+POST {{orders}}/orders
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}", "lines": [
+  {"variantId": "PHN-PIXEL-9", "quantity": 1, "unitPrice": {"amountMinor": 79900, "currency": "EUR"}}
 ]}
 
 ### A Customer can't place an Order, only Checkout can: 403
@@ -90,7 +123,8 @@ Content-Type: application/json
 
 {"customerId": "{{customerId}}", "lines": [
   {"variantId": "PHN-PIXEL-9", "quantity": 1, "unitPrice": {"amountMinor": 1, "currency": "EUR"}}
-]}
+],
+ "tax": {"amountMinor": 0, "currency": "EUR"}}
 
 ### A Customer can't change their Order's status, only Checkout can: 403
 PATCH {{orders}}/orders/{{orderId}}/status

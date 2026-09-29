@@ -6,6 +6,7 @@ import static java.util.stream.Collectors.toList;
 
 import com.ecomm.commons.money.Money;
 import com.ecomm.ordermanagement.application.port.out.OrderRepository;
+import com.ecomm.ordermanagement.domain.Discount;
 import com.ecomm.ordermanagement.domain.Order;
 import com.ecomm.ordermanagement.domain.OrderLine;
 import com.ecomm.ordermanagement.domain.OrderStatus;
@@ -27,11 +28,26 @@ import org.springframework.transaction.annotation.Transactional;
 @Component
 class PostgresOrderRepository implements OrderRepository {
 
-  /** An Order's own row, before its lines are attached. */
-  private record OrderRow(UUID id, String customerId, OrderStatus status, Instant placedAt) {
+  /**
+   * An Order's own row, before its lines are attached. Its discount and tax take their currency
+   * from the lines.
+   */
+  private record OrderRow(
+      UUID id,
+      String customerId,
+      String couponCode,
+      Long discountMinor,
+      long taxMinor,
+      OrderStatus status,
+      Instant placedAt) {
 
     Order with(List<OrderLine> lines) {
-      return new Order(id, customerId, lines, status, placedAt);
+      var currency = lines.get(0).unitPrice().currency();
+      var discount =
+          Optional.ofNullable(couponCode)
+              .map(code -> new Discount(code, new Money(discountMinor, currency)));
+      return new Order(
+          id, customerId, lines, discount, new Money(taxMinor, currency), status, placedAt);
     }
   }
 
@@ -42,6 +58,9 @@ class PostgresOrderRepository implements OrderRepository {
           new OrderRow(
               rs.getObject("id", UUID.class),
               rs.getString("customer_id"),
+              rs.getString("coupon_code"),
+              rs.getObject("discount_minor", Long.class),
+              rs.getLong("tax_minor"),
               OrderStatus.valueOf(rs.getString("status")),
               rs.getTimestamp("placed_at").toInstant());
 
@@ -65,11 +84,16 @@ class PostgresOrderRepository implements OrderRepository {
   public void add(Order order) {
     jdbc.sql(
             """
-            INSERT INTO customer_order (id, customer_id, status, placed_at)
-            VALUES (:id, :customerId, :status, :placedAt)
+            INSERT INTO customer_order
+              (id, customer_id, coupon_code, discount_minor, tax_minor, status, placed_at)
+            VALUES
+              (:id, :customerId, :couponCode, :discountMinor, :taxMinor, :status, :placedAt)
             """)
         .param("id", order.id())
         .param("customerId", order.customerId())
+        .param("couponCode", order.discount().map(Discount::couponCode).orElse(null))
+        .param("discountMinor", order.discount().map(d -> d.amount().amountMinor()).orElse(null))
+        .param("taxMinor", order.tax().amountMinor())
         .param("status", order.status().name())
         .param("placedAt", Timestamp.from(order.placedAt()))
         .update();
@@ -99,7 +123,7 @@ class PostgresOrderRepository implements OrderRepository {
     return withLines(
             jdbc.sql(
                     """
-                    SELECT id, customer_id, status, placed_at
+                    SELECT id, customer_id, coupon_code, discount_minor, tax_minor, status, placed_at
                     FROM customer_order WHERE id = :id
                     """)
                 .param("id", id)
@@ -115,7 +139,7 @@ class PostgresOrderRepository implements OrderRepository {
     return withLines(
         jdbc.sql(
                 """
-                SELECT id, customer_id, status, placed_at
+                SELECT id, customer_id, coupon_code, discount_minor, tax_minor, status, placed_at
                 FROM customer_order WHERE customer_id = :customerId
                 ORDER BY placed_at DESC, id
                 """)

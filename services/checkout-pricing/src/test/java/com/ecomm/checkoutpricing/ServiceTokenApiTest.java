@@ -76,11 +76,7 @@ class ServiceTokenApiTest extends CheckoutApiTest {
     DOWNSTREAM.stubFor(
         post("/orders")
             .withHeader("Authorization", equalTo("Bearer checkout-token-2"))
-            .willReturn(
-                aResponse()
-                    .withStatus(201)
-                    .withHeader("Content-Type", "application/json")
-                    .withBody("{\"id\": \"" + ORDER_ID + "\", \"status\": \"PLACED\"}")));
+            .willReturn(placedOrder()));
 
     checkout().expectStatus().isOk().expectBody().jsonPath("$.status").isEqualTo("PAID");
 

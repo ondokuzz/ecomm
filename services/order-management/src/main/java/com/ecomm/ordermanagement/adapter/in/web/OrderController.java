@@ -54,7 +54,9 @@ class OrderController {
   @PostMapping
   @PreAuthorize("hasRole('CHECKOUT')")
   ResponseEntity<OrderResponse> place(@RequestBody PlaceOrderRequest request) {
-    var order = place.place(request.toCustomerId(), request.toOrderLines());
+    var order =
+        place.place(
+            request.toCustomerId(), request.toOrderLines(), request.toDiscount(), request.toTax());
     log.info("Placed Order {}", order.id());
     return ResponseEntity.created(URI.create("/orders/" + order.id()))
         .body(OrderResponse.of(order));

@@ -9,10 +9,21 @@ export interface OrderLine {
   unitPrice: Money
 }
 
+/** What a Coupon took off an Order, and the code the Customer entered for it. */
+export interface Discount {
+  couponCode: string
+  amount: Money
+}
+
 export interface Order {
   id: string
   status: OrderStatus
   lines: OrderLine[]
+  /** The sum of the lines. */
+  subtotal: Money
+  discount: Discount | null
+  tax: Money
+  /** The subtotal, less the discount, plus the tax: what the Customer paid. */
   total: Money
   placedAt: string
 }
@@ -37,6 +48,31 @@ export function orderReference(order: Order): string {
 export function orderItemCountLabel(order: Order): string {
   const count = order.lines.reduce((sum, line) => sum + line.quantity, 0)
   return count === 1 ? '1 item' : `${count} items`
+}
+
+/** One line of an Order's summary; a discount's amount is negative, as it comes off. */
+export interface OrderSummaryRow {
+  label: string
+  amount: Money
+  isTotal?: boolean
+}
+
+/** What an Order comes to, as Order Management worked it out: subtotal, any discount, tax and total. */
+export function orderSummaryRows(order: Order): OrderSummaryRow[] {
+  const discount: OrderSummaryRow[] = order.discount
+    ? [
+        {
+          label: `Discount (${order.discount.couponCode})`,
+          amount: { ...order.discount.amount, amountMinor: -order.discount.amount.amountMinor },
+        },
+      ]
+    : []
+  return [
+    { label: 'Subtotal', amount: order.subtotal },
+    ...discount,
+    { label: 'Tax', amount: order.tax },
+    { label: 'Total', amount: order.total, isTotal: true },
+  ]
 }
 
 /** An Order Line with its total at the captured price, and its Product when Catalog still has it. */

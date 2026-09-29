@@ -7,6 +7,7 @@ import {
   orderItemCountLabel,
   orderReference,
   orderStatusLabel,
+  orderSummaryRows,
   orderTimeline,
 } from './order'
 
@@ -24,6 +25,9 @@ function order(overrides: Partial<Order> = {}): Order {
       { variantId: 'A', quantity: 2, unitPrice: eur(1000) },
       { variantId: 'B', quantity: 1, unitPrice: eur(250) },
     ],
+    subtotal: eur(2250),
+    discount: null,
+    tax: eur(0),
     total: eur(2250),
     placedAt: '2026-09-29T10:00:00Z',
     ...overrides,
@@ -58,6 +62,28 @@ describe('nameOrderLines', () => {
     const lines = nameOrderLines(order(), { A: product('A') })
 
     expect(lines[1]).toEqual({ variantId: 'B', quantity: 1, unitPrice: eur(250), lineTotal: eur(250) })
+  })
+})
+
+describe('orderSummaryRows', () => {
+  const rows = (o: Order) => orderSummaryRows(o).map((row) => `${row.label}:${row.amount.amountMinor}`)
+
+  it('shows the subtotal, the tax and the total', () => {
+    expect(rows(order({ tax: eur(450), total: eur(2700) }))).toEqual(['Subtotal:2250', 'Tax:450', 'Total:2700'])
+  })
+
+  it('shows a zero tax too', () => {
+    expect(rows(order())).toEqual(['Subtotal:2250', 'Tax:0', 'Total:2250'])
+  })
+
+  it('takes the discount off after the subtotal, naming its coupon', () => {
+    const discounted = order({ discount: { couponCode: 'WELCOME10', amount: eur(225) }, tax: eur(405), total: eur(2430) })
+
+    expect(rows(discounted)).toEqual(['Subtotal:2250', 'Discount (WELCOME10):-225', 'Tax:405', 'Total:2430'])
+  })
+
+  it('marks only the total as the total', () => {
+    expect(orderSummaryRows(order()).map((row) => row.isTotal ?? false)).toEqual([false, false, true])
   })
 })
 

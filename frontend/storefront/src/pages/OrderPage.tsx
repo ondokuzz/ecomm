@@ -11,7 +11,7 @@ import { ErrorMessage, Loading } from '../components/Status'
 import { Card } from '../components/ui/Card'
 import { Icon } from '../components/ui/Icon'
 import { formatMoney } from '../domain/money'
-import { type Order, nameOrderLines, orderItemCountLabel, orderReference } from '../domain/order'
+import { type Order, nameOrderLines, orderItemCountLabel, orderReference, orderSummaryRows } from '../domain/order'
 
 /** An Order, its Order Status and its lines, read from Order Management; after checkout, the confirmation first. */
 export function OrderPage() {
@@ -57,7 +57,7 @@ export function OrderPage() {
   )
 }
 
-/** The Order in brief, beside its lines: when it was placed, how many items, the total, and its full ID. */
+/** The Order in brief, beside its lines: when it was placed, how many items, what it comes to, and its full ID. */
 function OrderFacts({ order }: { order: Order }) {
   const headingId = useId()
   return (
@@ -72,10 +72,12 @@ function OrderFacts({ order }: { order: Order }) {
           <dt>Items</dt>
           <dd>{orderItemCountLabel(order)}</dd>
         </div>
-        <div className="order-summary-total">
-          <dt>Total</dt>
-          <dd>{formatMoney(order.total)}</dd>
-        </div>
+        {orderSummaryRows(order).map((row) => (
+          <div key={row.label} className={row.isTotal ? 'order-summary-total' : undefined}>
+            <dt>{row.label}</dt>
+            <dd>{formatMoney(row.amount)}</dd>
+          </div>
+        ))}
       </dl>
       <p className="muted order-id">
         Order ID <code>{order.id}</code>

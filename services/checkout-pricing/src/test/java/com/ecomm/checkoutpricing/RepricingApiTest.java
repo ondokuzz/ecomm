@@ -32,32 +32,8 @@ class RepricingApiTest extends CheckoutApiTest {
                        "unitPrice": {"amountMinor": 79900, "currency": "EUR"}},
                       {"variantId": "AUD-SONY-XM5", "quantity": 1,
                        "unitPrice": {"amountMinor": 34900, "currency": "EUR"}}
-                    ]}
+                    ],
+                     "tax": {"amountMinor": 0, "currency": "EUR"}}
                     """)));
-  }
-
-  @Test
-  void thePaymentIsForTheCatalogPricedTotal() {
-    stubSuccessfulCheckout();
-    stubCart(
-        """
-        {"variantId": "PHN-PIXEL-9", "quantity": 2, "unitPrice": {"amountMinor": 1, "currency": "EUR"}},
-        {"variantId": "AUD-SONY-XM5", "quantity": 1}
-        """);
-    stubProduct("PHN-PIXEL-9", 79900);
-    stubProduct("AUD-SONY-XM5", 34900);
-
-    checkout().expectStatus().isOk();
-
-    // 2 × 799.00 + 349.00, with no tax (ZeroTaxCalculator).
-    DOWNSTREAM.verify(
-        postRequestedFor(urlEqualTo("/payments"))
-            .withRequestBody(
-                equalToJson(
-                    """
-                    {"customerId": "customer-42", "orderId": "%s",
-                     "amount": {"amountMinor": 194700, "currency": "EUR"}}
-                    """
-                        .formatted(ORDER_ID))));
   }
 }

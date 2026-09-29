@@ -1,11 +1,13 @@
 package com.ecomm.ordermanagement.application;
 
+import com.ecomm.commons.money.Money;
 import com.ecomm.ordermanagement.application.port.in.ChangeOrderStatusUseCase;
 import com.ecomm.ordermanagement.application.port.in.ConcurrentStatusChangeException;
 import com.ecomm.ordermanagement.application.port.in.FindOrdersUseCase;
 import com.ecomm.ordermanagement.application.port.in.PlaceOrderUseCase;
 import com.ecomm.ordermanagement.application.port.out.OrderRepository;
 import com.ecomm.ordermanagement.application.port.out.TimeSource;
+import com.ecomm.ordermanagement.domain.Discount;
 import com.ecomm.ordermanagement.domain.Order;
 import com.ecomm.ordermanagement.domain.OrderLine;
 import com.ecomm.ordermanagement.domain.OrderStatus;
@@ -25,8 +27,9 @@ public class OrderService
   }
 
   @Override
-  public Order place(String customerId, List<OrderLine> lines) {
-    var order = Order.place(UUID.randomUUID(), customerId, lines, time.now());
+  public Order place(
+      String customerId, List<OrderLine> lines, Optional<Discount> discount, Money tax) {
+    var order = Order.place(UUID.randomUUID(), customerId, lines, discount, tax, time.now());
     orders.add(order);
     return order;
   }

@@ -29,7 +29,7 @@ class PlaceOrderApiTest extends OrderApiTest {
     var order =
         place(
                 """
-                {"customerId": "customer-42", "lines": [
+                {"customerId": "customer-42", "tax": {"amountMinor": 0, "currency": "EUR"}, "lines": [
                   {"variantId": "PHN-PIXEL-9", "quantity": 1,
                    "unitPrice": {"amountMinor": 79900, "currency": "EUR"}},
                   {"variantId": "ACC-CASE", "quantity": 3,
@@ -52,95 +52,95 @@ class PlaceOrderApiTest extends OrderApiTest {
         {"customerId": "customer-42"}
         """,
         """
-        {"customerId": "customer-42", "lines": []}
+        {"customerId": "customer-42", "tax": {"amountMinor": 0, "currency": "EUR"}, "lines": []}
         """,
         """
-        {"customerId": "customer-42", "lines": [null]}
+        {"customerId": "customer-42", "tax": {"amountMinor": 0, "currency": "EUR"}, "lines": [null]}
         """,
         """
-        {"customerId": "customer-42", "lines": [{"quantity": 1, "unitPrice": {"amountMinor": 100, "currency": "EUR"}}]}
+        {"customerId": "customer-42", "tax": {"amountMinor": 0, "currency": "EUR"}, "lines": [{"quantity": 1, "unitPrice": {"amountMinor": 100, "currency": "EUR"}}]}
         """,
         """
-        {"customerId": "customer-42", "lines": [{"variantId": " ", "quantity": 1,
+        {"customerId": "customer-42", "tax": {"amountMinor": 0, "currency": "EUR"}, "lines": [{"variantId": " ", "quantity": 1,
                     "unitPrice": {"amountMinor": 100, "currency": "EUR"}}]}
         """,
         """
-        {"customerId": "customer-42", "lines": [{"variantId": 7, "quantity": 1,
+        {"customerId": "customer-42", "tax": {"amountMinor": 0, "currency": "EUR"}, "lines": [{"variantId": 7, "quantity": 1,
                     "unitPrice": {"amountMinor": 100, "currency": "EUR"}}]}
         """,
         """
-        {"customerId": "customer-42", "lines": [{"variantId": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        {"customerId": "customer-42", "tax": {"amountMinor": 0, "currency": "EUR"}, "lines": [{"variantId": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
                     "quantity": 1, "unitPrice": {"amountMinor": 100, "currency": "EUR"}}]}
         """,
         """
-        {"customerId": "customer-42", "lines": [{"variantId": "V-1", "unitPrice": {"amountMinor": 100, "currency": "EUR"}}]}
+        {"customerId": "customer-42", "tax": {"amountMinor": 0, "currency": "EUR"}, "lines": [{"variantId": "V-1", "unitPrice": {"amountMinor": 100, "currency": "EUR"}}]}
         """,
         """
-        {"customerId": "customer-42", "lines": [{"variantId": "V-1", "quantity": 0,
+        {"customerId": "customer-42", "tax": {"amountMinor": 0, "currency": "EUR"}, "lines": [{"variantId": "V-1", "quantity": 0,
                     "unitPrice": {"amountMinor": 100, "currency": "EUR"}}]}
         """,
         """
-        {"customerId": "customer-42", "lines": [{"variantId": "V-1", "quantity": 1.5,
+        {"customerId": "customer-42", "tax": {"amountMinor": 0, "currency": "EUR"}, "lines": [{"variantId": "V-1", "quantity": 1.5,
                     "unitPrice": {"amountMinor": 100, "currency": "EUR"}}]}
         """,
         """
-        {"customerId": "customer-42", "lines": [{"variantId": "V-1", "quantity": "2",
+        {"customerId": "customer-42", "tax": {"amountMinor": 0, "currency": "EUR"}, "lines": [{"variantId": "V-1", "quantity": "2",
                     "unitPrice": {"amountMinor": 100, "currency": "EUR"}}]}
         """,
         """
-        {"customerId": "customer-42", "lines": [{"variantId": "V-1", "quantity": 1}]}
+        {"customerId": "customer-42", "tax": {"amountMinor": 0, "currency": "EUR"}, "lines": [{"variantId": "V-1", "quantity": 1}]}
         """,
         """
-        {"customerId": "customer-42", "lines": [{"variantId": "V-1", "quantity": 1,
+        {"customerId": "customer-42", "tax": {"amountMinor": 0, "currency": "EUR"}, "lines": [{"variantId": "V-1", "quantity": 1,
                     "unitPrice": {"amountMinor": -1, "currency": "EUR"}}]}
         """,
         """
-        {"customerId": "customer-42", "lines": [{"variantId": "V-1", "quantity": 1,
+        {"customerId": "customer-42", "tax": {"amountMinor": 0, "currency": "EUR"}, "lines": [{"variantId": "V-1", "quantity": 1,
                     "unitPrice": {"amountMinor": 1.5, "currency": "EUR"}}]}
         """,
         """
-        {"customerId": "customer-42", "lines": [{"variantId": "V-1", "quantity": 1, "unitPrice": {"amountMinor": 100}}]}
+        {"customerId": "customer-42", "tax": {"amountMinor": 0, "currency": "EUR"}, "lines": [{"variantId": "V-1", "quantity": 1, "unitPrice": {"amountMinor": 100}}]}
         """,
         """
-        {"customerId": "customer-42", "lines": [{"variantId": "V-1", "quantity": 1,
+        {"customerId": "customer-42", "tax": {"amountMinor": 0, "currency": "EUR"}, "lines": [{"variantId": "V-1", "quantity": 1,
                     "unitPrice": {"amountMinor": 100, "currency": "XYZ"}}]}
         """,
         """
-        {"customerId": "customer-42", "lines": [
+        {"customerId": "customer-42", "tax": {"amountMinor": 0, "currency": "EUR"}, "lines": [
           {"variantId": "V-1", "quantity": 1, "unitPrice": {"amountMinor": 100, "currency": "EUR"}},
           {"variantId": "V-1", "quantity": 2, "unitPrice": {"amountMinor": 100, "currency": "EUR"}}
         ]}
         """,
         """
-        {"customerId": "customer-42", "lines": [
+        {"customerId": "customer-42", "tax": {"amountMinor": 0, "currency": "EUR"}, "lines": [
           {"variantId": "V-1", "quantity": 1, "unitPrice": {"amountMinor": 100, "currency": "EUR"}},
           {"variantId": "V-2", "quantity": 1, "unitPrice": {"amountMinor": 100, "currency": "USD"}}
         ]}
         """,
         """
-        {"customerId": "customer-42", "lines": [{"variantId": "V-1", "quantity": 2,
+        {"customerId": "customer-42", "tax": {"amountMinor": 0, "currency": "EUR"}, "lines": [{"variantId": "V-1", "quantity": 2,
                     "unitPrice": {"amountMinor": 9223372036854775807, "currency": "EUR"}}]}
         """,
         """
-        {"customerId": "customer-42", "lines": [
+        {"customerId": "customer-42", "tax": {"amountMinor": 0, "currency": "EUR"}, "lines": [
           {"variantId": "V-1", "quantity": 1,
            "unitPrice": {"amountMinor": 9223372036854775807, "currency": "EUR"}},
           {"variantId": "V-2", "quantity": 1, "unitPrice": {"amountMinor": 1, "currency": "EUR"}}
         ]}
         """,
         """
-        {"lines": [{"variantId": "V-1", "quantity": 1,
+        {"tax": {"amountMinor": 0, "currency": "EUR"}, "lines": [{"variantId": "V-1", "quantity": 1,
                     "unitPrice": {"amountMinor": 100, "currency": "EUR"}}]}
         """,
         """
-        {"customerId": " ", "lines": [{"variantId": "V-1", "quantity": 1,
+        {"customerId": " ", "tax": {"amountMinor": 0, "currency": "EUR"}, "lines": [{"variantId": "V-1", "quantity": 1,
                                        "unitPrice": {"amountMinor": 100, "currency": "EUR"}}]}
         """,
         """
-        {"customerId": 42, "lines": [{"variantId": "V-1", "quantity": 1,
+        {"customerId": 42, "tax": {"amountMinor": 0, "currency": "EUR"}, "lines": [{"variantId": "V-1", "quantity": 1,
                                       "unitPrice": {"amountMinor": 100, "currency": "EUR"}}]}
         """,
-        "{\"customerId\": \"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\", \"lines\": [{\"variantId\": \"V-1\", \"quantity\": 1, \"unitPrice\": {\"amountMinor\": 100, \"currency\": \"EUR\"}}]}",
+        "{\"customerId\": \"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\", \"tax\": {\"amountMinor\": 0, \"currency\": \"EUR\"}, \"lines\": [{\"variantId\": \"V-1\", \"quantity\": 1, \"unitPrice\": {\"amountMinor\": 100, \"currency\": \"EUR\"}}]}",
         "not json"
       })
   void anInvalidOrderIsABadRequest(String body) {

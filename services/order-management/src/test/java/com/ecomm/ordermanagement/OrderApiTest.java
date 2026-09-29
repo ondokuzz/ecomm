@@ -36,7 +36,10 @@ abstract class OrderApiTest {
   /** The Customer every test places Orders for, unless it names another. */
   static final String CUSTOMER = "customer-42";
 
-  /** Two Pixel 9s at 799.00 EUR and one pair of AirPods Pro at 149.50 EUR: 1747.50 EUR in all. */
+  /**
+   * Two Pixel 9s at 799.00 EUR and one pair of AirPods Pro at 149.50 EUR, with no discount and no
+   * tax: 1747.50 EUR in all.
+   */
   static String twoLineOrder(String customerId) {
     return """
         {"customerId": "%s", "lines": [
@@ -44,7 +47,8 @@ abstract class OrderApiTest {
            "unitPrice": {"amountMinor": 79900, "currency": "EUR"}},
           {"variantId": "AUD-AIRPODS-PRO-2", "quantity": 1,
            "unitPrice": {"amountMinor": 14950, "currency": "EUR"}}
-        ]}
+        ],
+         "tax": {"amountMinor": 0, "currency": "EUR"}}
         """
         .formatted(customerId);
   }
@@ -112,9 +116,18 @@ abstract class OrderApiTest {
 
   /** The parts of an Order a client reads, independent of the service's classes. */
   record OrderView(
-      String id, String status, List<LineView> lines, AmountView total, String placedAt) {}
+      String id,
+      String status,
+      List<LineView> lines,
+      AmountView subtotal,
+      DiscountView discount,
+      AmountView tax,
+      AmountView total,
+      String placedAt) {}
 
   record LineView(String variantId, int quantity, AmountView unitPrice) {}
+
+  record DiscountView(String couponCode, AmountView amount) {}
 
   record AmountView(long amountMinor, String currency) {}
 }
