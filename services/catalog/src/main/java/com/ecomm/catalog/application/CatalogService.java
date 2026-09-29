@@ -13,6 +13,7 @@ import com.ecomm.catalog.domain.Product;
 import com.ecomm.catalog.domain.ProductAlreadyExistsException;
 import com.ecomm.catalog.domain.ProductNotFoundException;
 import com.ecomm.catalog.domain.VariantIdTakenException;
+import com.ecomm.catalog.domain.VariantIdsDroppedException;
 import java.util.List;
 import java.util.Optional;
 
@@ -67,12 +68,20 @@ public class CatalogService
 
   @Override
   public Product update(Product product) {
-    product = validate(product);
-    requireOwnVariantIds(product);
-    if (!products.replace(product)) {
-      throw new ProductNotFoundException(product.sku());
+    var arranged = validate(product);
+    var sku = arranged.sku();
+    var current = products.find(sku).orElseThrow(() -> new ProductNotFoundException(sku));
+    // A Staff write between the read and the replace could slip a drop through; edits are rare.
+    var dropped =
+        current.variantIds().stream().filter(id -> arranged.variant(id).isEmpty()).toList();
+    if (!dropped.isEmpty()) {
+      throw new VariantIdsDroppedException(sku, dropped);
     }
-    return product;
+    requireOwnVariantIds(arranged);
+    if (!products.replace(arranged)) {
+      throw new ProductNotFoundException(sku);
+    }
+    return arranged;
   }
 
   @Override

@@ -14,7 +14,7 @@ and testing conventions apply here. Data lives in Couchbase ([ADR 0001](./docs/a
 | `GET /categories` | anyone | Categories ordered by slug, with name, Product count and attribute definitions |
 | `GET /categories/{slug}` | anyone | One Category, 404 when missing |
 | `POST /products` | Staff | 201, or 409 when the SKU or a Variant ID is taken |
-| `PUT /products/{sku}` | Staff | Replaces the Product and its Variants; 404 when missing, 409 when a Variant ID is another Product's |
+| `PUT /products/{sku}` | Staff | Replaces the Product and its Variants; 404 when missing, 409 when it drops one of its Variant IDs or takes another Product's |
 | `DELETE /products/{sku}` | Staff | 204; 404 when missing |
 | `POST /categories` | Staff | 201, or 409 when the slug is taken |
 | `PUT /categories/{slug}` | Staff | Replaces the name and definitions; 404 when missing |
@@ -53,8 +53,10 @@ Products: the new rules apply on each Product's next write.
 A Product is sold as one or more Variants, such as a phone's colour and storage combinations. Each
 Variant has:
 
-- an `id`, the Variant ID, unique across the whole Catalog and never changed (a Variant ID another
-  Product has is a 409);
+- an `id`, the Variant ID, unique across the whole Catalog (a Variant ID another Product has is a
+  409) and never changed: an update may add Variants, but one that leaves out or renames any of the
+  Product's current Variant IDs is a 409, since Carts, Orders and Stock go on naming them. A Variant
+  goes only when its whole Product is deleted, which frees its ID;
 - its `axisValues`, such as `{"color": "Obsidian", "storage": "256 GB"}`, returned in the order
   the Category defines its axes;
 - its `price`, such as `{"amountMinor": 89900, "currency": "EUR"}`, in one currency for every

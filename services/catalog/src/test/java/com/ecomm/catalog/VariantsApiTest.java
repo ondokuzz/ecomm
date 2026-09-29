@@ -221,12 +221,70 @@ class VariantsApiTest extends CatalogApiTest {
         .isCreated();
     replace(
             "TAB-THIRD",
-            tablet("TAB-THIRD", "[%s]".formatted(variant("TAB-SHARED", "Grey", "128 GB", 1))))
+            tablet(
+                "TAB-THIRD",
+                "[%s, %s]"
+                    .formatted(
+                        variant("TAB-THIRD-1", "Grey", "128 GB", 100),
+                        variant("TAB-SHARED", "Pink", "128 GB", 1))))
         .expectStatus()
         .isEqualTo(409);
     replace(
             "TAB-FIRST",
             tablet("TAB-FIRST", "[%s]".formatted(variant("TAB-SHARED", "Grey", "128 GB", 1))))
+        .expectStatus()
+        .isOk();
+  }
+
+  @Test
+  void anUpdateMayAddVariantsButNeverDropOrRenameOne() {
+    create(
+            tablet(
+                "TAB-KEEP",
+                "[%s, %s]"
+                    .formatted(
+                        variant("TAB-KEEP-GREY", "Grey", "128 GB", 100),
+                        variant("TAB-KEEP-PINK", "Pink", "128 GB", 100))))
+        .expectStatus()
+        .isCreated();
+
+    // Renaming TAB-KEEP-PINK drops its ID just as leaving it out does.
+    replace(
+            "TAB-KEEP",
+            tablet(
+                "TAB-KEEP",
+                "[%s, %s]"
+                    .formatted(
+                        variant("TAB-KEEP-GREY", "Grey", "128 GB", 100),
+                        variant("TAB-KEEP-ROSE", "Pink", "128 GB", 100))))
+        .expectStatus()
+        .isEqualTo(409)
+        .expectHeader()
+        .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+        .expectBody()
+        .jsonPath("$.detail")
+        .value(detail -> assertThat((String) detail).contains("TAB-KEEP-PINK"));
+    replace(
+            "TAB-KEEP",
+            tablet("TAB-KEEP", "[%s]".formatted(variant("TAB-KEEP-GREY", "Grey", "128 GB", 100))))
+        .expectStatus()
+        .isEqualTo(409);
+    http.get()
+        .uri("/products/TAB-KEEP")
+        .exchange()
+        .expectBody()
+        .jsonPath("$.variants[*].id")
+        .isEqualTo(List.of("TAB-KEEP-GREY", "TAB-KEEP-PINK"));
+
+    replace(
+            "TAB-KEEP",
+            tablet(
+                "TAB-KEEP",
+                "[%s, %s, %s]"
+                    .formatted(
+                        variant("TAB-KEEP-GREY", "Grey", "128 GB", 90),
+                        variant("TAB-KEEP-PINK", "Pink", "128 GB", 100),
+                        variant("TAB-KEEP-PINK-256", "Pink", "256 GB", 120))))
         .expectStatus()
         .isOk();
   }

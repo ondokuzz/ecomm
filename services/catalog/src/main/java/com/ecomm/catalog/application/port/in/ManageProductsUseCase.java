@@ -14,8 +14,10 @@ public interface ManageProductsUseCase {
   Product create(Product product);
 
   /**
-   * Throws {@code ProductNotFoundException} when there is no Product with the SKU, and {@code
-   * VariantIdTakenException} and {@code InvalidProductException} as {@link #create} does.
+   * Throws {@code ProductNotFoundException} when there is no Product with the SKU, {@code
+   * VariantIdsDroppedException} when the Product leaves out (or renames) any of its current Variant
+   * IDs, and {@code VariantIdTakenException} and {@code InvalidProductException} as {@link #create}
+   * does. New Variants may be added.
    */
   Product update(Product product);
 

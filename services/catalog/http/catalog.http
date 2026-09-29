@@ -120,6 +120,21 @@ Content-Type: application/json
   ]
 }
 
+### Dropping or renaming one of its Variant IDs on update: 409
+PUT {{catalog}}/products/PHN-DEMO-PHONE
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{
+  "name": "Demo Phone",
+  "category": "phones",
+  "attributes": {"brand": "Demo", "screen": "6.1 in"},
+  "variants": [
+    {"id": "PHN-DEMO-PHONE", "axisValues": {"color": "Black", "storage": "128 GB"},
+     "price": {"amountMinor": 49900, "currency": "EUR"}}
+  ]
+}
+
 ### Staff delete the demo phone: 204
 DELETE {{catalog}}/products/PHN-DEMO-PHONE
 Authorization: Bearer {{staffToken}}
