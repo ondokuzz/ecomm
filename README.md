@@ -46,6 +46,27 @@ Mongo are behind the `full` profile until Sprint 3 (`docker compose --profile fu
 Each Spring service is capped at 384 MB, with 60% of it for the heap, and Keycloak at 512 MB, so
 the default stack fits in about 8 GB of Docker memory.
 
+## CI
+
+[`.github/workflows/ci.yml`](./.github/workflows/ci.yml) checks every push and pull request with
+four jobs:
+
+| Job | What it checks |
+|---|---|
+| `backend` | `./gradlew check` on JDK 21: Spotless, unit and Testcontainers tests, and `HexagonalRules` |
+| `frontend (<app>)` | `npm ci`, `lint`, `typecheck`, `test` and `build` for each app in its matrix; today the Storefront |
+| `images` | `docker compose build` of every service and frontend image. On a push to `main` it also pushes them to GHCR as `ghcr.io/ondokuzz/ecomm/<service>`, tagged with the commit SHA and `main` |
+| `e2e` | `make up`, then the Playwright suite in Chromium. When it fails, the `e2e-failure` artifact keeps the Playwright report, traces and `docker compose logs` |
+
+A new frontend app joins the `frontend` job by adding its directory name to `matrix.app`, and its
+`frontend (<app>)` check to the required checks below.
+
+Making the checks block a merge is a manual step, done once, since a workflow cannot require
+itself. In the repository's **Settings → Branches**, add a branch protection rule (or ruleset) for
+`main`, turn on **Require status checks to pass before merging**, and choose `backend`,
+`frontend (storefront)`, `images` and `e2e`. A check appears in that list only after it has run
+once. On a private repository, branch protection needs a paid GitHub plan.
+
 ## Layout
 
 - `services/` — one directory per bounded context (see `CONTEXT.md` for the domain terms, `docs/adr/` for why each is shaped the way it is)

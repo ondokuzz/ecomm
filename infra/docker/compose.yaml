@@ -3,6 +3,9 @@
 # Couchbase is the exception: its SDK bootstraps from the ports the cluster advertises, so they
 # stay fixed.
 #
+# Built images are named ecomm/<service>:latest; CI sets IMAGE_PREFIX and IMAGE_TAG to build them
+# as ghcr.io/<owner>/<repo>/<service>:<commit SHA>.
+#
 #   docker compose up -d                   # default stack
 #   docker compose --profile full up -d    # plus Kafka and Mongo (unused until Sprint 3)
 
@@ -122,7 +125,7 @@ services:
     build:
       context: ../..
       dockerfile: services/catalog/Dockerfile
-    image: ecomm/catalog
+    image: ${IMAGE_PREFIX:-ecomm}/catalog:${IMAGE_TAG:-latest}
     ports: ["${CATALOG_PORT:-8081}:8080"]
     depends_on:
       couchbase-init: { condition: service_completed_successfully }
@@ -133,7 +136,7 @@ services:
     build:
       context: ../..
       dockerfile: services/inventory/Dockerfile
-    image: ecomm/inventory
+    image: ${IMAGE_PREFIX:-ecomm}/inventory:${IMAGE_TAG:-latest}
     ports: ["${INVENTORY_PORT:-8082}:8080"]
     depends_on:
       postgres: { condition: service_healthy }
@@ -144,7 +147,7 @@ services:
     build:
       context: ../..
       dockerfile: services/cart/Dockerfile
-    image: ecomm/cart
+    image: ${IMAGE_PREFIX:-ecomm}/cart:${IMAGE_TAG:-latest}
     ports: ["${CART_PORT:-8083}:8080"]
     depends_on:
       redis: { condition: service_healthy }
@@ -155,7 +158,7 @@ services:
     build:
       context: ../..
       dockerfile: services/payment/Dockerfile
-    image: ecomm/payment
+    image: ${IMAGE_PREFIX:-ecomm}/payment:${IMAGE_TAG:-latest}
     ports: ["${PAYMENT_PORT:-8084}:8080"]
     depends_on:
       postgres: { condition: service_healthy }
@@ -166,7 +169,7 @@ services:
     build:
       context: ../..
       dockerfile: services/order-management/Dockerfile
-    image: ecomm/order-management
+    image: ${IMAGE_PREFIX:-ecomm}/order-management:${IMAGE_TAG:-latest}
     ports: ["${ORDER_MANAGEMENT_PORT:-8085}:8080"]
     depends_on:
       postgres: { condition: service_healthy }
@@ -177,7 +180,7 @@ services:
     build:
       context: ../..
       dockerfile: services/checkout-pricing/Dockerfile
-    image: ecomm/checkout-pricing
+    image: ${IMAGE_PREFIX:-ecomm}/checkout-pricing:${IMAGE_TAG:-latest}
     ports: ["${CHECKOUT_PRICING_PORT:-8086}:8080"]
     environment:
       # Checkout's own client in the ecomm realm (Identity & Access ADR 0002); dev-only, like the
@@ -194,7 +197,7 @@ services:
   storefront:
     build:
       context: ../../frontend/storefront
-    image: ecomm/storefront
+    image: ${IMAGE_PREFIX:-ecomm}/storefront:${IMAGE_TAG:-latest}
     # Fixed: http://localhost:8080 is one of the storefront client's redirect origins in the realm
     # file, so login breaks on any other port.
     ports: ["8080:8080"]
