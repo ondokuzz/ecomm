@@ -4,6 +4,7 @@ import com.ecomm.checkoutpricing.domain.CheckoutResult;
 import com.ecomm.checkoutpricing.domain.CheckoutSession;
 import com.ecomm.checkoutpricing.domain.CheckoutSessionExpiredException;
 import com.ecomm.checkoutpricing.domain.CheckoutSessionNotFoundException;
+import com.ecomm.checkoutpricing.domain.CouponNotApplicableException;
 import com.ecomm.checkoutpricing.domain.PaymentDeclinedException;
 import java.util.Optional;
 
@@ -20,10 +21,29 @@ public interface CheckoutUseCase {
   Optional<CheckoutSession> current(String customerId);
 
   /**
-   * Turns the Customer's Checkout Session into a paid Order at its captured Prices, paid with
-   * {@code paymentMethod}, clears the Cart and ends the session. If a step fails once the Order
-   * exists, a declined payment included, the Order is cancelled and the Cart and session are left
-   * as they were, so the session can be paid again.
+   * Applies the Coupon {@code couponCode} to the Customer's Checkout Session, in place of any it
+   * had, and works out its tax and total again.
+   *
+   * @throws CheckoutSessionNotFoundException when the Customer has no session with this ID
+   * @throws CheckoutSessionExpiredException when it has expired
+   * @throws CouponNotApplicableException when the Coupon doesn't apply; the session is unchanged
+   */
+  CheckoutSession applyCoupon(String customerId, String sessionId, String couponCode);
+
+  /**
+   * Takes the Coupon, if any, off the Customer's Checkout Session, and works out its tax and total
+   * again.
+   *
+   * @throws CheckoutSessionNotFoundException when the Customer has no session with this ID
+   * @throws CheckoutSessionExpiredException when it has expired
+   */
+  CheckoutSession removeCoupon(String customerId, String sessionId);
+
+  /**
+   * Turns the Customer's Checkout Session into a paid Order at its captured Prices, less its
+   * Discount, paid with {@code paymentMethod}, clears the Cart and ends the session. If a step
+   * fails once the Order exists, a declined payment included, the Order is cancelled and the Cart
+   * and session are left as they were, so the session can be paid again.
    *
    * @throws CheckoutSessionNotFoundException when the Customer has no session with this ID
    * @throws CheckoutSessionExpiredException when it has expired; nothing happens either way

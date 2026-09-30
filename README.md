@@ -15,17 +15,17 @@ The first build takes several minutes. Then open http://localhost:8080, where yo
 1. browse the 20 seeded Products by category;
 2. sign in as `demo@ecomm.local` / `demo`, or register a new Customer on Keycloak's page;
 3. add Products to the Cart and go to checkout, which holds them and their Prices for 15 minutes,
-   then pick a test card and press **Pay**. The payment is mocked: **Approve** pays, while
+   enter the Coupon `WELCOME10` for 10% off, then pick a test card and press **Pay**. The payment is mocked: **Approve** pays, while
    **Decline**, **Insufficient funds** and **Gateway error** each show why paying failed, and you
    can pay again with another card while the hold lasts;
-4. see the Order confirmation with its Order Status, **Paid**, and find the Order under
-   **My Orders**.
+4. see the Order confirmation with its Order Status, **Paid**, and its discount, and find the Order
+   under **My Orders**.
 
 The smoke test walks the same path in Chromium against the running stack. As the demo Customer it
 adds two Products, checks out with the approving test card, expects `PAID` on the confirmation page and checks through the
 Inventory API that the Checkout Session reserved their Stock and paying took it off on-hand. It
 also pays with a declining card, sees the decline, then pays the same session with the approving
-one, and registers a new Customer:
+one, applies `WELCOME10` and sees its discount on the `PAID` Order, and registers a new Customer:
 
 ```sh
 cd frontend/storefront
@@ -37,16 +37,19 @@ npm run test:e2e
 |---|---|
 | `make up` | Build and start the stack, and wait until it is healthy |
 | `make down` | Stop the stack, keeping its data |
-| `make seed-reset` | Put the seed Categories, Products and Stock back and drop every Cart, Order and Payment; registered Customers stay |
+| `make seed-reset` | Put the seed Categories, Products, Stock and Coupons back and drop every Cart, Reservation, Order and Payment; registered Customers stay |
 
 Every checkout takes Stock, so after many smoke-test runs `make seed-reset` refills it. A stack
 first seeded before Catalog had multi-Variant Products needs it once too, since the seed only loads
-into an empty Catalog ([Catalog README](./services/catalog/README.md#seed-data)). To wipe
+into an empty Catalog ([Catalog README](./services/catalog/README.md#seed-data)). `make up` creates
+any service's Postgres database that is missing, so a stack from before Promotions gains its
+`promotions` database, and `WELCOME10`, without a reset. To wipe
 everything, Keycloak's users included, run `docker compose down -v`.
 
 The browser reaches the services only through the [API gateway](./platform/api-gateway/README.md),
 on 8000, which the Storefront's nginx sends `/api/` to. Each service also publishes a host port:
-Keycloak on 8180 (`admin` / `admin`), Catalog to Checkout on 8081–8086 (see each service's README).
+Keycloak on 8180 (`admin` / `admin`), Catalog to Checkout on 8081–8086 and Promotions on 8087 (see
+each service's README).
 Those bypass the gateway, for development only. Override one that is already taken, e.g.
 `POSTGRES_PORT=5433 make up`; Couchbase's ports and the Storefront's 8080 are fixed. Kafka and
 Mongo are behind the `full` profile until Sprint 3 (`docker compose --profile full up -d`).

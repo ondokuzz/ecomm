@@ -38,7 +38,8 @@ abstract class GatewayApiTest {
   static void infrastructure(DynamicPropertyRegistry registry) {
     FakeKeycloak.registerWith(registry);
     for (var service :
-        List.of("catalog", "inventory", "cart", "checkout-pricing", "order-management")) {
+        List.of(
+            "catalog", "inventory", "cart", "checkout-pricing", "order-management", "promotions")) {
       registry.add("ecomm.gateway.services." + service + ".uri", DOWNSTREAM::baseUrl);
     }
   }

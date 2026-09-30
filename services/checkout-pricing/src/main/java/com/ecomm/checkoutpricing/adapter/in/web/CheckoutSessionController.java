@@ -5,6 +5,7 @@ import com.ecomm.checkoutpricing.application.port.in.DownstreamFailureException;
 import com.ecomm.checkoutpricing.application.port.in.ServiceTokenUnavailableException;
 import com.ecomm.checkoutpricing.domain.CheckoutSessionExpiredException;
 import com.ecomm.checkoutpricing.domain.CheckoutSessionNotFoundException;
+import com.ecomm.checkoutpricing.domain.CouponNotApplicableException;
 import com.ecomm.checkoutpricing.domain.EmptyCartException;
 import com.ecomm.checkoutpricing.domain.MixedCurrencyException;
 import com.ecomm.checkoutpricing.domain.OutOfStockException;
@@ -18,17 +19,20 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The calling Customer checks out their own Cart, in two steps: a Checkout Session holds it, then
- * paying the session buys it. Needs a {@code CUSTOMER} token, which Checkout also forwards to Cart.
+ * The calling Customer checks out their own Cart, in two steps: a Checkout Session holds it, and
+ * may take a Coupon, then paying the session buys it. Needs a {@code CUSTOMER} token, which
+ * Checkout also forwards to Cart.
  */
 @RestController
 @RequestMapping("/checkout/sessions")
@@ -62,6 +66,32 @@ class CheckoutSessionController {
   }
 
   /**
+   * 200 with the session, the Coupon applied in place of any it had; 422 with Promotions' {@code
+   * reason} when the Coupon doesn't apply, leaving the session as it was.
+   */
+  @PutMapping("/{id}/coupon")
+  SessionResponse applyCoupon(
+      @PathVariable String id,
+      CurrentCustomer customer,
+      @RequestBody(required = false) CouponRequest request) {
+    var session = checkout.applyCoupon(customer.id(), id, CouponRequest.codeOf(request));
+    log.info(
+        "Applied Coupon {} to Checkout Session {}, taking {} off",
+        session.discount().couponCode(),
+        id,
+        session.discount().amount());
+    return SessionResponse.of(session);
+  }
+
+  /** 200 with the session, without a Coupon. */
+  @DeleteMapping("/{id}/coupon")
+  SessionResponse removeCoupon(@PathVariable String id, CurrentCustomer customer) {
+    var session = checkout.removeCoupon(customer.id(), id);
+    log.info("Removed the Coupon from Checkout Session {}", id);
+    return SessionResponse.of(session);
+  }
+
+  /**
    * 200 with the paid Order's ID and Order Status; 402 when the payment is declined, 410 once the
    * session has expired. The body is optional here only so that a caller who isn't a Customer gets
    * its 403 before a missing body gets a 400.
@@ -89,6 +119,20 @@ class CheckoutSessionController {
   @ExceptionHandler(InvalidPayRequestException.class)
   ProblemDetail invalidPayRequest(InvalidPayRequestException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+  }
+
+  @ExceptionHandler(InvalidCouponRequestException.class)
+  ProblemDetail invalidCouponRequest(InvalidCouponRequestException e) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+  }
+
+  @ExceptionHandler(CouponNotApplicableException.class)
+  ProblemDetail couponNotApplicable(CouponNotApplicableException e) {
+    log.info("Coupon rejected: {}", e.reason());
+    var problem =
+        ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, e.getMessage());
+    problem.setProperty("reason", e.reason());
+    return problem;
   }
 
   @ExceptionHandler(PaymentDeclinedException.class)

@@ -19,10 +19,10 @@ import org.springframework.web.client.RestClient;
  * The {@link RestClient}s behind the outbound ports.
  *
  * <p>Cart calls carry the token of the Customer making the current request, and Catalog reads are
- * public. Inventory, Order Management and Payment get clients that carry Checkout's own token from
- * the {@code checkout} client-credentials registration (Identity & Access ADR 0002). That token is
- * cached in memory, replaced once it has less than a minute left, and replaced on a 401 before the
- * one retry.
+ * public. Inventory, Order Management, Payment and Promotions get clients that carry Checkout's own
+ * token from the {@code checkout} client-credentials registration (Identity & Access ADR 0002).
+ * That token is cached in memory, replaced once it has less than a minute left, and replaced on a
+ * 401 before the one retry.
  */
 @Configuration
 @EnableConfigurationProperties(DownstreamProperties.class)
@@ -90,6 +90,15 @@ class HttpClientsConfiguration {
       @Qualifier("checkoutAuthorizedClientManager") OAuth2AuthorizedClientManager manager,
       OAuth2AuthorizedClientService authorizedClients) {
     return internal(builder, urls.paymentUrl(), manager, authorizedClients);
+  }
+
+  @Bean
+  RestClient promotionsRestClient(
+      RestClient.Builder builder,
+      DownstreamProperties urls,
+      @Qualifier("checkoutAuthorizedClientManager") OAuth2AuthorizedClientManager manager,
+      OAuth2AuthorizedClientService authorizedClients) {
+    return internal(builder, urls.promotionsUrl(), manager, authorizedClients);
   }
 
   /** A client that sends Checkout's token, retrying once with a fresh one on a 401. */

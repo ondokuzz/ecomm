@@ -7,9 +7,18 @@ import java.util.List;
 
 /**
  * A Checkout Session as the Customer sees it; its Reservation stays between Checkout and Inventory.
+ * {@code discount} is null when no Coupon is applied.
  */
 record SessionResponse(
-    String id, List<Line> lines, Amount subtotal, Amount tax, Amount total, Instant expiresAt) {
+    String id,
+    List<Line> lines,
+    Amount subtotal,
+    Discount discount,
+    Amount tax,
+    Amount total,
+    Instant expiresAt) {
+
+  record Discount(String couponCode, Amount amount) {}
 
   record Line(String variantId, int quantity, Amount unitPrice, Amount lineTotal) {}
 
@@ -33,6 +42,9 @@ record SessionResponse(
                         Amount.of(l.lineTotal())))
             .toList(),
         Amount.of(session.subtotal()),
+        session.discount() == null
+            ? null
+            : new Discount(session.discount().couponCode(), Amount.of(session.discount().amount())),
         Amount.of(session.tax()),
         Amount.of(session.total()),
         session.expiresAt());

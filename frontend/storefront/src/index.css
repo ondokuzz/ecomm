@@ -1612,6 +1612,59 @@ main {
   font-weight: 650;
 }
 
+/* Coupon field, in the checkout's order summary */
+
+.coupon {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: var(--space-3) 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-line);
+}
+.coupon-label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.coupon-row {
+  display: flex;
+  gap: var(--space-2);
+}
+.coupon-row .input {
+  flex: 1;
+  min-width: 0;
+  text-transform: uppercase;
+}
+.coupon-error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  margin: 0;
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+}
+.coupon-error svg {
+  flex: none;
+  margin-top: 0.15em;
+}
+.coupon-applied {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  color: var(--color-success);
+}
+.coupon-applied > span {
+  flex: 1;
+  color: var(--color-fg);
+}
+.coupon-code {
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+}
+.coupon-applied .alert {
+  flex-basis: 100%;
+}
+
 /* Checkout steps: Cart → Payment → Done */
 
 .steps {

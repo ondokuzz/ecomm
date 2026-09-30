@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from 'react-oidc-context'
 import type { Cart } from '../domain/cart'
 import { type CheckoutSession, sessionHoldsCart } from '../domain/checkout'
+import { type CouponRejection, couponRejection } from '../domain/coupon'
 import type { CheckoutResult } from '../domain/order'
 import { type PaymentFailure, paymentFailure } from '../domain/payment'
 import { cartKey } from './cart'
@@ -45,6 +46,29 @@ async function currentSession(token: string | undefined): Promise<CheckoutSessio
 }
 
 /**
+ * Applies a Coupon to a Checkout Session, or takes it off with `code` null. Checkout works the
+ * discount, tax and total out again, and the session it answers replaces the one shown.
+ */
+export function useSessionCoupon() {
+  const token = useAuth().user?.access_token
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ sessionId, code }: { sessionId: string; code: string | null }) =>
+      api<CheckoutSession>('checkout-pricing', `/checkout/sessions/${encodeURIComponent(sessionId)}/coupon`, {
+        method: code === null ? 'DELETE' : 'PUT',
+        token,
+        body: code === null ? undefined : { code },
+      }),
+    onSuccess: (session) => queryClient.setQueriesData({ queryKey: sessionKey }, session),
+  })
+}
+
+/** Why a Coupon doesn't apply, when that is why applying it failed. */
+export function couponRejectionOf(error: unknown): CouponRejection | undefined {
+  return error instanceof ApiError ? couponRejection(error.status, error.problem) : undefined
+}
+
+/**
  * Pays a Checkout Session with a payment method: Checkout places the Order, authorizes payment and
  * takes the held Stock. A declined or failed payment cancels that Order but keeps the session, so it
  * can be paid again.
@@ -72,7 +96,7 @@ export function payFailureOf(error: unknown): PaymentFailure | undefined {
   return error instanceof ApiError ? paymentFailure(error.status, error.problem) : undefined
 }
 
-/** Whether paying failed because the session is over: expired (410), or gone altogether (404). */
+/** Whether paying, or changing its Coupon, failed because the session is over: expired (410), or gone altogether (404). */
 export function isSessionOver(error: unknown): boolean {
   return error instanceof ApiError && (error.status === 410 || error.status === 404)
 }

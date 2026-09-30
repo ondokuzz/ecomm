@@ -57,7 +57,7 @@ How a Customer turns their Cart into an Order, in two steps. Starting it opens a
 _Avoid_: Purchase, Order placement
 
 **Checkout Session**:
-A Customer's Cart held for checkout for 15 minutes: its lines at the Prices captured when it started, their tax, and a Reservation of their Stock. Paying it honours those Prices even if Catalog has changed them since; paying one that has expired does nothing. A Customer has at most one: starting checkout again replaces it and releases its Reservation. Checkout owns it.
+A Customer's Cart held for checkout for 15 minutes: its lines at the Prices captured when it started, the Discount of the one Coupon applied to it, if any, their tax, and a Reservation of their Stock. Paying it honours those Prices even if Catalog has changed them since; paying one that has expired does nothing. A Customer has at most one: starting checkout again replaces it and releases its Reservation. Checkout owns it.
 _Avoid_: Checkout (the whole two-step process), Hold, Basket
 
 **Reservation**:
@@ -69,11 +69,11 @@ A Customer's confirmed intent to purchase one or more Variants, tracked through 
 _Avoid_: Purchase, Transaction
 
 **Coupon**:
-A code a Customer enters at checkout for a Discount, under a Promotions campaign's rules. An Order records the code of the Coupon behind its Discount.
+A code a Customer enters at checkout for a Discount, under a Promotions campaign's rules. It takes a percentage (1 to 100) or a fixed amount of Money off, and applies only while it is active and within its validity window, to a subtotal of at least its optional minimum, in the same currency as its amount and minimum. Its code is matched whatever the case. Staff manage Coupons, which Promotions owns; a Checkout Session holds at most one, and an Order records the code of the Coupon behind its Discount. When one doesn't apply, the reason is one of `unknown`, `inactive`, `notYetValid`, `expired`, `belowMinimum` or `currencyMismatch`.
 _Avoid_: Voucher, Promo code
 
 **Discount**:
-The amount a Coupon took off an Order, recorded on it with the Coupon's code. It can bring the total to zero, but not below.
+The amount a Coupon takes off a Checkout Session's subtotal, and so off the Order paid from it, recorded on both with the Coupon's code. Promotions works it out when the Coupon is applied: a percentage is rounded down to the currency's minor unit, and it is never more than the subtotal, so it can bring the total to zero, but not below. Tax is worked out on the subtotal less the Discount.
 _Avoid_: Rebate, Markdown
 
 **Tax**:

@@ -1,6 +1,6 @@
 import type { Cart, CartLine } from './cart'
 import type { Money } from './money'
-import type { OrderSummaryRow } from './order'
+import { type Discount, type OrderSummaryRow, summaryRows } from './order'
 
 /** One line of a Checkout Session, at the Price captured when it started. */
 export interface CheckoutSessionLine {
@@ -12,14 +12,16 @@ export interface CheckoutSessionLine {
 
 /**
  * The Customer's Cart held for checkout: its lines at the Prices captured when it started, and its
- * Stock reserved, until `expiresAt`. Paying it buys it at those Prices.
+ * Stock reserved, until `expiresAt`. Paying it buys it at those Prices, less the Discount of the
+ * Coupon applied to it, if any.
  */
 export interface CheckoutSession {
   id: string
   lines: CheckoutSessionLine[]
   subtotal: Money
+  discount: Discount | null
   tax: Money
-  /** The subtotal plus the tax. */
+  /** The subtotal, less the discount, plus the tax. */
   total: Money
   /** An ISO 8601 instant. */
   expiresAt: string
@@ -33,13 +35,9 @@ export function sessionCountdown(expiresAt: string, now: number): { expired: boo
   return { expired: secondsLeft === 0, label: `${minutes}:${String(seconds).padStart(2, '0')}` }
 }
 
-/** What a Checkout Session comes to: subtotal, tax (even when zero) and total. */
+/** What a Checkout Session comes to: subtotal, any discount, tax (even when zero) and total. */
 export function sessionSummaryRows(session: CheckoutSession): OrderSummaryRow[] {
-  return [
-    { label: 'Subtotal', amount: session.subtotal },
-    { label: 'Tax', amount: session.tax },
-    { label: 'Total', amount: session.total, isTotal: true },
-  ]
+  return summaryRows(session)
 }
 
 /** Whether a Checkout Session holds exactly this Cart; one changed since would buy the wrong things. */

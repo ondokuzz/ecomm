@@ -23,6 +23,10 @@ ecomm:
       order-management:
         uri: http://localhost:8085
         internal: [POST /orders, PATCH /orders/*/status]
+      promotions:
+        uri: http://localhost:8087
+        # Only Checkout evaluates Coupons, so nobody can probe codes from outside a checkout.
+        internal: [/discounts/**]
 
 # Plain-text logs name the Correlation ID too, so the access log reads the same outside Docker.
 logging:

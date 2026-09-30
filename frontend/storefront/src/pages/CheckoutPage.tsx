@@ -1,8 +1,15 @@
-import { useEffect, useId, useState } from 'react'
+import { type FormEvent, type ReactNode, useEffect, useId, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { useCart } from '../api/cart'
 import { useVariants } from '../api/catalog'
-import { isSessionOver, payFailureOf, useCheckoutSession, usePayCheckoutSession } from '../api/checkout'
+import {
+  couponRejectionOf,
+  isSessionOver,
+  payFailureOf,
+  useCheckoutSession,
+  usePayCheckoutSession,
+  useSessionCoupon,
+} from '../api/checkout'
 import { ApiError } from '../api/http'
 import { CheckoutSteps } from '../components/CheckoutSteps'
 import { EmptyCart } from '../components/EmptyCart'
@@ -11,6 +18,7 @@ import { EmptyState, ErrorMessage, ErrorState, Loading } from '../components/Sta
 import { Button, ButtonLink } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { Icon } from '../components/ui/Icon'
+import { Input } from '../components/ui/Input'
 import { type CartLine, itemCountLabel } from '../domain/cart'
 import { variantName } from '../domain/catalog'
 import { type CheckoutSession, checkoutProblem, sessionCountdown, sessionSummaryRows } from '../domain/checkout'
@@ -28,12 +36,14 @@ export function CheckoutPage() {
   const [attempt, setAttempt] = useState(0)
   const session = useCheckoutSession(cart.data, attempt)
   const pay = usePayCheckoutSession()
+  const coupon = useSessionCoupon()
   const [card, setCard] = useState(defaultTestCard)
   const now = useNow()
   const navigate = useNavigate()
 
   const startAgain = () => {
     pay.reset()
+    coupon.reset()
     setAttempt((n) => n + 1)
   }
 
@@ -44,7 +54,7 @@ export function CheckoutPage() {
   if (session.error) return <StartError error={session.error} retrying={session.isFetching} onRetry={startAgain} />
 
   const countdown = sessionCountdown(session.data.expiresAt, now)
-  if (countdown.expired || isSessionOver(pay.error)) return <SessionExpired onStartAgain={startAgain} />
+  if (countdown.expired || isSessionOver(pay.error) || isSessionOver(coupon.error)) return <SessionExpired onStartAgain={startAgain} />
 
   const payNow = () =>
     pay.mutate(
@@ -83,12 +93,20 @@ export function CheckoutPage() {
               className="pay-button"
               onClick={payNow}
               loading={pay.isPending || pay.isSuccess}
+              disabled={coupon.isPending}
             >
               {pay.isPending ? 'Paying…' : `Pay ${formatMoney(session.data.total)}`}
             </Button>
           </Card>
         </div>
-        <SessionSummary session={session.data} />
+        <SessionSummary session={session.data}>
+          <CouponField
+            session={session.data}
+            coupon={coupon}
+            disabled={pay.isPending || pay.isSuccess}
+            onChange={pay.reset}
+          />
+        </SessionSummary>
       </div>
     </section>
   )
@@ -124,8 +142,8 @@ function HeldUntilNotice({ expiresAt, left }: { expiresAt: string; left: string 
   )
 }
 
-/** What the session comes to, with its lines at their held Prices. */
-function SessionSummary({ session }: { session: CheckoutSession }) {
+/** What the session comes to, with its lines at their held Prices, and `children` below the breakdown. */
+function SessionSummary({ session, children }: { session: CheckoutSession; children?: ReactNode }) {
   const headingId = useId()
   const variants = useVariants(session.lines.map((line) => line.variantId))
   const lines = session.lines.map((line) => {
@@ -148,10 +166,99 @@ function SessionSummary({ session }: { session: CheckoutSession }) {
           </div>
         ))}
       </dl>
+      {children}
       <Link to="/cart" className="order-summary-edit">
         Edit cart
       </Link>
     </Card>
+  )
+}
+
+/**
+ * The Coupon field: a code to apply, or the one applied with a way to remove it. A code that doesn't
+ * apply says why, next to the field, and leaves the session as it was.
+ */
+function CouponField({
+  session,
+  coupon,
+  disabled,
+  onChange,
+}: {
+  session: CheckoutSession
+  coupon: ReturnType<typeof useSessionCoupon>
+  disabled: boolean
+  /** Called before the Coupon changes, since the amount to pay does too. */
+  onChange: () => void
+}) {
+  const [code, setCode] = useState('')
+  const inputId = useId()
+  const errorId = useId()
+  const change = (next: string | null) => {
+    onChange()
+    coupon.mutate({ sessionId: session.id, code: next }, { onSuccess: () => setCode('') })
+  }
+  const rejection = couponRejectionOf(coupon.error)
+  const otherError = coupon.error && !rejection && !isSessionOver(coupon.error) ? coupon.error : undefined
+
+  if (session.discount) {
+    return (
+      <div className="coupon coupon-applied">
+        <Icon name="check" size={18} />
+        <span>
+          <strong className="coupon-code">{session.discount.couponCode}</strong> applied
+        </span>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => change(null)}
+          loading={coupon.isPending}
+          disabled={disabled}
+          aria-label={`Remove coupon ${session.discount.couponCode}`}
+        >
+          Remove
+        </Button>
+        {otherError && <ErrorMessage error={otherError} />}
+      </div>
+    )
+  }
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault()
+    if (code.trim()) change(code.trim())
+  }
+  return (
+    <form className="coupon" onSubmit={submit} noValidate>
+      <label htmlFor={inputId} className="coupon-label">
+        Coupon code
+      </label>
+      <div className="coupon-row">
+        <Input
+          id={inputId}
+          value={code}
+          onChange={(event) => {
+            setCode(event.target.value)
+            coupon.reset()
+          }}
+          autoComplete="off"
+          autoCapitalize="characters"
+          spellCheck={false}
+          maxLength={64}
+          disabled={disabled || coupon.isPending}
+          aria-invalid={rejection ? true : undefined}
+          aria-describedby={rejection ? errorId : undefined}
+        />
+        <Button type="submit" loading={coupon.isPending} disabled={disabled || !code.trim()}>
+          Apply
+        </Button>
+      </div>
+      {rejection && (
+        <p id={errorId} className="coupon-error" role="alert">
+          <Icon name="alert" size={16} />
+          {rejection.message}
+        </p>
+      )}
+      {otherError && <ErrorMessage error={otherError} />}
+    </form>
   )
 }
 

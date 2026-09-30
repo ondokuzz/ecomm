@@ -39,12 +39,26 @@ services:
     ports: ["${POSTGRES_PORT:-5432}:5432"]
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - ./postgres-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h localhost -U ecomm -d keycloak"]
+      test: ["CMD-SHELL", "pg_isready -h localhost -U ecomm -d postgres"]
       interval: 5s
       timeout: 3s
       retries: 20
+
+  # Creates each service's database that doesn't exist yet, then exits; see the script.
+  postgres-databases:
+    image: postgres:16
+    entrypoint: ["/init/postgres-databases.sh"]
+    environment:
+      PGHOST: postgres
+      PGUSER: ecomm
+      PGPASSWORD: ecomm
+      PGDATABASE: postgres
+    volumes:
+      - ./postgres-databases.sh:/init/postgres-databases.sh:ro
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
 
   redis:
     image: redis:7
@@ -80,7 +94,7 @@ services:
       # The ecomm realm's login theme. start-dev doesn't cache themes, so edits show on reload.
       - ../../services/identity-access/themes/ecomm:/opt/keycloak/themes/ecomm:ro
     depends_on:
-      postgres: { condition: service_healthy }
+      postgres-databases: { condition: service_completed_successfully }
     healthcheck:
       # The image has no curl; talk HTTP to the management port over bash's /dev/tcp.
       test:
@@ -139,7 +153,7 @@ services:
     image: ${IMAGE_PREFIX:-ecomm}/inventory:${IMAGE_TAG:-latest}
     ports: ["${INVENTORY_PORT:-8082}:8080"]
     depends_on:
-      postgres: { condition: service_healthy }
+      postgres-databases: { condition: service_completed_successfully }
       keycloak: { condition: service_healthy }
 
   cart:
@@ -161,7 +175,7 @@ services:
     image: ${IMAGE_PREFIX:-ecomm}/payment:${IMAGE_TAG:-latest}
     ports: ["${PAYMENT_PORT:-8084}:8080"]
     depends_on:
-      postgres: { condition: service_healthy }
+      postgres-databases: { condition: service_completed_successfully }
       keycloak: { condition: service_healthy }
 
   order-management:
@@ -172,7 +186,18 @@ services:
     image: ${IMAGE_PREFIX:-ecomm}/order-management:${IMAGE_TAG:-latest}
     ports: ["${ORDER_MANAGEMENT_PORT:-8085}:8080"]
     depends_on:
-      postgres: { condition: service_healthy }
+      postgres-databases: { condition: service_completed_successfully }
+      keycloak: { condition: service_healthy }
+
+  promotions:
+    <<: *spring-service
+    build:
+      context: ../..
+      dockerfile: services/promotions/Dockerfile
+    image: ${IMAGE_PREFIX:-ecomm}/promotions:${IMAGE_TAG:-latest}
+    ports: ["${PROMOTIONS_PORT:-8087}:8080"]
+    depends_on:
+      postgres-databases: { condition: service_completed_successfully }
       keycloak: { condition: service_healthy }
 
   checkout-pricing:
@@ -194,6 +219,7 @@ services:
       cart: { condition: service_healthy }
       payment: { condition: service_healthy }
       order-management: { condition: service_healthy }
+      promotions: { condition: service_healthy }
 
   # The one way in for browsers: authenticates at the edge and routes /api/<service>/** to the
   # services (platform/api-gateway). The services' own host ports above bypass it, for development.
@@ -211,6 +237,7 @@ services:
       cart: { condition: service_healthy }
       order-management: { condition: service_healthy }
       checkout-pricing: { condition: service_healthy }
+      promotions: { condition: service_healthy }
 
   storefront:
     build:

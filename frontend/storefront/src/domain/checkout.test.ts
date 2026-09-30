@@ -47,6 +47,7 @@ const session: CheckoutSession = {
     { variantId: 'FLIP-6', quantity: 1, unitPrice: eur(12900), lineTotal: eur(12900) },
   ],
   subtotal: eur(172700),
+  discount: null,
   tax: eur(0),
   total: eur(172700),
   expiresAt: '2026-09-30T10:15:00Z',
@@ -79,6 +80,20 @@ describe('sessionSummaryRows', () => {
       { label: 'Subtotal', amount: eur(172700) },
       { label: 'Tax', amount: eur(34540) },
       { label: 'Total', amount: eur(207240), isTotal: true },
+    ])
+  })
+
+  it('takes a Coupon off, naming its code', () => {
+    const discounted = {
+      ...session,
+      discount: { couponCode: 'WELCOME10', amount: eur(17270) },
+      total: eur(155430),
+    }
+    expect(sessionSummaryRows(discounted)).toEqual([
+      { label: 'Subtotal', amount: eur(172700) },
+      { label: 'Discount (WELCOME10)', amount: eur(-17270) },
+      { label: 'Tax', amount: eur(0) },
+      { label: 'Total', amount: eur(155430), isTotal: true },
     ])
   })
 

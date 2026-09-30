@@ -7,6 +7,7 @@ import com.ecomm.checkoutpricing.application.port.out.CheckoutSessionRepository;
 import com.ecomm.checkoutpricing.application.port.out.InventoryPort;
 import com.ecomm.checkoutpricing.application.port.out.OrderPort;
 import com.ecomm.checkoutpricing.application.port.out.PaymentPort;
+import com.ecomm.checkoutpricing.application.port.out.PromotionsPort;
 import com.ecomm.checkoutpricing.application.port.out.TaxCalculator;
 import com.ecomm.checkoutpricing.application.port.out.TimeSource;
 import com.ecomm.checkoutpricing.domain.CartLine;
@@ -14,11 +15,13 @@ import com.ecomm.checkoutpricing.domain.CheckoutResult;
 import com.ecomm.checkoutpricing.domain.CheckoutSession;
 import com.ecomm.checkoutpricing.domain.CheckoutSessionExpiredException;
 import com.ecomm.checkoutpricing.domain.CheckoutSessionNotFoundException;
+import com.ecomm.checkoutpricing.domain.Discount;
 import com.ecomm.checkoutpricing.domain.EmptyCartException;
 import com.ecomm.checkoutpricing.domain.OrderStatus;
 import com.ecomm.checkoutpricing.domain.PricedCart;
 import com.ecomm.checkoutpricing.domain.PricedLine;
 import com.ecomm.checkoutpricing.domain.UnknownVariantsException;
+import com.ecomm.commons.money.Money;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -39,6 +42,7 @@ public class CheckoutService implements CheckoutUseCase {
   private final OrderPort orders;
   private final InventoryPort inventory;
   private final PaymentPort payments;
+  private final PromotionsPort promotions;
   private final TaxCalculator taxes;
   private final CheckoutSessionRepository sessions;
   private final TimeSource time;
@@ -49,6 +53,7 @@ public class CheckoutService implements CheckoutUseCase {
       OrderPort orders,
       InventoryPort inventory,
       PaymentPort payments,
+      PromotionsPort promotions,
       TaxCalculator taxes,
       CheckoutSessionRepository sessions,
       TimeSource time) {
@@ -57,6 +62,7 @@ public class CheckoutService implements CheckoutUseCase {
     this.orders = orders;
     this.inventory = inventory;
     this.payments = payments;
+    this.promotions = promotions;
     this.taxes = taxes;
     this.sessions = sessions;
     this.time = time;
@@ -69,7 +75,7 @@ public class CheckoutService implements CheckoutUseCase {
       throw new EmptyCartException();
     }
     var priced = price(lines);
-    var tax = taxes.tax(priced);
+    var tax = taxes.tax(priced, new Money(0, priced.subtotal().currency()));
 
     // The old session's hold would otherwise count against the new one's.
     sessions.findByCustomer(customerId).ifPresent(this::discard);
@@ -80,7 +86,7 @@ public class CheckoutService implements CheckoutUseCase {
     var reservationId = inventory.reserve(customerId, lines, reservationExpiresAt);
     var session =
         new CheckoutSession(
-            UUID.randomUUID().toString(), customerId, priced, tax, reservationId, expiresAt);
+            UUID.randomUUID().toString(), customerId, priced, null, tax, reservationId, expiresAt);
     // Kept past its expiry, until its Reservation's, so paying it late is told apart from paying
     // one that never existed.
     sessions.save(session, Duration.between(now, reservationExpiresAt));
@@ -93,19 +99,24 @@ public class CheckoutService implements CheckoutUseCase {
   }
 
   @Override
+  public CheckoutSession applyCoupon(String customerId, String sessionId, String couponCode) {
+    var session = live(customerId, sessionId);
+    var discount = promotions.evaluate(couponCode, session.subtotal());
+    return discounted(session, discount);
+  }
+
+  @Override
+  public CheckoutSession removeCoupon(String customerId, String sessionId) {
+    return discounted(live(customerId, sessionId), null);
+  }
+
+  @Override
   public CheckoutResult pay(String customerId, String sessionId, String paymentMethod) {
-    var session =
-        sessions
-            .find(sessionId)
-            .filter(s -> s.customerId().equals(customerId))
-            .orElseThrow(() -> new CheckoutSessionNotFoundException(sessionId));
-    if (session.isExpiredAt(time.now())) {
-      throw new CheckoutSessionExpiredException(sessionId);
-    }
+    var session = live(customerId, sessionId);
 
     // The Payment is for the Order's total, as Order Management records it, so the two always
     // match.
-    var order = orders.place(customerId, session.cart().lines(), session.tax());
+    var order = orders.place(customerId, session.cart().lines(), session.discount(), session.tax());
     var orderId = order.id();
     try {
       payments.authorize(customerId, orderId, order.total(), paymentMethod);
@@ -119,6 +130,39 @@ public class CheckoutService implements CheckoutUseCase {
     clearCart(orderId);
     endSession(session, orderId);
     return new CheckoutResult(orderId, OrderStatus.PAID);
+  }
+
+  /**
+   * The Customer's Checkout Session with this ID.
+   *
+   * @throws CheckoutSessionNotFoundException when they have none with it
+   * @throws CheckoutSessionExpiredException when it has expired
+   */
+  private CheckoutSession live(String customerId, String sessionId) {
+    var session =
+        sessions
+            .find(sessionId)
+            .filter(s -> s.customerId().equals(customerId))
+            .orElseThrow(() -> new CheckoutSessionNotFoundException(sessionId));
+    if (session.isExpiredAt(time.now())) {
+      throw new CheckoutSessionExpiredException(sessionId);
+    }
+    return session;
+  }
+
+  /**
+   * Keeps {@code session} with {@code discount}, or with none when it is null, taxed again for it.
+   */
+  private CheckoutSession discounted(CheckoutSession session, Discount discount) {
+    var currency = session.subtotal().currency();
+    var tax =
+        taxes.tax(session.cart(), discount == null ? new Money(0, currency) : discount.amount());
+    var updated = session.withDiscount(discount, tax);
+    // Replaced or lapsed while the Coupon was being evaluated.
+    if (!sessions.replace(updated)) {
+      throw new CheckoutSessionNotFoundException(session.id());
+    }
+    return updated;
   }
 
   /** Every line at Catalog's current Price; whatever price the Cart shows is ignored. */

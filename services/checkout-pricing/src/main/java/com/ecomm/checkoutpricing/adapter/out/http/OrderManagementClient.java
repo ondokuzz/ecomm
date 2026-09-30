@@ -2,10 +2,12 @@ package com.ecomm.checkoutpricing.adapter.out.http;
 
 import com.ecomm.checkoutpricing.application.port.in.DownstreamFailureException;
 import com.ecomm.checkoutpricing.application.port.out.OrderPort;
+import com.ecomm.checkoutpricing.domain.Discount;
 import com.ecomm.checkoutpricing.domain.OrderStatus;
 import com.ecomm.checkoutpricing.domain.PlacedOrder;
 import com.ecomm.checkoutpricing.domain.PricedLine;
 import com.ecomm.commons.money.Money;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -24,7 +26,14 @@ class OrderManagementClient implements OrderPort {
     this.http = http;
   }
 
-  private record PlaceOrderBody(String customerId, List<Line> lines, Amount tax) {}
+  /** {@code discount} is left out when the Order has none. */
+  private record PlaceOrderBody(
+      String customerId,
+      List<Line> lines,
+      @JsonInclude(JsonInclude.Include.NON_NULL) DiscountBody discount,
+      Amount tax) {}
+
+  private record DiscountBody(String couponCode, Amount amount) {}
 
   private record Line(String variantId, int quantity, Amount unitPrice) {}
 
@@ -44,13 +53,17 @@ class OrderManagementClient implements OrderPort {
   private record OrderBody(String id, Amount total) {}
 
   @Override
-  public PlacedOrder place(String customerId, List<PricedLine> lines, Money tax) {
+  public PlacedOrder place(
+      String customerId, List<PricedLine> lines, Discount discount, Money tax) {
     var body =
         new PlaceOrderBody(
             customerId,
             lines.stream()
                 .map(l -> new Line(l.variantId(), l.quantity(), Amount.of(l.unitPrice())))
                 .toList(),
+            discount == null
+                ? null
+                : new DiscountBody(discount.couponCode(), Amount.of(discount.amount())),
             Amount.of(tax));
     var order =
         Downstream.call(

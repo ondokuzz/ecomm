@@ -13,6 +13,12 @@ public interface CheckoutSessionRepository {
   /** Keeps {@code session} for {@code timeToLive}, as its Customer's one session. */
   void save(CheckoutSession session, Duration timeToLive);
 
+  /**
+   * Replaces the kept session with {@code session}'s ID, for the rest of the time it was kept;
+   * false, keeping nothing, when it is no longer kept.
+   */
+  boolean replace(CheckoutSession session);
+
   Optional<CheckoutSession> find(String sessionId);
 
   /** The Customer's session, if they have one that is still kept; it may have expired. */

@@ -1,0 +1,145 @@
+# Exercises Promotions against the compose stack (`make up`): Staff manage Coupons, and Checkout
+# evaluates one. Run the requests top to bottom in the IntelliJ HTTP client; the token requests
+# store tokens for the ones after them.
+
+@promotions = http://localhost:8087
+@gateway = http://localhost:8000
+@keycloak = http://localhost:8180/realms/ecomm/protocol/openid-connect/token
+
+### Staff token
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=dev-cli&username=staff@ecomm.local&password=staff
+
+> {% client.global.set("staffToken", response.body.access_token); %}
+
+### Checkout's own token (client credentials; the secret is dev-only)
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&client_id=checkout&client_secret=checkout-dev-secret
+
+> {% client.global.set("checkoutToken", response.body.access_token); %}
+
+### Customer token
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=dev-cli&username=demo@ecomm.local&password=demo
+
+> {% client.global.set("customerToken", response.body.access_token); %}
+
+### Every Coupon, the seeded WELCOME10 among them
+GET {{promotions}}/coupons
+Authorization: Bearer {{staffToken}}
+
+### A fixed amount off, with a minimum spend; the code is stored upper-case
+POST {{promotions}}/coupons
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{"code": "spring25", "discount": {"type": "AMOUNT_OFF", "amountOff": {"amountMinor": 2500, "currency": "EUR"}},
+ "minimumSubtotal": {"amountMinor": 10000, "currency": "EUR"},
+ "validFrom": "2026-01-01T00:00:00Z", "validUntil": "2030-01-01T00:00:00Z", "active": true}
+
+### The same code again, in any case: 409
+POST {{promotions}}/coupons
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{"code": "SPRING25", "discount": {"type": "PERCENT_OFF", "percentOff": 5},
+ "validFrom": "2026-01-01T00:00:00Z", "validUntil": "2030-01-01T00:00:00Z", "active": true}
+
+### A percentage past 100: 400
+POST {{promotions}}/coupons
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{"code": "TOOMUCH", "discount": {"type": "PERCENT_OFF", "percentOff": 150},
+ "validFrom": "2026-01-01T00:00:00Z", "validUntil": "2030-01-01T00:00:00Z", "active": true}
+
+### Read it back, in any case
+GET {{promotions}}/coupons/Spring25
+Authorization: Bearer {{staffToken}}
+
+### Evaluate it as Checkout: 25.00 EUR off
+POST {{promotions}}/discounts/evaluate
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"couponCode": "spring25", "subtotal": {"amountMinor": 15980, "currency": "EUR"}}
+
+### Below its minimum: 422, reason belowMinimum
+POST {{promotions}}/discounts/evaluate
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"couponCode": "SPRING25", "subtotal": {"amountMinor": 9999, "currency": "EUR"}}
+
+### In another currency: 422, reason currencyMismatch
+POST {{promotions}}/discounts/evaluate
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"couponCode": "SPRING25", "subtotal": {"amountMinor": 15980, "currency": "USD"}}
+
+### Switch it off: replace every field but the code
+PUT {{promotions}}/coupons/SPRING25
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{"discount": {"type": "AMOUNT_OFF", "amountOff": {"amountMinor": 2500, "currency": "EUR"}},
+ "minimumSubtotal": {"amountMinor": 10000, "currency": "EUR"},
+ "validFrom": "2026-01-01T00:00:00Z", "validUntil": "2030-01-01T00:00:00Z", "active": false}
+
+### Now 422, reason inactive
+POST {{promotions}}/discounts/evaluate
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"couponCode": "SPRING25", "subtotal": {"amountMinor": 15980, "currency": "EUR"}}
+
+### The seeded WELCOME10: 10% off, rounded down
+POST {{promotions}}/discounts/evaluate
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"couponCode": "WELCOME10", "subtotal": {"amountMinor": 1001, "currency": "EUR"}}
+
+### An unknown code: 422, reason unknown
+POST {{promotions}}/discounts/evaluate
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"couponCode": "NO-SUCH-CODE", "subtotal": {"amountMinor": 15980, "currency": "EUR"}}
+
+### A Customer can't evaluate: 403
+POST {{promotions}}/discounts/evaluate
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"couponCode": "WELCOME10", "subtotal": {"amountMinor": 15980, "currency": "EUR"}}
+
+### Nor manage Coupons: 403
+GET {{promotions}}/coupons
+Authorization: Bearer {{customerToken}}
+
+### Through the gateway, Staff reach Coupons
+GET {{gateway}}/api/promotions/coupons/WELCOME10
+Authorization: Bearer {{staffToken}}
+
+### But evaluation is never routed: 404, whatever the token
+POST {{gateway}}/api/promotions/discounts/evaluate
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"couponCode": "WELCOME10", "subtotal": {"amountMinor": 15980, "currency": "EUR"}}
+
+### Delete it: 204, then 404
+DELETE {{promotions}}/coupons/SPRING25
+Authorization: Bearer {{staffToken}}
+
+###
+GET {{promotions}}/coupons/SPRING25
+Authorization: Bearer {{staffToken}}

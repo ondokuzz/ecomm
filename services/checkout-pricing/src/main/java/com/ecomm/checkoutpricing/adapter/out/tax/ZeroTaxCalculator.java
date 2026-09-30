@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 class ZeroTaxCalculator implements TaxCalculator {
 
   @Override
-  public Money tax(PricedCart cart) {
+  public Money tax(PricedCart cart, Money discount) {
     return new Money(0, cart.subtotal().currency());
   }
 }

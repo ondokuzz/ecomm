@@ -12,16 +12,16 @@ up:
 down:
 	$(COMPOSE) down
 
-## Put the seed Categories, Products and Stock back and drop every Cart, Order and Payment.
-## Keycloak is left alone, so registered Customers stay.
+## Put the seed Categories, Products, Stock and Coupons back and drop every Cart, Reservation,
+## Order and Payment. Keycloak is left alone, so registered Customers stay.
 seed-reset:
 	$(COMPOSE) up -d --wait couchbase postgres redis
-	$(COMPOSE) stop storefront checkout-pricing catalog inventory cart payment order-management
+	$(COMPOSE) stop storefront checkout-pricing catalog inventory cart payment order-management promotions
 	$(COMPOSE) exec -T couchbase couchbase-cli bucket-delete -c localhost:8091 -u admin -p password --bucket catalog
 	$(COMPOSE) run --rm --no-deps couchbase-init
-	for db in inventory payment orders; do \
+	for db in inventory payment orders promotions; do \
 	  $(COMPOSE) exec -T postgres psql -U ecomm -d postgres -v ON_ERROR_STOP=1 \
-	    -c "DROP DATABASE $$db WITH (FORCE)" -c "CREATE DATABASE $$db" || exit 1; \
+	    -c "DROP DATABASE IF EXISTS $$db WITH (FORCE)" -c "CREATE DATABASE $$db" || exit 1; \
 	done
 	$(COMPOSE) exec -T redis redis-cli FLUSHALL
 	$(COMPOSE) up -d --wait

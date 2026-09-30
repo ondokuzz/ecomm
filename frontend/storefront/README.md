@@ -11,7 +11,7 @@ React, TypeScript, React Router and TanStack Query.
 | `/?category=` | Products, filtered by category | no |
 | `/products/{sku}?variant=` | A Product with a Variant picker, and the chosen Variant's image, Price, Stock and specs, laid out by its Category's attribute definitions; add it to the Cart | no (adding needs it) |
 | `/cart` | The Cart, priced from Catalog's current Prices; change quantities, remove lines or empty it | yes |
-| `/checkout` | Starts or resumes a Checkout Session: its lines, price breakdown and a countdown to when it expires, a test-card picker and a "Pay" button | yes |
+| `/checkout` | Starts or resumes a Checkout Session: its lines, price breakdown, a Coupon field and a countdown to when it expires, a test-card picker and a "Pay" button | yes |
 | `/orders/{id}` | An Order: its Order Status timeline, its lines and summary; after checkout, the confirmation first | yes |
 | `/orders` | My Orders as cards, newest first | yes |
 
@@ -171,12 +171,22 @@ Arriving there
 resumes the Customer's Checkout Session when it still holds exactly their Cart
 (`sessionHoldsCart`), and starts a new one otherwise, which replaces the old and releases its
 Reservation.
-The page shows the session's lines at their held Prices, its price breakdown (subtotal, tax, total:
-`sessionSummaryRows`), and "held until" the session's expiry with a live `m:ss` countdown
+The page shows the session's lines at their held Prices, its price breakdown (subtotal, a Discount
+line naming its Coupon when there is one, tax, total: `sessionSummaryRows`), and "held until" the session's expiry with a live `m:ss` countdown
 (`sessionCountdown`), all in [`src/domain/checkout.ts`](./src/domain/checkout.ts). The countdown is a
 `timer`, so screen readers aren't told every second; the clock time says it once. When the session
 expires, or paying finds it over (410 or 404), the page becomes "Your hold expired" with a "Start
 again" button, which always starts a new session. Pay is disabled while a payment is in flight.
+
+The price breakdown has a Coupon field. Applying a code, in any case, sends it to Checkout, and the
+session it answers with replaces the one shown, so the Discount line, the total and the Pay button
+follow at once. A code that doesn't apply (422) says why next to the field, one message per
+Promotions `reason` (`couponRejection` in [`src/domain/coupon.ts`](./src/domain/coupon.ts)):
+`unknown`, `inactive`, `notYetValid`, `expired`, `belowMinimum` and `currencyMismatch`, with a
+general one for a reason it doesn't know. The session keeps whatever Coupon it had. Once one is
+applied, the field shows its code with "Remove", which takes it off. Typing clears the message;
+Pay waits while a Coupon is being applied, and the Coupon field while a payment is in flight. The
+demo Coupon is `WELCOME10`, 10% off.
 
 When Checkout refuses to start a session for Products out of Stock or unknown to Catalog, it names
 their Variants, and the page lists their Products (`checkoutProblem`) with a link back to the Cart.
@@ -204,7 +214,7 @@ Sign in as `demo@ecomm.local` / `demo`, or register a new Customer.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: Money formatting, Cart pricing, checkout problems, the session countdown and price breakdown, test cards and payment failures, quantities, Stock levels, toasts, category chips, Product specs by their Category's definitions, Customer initials, Orders and their timeline, Order Status colours, seed Product images, the Keycloak theme's copy of the tokens
+npm test          # Vitest: Money formatting, Cart pricing, checkout problems, the session countdown and price breakdown, Coupon rejections, test cards and payment failures, quantities, Stock levels, toasts, category chips, Product specs by their Category's definitions, Customer initials, Orders and their timeline, Order Status colours, seed Product images, the Keycloak theme's copy of the tokens
 npm run test:e2e  # Playwright smoke test against the running compose stack (`make up`)
 ```
 

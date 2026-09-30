@@ -57,22 +57,35 @@ export interface OrderSummaryRow {
   isTotal?: boolean
 }
 
-/** What an Order comes to, as Order Management worked it out: subtotal, any discount, tax and total. */
-export function orderSummaryRows(order: Order): OrderSummaryRow[] {
-  const discount: OrderSummaryRow[] = order.discount
+/**
+ * What an Order, or a Checkout Session, comes to: subtotal, any discount with its Coupon code, tax
+ * and total.
+ */
+export function summaryRows({
+  subtotal,
+  discount,
+  tax,
+  total,
+}: Pick<Order, 'subtotal' | 'discount' | 'tax' | 'total'>): OrderSummaryRow[] {
+  const discountRows: OrderSummaryRow[] = discount
     ? [
         {
-          label: `Discount (${order.discount.couponCode})`,
-          amount: { ...order.discount.amount, amountMinor: -order.discount.amount.amountMinor },
+          label: `Discount (${discount.couponCode})`,
+          amount: { ...discount.amount, amountMinor: -discount.amount.amountMinor },
         },
       ]
     : []
   return [
-    { label: 'Subtotal', amount: order.subtotal },
-    ...discount,
-    { label: 'Tax', amount: order.tax },
-    { label: 'Total', amount: order.total, isTotal: true },
+    { label: 'Subtotal', amount: subtotal },
+    ...discountRows,
+    { label: 'Tax', amount: tax },
+    { label: 'Total', amount: total, isTotal: true },
   ]
+}
+
+/** What an Order comes to, as Order Management worked it out: subtotal, any discount, tax and total. */
+export function orderSummaryRows(order: Order): OrderSummaryRow[] {
+  return summaryRows(order)
 }
 
 /** An Order Line with its total at the captured price, and its Variant when Catalog still has it. */

@@ -22,7 +22,8 @@ class RoutingApiTest extends GatewayApiTest {
     "/api/inventory/stock/PHN-PIXEL-9, /stock/PHN-PIXEL-9",
     "/api/cart/cart, /cart",
     "/api/checkout-pricing/checkout/sessions/current, /checkout/sessions/current",
-    "/api/order-management/orders/7f1c, /orders/7f1c"
+    "/api/order-management/orders/7f1c, /orders/7f1c",
+    "/api/promotions/coupons/WELCOME10, /coupons/WELCOME10"
   })
   void eachServiceIsReachedWithThePrefixStripped(String path, String downstreamPath) {
     http.get()
@@ -57,6 +58,9 @@ class RoutingApiTest extends GatewayApiTest {
     "POST, /api/order-management/orders/",
     "POST, /api/payment/payments",
     "GET, /api/payment/payments/p-1",
+    "POST, /api/promotions/discounts/evaluate",
+    "POST, /api/promotions/discounts/evaluate/",
+    "GET, /api/promotions/discounts/evaluate",
     "GET, /api/no-such-service/things",
     "GET, /products"
   })
@@ -77,7 +81,8 @@ class RoutingApiTest extends GatewayApiTest {
   @CsvSource({
     "POST, /api/inventory/reservations",
     "POST, /api/order-management/orders",
-    "POST, /api/payment/payments"
+    "POST, /api/payment/payments",
+    "POST, /api/promotions/discounts/evaluate"
   })
   void internalEndpointsAreNotFoundWithoutAToken(String method, String path) {
     http.method(HttpMethod.valueOf(method)).uri(path).exchange().expectStatus().isNotFound();

@@ -1,5 +1,6 @@
 package com.ecomm.checkoutpricing.application.port.out;
 
+import com.ecomm.checkoutpricing.domain.Discount;
 import com.ecomm.checkoutpricing.domain.OrderStatus;
 import com.ecomm.checkoutpricing.domain.PlacedOrder;
 import com.ecomm.checkoutpricing.domain.PricedLine;
@@ -10,10 +11,10 @@ import java.util.List;
 public interface OrderPort {
 
   /**
-   * Places the Customer's Order in {@code PLACED}, with its tax; returns its ID and the total Order
-   * Management gives it.
+   * Places the Customer's Order in {@code PLACED}, with its Discount, when {@code discount} isn't
+   * null, and its tax; returns its ID and the total Order Management gives it.
    */
-  PlacedOrder place(String customerId, List<PricedLine> lines, Money tax);
+  PlacedOrder place(String customerId, List<PricedLine> lines, Discount discount, Money tax);
 
   void changeStatus(String customerId, String orderId, OrderStatus status);
 }

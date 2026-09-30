@@ -9,6 +9,6 @@ import com.ecomm.commons.money.Money;
  */
 public interface TaxCalculator {
 
-  /** The tax owed on {@code cart}, in its currency. */
-  Money tax(PricedCart cart);
+  /** The tax owed on {@code cart} once {@code discount} is taken off it, in its currency. */
+  Money tax(PricedCart cart, Money discount);
 }

@@ -1,5 +1,5 @@
 # Checks out the demo Customer's Cart against the compose stack (`docker compose up -d --build`), in
-# two steps: a Checkout Session holds the Cart, then paying it buys it. Run the requests top to
+# two steps: a Checkout Session holds the Cart, and may take a Coupon, then paying it buys it. Run the requests top to
 # bottom in the IntelliJ HTTP client; the token request stores a token for the ones after it.
 
 @checkout = http://localhost:8086
@@ -60,6 +60,31 @@ Authorization: Bearer {{customerToken}}
 
 > {% client.global.set("sessionId", response.body.id); %}
 
+### Apply the demo Coupon, in any case: the session with 10% off its subtotal, and its total less that
+PUT {{checkout}}/checkout/sessions/{{sessionId}}/coupon
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"code": "welcome10"}
+
+### A Coupon that doesn't apply: 422 with Promotions' reason (unknown); the session keeps WELCOME10
+PUT {{checkout}}/checkout/sessions/{{sessionId}}/coupon
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"code": "NO-SUCH-CODE"}
+
+### Take the Coupon off: the session at its full total again
+DELETE {{checkout}}/checkout/sessions/{{sessionId}}/coupon
+Authorization: Bearer {{customerToken}}
+
+### And back on, to pay with it
+PUT {{checkout}}/checkout/sessions/{{sessionId}}/coupon
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"code": "WELCOME10"}
+
 ### Pay with a declining test card: 402 with its declineReason; that Order is CANCELLED
 POST {{checkout}}/checkout/sessions/{{sessionId}}/pay
 Authorization: Bearer {{customerToken}}
@@ -94,7 +119,8 @@ Content-Type: application/json
 
 > {% client.global.set("orderId", response.body.orderId); %}
 
-### The Order, at the session's Prices, with its tax (zero for now) and the total its Payment was for
+### The Order, at the session's Prices, with the WELCOME10 discount, its tax (zero for now) and the
+### total its Payment was for
 GET {{orders}}/orders/{{orderId}}
 Authorization: Bearer {{customerToken}}
 

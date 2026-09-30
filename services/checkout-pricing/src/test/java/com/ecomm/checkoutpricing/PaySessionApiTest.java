@@ -5,6 +5,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.anyUrl;
 import static com.github.tomakehurst.wiremock.client.WireMock.deleteRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalToJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
@@ -106,6 +107,75 @@ class PaySessionApiTest extends CheckoutApiTest {
     pay(sessionId).expectStatus().isOk();
 
     DOWNSTREAM.verify(0, getRequestedFor(urlPathMatching("/variants/.*")));
+    DOWNSTREAM.verify(
+        postRequestedFor(urlEqualTo("/orders"))
+            .withRequestBody(
+                equalToJson(
+                    """
+                    {"customerId": "customer-42", "lines": [
+                      {"variantId": "PHN-PIXEL-9", "quantity": 2,
+                       "unitPrice": {"amountMinor": 79900, "currency": "EUR"}}
+                    ],
+                     "tax": {"amountMinor": 0, "currency": "EUR"}}
+                    """)));
+  }
+
+  @Test
+  void theOrderIsPlacedWithTheSessionsDiscount() {
+    stubSuccessfulCheckout();
+    stubDiscount("WELCOME10", 15980);
+    var sessionId = startedSessionId();
+    applyCoupon(sessionId, "welcome10").expectStatus().isOk();
+
+    pay(sessionId).expectStatus().isOk();
+
+    DOWNSTREAM.verify(
+        postRequestedFor(urlEqualTo("/orders"))
+            .withRequestBody(
+                equalToJson(
+                    """
+                    {"customerId": "customer-42", "lines": [
+                      {"variantId": "PHN-PIXEL-9", "quantity": 2,
+                       "unitPrice": {"amountMinor": 79900, "currency": "EUR"}}
+                    ],
+                     "discount": {"couponCode": "WELCOME10",
+                                  "amount": {"amountMinor": 15980, "currency": "EUR"}},
+                     "tax": {"amountMinor": 0, "currency": "EUR"}}
+                    """)));
+  }
+
+  @Test
+  void theDiscountedTotalIsAuthorized() {
+    stubSuccessfulCheckout();
+    stubDiscount("WELCOME10", 15980);
+    // Order Management's total for those lines, less the discount: 1598.00 - 159.80.
+    DOWNSTREAM.stubFor(post("/orders").willReturn(placedOrder(143820)));
+    var sessionId = startedSessionId();
+    applyCoupon(sessionId, "WELCOME10").expectStatus().isOk();
+
+    pay(sessionId).expectStatus().isOk();
+
+    DOWNSTREAM.verify(
+        postRequestedFor(urlEqualTo("/payments"))
+            .withRequestBody(
+                equalToJson(
+                    """
+                    {"customerId": "customer-42", "orderId": "%s", "paymentMethod": "tok_approve",
+                     "amount": {"amountMinor": 143820, "currency": "EUR"}}
+                    """
+                        .formatted(ORDER_ID))));
+  }
+
+  @Test
+  void aRemovedCouponIsNotSentWithTheOrder() {
+    stubSuccessfulCheckout();
+    stubDiscount("WELCOME10", 15980);
+    var sessionId = startedSessionId();
+    applyCoupon(sessionId, "WELCOME10").expectStatus().isOk();
+    removeCoupon(sessionId).expectStatus().isOk();
+
+    pay(sessionId).expectStatus().isOk();
+
     DOWNSTREAM.verify(
         postRequestedFor(urlEqualTo("/orders"))
             .withRequestBody(

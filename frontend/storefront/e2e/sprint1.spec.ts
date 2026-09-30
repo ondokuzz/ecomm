@@ -172,6 +172,61 @@ test('a declined card shows why, and the held session can then be paid with one 
   expect(await stockOf(request, variantId)).toEqual({ quantity: stock.quantity - 1, onHand: stock.onHand - 1 })
 })
 
+test('WELCOME10 takes 10% off at checkout, and the PAID Order shows the discount', async ({ page, request }) => {
+  const token = await tokenFor(request, demoCustomer)
+  await emptyCart(request, token)
+  const { variantId, variant } = await aProductInStock(request)
+  const put = await request.put(`/api/cart/cart/items/${encodeURIComponent(variantId)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { quantity: 1 },
+  })
+  expect(put.ok()).toBeTruthy()
+  const subtotal = variant.price
+  // 10%, rounded down to the minor unit.
+  const discount = { ...subtotal, amountMinor: Math.floor(subtotal.amountMinor / 10) }
+  const discounted = { ...subtotal, amountMinor: subtotal.amountMinor - discount.amountMinor }
+
+  await page.goto('/checkout')
+  await signInOnKeycloak(page, demoCustomer)
+  await expect(page.getByRole('timer', { name: 'Time left' })).toBeVisible()
+  const summary = page.getByRole('region', { name: 'Order summary' })
+  const couponField = summary.getByLabel('Coupon code')
+
+  // A code Promotions doesn't know says so, next to the field, and changes nothing.
+  await couponField.fill('NOT-A-REAL-CODE')
+  await summary.getByRole('button', { name: 'Apply' }).click()
+  await expect(summary.getByRole('alert')).toHaveText("We don't know that code. Check it and try again.")
+  await expect(couponField).toHaveAttribute('aria-invalid', 'true')
+
+  // Codes are matched whatever their case.
+  await couponField.fill('welcome10')
+  await summary.getByRole('button', { name: 'Apply' }).click()
+  await expect(summary).toContainText('WELCOME10 applied')
+  await expect(summary.getByText('Discount (WELCOME10)')).toBeVisible()
+  await expect(summary).toContainText(formatMoney({ ...discount, amountMinor: -discount.amountMinor }, 'en-US'))
+  await expect(page.getByRole('button', { name: `Pay ${formatMoney(discounted, 'en-US')}` })).toBeVisible()
+
+  // Removing it puts the total back; applying it again takes it off again.
+  await summary.getByRole('button', { name: 'Remove coupon WELCOME10' }).click()
+  await expect(summary.getByText('Discount (WELCOME10)')).toBeHidden()
+  await expect(page.getByRole('button', { name: `Pay ${formatMoney(subtotal, 'en-US')}` })).toBeVisible()
+  await couponField.fill('WELCOME10')
+  await summary.getByRole('button', { name: 'Apply' }).click()
+  await expect(summary.getByText('Discount (WELCOME10)')).toBeVisible()
+
+  await testCard(page, 'Approve').check()
+  await page.getByRole('button', { name: `Pay ${formatMoney(discounted, 'en-US')}` }).click()
+
+  await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/)
+  await expect(page.locator('.status-paid')).toHaveText('Paid')
+  await expect(page.getByText('Discount (WELCOME10)')).toBeVisible()
+  const orderId = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!)
+  const order = await orderOf(request, token, orderId)
+  expect(order.status).toBe('PAID')
+  expect(order.discount).toEqual({ couponCode: 'WELCOME10', amount: discount })
+  expect(order.total).toEqual({ ...discounted, amountMinor: discounted.amountMinor + order.tax.amountMinor })
+})
+
 test('the demo Customer empties their Cart after confirming', async ({ page, request }) => {
   const token = await tokenFor(request, demoCustomer)
   await emptyCart(request, token)

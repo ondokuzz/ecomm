@@ -66,6 +66,7 @@ abstract class CheckoutApiTest {
     registry.add("ecomm.checkout.inventory-url", () -> url);
     registry.add("ecomm.checkout.order-management-url", () -> url);
     registry.add("ecomm.checkout.payment-url", () -> url);
+    registry.add("ecomm.checkout.promotions-url", () -> url);
     registry.add(
         "spring.security.oauth2.client.provider.keycloak.token-uri", () -> url + TOKEN_PATH);
     registry.add("spring.security.oauth2.client.registration.checkout.client-secret", () -> "test");
@@ -158,6 +159,32 @@ abstract class CheckoutApiTest {
         .headers(h -> h.setBearerAuth(token))
         .contentType(MediaType.APPLICATION_JSON)
         .body(body)
+        .exchange();
+  }
+
+  /** Applies the Coupon {@code code} to the session, as its Customer. */
+  RestTestClient.ResponseSpec applyCoupon(String sessionId, String code) {
+    return applyCouponWith(customerToken(), sessionId, "{\"code\": \"%s\"}".formatted(code));
+  }
+
+  /** Applies a Coupon to the session with the JSON {@code body} as it is. */
+  RestTestClient.ResponseSpec applyCouponWith(String token, String sessionId, String body) {
+    return http.put()
+        .uri("/checkout/sessions/{id}/coupon", sessionId)
+        .headers(h -> h.setBearerAuth(token))
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(body)
+        .exchange();
+  }
+
+  RestTestClient.ResponseSpec removeCoupon(String sessionId) {
+    return removeCoupon(customerToken(), sessionId);
+  }
+
+  RestTestClient.ResponseSpec removeCoupon(String token, String sessionId) {
+    return http.delete()
+        .uri("/checkout/sessions/{id}/coupon", sessionId)
+        .headers(h -> h.setBearerAuth(token))
         .exchange();
   }
 
@@ -333,6 +360,38 @@ abstract class CheckoutApiTest {
 
   static void stubPayment(ResponseDefinitionBuilder response) {
     DOWNSTREAM.stubFor(post("/payments").willReturn(response));
+  }
+
+  // --- Promotions ---
+
+  static final String EVALUATE_PATH = "/discounts/evaluate";
+
+  /** Promotions finds that the Coupon {@code couponCode} takes {@code discountMinor} EUR off. */
+  static void stubDiscount(String couponCode, long discountMinor) {
+    stubEvaluation(
+        okJson(
+            """
+            {"couponCode": "%s", "discount": {"amountMinor": %d, "currency": "EUR"}}
+            """
+                .formatted(couponCode, discountMinor)));
+  }
+
+  /** Promotions finds the Coupon doesn't apply, for {@code reason}. */
+  static void stubRejectedCoupon(String reason) {
+    stubEvaluation(
+        aResponse()
+            .withStatus(422)
+            .withHeader("Content-Type", "application/problem+json")
+            .withBody(
+                """
+                {"type": "about:blank", "title": "Unprocessable Content", "status": 422,
+                 "detail": "Coupon doesn't apply: %1$s", "reason": "%1$s"}
+                """
+                    .formatted(reason)));
+  }
+
+  static void stubEvaluation(ResponseDefinitionBuilder response) {
+    DOWNSTREAM.stubFor(post(EVALUATE_PATH).willReturn(response));
   }
 
   /** Every downstream answers as a successful checkout of two Pixel 9s needs. */

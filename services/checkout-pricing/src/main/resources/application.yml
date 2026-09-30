@@ -9,8 +9,9 @@ spring:
   security:
     oauth2:
       client:
-        # Checkout's own identity for Inventory, Order Management and Payment (Identity & Access
-        # ADR 0002). The secret has no default: set CHECKOUT_CLIENT_SECRET, which compose does.
+        # Checkout's own identity for Inventory, Order Management, Payment and Promotions (Identity
+        # & Access ADR 0002). The secret has no default: set CHECKOUT_CLIENT_SECRET, which compose
+        # does.
         registration:
           checkout:
             provider: keycloak
@@ -29,6 +30,7 @@ ecomm:
     cart-url: http://localhost:8083
     payment-url: http://localhost:8084
     order-management-url: http://localhost:8085
+    promotions-url: http://localhost:8087
 
 management:
   endpoints:

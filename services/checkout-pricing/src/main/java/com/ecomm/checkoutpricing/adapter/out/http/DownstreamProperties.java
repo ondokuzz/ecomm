@@ -9,4 +9,5 @@ record DownstreamProperties(
     String catalogUrl,
     String inventoryUrl,
     String orderManagementUrl,
-    String paymentUrl) {}
+    String paymentUrl,
+    String promotionsUrl) {}

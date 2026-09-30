@@ -1,7 +1,8 @@
 # Checkout & Pricing
 
 Turns a Customer's Cart into a paid Order in two steps: a **Checkout Session** holds the Cart for
-15 minutes, at the Prices of the moment it started, and paying the session buys it. Built from
+15 minutes, at the Prices of the moment it started, and may take a **Coupon**; paying the session
+buys it. Built from
 [`platform/service-template`](../../platform/service-template/README.md), so its layout, security
 and testing conventions apply here. Checkout Sessions live in Redis; otherwise it holds nothing
 but its own cached token. Why sessions hold Stock through Inventory's Reservations is in
@@ -15,9 +16,12 @@ Every endpoint is the calling Customer's own and needs a `CUSTOMER` token.
 |---|---|
 | `POST /checkout/sessions` | Starts a Checkout Session for the caller's Cart; 201 with the session and its `Location` |
 | `GET /checkout/sessions/current` | The caller's live Checkout Session, or 404 |
+| `PUT /checkout/sessions/{id}/coupon` | Applies a Coupon with `{"code": "WELCOME10"}`, in place of any it had; 200 with the session |
+| `DELETE /checkout/sessions/{id}/coupon` | Takes the Coupon off, if any; 200 with the session |
 | `POST /checkout/sessions/{id}/pay` | Pays it with `{"paymentMethod": "…"}`; 200 with `{"orderId": "…", "status": "PAID"}` |
 
-A session looks like this. Its `total` is the `subtotal` plus the `tax`:
+A session looks like this. Its `total` is the `subtotal`, less the `discount`, plus the `tax`;
+`discount` is null until a Coupon is applied:
 
 ```json
 {"id": "…", "expiresAt": "2026-09-30T10:15:00Z",
@@ -25,8 +29,9 @@ A session looks like this. Its `total` is the `subtotal` plus the `tax`:
             "unitPrice": {"amountMinor": 79900, "currency": "EUR"},
             "lineTotal": {"amountMinor": 159800, "currency": "EUR"}}],
  "subtotal": {"amountMinor": 159800, "currency": "EUR"},
+ "discount": {"couponCode": "WELCOME10", "amount": {"amountMinor": 15980, "currency": "EUR"}},
  "tax": {"amountMinor": 0, "currency": "EUR"},
- "total": {"amountMinor": 159800, "currency": "EUR"}}
+ "total": {"amountMinor": 143820, "currency": "EUR"}}
 ```
 
 ### Starting a session
@@ -43,6 +48,28 @@ A session looks like this. Its `total` is the `subtotal` plus the `tax`:
 The Prices captured here are the ones the Customer pays for the session's whole life, even if
 Catalog changes them meanwhile.
 
+### Applying a Coupon
+
+`PUT /checkout/sessions/{id}/coupon` with `{"code": "welcome10"}` asks Promotions what the Coupon
+takes off the session's subtotal (`POST /discounts/evaluate`, with Checkout's own token). Promotions
+matches the code whatever its case and answers with its upper-case code and the Discount, which
+it has already rounded down and capped at the subtotal. Checkout then works out the tax again, on
+the subtotal less the Discount, and keeps the session with both, for the rest of its life: its
+`expiresAt` doesn't move. A session holds one Coupon, so applying another replaces the first.
+
+A Coupon that doesn't apply is a 422 whose `reason` is Promotions' own: `unknown`, `inactive`,
+`notYetValid`, `expired`, `belowMinimum` or `currencyMismatch`. The session is left as it was,
+with any Coupon it already had. A missing, blank or non-string `code`, or one past 64 characters,
+is a 400 and never reaches Promotions.
+
+`DELETE /checkout/sessions/{id}/coupon` takes the Coupon off and works out the tax again; on a
+session without one it changes nothing. Both answer with the session, and, like paying, are a 410
+once the session has expired and a 404 for a session the Customer doesn't have, asking Promotions
+nothing.
+
+The Discount is Promotions' answer when the Coupon was applied, and paying honours it just as it
+honours the session's Prices, even if the Coupon expires in the meantime.
+
 ### Paying a session
 
 The body names the Payment method, `{"paymentMethod": "tok_approve"}`: an opaque token from the
@@ -51,20 +78,21 @@ payment gateway, which Checkout passes on to Payment unread (the mock's test tok
 255 characters, is a 400. A session that has expired is a 410, and one that doesn't exist, has ended
 or belongs to someone else is a 404; in all three cases nothing else happens. Otherwise, in order:
 
-1. place the Order in `PLACED` in Order Management, at the session's Prices, with its tax;
-2. authorize the payment for the Order's total (lines plus tax), as Order Management answers it,
-   with the Payment method;
+1. place the Order in `PLACED` in Order Management, at the session's Prices, with its Discount,
+   if it has one, and its tax;
+2. authorize the payment for the Order's total (lines less the Discount, plus tax), as Order
+   Management answers it, with the Payment method;
 3. commit the Reservation, which takes its Stock off on-hand for good;
 4. set the Order to `PAID`;
 5. clear the Cart;
 6. end the session;
 7. return the Order's ID and Order Status.
 
-Tax comes from the `TaxCalculator` port. For now that is `ZeroTaxCalculator`
-([ADR 0005](../../docs/adr/0005-localization-compliance-abstracted.md)). It is worked out when the
-session starts, sent on `POST /orders` even when zero, and the Order records it. The Payment is
-authorized for the total Order Management gives the Order, never one Checkout works out itself, so
-the two always match. Checkout applies no Discount yet.
+Tax comes from the `TaxCalculator` port, on the subtotal less any Discount. For now that is
+`ZeroTaxCalculator` ([ADR 0005](../../docs/adr/0005-localization-compliance-abstracted.md)). It is
+worked out when the session starts and again whenever its Coupon changes, sent on `POST /orders`
+even when zero, and the Order records it. The Payment is authorized for the total Order Management
+gives the Order, never one Checkout works out itself, so the two always match.
 
 ### Errors
 
@@ -72,12 +100,13 @@ Every error is a problem detail.
 
 | Status | When |
 |---|---|
-| 400 | Starting: the Cart is empty. Paying: no usable `paymentMethod` |
+| 400 | Starting: the Cart is empty. Paying: no usable `paymentMethod`. Applying a Coupon: no usable `code` |
 | 401 / 403 | No token / not a Customer (Staff and services have no Cart) |
-| 404 | No live session (`current`), or paying one the Customer doesn't have |
+| 404 | No live session (`current`), or paying or changing the Coupon of one the Customer doesn't have |
 | 409 | Starting: `unknownVariants`: Catalog no longer has these Variants. `outOfStock`: Inventory can't hold these. Also a Cart priced in more than one currency |
 | 402 | Paying: the gateway declined the payment; `declineReason` gives its reason, such as `insufficient_funds` |
-| 410 | Paying a session that has expired |
+| 422 | Applying a Coupon that doesn't apply; `reason` says why, as Promotions does |
+| 410 | Paying, or changing the Coupon of, a session that has expired |
 | 502 | Another service failed or answered unexpectedly, the payment gateway failing to answer included |
 | 503 | Keycloak couldn't issue Checkout's own token |
 
@@ -96,7 +125,9 @@ A session is one JSON string in Redis, `checkout-session:<ID>`, and the Customer
 `checkout-customer:<Customer ID>`, holds its ID. Both are written in one script with a TTL that
 runs to the Reservation's expiry, 2 minutes after the session's. The session's own `expiresAt`, on
 Checkout's clock (the `TimeSource` port), is what decides it has expired: from then on it is no
-longer `current`, and paying it is a 410. Once Redis drops it, paying it is a 404, like a session
+longer `current`, and paying it is a 410. Applying or removing a Coupon rewrites the session's
+string in place, keeping its TTL, and only while Redis still has it: a session replaced or dropped
+meanwhile stays gone. Once Redis drops it, paying it is a 404, like a session
 that never existed. Ending a session deletes both keys, unless the pointer already names a newer
 session.
 
@@ -112,10 +143,11 @@ Checkout calls each service with the identity that service expects
   the current request's security context, so the use case and its ports only ever see the
   Customer ID.
 - **Catalog**: no token; reads are public.
-- **Inventory, Order Management, Payment**: Checkout's own token, from the confidential `checkout`
+- **Inventory, Order Management, Payment, Promotions**: Checkout's own token, from the confidential `checkout`
   client (client credentials, `CHECKOUT` role). The Customer goes in the body as `customerId`, on
   `POST /reservations` and its commit and release, `POST /orders`, every
   `PATCH /orders/{id}/status` (the compensating `CANCELLED` too), and `POST /payments`.
+  `POST /discounts/evaluate` names no Customer: a Coupon applies the same to everyone.
 
 The client secret comes from `CHECKOUT_CLIENT_SECRET`, which compose sets; there is no default.
 

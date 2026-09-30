@@ -2,6 +2,7 @@ package com.ecomm.checkoutpricing.adapter.out.redis;
 
 import com.ecomm.checkoutpricing.application.port.out.CheckoutSessionRepository;
 import com.ecomm.checkoutpricing.domain.CheckoutSession;
+import com.ecomm.checkoutpricing.domain.Discount;
 import com.ecomm.checkoutpricing.domain.PricedCart;
 import com.ecomm.checkoutpricing.domain.PricedLine;
 import com.ecomm.commons.money.Money;
@@ -40,6 +41,16 @@ class RedisCheckoutSessionRepository implements CheckoutSessionRepository {
           """,
           Long.class);
 
+  // Only a session still kept, for the time it has left: one that was replaced or has lapsed
+  // stays gone.
+  private static final RedisScript<Long> REPLACE =
+      RedisScript.of(
+          """
+          if redis.call('SET', KEYS[1], ARGV[1], 'XX', 'KEEPTTL') then return 1 end
+          return 0
+          """,
+          Long.class);
+
   private final StringRedisTemplate redis;
   private final JsonMapper json;
 
@@ -53,6 +64,7 @@ class RedisCheckoutSessionRepository implements CheckoutSessionRepository {
       String id,
       String customerId,
       List<StoredLine> lines,
+      StoredDiscount discount,
       StoredMoney tax,
       String reservationId,
       Instant expiresAt) {
@@ -64,6 +76,7 @@ class RedisCheckoutSessionRepository implements CheckoutSessionRepository {
           session.cart().lines().stream()
               .map(l -> new StoredLine(l.variantId(), l.quantity(), StoredMoney.of(l.unitPrice())))
               .toList(),
+          session.discount() == null ? null : StoredDiscount.of(session.discount()),
           StoredMoney.of(session.tax()),
           session.reservationId(),
           session.expiresAt());
@@ -77,6 +90,7 @@ class RedisCheckoutSessionRepository implements CheckoutSessionRepository {
               lines.stream()
                   .map(l -> new PricedLine(l.variantId(), l.quantity(), l.unitPrice().toMoney()))
                   .toList()),
+          discount == null ? null : discount.toDiscount(),
           tax.toMoney(),
           reservationId,
           expiresAt);
@@ -84,6 +98,17 @@ class RedisCheckoutSessionRepository implements CheckoutSessionRepository {
   }
 
   private record StoredLine(String variantId, int quantity, StoredMoney unitPrice) {}
+
+  private record StoredDiscount(String couponCode, StoredMoney amount) {
+
+    static StoredDiscount of(Discount discount) {
+      return new StoredDiscount(discount.couponCode(), StoredMoney.of(discount.amount()));
+    }
+
+    Discount toDiscount() {
+      return new Discount(couponCode, amount.toMoney());
+    }
+  }
 
   private record StoredMoney(long amountMinor, String currency) {
 
@@ -104,6 +129,14 @@ class RedisCheckoutSessionRepository implements CheckoutSessionRepository {
         json.writeValueAsString(Stored.of(session)),
         session.id(),
         String.valueOf(timeToLive.toMillis()));
+  }
+
+  @Override
+  public boolean replace(CheckoutSession session) {
+    var replaced =
+        redis.execute(
+            REPLACE, List.of(key(session.id())), json.writeValueAsString(Stored.of(session)));
+    return replaced != null && replaced == 1;
   }
 
   @Override

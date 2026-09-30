@@ -22,6 +22,7 @@ stay with the services, which still check every token themselves.
 | `cart` | | |
 | `checkout-pricing` | | |
 | `order-management` | | `POST /orders`, `PATCH /orders/*/status` |
+| `promotions` | | `/discounts/**`: Coupon evaluation, which only Checkout calls |
 
 The table lives in [`application.yml`](./src/main/resources/application.yml) under
 `ecomm.gateway.services`, and routing and edge security are both built from it (`EdgeRoutes`), so
@@ -37,7 +38,8 @@ network; outside Docker they are the services' dev host ports.
   the same token and applies its own roles.
 - **Internal endpoints**, those only other services call, are not routed and get a 404, token or
   not, as does any path outside the table. Payment has no routes at all, so `POST /payments` is
-  among them.
+  among them. Hiding Promotions' `POST /discounts/evaluate` means nobody can probe Coupon codes
+  outside a checkout; Staff still reach `/coupons` through the gateway.
 
 The gateway sends no CORS headers: browsers reach it on the Storefront's own origin.
 

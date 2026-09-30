@@ -50,6 +50,13 @@ Content-Type: application/json
 
 {}
 
+### Coupon evaluation is internal too: 404, so Coupon codes can't be probed from outside
+POST {{gateway}}/api/promotions/discounts/evaluate
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"couponCode": "WELCOME10", "subtotal": {"amountMinor": 100, "currency": "EUR"}}
+
 ### Payment has no routes at all: 404
 GET {{gateway}}/api/payment/payments/00000000-0000-0000-0000-000000000000
 Authorization: Bearer {{customerToken}}
