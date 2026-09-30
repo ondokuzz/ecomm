@@ -1,5 +1,7 @@
 .scratch/
 build/
+# Eclipse/VS Code Java compiler output
+bin/
 .gradle/
 .kotlin/
 .idea/
