@@ -2,6 +2,7 @@ package com.ecomm.payment.application.port.out;
 
 import com.ecomm.payment.domain.AuthorizationRequest;
 import com.ecomm.payment.domain.GatewayAuthorization;
+import com.ecomm.payment.domain.PaymentGatewayUnavailableException;
 
 /**
  * The payment gateway, kept behind a port so a real, market-specific gateway can replace the mock
@@ -9,5 +10,10 @@ import com.ecomm.payment.domain.GatewayAuthorization;
  */
 public interface PaymentGatewayPort {
 
+  /**
+   * The gateway's answer: approved or declined.
+   *
+   * @throws PaymentGatewayUnavailableException when the gateway fails to answer
+   */
   GatewayAuthorization authorize(AuthorizationRequest request);
 }

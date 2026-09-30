@@ -79,7 +79,7 @@ class TaxApiTest extends CheckoutApiTest {
             .withRequestBody(
                 equalToJson(
                     """
-                    {"customerId": "customer-42", "orderId": "%s",
+                    {"customerId": "customer-42", "orderId": "%s", "paymentMethod": "tok_approve",
                      "amount": {"amountMinor": 191760, "currency": "EUR"}}
                     """
                         .formatted(ORDER_ID))));

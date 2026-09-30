@@ -13,7 +13,7 @@ class PaymentIsolationApiTest extends PaymentApiTest {
 
   private static final String PAYMENT =
       """
-      {"customerId": "customer-42", "orderId": "order-isolated", "amount": {"amountMinor": 100, "currency": "EUR"}}
+      {"customerId": "customer-42", "orderId": "order-isolated", "paymentMethod": "tok_approve", "amount": {"amountMinor": 100, "currency": "EUR"}}
       """;
 
   @Test
@@ -36,7 +36,7 @@ class PaymentIsolationApiTest extends PaymentApiTest {
         authorize(
                 """
                 {"customerId": "customer-9", "orderId": "order-named",
-                 "amount": {"amountMinor": 100, "currency": "EUR"}}
+                 "paymentMethod": "tok_approve", "amount": {"amountMinor": 100, "currency": "EUR"}}
                 """)
             .expectBody(PaymentView.class)
             .returnResult()

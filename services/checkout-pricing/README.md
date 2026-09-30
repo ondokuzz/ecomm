@@ -15,7 +15,7 @@ Every endpoint is the calling Customer's own and needs a `CUSTOMER` token.
 |---|---|
 | `POST /checkout/sessions` | Starts a Checkout Session for the caller's Cart; 201 with the session and its `Location` |
 | `GET /checkout/sessions/current` | The caller's live Checkout Session, or 404 |
-| `POST /checkout/sessions/{id}/pay` | Pays it; 200 with `{"orderId": "…", "status": "PAID"}` |
+| `POST /checkout/sessions/{id}/pay` | Pays it with `{"paymentMethod": "…"}`; 200 with `{"orderId": "…", "status": "PAID"}` |
 
 A session looks like this. Its `total` is the `subtotal` plus the `tax`:
 
@@ -45,11 +45,15 @@ Catalog changes them meanwhile.
 
 ### Paying a session
 
-A session that has expired is a 410, and one that doesn't exist, has ended or belongs to someone
-else is a 404; in both cases nothing else happens. Otherwise, in order:
+The body names the Payment method, `{"paymentMethod": "tok_approve"}`: an opaque token from the
+payment gateway, which Checkout passes on to Payment unread (the mock's test tokens are in
+[Payment's README](../payment/README.md#gateways)). A missing, blank or non-string one, or one past
+255 characters, is a 400. A session that has expired is a 410, and one that doesn't exist, has ended
+or belongs to someone else is a 404; in all three cases nothing else happens. Otherwise, in order:
 
 1. place the Order in `PLACED` in Order Management, at the session's Prices, with its tax;
-2. authorize the payment for the Order's total (lines plus tax), as Order Management answers it;
+2. authorize the payment for the Order's total (lines plus tax), as Order Management answers it,
+   with the Payment method;
 3. commit the Reservation, which takes its Stock off on-hand for good;
 4. set the Order to `PAID`;
 5. clear the Cart;
@@ -68,17 +72,20 @@ Every error is a problem detail.
 
 | Status | When |
 |---|---|
-| 400 | Starting: the Cart is empty |
+| 400 | Starting: the Cart is empty. Paying: no usable `paymentMethod` |
 | 401 / 403 | No token / not a Customer (Staff and services have no Cart) |
 | 404 | No live session (`current`), or paying one the Customer doesn't have |
 | 409 | Starting: `unknownVariants`: Catalog no longer has these Variants. `outOfStock`: Inventory can't hold these. Also a Cart priced in more than one currency |
+| 402 | Paying: the gateway declined the payment; `declineReason` gives its reason, such as `insufficient_funds` |
 | 410 | Paying a session that has expired |
-| 502 | Another service failed or answered unexpectedly |
+| 502 | Another service failed or answered unexpectedly, the payment gateway failing to answer included |
 | 503 | Keycloak couldn't issue Checkout's own token |
 
 Starting a session changes nothing when it fails, except that a replaced session is gone and its
 Stock released. Once paying has placed the Order, a failing step sets it to `CANCELLED` and leaves
-the Cart and the session as they were. That's the only compensation for now: if the commit fails
+the Cart and the session as they were. A declined payment (402) and a gateway failure (502) are
+such steps: the session and its Reservation stay, so the Customer can pay it again, with another
+Payment method, until it expires. Each attempt places a new Order. That's the only compensation for now: if the commit fails
 after the Payment is authorized, the Payment stays authorized, the same known limitation as Sprint
 1, which the Sagas in Sprint 3 fix. A Cart that can't be cleared, or a session that can't be ended,
 after the Order is paid is only logged, since the Customer keeps the paid Order either way.

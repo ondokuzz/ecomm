@@ -28,18 +28,59 @@ grant_type=client_credentials&client_id=checkout&client_secret=checkout-dev-secr
 
 > {% client.global.set("checkoutToken", response.body.access_token); %}
 
-### Checkout authorizes an Order's payment for the Customer: 201, AUTHORIZED by the mock gateway
+### Checkout authorizes an Order's payment for the Customer: 201, AUTHORIZED by the approving test card
 POST {{payment}}/payments
 Authorization: Bearer {{checkoutToken}}
 Content-Type: application/json
 
-{"customerId": "{{customerId}}", "orderId": "order-1", "amount": {"amountMinor": 79900, "currency": "EUR"}}
+{"customerId": "{{customerId}}", "orderId": "order-1", "paymentMethod": "tok_approve", "amount": {"amountMinor": 79900, "currency": "EUR"}}
 
 > {% client.global.set("paymentId", response.body.id); %}
 
 ### The Customer reads it back with their own token
 GET {{payment}}/payments/{{paymentId}}
 Authorization: Bearer {{customerToken}}
+
+### A declining test card: 201, recorded as DECLINED with its declineReason, card_declined
+POST {{payment}}/payments
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}", "orderId": "order-2", "paymentMethod": "tok_decline", "amount": {"amountMinor": 79900, "currency": "EUR"}}
+
+> {% client.global.set("declinedPaymentId", response.body.id); %}
+
+### The Customer reads the declined Payment back too
+GET {{payment}}/payments/{{declinedPaymentId}}
+Authorization: Bearer {{customerToken}}
+
+### Not enough funds: DECLINED, insufficient_funds
+POST {{payment}}/payments
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}", "orderId": "order-3", "paymentMethod": "tok_insufficient_funds", "amount": {"amountMinor": 79900, "currency": "EUR"}}
+
+### A token the mock doesn't know: DECLINED, unknown_payment_method
+POST {{payment}}/payments
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}", "orderId": "order-4", "paymentMethod": "tok_visa", "amount": {"amountMinor": 79900, "currency": "EUR"}}
+
+### The gateway fails to answer: 502, and no Payment is recorded
+POST {{payment}}/payments
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}", "orderId": "order-5", "paymentMethod": "tok_gateway_error", "amount": {"amountMinor": 79900, "currency": "EUR"}}
+
+### No paymentMethod: 400
+POST {{payment}}/payments
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}", "orderId": "order-1", "amount": {"amountMinor": 79900, "currency": "EUR"}}
 
 ### An unknown Payment: 404
 GET {{payment}}/payments/00000000-0000-4000-8000-000000000000
@@ -50,27 +91,27 @@ POST {{payment}}/payments
 Authorization: Bearer {{checkoutToken}}
 Content-Type: application/json
 
-{"customerId": "{{customerId}}", "orderId": "order-1", "amount": {"amountMinor": 0, "currency": "EUR"}}
+{"customerId": "{{customerId}}", "orderId": "order-1", "paymentMethod": "tok_approve", "amount": {"amountMinor": 0, "currency": "EUR"}}
 
 ### An unknown currency: 400
 POST {{payment}}/payments
 Authorization: Bearer {{checkoutToken}}
 Content-Type: application/json
 
-{"customerId": "{{customerId}}", "orderId": "order-1", "amount": {"amountMinor": 79900, "currency": "XYZ"}}
+{"customerId": "{{customerId}}", "orderId": "order-1", "paymentMethod": "tok_approve", "amount": {"amountMinor": 79900, "currency": "XYZ"}}
 
 ### A Customer can't authorize a payment, only Checkout can: 403
 POST {{payment}}/payments
 Authorization: Bearer {{customerToken}}
 Content-Type: application/json
 
-{"customerId": "{{customerId}}", "orderId": "order-1", "amount": {"amountMinor": 79900, "currency": "EUR"}}
+{"customerId": "{{customerId}}", "orderId": "order-1", "paymentMethod": "tok_approve", "amount": {"amountMinor": 79900, "currency": "EUR"}}
 
 ### Without a token: 401
 POST {{payment}}/payments
 Content-Type: application/json
 
-{"customerId": "{{customerId}}", "orderId": "order-1", "amount": {"amountMinor": 79900, "currency": "EUR"}}
+{"customerId": "{{customerId}}", "orderId": "order-1", "paymentMethod": "tok_approve", "amount": {"amountMinor": 79900, "currency": "EUR"}}
 
 ### Staff have no Payments: 403
 POST {{keycloak}}

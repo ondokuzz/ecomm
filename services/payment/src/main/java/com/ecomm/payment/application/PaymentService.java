@@ -21,7 +21,7 @@ public class PaymentService implements AuthorizePaymentUseCase, FindPaymentUseCa
 
   @Override
   public Payment authorize(AuthorizationRequest request) {
-    var payment = Payment.authorized(UUID.randomUUID(), request, gateway.authorize(request));
+    var payment = Payment.of(UUID.randomUUID(), request, gateway.authorize(request));
     payments.add(payment);
     return payment;
   }

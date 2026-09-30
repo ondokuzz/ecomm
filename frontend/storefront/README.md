@@ -1,7 +1,7 @@
 # Storefront
 
 The Customer-facing React app: browse Products by category, pick a Variant and see its Price and
-Stock, keep a Cart, check out with a mock payment, and follow Orders and their Order Status. Built with Vite,
+Stock, keep a Cart, check out with a mock payment's test cards, and follow Orders and their Order Status. Built with Vite,
 React, TypeScript, React Router and TanStack Query.
 
 ## Pages
@@ -11,7 +11,7 @@ React, TypeScript, React Router and TanStack Query.
 | `/?category=` | Products, filtered by category | no |
 | `/products/{sku}?variant=` | A Product with a Variant picker, and the chosen Variant's image, Price, Stock and specs, laid out by its Category's attribute definitions; add it to the Cart | no (adding needs it) |
 | `/cart` | The Cart, priced from Catalog's current Prices; change quantities, remove lines or empty it | yes |
-| `/checkout` | Starts or resumes a Checkout Session: its lines, price breakdown and a countdown to when it expires, and a mock payment card with a "Pay" button | yes |
+| `/checkout` | Starts or resumes a Checkout Session: its lines, price breakdown and a countdown to when it expires, a test-card picker and a "Pay" button | yes |
 | `/orders/{id}` | An Order: its Order Status timeline, its lines and summary; after checkout, the confirmation first | yes |
 | `/orders` | My Orders as cards, newest first | yes |
 
@@ -155,7 +155,19 @@ the subtotal. "Empty cart" clears it through `DELETE /cart` once the Customer co
 focus to the empty state, since the button that had it is gone.
 
 Checkout shows where the Customer is (Cart → Payment → Done; the Order confirmation shows Done),
-and a drawn payment card: there is nothing to type, since the payment is mocked. Arriving there
+and a drawn payment card over a test-card picker: there is nothing to type, since the payment is
+mocked. Each test card is a radio named by its card and described by what it does
+(`testCards` in [`src/domain/payment.ts`](./src/domain/payment.ts)): **Approve**, **Decline**,
+**Insufficient funds** and **Gateway error**, sent as the Payment method `tok_approve`,
+`tok_decline`, `tok_insufficient_funds` and `tok_gateway_error`. Approve is chosen to begin with,
+and the drawn card shows the chosen one's last four digits.
+
+A declined card (402) shows "Your card was declined" inline, with a line for its `declineReason`;
+a payment that didn't go through (502) shows "The payment didn't go through" instead
+(`paymentFailure`). Either way the session still holds the items, so the Customer picks a card,
+which clears the message, and pays again. Any other failure shows the service's own message.
+
+Arriving there
 resumes the Customer's Checkout Session when it still holds exactly their Cart
 (`sessionHoldsCart`), and starts a new one otherwise, which replaces the old and releases its
 Reservation.
@@ -192,13 +204,15 @@ Sign in as `demo@ecomm.local` / `demo`, or register a new Customer.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: Money formatting, Cart pricing, checkout problems, the session countdown and price breakdown, quantities, Stock levels, toasts, category chips, Product specs by their Category's definitions, Customer initials, Orders and their timeline, Order Status colours, seed Product images, the Keycloak theme's copy of the tokens
+npm test          # Vitest: Money formatting, Cart pricing, checkout problems, the session countdown and price breakdown, test cards and payment failures, quantities, Stock levels, toasts, category chips, Product specs by their Category's definitions, Customer initials, Orders and their timeline, Order Status colours, seed Product images, the Keycloak theme's copy of the tokens
 npm run test:e2e  # Playwright smoke test against the running compose stack (`make up`)
 ```
 
 The smoke test ([`e2e/sprint1.spec.ts`](./e2e/sprint1.spec.ts)) signs in on Keycloak for real,
-checks out two Products as the demo Customer (the "held until" notice and its countdown, their Stock reserved but
+checks out two Products as the demo Customer with the Approve test card (the "held until" notice and its countdown, their Stock reserved but
 still on hand, then the confirmation, the confetti gone under reduced motion, the Order's lines by
-Product name, its timeline, its card on My Orders, and on-hand Stock down by one), empties a Cart
+Product name, its timeline, its card on My Orders, and on-hand Stock down by one), pays with the
+Decline card and sees the decline inline with the session kept, then pays the same session with
+Approve and sees `PAID`, empties a Cart
 through the confirmation, and registers a new Customer. It needs Chromium once:
 `npx playwright install chromium`. Set `STOREFRONT_URL` or `KEYCLOAK_URL` to aim it elsewhere.

@@ -26,6 +26,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
+import org.springframework.http.MediaType;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -133,14 +134,30 @@ abstract class CheckoutApiTest {
         .exchange();
   }
 
+  /** The mock gateway's test token that approves. */
+  static final String APPROVE = "tok_approve";
+
   RestTestClient.ResponseSpec pay(String sessionId) {
     return pay(customerToken(), sessionId);
   }
 
   RestTestClient.ResponseSpec pay(String token, String sessionId) {
+    return payWith(token, sessionId, "{\"paymentMethod\": \"%s\"}".formatted(APPROVE));
+  }
+
+  /** Pays the session with {@code paymentMethod}, a gateway's test token. */
+  RestTestClient.ResponseSpec payWithMethod(String sessionId, String paymentMethod) {
+    return payWith(
+        customerToken(), sessionId, "{\"paymentMethod\": \"%s\"}".formatted(paymentMethod));
+  }
+
+  /** Pays the session with the JSON {@code body} as it is. */
+  RestTestClient.ResponseSpec payWith(String token, String sessionId, String body) {
     return http.post()
         .uri("/checkout/sessions/{id}/pay", sessionId)
         .headers(h -> h.setBearerAuth(token))
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(body)
         .exchange();
   }
 
@@ -299,6 +316,19 @@ abstract class CheckoutApiTest {
             .withStatus(201)
             .withHeader("Content-Type", "application/json")
             .withBody("{\"id\": \"p-1\", \"status\": \"AUTHORIZED\"}"));
+  }
+
+  /** Payment records the Order's Payment as declined by the gateway, for {@code reason}. */
+  static void stubDeclinedPayment(String reason) {
+    stubPayment(
+        aResponse()
+            .withStatus(201)
+            .withHeader("Content-Type", "application/json")
+            .withBody(
+                """
+                {"id": "p-2", "status": "DECLINED", "declineReason": "%s"}
+                """
+                    .formatted(reason)));
   }
 
   static void stubPayment(ResponseDefinitionBuilder response) {

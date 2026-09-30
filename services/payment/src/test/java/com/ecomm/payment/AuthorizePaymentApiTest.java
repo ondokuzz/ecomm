@@ -7,14 +7,14 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.MediaType;
 
-/** Checkout authorizes an Order's payment for a Customer; the mock gateway always approves it. */
+/** Checkout authorizes an Order's payment for a Customer, paid with a payment method. */
 class AuthorizePaymentApiTest extends PaymentApiTest {
 
   @Test
   void aPaymentIsRecordedAsAuthorizedWithAGatewayReference() {
     authorize(
             """
-            {"customerId": "customer-42", "orderId": "order-1", "amount": {"amountMinor": 79900, "currency": "EUR"}}
+            {"customerId": "customer-42", "orderId": "order-1", "paymentMethod": "tok_approve", "amount": {"amountMinor": 79900, "currency": "EUR"}}
             """)
         .expectStatus()
         .isCreated()
@@ -37,7 +37,7 @@ class AuthorizePaymentApiTest extends PaymentApiTest {
   void eachAuthorizationGetsItsOwnPaymentAndGatewayReference() {
     var body =
         """
-        {"customerId": "customer-42", "orderId": "order-twice", "amount": {"amountMinor": 100, "currency": "EUR"}}
+        {"customerId": "customer-42", "orderId": "order-twice", "paymentMethod": "tok_approve", "amount": {"amountMinor": 100, "currency": "EUR"}}
         """;
     var first = authorize(body).expectBody(PaymentView.class).returnResult().getResponseBody();
     var second = authorize(body).expectBody(PaymentView.class).returnResult().getResponseBody();
@@ -50,57 +50,73 @@ class AuthorizePaymentApiTest extends PaymentApiTest {
   @ValueSource(
       strings = {
         """
-        {"customerId": "customer-42", "amount": {"amountMinor": 100, "currency": "EUR"}}
+        {"customerId": "customer-42", "paymentMethod": "tok_approve", "amount": {"amountMinor": 100, "currency": "EUR"}}
         """,
         """
-        {"customerId": "customer-42", "orderId": " ", "amount": {"amountMinor": 100, "currency": "EUR"}}
+        {"customerId": "customer-42", "orderId": " ", "paymentMethod": "tok_approve", "amount": {"amountMinor": 100, "currency": "EUR"}}
         """,
         """
-        {"customerId": "customer-42", "orderId": 7, "amount": {"amountMinor": 100, "currency": "EUR"}}
+        {"customerId": "customer-42", "orderId": 7, "paymentMethod": "tok_approve", "amount": {"amountMinor": 100, "currency": "EUR"}}
         """,
         """
         {"customerId": "customer-42", "orderId": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-         "amount": {"amountMinor": 100, "currency": "EUR"}}
+         "paymentMethod": "tok_approve", "amount": {"amountMinor": 100, "currency": "EUR"}}
         """,
         """
-        {"customerId": "customer-42", "orderId": "order-bad"}
+        {"customerId": "customer-42", "orderId": "order-bad", "paymentMethod": "tok_approve"}
         """,
         """
-        {"customerId": "customer-42", "orderId": "order-bad", "amount": {"amountMinor": 0, "currency": "EUR"}}
+        {"customerId": "customer-42", "orderId": "order-bad", "paymentMethod": "tok_approve", "amount": {"amountMinor": 0, "currency": "EUR"}}
         """,
         """
-        {"customerId": "customer-42", "orderId": "order-bad", "amount": {"amountMinor": -100, "currency": "EUR"}}
+        {"customerId": "customer-42", "orderId": "order-bad", "paymentMethod": "tok_approve", "amount": {"amountMinor": -100, "currency": "EUR"}}
         """,
         """
-        {"customerId": "customer-42", "orderId": "order-bad", "amount": {"amountMinor": 1.5, "currency": "EUR"}}
+        {"customerId": "customer-42", "orderId": "order-bad", "paymentMethod": "tok_approve", "amount": {"amountMinor": 1.5, "currency": "EUR"}}
         """,
         """
-        {"customerId": "customer-42", "orderId": "order-bad", "amount": {"amountMinor": "100", "currency": "EUR"}}
+        {"customerId": "customer-42", "orderId": "order-bad", "paymentMethod": "tok_approve", "amount": {"amountMinor": "100", "currency": "EUR"}}
         """,
         """
-        {"customerId": "customer-42", "orderId": "order-bad", "amount": {"amountMinor": 100}}
+        {"customerId": "customer-42", "orderId": "order-bad", "paymentMethod": "tok_approve", "amount": {"amountMinor": 100}}
         """,
         """
-        {"customerId": "customer-42", "orderId": "order-bad", "amount": {"amountMinor": 100, "currency": "XYZ"}}
+        {"customerId": "customer-42", "orderId": "order-bad", "paymentMethod": "tok_approve", "amount": {"amountMinor": 100, "currency": "XYZ"}}
         """,
         """
-        {"customerId": "customer-42", "orderId": "order-bad", "amount": {"amountMinor": 100, "currency": "eur"}}
+        {"customerId": "customer-42", "orderId": "order-bad", "paymentMethod": "tok_approve", "amount": {"amountMinor": 100, "currency": "eur"}}
         """,
         """
-        {"customerId": "customer-42", "orderId": "order-bad", "amount": {"amountMinor": 99999999999999999999, "currency": "EUR"}}
+        {"customerId": "customer-42", "orderId": "order-bad", "paymentMethod": "tok_approve", "amount": {"amountMinor": 99999999999999999999, "currency": "EUR"}}
         """,
         """
-        {"orderId": "order-bad", "amount": {"amountMinor": 100, "currency": "EUR"}}
+        {"orderId": "order-bad", "paymentMethod": "tok_approve", "amount": {"amountMinor": 100, "currency": "EUR"}}
         """,
         """
         {"customerId": " ", "orderId": "order-bad",
-         "amount": {"amountMinor": 100, "currency": "EUR"}}
+         "paymentMethod": "tok_approve", "amount": {"amountMinor": 100, "currency": "EUR"}}
         """,
         """
         {"customerId": 42, "orderId": "order-bad",
+         "paymentMethod": "tok_approve", "amount": {"amountMinor": 100, "currency": "EUR"}}
+        """,
+        "{\"customerId\": \"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\", \"orderId\": \"order-bad\", \"paymentMethod\": \"tok_approve\", \"amount\": {\"amountMinor\": 100, \"currency\": \"EUR\"}}",
+        """
+        {"customerId": "customer-42", "orderId": "order-bad", "amount": {"amountMinor": 100, "currency": "EUR"}}
+        """,
+        """
+        {"customerId": "customer-42", "orderId": "order-bad", "paymentMethod": " ",
          "amount": {"amountMinor": 100, "currency": "EUR"}}
         """,
-        "{\"customerId\": \"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\", \"orderId\": \"order-bad\", \"amount\": {\"amountMinor\": 100, \"currency\": \"EUR\"}}",
+        """
+        {"customerId": "customer-42", "orderId": "order-bad", "paymentMethod": 42,
+         "amount": {"amountMinor": 100, "currency": "EUR"}}
+        """,
+        """
+        {"customerId": "customer-42", "orderId": "order-bad", "paymentMethod": {"token": "tok_approve"},
+         "amount": {"amountMinor": 100, "currency": "EUR"}}
+        """,
+        "{\"customerId\": \"customer-42\", \"orderId\": \"order-bad\", \"paymentMethod\": \"tok_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\", \"amount\": {\"amountMinor\": 100, \"currency\": \"EUR\"}}",
         "not json"
       })
   void anInvalidRequestIsABadRequest(String body) {

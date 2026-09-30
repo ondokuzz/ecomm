@@ -3,8 +3,14 @@ package com.ecomm.payment.adapter.in.web;
 import com.ecomm.payment.domain.Payment;
 import java.util.UUID;
 
+/** A Payment: {@code declineReason} is null unless its {@code status} is {@code DECLINED}. */
 record PaymentResponse(
-    UUID id, String orderId, Amount amount, String status, String gatewayReference) {
+    UUID id,
+    String orderId,
+    Amount amount,
+    String status,
+    String declineReason,
+    String gatewayReference) {
 
   record Amount(long amountMinor, String currency) {}
 
@@ -14,6 +20,7 @@ record PaymentResponse(
         payment.orderId(),
         new Amount(payment.amount().amountMinor(), payment.amount().currency().getCurrencyCode()),
         payment.status().name(),
+        payment.declineReason(),
         payment.gatewayReference());
   }
 }

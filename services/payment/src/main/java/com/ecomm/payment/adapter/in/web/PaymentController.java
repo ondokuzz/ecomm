@@ -4,6 +4,7 @@ import com.ecomm.commons.security.CurrentCustomer;
 import com.ecomm.payment.application.port.in.AuthorizePaymentUseCase;
 import com.ecomm.payment.application.port.in.FindPaymentUseCase;
 import com.ecomm.payment.domain.InvalidPaymentException;
+import com.ecomm.payment.domain.PaymentGatewayUnavailableException;
 import java.net.URI;
 import java.util.Optional;
 import java.util.UUID;
@@ -40,7 +41,10 @@ class PaymentController {
     this.find = find;
   }
 
-  /** 201 with the recorded Payment, and its URL in {@code Location}. */
+  /**
+   * 201 with the recorded Payment, authorized or declined, and its URL in {@code Location}; 502
+   * when the gateway fails to answer.
+   */
   @PostMapping
   @PreAuthorize("hasRole('CHECKOUT')")
   ResponseEntity<PaymentResponse> authorize(@RequestBody AuthorizePaymentRequest request) {
@@ -78,6 +82,13 @@ class PaymentController {
   @ExceptionHandler(PaymentNotFoundException.class)
   ProblemDetail notFound(PaymentNotFoundException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
+  }
+
+  @ExceptionHandler(PaymentGatewayUnavailableException.class)
+  ProblemDetail gatewayUnavailable(PaymentGatewayUnavailableException e) {
+    log.warn("The payment gateway failed to answer", e);
+    return ProblemDetail.forStatusAndDetail(
+        HttpStatus.BAD_GATEWAY, "The payment gateway failed to answer; nothing was recorded.");
   }
 
   @ExceptionHandler(InvalidPaymentException.class)

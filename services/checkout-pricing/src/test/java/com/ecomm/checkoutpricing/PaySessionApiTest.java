@@ -57,6 +57,23 @@ class PaySessionApiTest extends CheckoutApiTest {
   }
 
   @Test
+  void theOrdersTotalIsAuthorizedWithTheCustomersPaymentMethod() {
+    stubSuccessfulCheckout();
+
+    pay(startedSessionId()).expectStatus().isOk();
+
+    DOWNSTREAM.verify(
+        postRequestedFor(urlEqualTo("/payments"))
+            .withRequestBody(
+                equalToJson(
+                    """
+                    {"customerId": "customer-42", "orderId": "%s", "paymentMethod": "tok_approve",
+                     "amount": {"amountMinor": 159800, "currency": "EUR"}}
+                    """
+                        .formatted(ORDER_ID))));
+  }
+
+  @Test
   void theReservationIsCommittedForTheCustomer() {
     stubSuccessfulCheckout();
 

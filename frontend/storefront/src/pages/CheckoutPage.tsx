@@ -2,7 +2,7 @@ import { useEffect, useId, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { useCart } from '../api/cart'
 import { useVariants } from '../api/catalog'
-import { isSessionOver, useCheckoutSession, usePayCheckoutSession } from '../api/checkout'
+import { isSessionOver, payFailureOf, useCheckoutSession, usePayCheckoutSession } from '../api/checkout'
 import { ApiError } from '../api/http'
 import { CheckoutSteps } from '../components/CheckoutSteps'
 import { EmptyCart } from '../components/EmptyCart'
@@ -15,10 +15,12 @@ import { type CartLine, itemCountLabel } from '../domain/cart'
 import { variantName } from '../domain/catalog'
 import { type CheckoutSession, checkoutProblem, sessionCountdown, sessionSummaryRows } from '../domain/checkout'
 import { formatMoney } from '../domain/money'
+import { type TestCard, defaultTestCard, testCards } from '../domain/payment'
 
 /**
  * Starts a Checkout Session for the Cart, or resumes the one that already holds it, and shows its
- * lines at their held Prices with a countdown to when the hold ends. Paying it places the Order.
+ * lines at their held Prices with a countdown to when the hold ends. Paying it with the chosen test
+ * card places the Order; a declined or failed payment says why, and the Customer can pay again.
  */
 export function CheckoutPage() {
   const cart = useCart()
@@ -26,6 +28,7 @@ export function CheckoutPage() {
   const [attempt, setAttempt] = useState(0)
   const session = useCheckoutSession(cart.data, attempt)
   const pay = usePayCheckoutSession()
+  const [card, setCard] = useState(defaultTestCard)
   const now = useNow()
   const navigate = useNavigate()
 
@@ -44,9 +47,12 @@ export function CheckoutPage() {
   if (countdown.expired || isSessionOver(pay.error)) return <SessionExpired onStartAgain={startAgain} />
 
   const payNow = () =>
-    pay.mutate(session.data.id, {
-      onSuccess: (result) => navigate(`/orders/${encodeURIComponent(result.orderId)}?placed`, { replace: true }),
-    })
+    pay.mutate(
+      { sessionId: session.data.id, paymentMethod: card.token },
+      {
+        onSuccess: (result) => navigate(`/orders/${encodeURIComponent(result.orderId)}?placed`, { replace: true }),
+      },
+    )
 
   return (
     <section>
@@ -57,12 +63,20 @@ export function CheckoutPage() {
         <div className="cart-main">
           <Card className="payment">
             <h2>Payment</h2>
-            <MockCard />
+            <MockCard card={card} />
+            <TestCardPicker
+              selected={card}
+              disabled={pay.isPending || pay.isSuccess}
+              onSelect={(picked) => {
+                setCard(picked)
+                pay.reset()
+              }}
+            />
             <p className="muted payment-note">
               <Icon name="lock" size={16} />
-              This is a demo: the payment is mocked and always succeeds.
+              This is a demo: each test card shows one way a payment can go. Nothing is charged.
             </p>
-            {pay.error && <ErrorMessage error={pay.error} />}
+            {pay.error && <PayError error={pay.error} />}
             <Button
               variant="primary"
               size="lg"
@@ -196,15 +210,77 @@ function StartError({ error, retrying, onRetry }: { error: unknown; retrying: bo
   )
 }
 
-/** A payment card drawn for show: there is nothing to type, since the payment is mocked. */
-function MockCard() {
+/**
+ * The test cards to pay with, one per way the mock gateway answers. Each radio is named by its card
+ * alone and described by what it does, so the Customer knows a decline is coming.
+ */
+function TestCardPicker({
+  selected,
+  disabled,
+  onSelect,
+}: {
+  selected: TestCard
+  disabled: boolean
+  onSelect: (card: TestCard) => void
+}) {
+  const name = useId()
   return (
-    <div className="mock-card" aria-label="Demo payment card" role="img">
+    <fieldset className="test-cards" disabled={disabled}>
+      <legend>Test card</legend>
+      {testCards.map((card) => (
+        <label key={card.token} className="test-card">
+          <input
+            type="radio"
+            name={name}
+            value={card.token}
+            checked={card.token === selected.token}
+            onChange={() => onSelect(card)}
+            aria-labelledby={`${name}-${card.token}-label`}
+            aria-describedby={`${name}-${card.token}-outcome`}
+          />
+          <span id={`${name}-${card.token}-label`} className="test-card-label">
+            {card.label}
+          </span>
+          <span className="test-card-number" aria-hidden="true">
+            •••• {card.last4}
+          </span>
+          <span id={`${name}-${card.token}-outcome`} className="test-card-outcome muted">
+            {card.outcome}
+          </span>
+        </label>
+      ))}
+    </fieldset>
+  )
+}
+
+/**
+ * Why paying failed. A decline and a payment that didn't go through each have their own message, and
+ * the session still holds the items, so the Customer can pay again; anything else says what the
+ * service said.
+ */
+function PayError({ error }: { error: unknown }) {
+  const failure = payFailureOf(error)
+  if (!failure) return <ErrorMessage error={error} />
+  return (
+    <div className={`alert alert-danger pay-error pay-error-${failure.kind}`} role="alert">
+      <Icon name="alert" size={18} />
+      <div>
+        <strong>{failure.title}</strong>
+        <span>{failure.message}</span>
+      </div>
+    </div>
+  )
+}
+
+/** The chosen test card, drawn for show: there is nothing to type, since the payment is mocked. */
+function MockCard({ card }: { card: TestCard }) {
+  return (
+    <div className="mock-card" aria-label={`Demo payment card ending ${card.last4}`} role="img">
       <div className="mock-card-top">
         <span className="mock-card-chip" />
         <span className="mock-card-brand">DEMO</span>
       </div>
-      <span className="mock-card-number">•••• •••• •••• 4242</span>
+      <span className="mock-card-number">•••• •••• •••• {card.last4}</span>
       <div className="mock-card-bottom">
         <span>Demo Customer</span>
         <span>12/30</span>

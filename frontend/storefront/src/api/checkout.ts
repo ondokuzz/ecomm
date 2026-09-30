@@ -3,6 +3,7 @@ import { useAuth } from 'react-oidc-context'
 import type { Cart } from '../domain/cart'
 import { type CheckoutSession, sessionHoldsCart } from '../domain/checkout'
 import type { CheckoutResult } from '../domain/order'
+import { type PaymentFailure, paymentFailure } from '../domain/payment'
 import { cartKey } from './cart'
 import { stockKey } from './catalog'
 import { ApiError, api } from './http'
@@ -43,15 +44,20 @@ async function currentSession(token: string | undefined): Promise<CheckoutSessio
   }
 }
 
-/** Pays a Checkout Session: Checkout places the Order, authorizes payment and takes the held Stock. */
+/**
+ * Pays a Checkout Session with a payment method: Checkout places the Order, authorizes payment and
+ * takes the held Stock. A declined or failed payment cancels that Order but keeps the session, so it
+ * can be paid again.
+ */
 export function usePayCheckoutSession() {
   const token = useAuth().user?.access_token
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (sessionId: string) =>
+    mutationFn: ({ sessionId, paymentMethod }: { sessionId: string; paymentMethod: string }) =>
       api<CheckoutResult>('checkout-pricing', `/checkout/sessions/${encodeURIComponent(sessionId)}/pay`, {
         method: 'POST',
         token,
+        body: { paymentMethod },
       }),
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: cartKey })
@@ -59,6 +65,11 @@ export function usePayCheckoutSession() {
       queryClient.invalidateQueries({ queryKey: stockKey })
     },
   })
+}
+
+/** Why paying failed, when paying again can fix it: a declined card, or a payment that didn't go through. */
+export function payFailureOf(error: unknown): PaymentFailure | undefined {
+  return error instanceof ApiError ? paymentFailure(error.status, error.problem) : undefined
 }
 
 /** Whether paying failed because the session is over: expired (410), or gone altogether (404). */

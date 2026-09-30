@@ -7,6 +7,10 @@ spring:
     username: ecomm
     password: ecomm
 
+payment:
+  # The PaymentGatewayPort adapter; only mock so far. A value with no adapter fails at startup.
+  gateway: mock
+
 management:
   endpoints:
     web:

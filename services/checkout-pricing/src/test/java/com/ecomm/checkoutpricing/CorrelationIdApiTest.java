@@ -7,6 +7,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.github.tomakehurst.wiremock.verification.LoggedRequest;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
 
 /**
  * Each step of a checkout reads as one story across services: every downstream call names the
@@ -51,6 +52,8 @@ class CorrelationIdApiTest extends CheckoutApiTest {
               h.setBearerAuth(customerToken());
               h.set(HEADER, "pay-7f3a-42");
             })
+        .contentType(MediaType.APPLICATION_JSON)
+        .body("{\"paymentMethod\": \"tok_approve\"}")
         .exchange()
         .expectStatus()
         .isOk()

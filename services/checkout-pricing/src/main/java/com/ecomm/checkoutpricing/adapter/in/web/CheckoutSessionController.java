@@ -8,6 +8,7 @@ import com.ecomm.checkoutpricing.domain.CheckoutSessionNotFoundException;
 import com.ecomm.checkoutpricing.domain.EmptyCartException;
 import com.ecomm.checkoutpricing.domain.MixedCurrencyException;
 import com.ecomm.checkoutpricing.domain.OutOfStockException;
+import com.ecomm.checkoutpricing.domain.PaymentDeclinedException;
 import com.ecomm.checkoutpricing.domain.UnknownVariantsException;
 import com.ecomm.commons.security.CurrentCustomer;
 import java.net.URI;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -59,10 +61,17 @@ class CheckoutSessionController {
         .orElseThrow(NoCurrentSessionException::new);
   }
 
-  /** 200 with the paid Order's ID and Order Status; 410 once the session has expired. */
+  /**
+   * 200 with the paid Order's ID and Order Status; 402 when the payment is declined, 410 once the
+   * session has expired. The body is optional here only so that a caller who isn't a Customer gets
+   * its 403 before a missing body gets a 400.
+   */
   @PostMapping("/{id}/pay")
-  CheckoutResponse pay(@PathVariable String id, CurrentCustomer customer) {
-    var result = checkout.pay(customer.id(), id);
+  CheckoutResponse pay(
+      @PathVariable String id,
+      CurrentCustomer customer,
+      @RequestBody(required = false) PayRequest request) {
+    var result = checkout.pay(customer.id(), id, PayRequest.paymentMethodOf(request));
     log.info("Paid Checkout Session {} as Order {}, {}", id, result.orderId(), result.status());
     return CheckoutResponse.of(result);
   }
@@ -75,6 +84,19 @@ class CheckoutSessionController {
   @ExceptionHandler(CheckoutSessionExpiredException.class)
   ProblemDetail sessionExpired(CheckoutSessionExpiredException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.GONE, e.getMessage());
+  }
+
+  @ExceptionHandler(InvalidPayRequestException.class)
+  ProblemDetail invalidPayRequest(InvalidPayRequestException e) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+  }
+
+  @ExceptionHandler(PaymentDeclinedException.class)
+  ProblemDetail paymentDeclined(PaymentDeclinedException e) {
+    log.info("Payment declined: {}", e.reason());
+    var problem = ProblemDetail.forStatusAndDetail(HttpStatus.PAYMENT_REQUIRED, e.getMessage());
+    problem.setProperty("declineReason", e.reason());
+    return problem;
   }
 
   @ExceptionHandler(NoCurrentSessionException.class)

@@ -93,7 +93,7 @@ public class CheckoutService implements CheckoutUseCase {
   }
 
   @Override
-  public CheckoutResult pay(String customerId, String sessionId) {
+  public CheckoutResult pay(String customerId, String sessionId, String paymentMethod) {
     var session =
         sessions
             .find(sessionId)
@@ -108,7 +108,7 @@ public class CheckoutService implements CheckoutUseCase {
     var order = orders.place(customerId, session.cart().lines(), session.tax());
     var orderId = order.id();
     try {
-      payments.authorize(customerId, orderId, order.total());
+      payments.authorize(customerId, orderId, order.total(), paymentMethod);
       inventory.commit(customerId, session.reservationId());
       orders.changeStatus(customerId, orderId, OrderStatus.PAID);
     } catch (RuntimeException e) {

@@ -92,8 +92,12 @@ The lifecycle stage of an Order: `Placed → Paid → Fulfilled → Shipped → 
 _Avoid_: State (Status is the domain term; state is a general programming concept)
 
 **Payment**:
-An Order's amount, as `Money`, taken through a payment gateway and recorded with the gateway's reference for it. A Payment starts `AUTHORIZED`: the gateway has approved the amount but not yet captured it. It belongs to the Customer who authorized it, and only they can see it. Capture and refund come later.
+An Order's amount, as `Money`, taken through a payment gateway with a Payment method and recorded with the gateway's answer and its reference for it. A Payment is `AUTHORIZED` when the gateway has approved the amount but not yet captured it, or `DECLINED`, for good, with the gateway's decline reason (such as `insufficient_funds`). A gateway that fails to answer records no Payment at all. It belongs to the Customer who authorized it, and only they can see it. Capture and refund come later.
 _Avoid_: Charge, Transaction
+
+**Payment method**:
+How a Customer pays: an opaque token the payment gateway issued for their card, which Checkout passes on to Payment and nothing else reads. The mock gateway takes test tokens: `tok_approve` authorizes; `tok_decline` and `tok_insufficient_funds` decline; `tok_gateway_error` fails to answer.
+_Avoid_: Card (a Payment method stands for a card, but is never its number)
 
 **Fulfillment**:
 The physical pick/pack/ship process that turns a Paid Order into a Shipped Order.

@@ -7,6 +7,7 @@ import type { Order } from '../src/domain/order'
  * The Sprint 1 definition of done, end to end: browse seeded Products, pick a Variant, add them to
  * the Cart, check out with the mock payment, and see the Order confirmation and its Order Status.
  * Checkout holds the Cart in a Checkout Session first, and paying takes the held Stock off on-hand.
+ * A declined test card says so, and the held session can then be paid with one that approves.
  */
 
 // The demo checkout compares Stock before and after, so nothing else may check out meanwhile.
@@ -96,6 +97,7 @@ test('the demo Customer checks out a picked Variant and another Product, and on-
       onHand: line.stock.onHand,
     })
   }
+  await testCard(page, 'Approve').check()
   await page.getByRole('button', { name: /^Pay/ }).click()
 
   await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/)
@@ -132,6 +134,42 @@ test('the demo Customer checks out a picked Variant and another Product, and on-
   for (const { variantId, stock } of bought) {
     expect(await stockOf(request, variantId)).toEqual({ quantity: stock.quantity - 1, onHand: stock.onHand - 1 })
   }
+})
+
+test('a declined card shows why, and the held session can then be paid with one that approves', async ({ page, request }) => {
+  const token = await tokenFor(request, demoCustomer)
+  await emptyCart(request, token)
+  const { variantId, stock } = await aProductInStock(request)
+  const put = await request.put(`/api/cart/cart/items/${encodeURIComponent(variantId)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { quantity: 1 },
+  })
+  expect(put.ok()).toBeTruthy()
+
+  await page.goto('/checkout')
+  await signInOnKeycloak(page, demoCustomer)
+  await expect(page.getByRole('timer', { name: 'Time left' })).toBeVisible()
+  const sessionId = await currentSessionId(request, token)
+
+  await testCard(page, 'Decline').check()
+  await page.getByRole('button', { name: /^Pay/ }).click()
+
+  const declined = page.getByRole('alert').filter({ hasText: 'Your card was declined' })
+  await expect(declined).toContainText('Your bank declined the payment. Try another card.')
+  await expect(page).toHaveURL(/\/checkout$/)
+  // The decline cancelled that Order, but the session still holds the Stock, so paying again works.
+  expect(await currentSessionId(request, token)).toBe(sessionId)
+  expect((await stockOf(request, variantId)).quantity).toBe(stock.quantity - 1)
+
+  await testCard(page, 'Approve').check()
+  await expect(declined).toBeHidden()
+  await page.getByRole('button', { name: /^Pay/ }).click()
+
+  await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/)
+  await expect(page.locator('.status-paid')).toHaveText('Paid')
+  const orderId = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!)
+  expect((await orderOf(request, token, orderId)).status).toBe('PAID')
+  expect(await stockOf(request, variantId)).toEqual({ quantity: stock.quantity - 1, onHand: stock.onHand - 1 })
 })
 
 test('the demo Customer empties their Cart after confirming', async ({ page, request }) => {
@@ -178,6 +216,20 @@ test('a new Customer registers on Keycloak and comes back signed in', async ({ p
   await expect(page).toHaveURL((url) => url.origin === new URL(baseURL!).origin)
   await expectSignedIn(page, email)
 })
+
+/** The checkout page's test card radio, named by its card. */
+function testCard(page: Page, label: string) {
+  return page.getByRole('group', { name: 'Test card' }).getByRole('radio', { name: label, exact: true })
+}
+
+/** The ID of the Customer's live Checkout Session. */
+async function currentSessionId(request: APIRequestContext, token: string): Promise<string> {
+  const response = await request.get('/api/checkout-pricing/checkout/sessions/current', {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  expect(response.ok()).toBeTruthy()
+  return ((await response.json()) as { id: string }).id
+}
 
 /** The Customer menu, behind the Customer's avatar, names them and offers to log out. */
 async function expectSignedIn(page: Page, email: string) {

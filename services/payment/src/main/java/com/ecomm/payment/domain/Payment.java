@@ -4,8 +4,9 @@ import com.ecomm.commons.money.Money;
 import java.util.UUID;
 
 /**
- * An Order's payment as recorded after the gateway answered. It belongs to the Customer it was
- * authorized for, and only they may see it.
+ * An Order's payment as recorded after the gateway answered: {@code AUTHORIZED}, or {@code
+ * DECLINED} with the gateway's {@code declineReason}, which is null otherwise. It belongs to the
+ * Customer it was authorized for, and only they may see it.
  */
 public record Payment(
     UUID id,
@@ -13,17 +14,21 @@ public record Payment(
     String orderId,
     Money amount,
     PaymentStatus status,
+    String declineReason,
     String gatewayReference) {
 
-  public static Payment authorized(
-      UUID id, AuthorizationRequest request, GatewayAuthorization authorization) {
+  /** The Payment the gateway's answer to {@code request} makes. */
+  public static Payment of(UUID id, AuthorizationRequest request, GatewayAuthorization answer) {
+    var declineReason =
+        answer instanceof GatewayAuthorization.Declined declined ? declined.reason() : null;
     return new Payment(
         id,
         request.customerId(),
         request.orderId(),
         request.amount(),
-        PaymentStatus.AUTHORIZED,
-        authorization.reference());
+        declineReason == null ? PaymentStatus.AUTHORIZED : PaymentStatus.DECLINED,
+        declineReason,
+        answer.reference());
   }
 
   public boolean belongsTo(String customerId) {

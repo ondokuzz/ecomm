@@ -17,7 +17,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 @AutoConfigureRestTestClient
 abstract class PaymentApiTest {
 
-  private static final PostgreSQLContainer POSTGRES =
+  static final PostgreSQLContainer POSTGRES =
       new PostgreSQLContainer("postgres:16").withDatabaseName("payment");
 
   static {
@@ -47,6 +47,19 @@ abstract class PaymentApiTest {
     return FakeKeycloak.token("checkout", "CHECKOUT");
   }
 
+  /**
+   * Authorizes {@code amountMinor} EUR of {@code orderId} for {@code customer-42}, paid with {@code
+   * paymentMethod}.
+   */
+  RestTestClient.ResponseSpec authorize(String orderId, String paymentMethod) {
+    return authorize(
+        """
+        {"customerId": "customer-42", "orderId": "%s", "paymentMethod": "%s",
+         "amount": {"amountMinor": 79900, "currency": "EUR"}}
+        """
+            .formatted(orderId, paymentMethod));
+  }
+
   /** Authorizes as Checkout; the body names the Customer. */
   RestTestClient.ResponseSpec authorize(String body) {
     return http.post()
@@ -59,7 +72,12 @@ abstract class PaymentApiTest {
 
   /** The parts of a Payment a client reads, independent of the service's classes. */
   record PaymentView(
-      String id, String orderId, AmountView amount, String status, String gatewayReference) {}
+      String id,
+      String orderId,
+      AmountView amount,
+      String status,
+      String declineReason,
+      String gatewayReference) {}
 
   record AmountView(long amountMinor, String currency) {}
 }

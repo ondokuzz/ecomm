@@ -60,9 +60,37 @@ Authorization: Bearer {{customerToken}}
 
 > {% client.global.set("sessionId", response.body.id); %}
 
-### Pay: 200 with the Order in PAID
+### Pay with a declining test card: 402 with its declineReason; that Order is CANCELLED
 POST {{checkout}}/checkout/sessions/{{sessionId}}/pay
 Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"paymentMethod": "tok_insufficient_funds"}
+
+### The gateway fails to answer: 502, and that Order is CANCELLED too
+POST {{checkout}}/checkout/sessions/{{sessionId}}/pay
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"paymentMethod": "tok_gateway_error"}
+
+### The session still holds the Cart, so it can be paid again
+GET {{checkout}}/checkout/sessions/current
+Authorization: Bearer {{customerToken}}
+
+### No paymentMethod: 400, and nothing happens
+POST {{checkout}}/checkout/sessions/{{sessionId}}/pay
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{}
+
+### Pay with the approving test card: 200 with the Order in PAID
+POST {{checkout}}/checkout/sessions/{{sessionId}}/pay
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"paymentMethod": "tok_approve"}
 
 > {% client.global.set("orderId", response.body.orderId); %}
 
@@ -80,6 +108,9 @@ Authorization: Bearer {{customerToken}}
 ###
 POST {{checkout}}/checkout/sessions/{{sessionId}}/pay
 Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"paymentMethod": "tok_approve"}
 
 ### More than there is in stock: 409 naming the Variant, and no session
 PUT {{cart}}/cart/items/PHN-PIXEL-9
