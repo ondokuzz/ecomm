@@ -38,7 +38,8 @@ class EdgeAuthenticationApiTest extends GatewayApiTest {
     "DELETE, /api/catalog/products/PHN-PIXEL-9",
     "GET, /api/cart/cart",
     "PUT, /api/cart/cart/items/PHN-PIXEL-9",
-    "POST, /api/checkout-pricing/checkout",
+    "POST, /api/checkout-pricing/checkout/sessions",
+    "POST, /api/checkout-pricing/checkout/sessions/s-1/pay",
     "GET, /api/order-management/orders",
     "GET, /api/order-management/orders/7f1c"
   })

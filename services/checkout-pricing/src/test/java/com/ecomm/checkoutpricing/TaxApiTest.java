@@ -13,8 +13,9 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 
 /**
- * The tax from the {@code TaxCalculator} goes on the Order, and the Payment is authorized for the
- * Order's total, so the two always match.
+ * The tax from the {@code TaxCalculator} is worked out when the Checkout Session starts, shown on
+ * it and sent with the Order; the Payment is authorized for the Order's total, so the two always
+ * match.
  */
 class TaxApiTest extends CheckoutApiTest {
 
@@ -26,6 +27,23 @@ class TaxApiTest extends CheckoutApiTest {
     TaxCalculator twentyPercentTax() {
       return cart -> new Money(cart.subtotal().amountMinor() / 5, cart.subtotal().currency());
     }
+  }
+
+  @Test
+  void theSessionShowsTheTaxAndTheTotalWithIt() {
+    stubSuccessfulCheckout();
+
+    // 2 × 799.00, and 20% of that.
+    startSession()
+        .expectStatus()
+        .isCreated()
+        .expectBody()
+        .jsonPath("$.subtotal.amountMinor")
+        .isEqualTo(159800)
+        .jsonPath("$.tax.amountMinor")
+        .isEqualTo(31960)
+        .jsonPath("$.total.amountMinor")
+        .isEqualTo(191760);
   }
 
   @Test

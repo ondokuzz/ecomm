@@ -31,10 +31,10 @@ Browsers reach the services only through the API gateway ([`platform/api-gateway
 
 ## Relationships
 
-> **Sprint 1:** Checkout calls Inventory, Order Management and Payment directly and synchronously ([`services/checkout-pricing`](./services/checkout-pricing/README.md)). The Saga-based relationships below (Order Management → Inventory and → Payment) arrive in Sprint 3.
+> **Sprint 1:** Checkout calls Inventory, Order Management and Payment directly and synchronously ([`services/checkout-pricing`](./services/checkout-pricing/README.md)). It now reserves and commits Stock through Inventory's Reservations, still directly: a Checkout Session reserves the Cart's Stock, and paying it commits the Reservation ([Checkout ADR 0001](./services/checkout-pricing/docs/adr/0001-checkout-sessions-hold-stock-through-reservations.md)). The Saga-based relationships below (Order Management → Inventory and → Payment) arrive in Sprint 3.
 
-- **Cart → Checkout & Pricing**: Checkout reads the Cart's contents to build an Order.
-- **Catalog → Checkout & Pricing**: Checkout prices every line from Catalog's current Price, never from the Cart.
+- **Cart → Checkout & Pricing**: Checkout reads the Cart's contents to start a Checkout Session.
+- **Catalog → Checkout & Pricing**: a Checkout Session prices every line from Catalog's Price when it starts, never from the Cart, and keeps that Price for its lifetime.
 - **Checkout & Pricing → Order Management**: a successful checkout creates an Order.
 - **Order Management → Inventory**: the fulfillment Saga dispatches Reservation commands; Inventory owns the Reservation lifecycle.
 - **Order Management → Payment**: the fulfillment Saga dispatches payment-capture commands; Payment emits authorization/capture/refund events back.
@@ -52,4 +52,4 @@ Term definitions currently live in one shared [`CONTEXT.md`](./CONTEXT.md) at th
 
 ## ADRs
 
-System-wide decisions live in [`docs/adr/`](./docs/adr/). Context-specific decisions live inside the context they belong to (e.g. [`services/catalog/docs/adr/`](./services/catalog/docs/adr/)).
+System-wide decisions live in [`docs/adr/`](./docs/adr/). Context-specific decisions live inside the context they belong to (e.g. [`services/catalog/docs/adr/`](./services/catalog/docs/adr/), [`services/checkout-pricing/docs/adr/`](./services/checkout-pricing/docs/adr/)).

@@ -35,53 +35,6 @@ GET {{inventory}}/stock/PHN-PIXEL-9
 ### An unknown Variant: 404
 GET {{inventory}}/stock/NO-SUCH-VARIANT
 
-### Decrement a batch: 200 with the new stock of each Variant
-POST {{inventory}}/stock/decrement
-Authorization: Bearer {{checkoutToken}}
-Content-Type: application/json
-
-{"items": [
-  {"variantId": "PHN-PIXEL-9", "quantity": 1},
-  {"variantId": "AUD-JBL-FLIP-6", "quantity": 2}
-]}
-
-### A batch that would take a Variant negative: 409, and nothing changes
-POST {{inventory}}/stock/decrement
-Authorization: Bearer {{checkoutToken}}
-Content-Type: application/json
-
-{"items": [
-  {"variantId": "PHN-PIXEL-9", "quantity": 1},
-  {"variantId": "AUD-SONOS-ERA-100", "quantity": 1000}
-]}
-
-### A batch with an unknown Variant: 404, and nothing changes
-POST {{inventory}}/stock/decrement
-Authorization: Bearer {{checkoutToken}}
-Content-Type: application/json
-
-{"items": [{"variantId": "NO-SUCH-VARIANT", "quantity": 1}]}
-
-### A non-positive quantity: 400
-POST {{inventory}}/stock/decrement
-Authorization: Bearer {{checkoutToken}}
-Content-Type: application/json
-
-{"items": [{"variantId": "PHN-PIXEL-9", "quantity": 0}]}
-
-### A Customer can't decrement stock, only Checkout can: 403
-POST {{inventory}}/stock/decrement
-Authorization: Bearer {{customerToken}}
-Content-Type: application/json
-
-{"items": [{"variantId": "PHN-PIXEL-9", "quantity": 1}]}
-
-### Decrementing without a token: 401
-POST {{inventory}}/stock/decrement
-Content-Type: application/json
-
-{"items": [{"variantId": "PHN-PIXEL-9", "quantity": 1}]}
-
 ### Staff set a Variant's on-hand Stock: 200, or 201 for a Variant Inventory didn't stock yet
 PUT {{inventory}}/stock/PHN-PIXEL-9
 Authorization: Bearer {{staffToken}}
@@ -179,6 +132,24 @@ Content-Type: application/json
 
 {"customerId": "http-file-customer", "expiresAt": "2030-01-01T00:00:00Z", "items": [
   {"variantId": "AUD-SONOS-ERA-100", "quantity": 1000}
+]}
+
+### A batch with an unknown Variant: 404 with unknownVariants, and nothing is held
+POST {{inventory}}/reservations
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"customerId": "http-file-customer", "expiresAt": "2030-01-01T00:00:00Z", "items": [
+  {"variantId": "NO-SUCH-VARIANT", "quantity": 1}
+]}
+
+### A non-positive quantity: 400
+POST {{inventory}}/reservations
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"customerId": "http-file-customer", "expiresAt": "2030-01-01T00:00:00Z", "items": [
+  {"variantId": "PHN-PIXEL-9", "quantity": 0}
 ]}
 
 ### An expiresAt in the past: 400

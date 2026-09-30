@@ -14,14 +14,14 @@ The first build takes several minutes. Then open http://localhost:8080, where yo
 
 1. browse the 20 seeded Products by category;
 2. sign in as `demo@ecomm.local` / `demo`, or register a new Customer on Keycloak's page;
-3. add Products to the Cart, go to checkout and press **Pay**. The payment is mocked and always
-   succeeds;
+3. add Products to the Cart and go to checkout, which holds them and their Prices for 15 minutes,
+   then press **Pay**. The payment is mocked and always succeeds;
 4. see the Order confirmation with its Order Status, **Paid**, and find the Order under
    **My Orders**.
 
 The smoke test walks the same path in Chromium against the running stack. As the demo Customer it
 adds two Products, checks out, expects `PAID` on the confirmation page and checks through the
-Inventory API that Stock went down. It also registers a new Customer:
+Inventory API that the Checkout Session reserved their Stock and paying took it off on-hand. It also registers a new Customer:
 
 ```sh
 cd frontend/storefront

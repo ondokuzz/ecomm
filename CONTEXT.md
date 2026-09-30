@@ -33,7 +33,7 @@ A specific purchasable version of a Product (e.g. a color/storage combination), 
 _Avoid_: Option, Configuration
 
 **Stock**:
-How many units of a Variant are available to sell, counted per Variant ID and never negative: its On-hand units less what active Reservations hold of them. Inventory owns Stock. A checkout takes the Stock of several Variants as one batch that applies whole or not at all.
+How many units of a Variant are available to sell, counted per Variant ID and never negative: its On-hand units less what active Reservations hold of them. Inventory owns Stock. Checkout takes it only through Reservations, which hold several Variants as one batch that applies whole or not at all.
 _Avoid_: Inventory (that's the context, not the count)
 
 **On-hand**:
@@ -41,7 +41,7 @@ How many units of a Variant Inventory physically has, whether or not Reservation
 _Avoid_: Stock (Stock is what's left to sell), Physical stock
 
 **Price**:
-What a Variant sells for, as `Money`: an amount in the currency's minor unit. Catalog owns Price. A Cart holds no authoritative price: whatever a Cart shows is a copy, and the Price that counts is always the one Catalog holds now.
+What a Variant sells for, as `Money`: an amount in the currency's minor unit. Catalog owns Price. A Cart holds no authoritative price: whatever a Cart shows is a copy. The Price that counts is the one Catalog holds when a Checkout Session starts, which the session keeps for its lifetime.
 _Avoid_: Cost (what the platform pays a supplier)
 
 **Money**:
@@ -53,11 +53,15 @@ A Customer's in-progress, unconfirmed selection of Variants and quantities. Ephe
 _Avoid_: Basket, Bag
 
 **Checkout**:
-The step where a Customer confirms their Cart: its Variants are priced, their Stock is taken, payment is authorized, and an Order is placed.
+How a Customer turns their Cart into an Order, in two steps. Starting it opens a Checkout Session: the Cart's Variants are priced and their Stock reserved. Paying the session places the Order at those Prices, authorizes payment and commits the Reservation.
 _Avoid_: Purchase, Order placement
 
+**Checkout Session**:
+A Customer's Cart held for checkout for 15 minutes: its lines at the Prices captured when it started, their tax, and a Reservation of their Stock. Paying it honours those Prices even if Catalog has changed them since; paying one that has expired does nothing. A Customer has at most one: starting checkout again replaces it and releases its Reservation. Checkout owns it.
+_Avoid_: Checkout (the whole two-step process), Hold, Basket
+
 **Reservation**:
-A temporary, all-or-nothing hold on the Stock of several Variants for one Customer, created when checkout starts. It is `ACTIVE` until it is committed, which takes its units off On-hand for good on payment success, or released, which gives them back on abandonment. It holds Stock only while `ACTIVE` and before its `expiresAt`: from that moment it holds nothing, even before a sweep marks it `RELEASED`, and it can no longer be committed. Only its Customer's checkout can commit or release it.
+A temporary, all-or-nothing hold on the Stock of several Variants for one Customer, created when a Checkout Session starts and lasting 2 minutes longer than the session. It is `ACTIVE` until it is committed, which takes its units off On-hand for good on payment success, or released, which gives them back on abandonment. It holds Stock only while `ACTIVE` and before its `expiresAt`: from that moment it holds nothing, even before a sweep marks it `RELEASED`, and it can no longer be committed. Only its Customer's checkout can commit or release it.
 _Avoid_: Lock, Hold
 
 **Order**:
@@ -80,7 +84,7 @@ _Avoid_: VAT (one kind of it)
 The short handle the Storefront shows an Order by, such as `#3F2A9C1B`: the first eight characters of its ID, upper-cased. Order IDs are random UUIDs, so it tells a Customer's Orders apart; the full ID stays on the Order page. Display only; no service looks an Order up by it.
 
 **Order Line**:
-One Variant, its quantity, and its unit price captured at checkout. The captured price stays with the Order even if the Variant's Price changes later.
+One Variant, its quantity, and its unit price captured when the Checkout Session started. The captured price stays with the Order even if the Variant's Price changes later.
 _Avoid_: Item
 
 **Order Status**:

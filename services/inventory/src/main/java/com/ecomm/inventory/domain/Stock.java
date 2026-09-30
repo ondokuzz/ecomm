@@ -56,14 +56,6 @@ public record Stock(String variantId, int onHand, int reserved) {
     return units <= available();
   }
 
-  /** Callers check {@link #covers} first; taking more than is available throws. */
-  public Stock decrementBy(int units) {
-    if (!covers(units)) {
-      throw new IllegalArgumentException("Only " + available() + " of " + variantId + " available");
-    }
-    return new Stock(variantId, onHand - units, reserved);
-  }
-
   /**
    * The same Stock with a new on-hand count. Throws {@link OnHandBelowReservedException} when
    * Reservations hold more than that.

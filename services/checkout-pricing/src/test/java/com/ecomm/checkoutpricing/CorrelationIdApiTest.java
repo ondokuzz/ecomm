@@ -8,39 +8,68 @@ import com.github.tomakehurst.wiremock.verification.LoggedRequest;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/** One checkout reads as one story across services: every downstream call names its request. */
+/**
+ * Each step of a checkout reads as one story across services: every downstream call names the
+ * request it serves.
+ */
 class CorrelationIdApiTest extends CheckoutApiTest {
 
   private static final String HEADER = "X-Correlation-Id";
 
   @Test
-  void everyDownstreamCallCarriesTheIncomingCorrelationId() {
+  void everyCallStartingASessionCarriesTheIncomingCorrelationId() {
     stubSuccessfulCheckout();
 
     http.post()
-        .uri("/checkout")
+        .uri("/checkout/sessions")
         .headers(
             h -> {
               h.setBearerAuth(customerToken());
-              h.set(HEADER, "checkout-7f3a-42");
+              h.set(HEADER, "start-7f3a-42");
+            })
+        .exchange()
+        .expectStatus()
+        .isCreated()
+        .expectHeader()
+        .valueEquals(HEADER, "start-7f3a-42");
+
+    assertThat(downstreamCalls())
+        .isNotEmpty()
+        .allSatisfy(call -> assertThat(call.getHeader(HEADER)).isEqualTo("start-7f3a-42"));
+  }
+
+  @Test
+  void everyCallPayingCarriesTheIncomingCorrelationId() {
+    stubSuccessfulCheckout();
+    var sessionId = startedSessionId();
+    DOWNSTREAM.resetRequests();
+
+    http.post()
+        .uri("/checkout/sessions/{id}/pay", sessionId)
+        .headers(
+            h -> {
+              h.setBearerAuth(customerToken());
+              h.set(HEADER, "pay-7f3a-42");
             })
         .exchange()
         .expectStatus()
         .isOk()
         .expectHeader()
-        .valueEquals(HEADER, "checkout-7f3a-42");
+        .valueEquals(HEADER, "pay-7f3a-42");
 
     assertThat(downstreamCalls())
         .isNotEmpty()
-        .allSatisfy(call -> assertThat(call.getHeader(HEADER)).isEqualTo("checkout-7f3a-42"));
+        .allSatisfy(call -> assertThat(call.getHeader(HEADER)).isEqualTo("pay-7f3a-42"));
   }
 
   @Test
   void everyDownstreamCallCarriesTheGeneratedCorrelationId() {
     stubSuccessfulCheckout();
+    var sessionId = startedSessionId();
+    DOWNSTREAM.resetRequests();
 
     var generated =
-        checkout()
+        pay(sessionId)
             .expectStatus()
             .isOk()
             .returnResult(String.class)

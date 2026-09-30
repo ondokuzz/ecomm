@@ -1,0 +1,134 @@
+package com.ecomm.checkoutpricing.adapter.out.redis;
+
+import com.ecomm.checkoutpricing.application.port.out.CheckoutSessionRepository;
+import com.ecomm.checkoutpricing.domain.CheckoutSession;
+import com.ecomm.checkoutpricing.domain.PricedCart;
+import com.ecomm.checkoutpricing.domain.PricedLine;
+import com.ecomm.commons.money.Money;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.RedisScript;
+import org.springframework.stereotype.Component;
+import tools.jackson.databind.json.JsonMapper;
+
+/**
+ * Each Checkout Session is one JSON string, {@code checkout-session:<ID>}, and its Customer's
+ * pointer to it is {@code checkout-customer:<Customer ID>}, holding the ID. Both carry the time to
+ * live they are saved with, and Redis drops them when it runs out.
+ */
+@Component
+class RedisCheckoutSessionRepository implements CheckoutSessionRepository {
+
+  private static final RedisScript<Long> SAVE =
+      RedisScript.of(
+          """
+          redis.call('SET', KEYS[1], ARGV[1], 'PX', ARGV[3])
+          redis.call('SET', KEYS[2], ARGV[2], 'PX', ARGV[3])
+          return 1
+          """,
+          Long.class);
+
+  // A newer session may already have taken over the pointer; that one stays.
+  private static final RedisScript<Long> DELETE =
+      RedisScript.of(
+          """
+          if redis.call('GET', KEYS[2]) == ARGV[1] then redis.call('DEL', KEYS[2]) end
+          return redis.call('DEL', KEYS[1])
+          """,
+          Long.class);
+
+  private final StringRedisTemplate redis;
+  private final JsonMapper json;
+
+  RedisCheckoutSessionRepository(StringRedisTemplate redis, JsonMapper json) {
+    this.redis = redis;
+    this.json = json;
+  }
+
+  /** A session as it is stored; decoupled from the domain so the domain can change freely. */
+  private record Stored(
+      String id,
+      String customerId,
+      List<StoredLine> lines,
+      StoredMoney tax,
+      String reservationId,
+      Instant expiresAt) {
+
+    static Stored of(CheckoutSession session) {
+      return new Stored(
+          session.id(),
+          session.customerId(),
+          session.cart().lines().stream()
+              .map(l -> new StoredLine(l.variantId(), l.quantity(), StoredMoney.of(l.unitPrice())))
+              .toList(),
+          StoredMoney.of(session.tax()),
+          session.reservationId(),
+          session.expiresAt());
+    }
+
+    CheckoutSession toSession() {
+      return new CheckoutSession(
+          id,
+          customerId,
+          new PricedCart(
+              lines.stream()
+                  .map(l -> new PricedLine(l.variantId(), l.quantity(), l.unitPrice().toMoney()))
+                  .toList()),
+          tax.toMoney(),
+          reservationId,
+          expiresAt);
+    }
+  }
+
+  private record StoredLine(String variantId, int quantity, StoredMoney unitPrice) {}
+
+  private record StoredMoney(long amountMinor, String currency) {
+
+    static StoredMoney of(Money money) {
+      return new StoredMoney(money.amountMinor(), money.currency().getCurrencyCode());
+    }
+
+    Money toMoney() {
+      return Money.of(amountMinor, currency);
+    }
+  }
+
+  @Override
+  public void save(CheckoutSession session, Duration timeToLive) {
+    redis.execute(
+        SAVE,
+        List.of(key(session.id()), customerKey(session.customerId())),
+        json.writeValueAsString(Stored.of(session)),
+        session.id(),
+        String.valueOf(timeToLive.toMillis()));
+  }
+
+  @Override
+  public Optional<CheckoutSession> find(String sessionId) {
+    return Optional.ofNullable(redis.opsForValue().get(key(sessionId)))
+        .map(value -> json.readValue(value, Stored.class).toSession());
+  }
+
+  @Override
+  public Optional<CheckoutSession> findByCustomer(String customerId) {
+    return Optional.ofNullable(redis.opsForValue().get(customerKey(customerId)))
+        .flatMap(this::find);
+  }
+
+  @Override
+  public void delete(CheckoutSession session) {
+    redis.execute(
+        DELETE, List.of(key(session.id()), customerKey(session.customerId())), session.id());
+  }
+
+  private static String key(String sessionId) {
+    return "checkout-session:" + sessionId;
+  }
+
+  private static String customerKey(String customerId) {
+    return "checkout-customer:" + customerId;
+  }
+}

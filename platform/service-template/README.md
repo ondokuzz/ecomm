@@ -55,7 +55,7 @@ docker compose logs --no-log-prefix | jq -cR 'fromjson? | select(.correlationId 
 A request's path through the services shows up in three kinds of line:
 
 - **Outbound calls:** every call to another service through such a `RestClient` logs one line
-  from `OutboundCallLogInterceptor`, such as `POST http://inventory:8080/stock/decrement -> 409 in
+  from `OutboundCallLogInterceptor`, such as `POST http://inventory:8080/reservations -> 409 in
   12 ms`. The query string is left out. A call that gets no response, such as a refused
   connection or a timeout, logs a warning. A client's own retries happen inside the call, so a
   retried call is one line with its final status.

@@ -7,7 +7,10 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 
 import org.junit.jupiter.api.Test;
 
-/** Checkout prices every line at its Variant's current Price in Catalog, whatever the Cart says. */
+/**
+ * A Checkout Session prices every line at its Variant's current Price in Catalog when it starts,
+ * whatever the Cart says, and the Order is placed at those Prices.
+ */
 class RepricingApiTest extends CheckoutApiTest {
 
   @Test

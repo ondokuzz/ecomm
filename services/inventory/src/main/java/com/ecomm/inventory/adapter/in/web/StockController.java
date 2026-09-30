@@ -1,9 +1,7 @@
 package com.ecomm.inventory.adapter.in.web;
 
-import com.ecomm.inventory.application.port.in.DecrementStockUseCase;
 import com.ecomm.inventory.application.port.in.ReadStockUseCase;
 import com.ecomm.inventory.application.port.in.SetOnHandUseCase;
-import com.ecomm.inventory.domain.InsufficientStockException;
 import com.ecomm.inventory.domain.InvalidStockRequestException;
 import com.ecomm.inventory.domain.OnHandBelowReservedException;
 import com.ecomm.inventory.domain.UnknownVariantException;
@@ -17,7 +15,6 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -25,7 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Anyone may read stock (see {@code public-read-paths}); only Staff may set how many units are on
- * hand, and only Checkout, with its own {@code CHECKOUT} token, may decrement it.
+ * hand. Checkout takes Stock through Reservations ({@link ReservationController}).
  */
 @RestController
 @RequestMapping("/stock")
@@ -34,13 +31,10 @@ class StockController {
   private static final Logger log = LoggerFactory.getLogger(StockController.class);
 
   private final ReadStockUseCase read;
-  private final DecrementStockUseCase decrement;
   private final SetOnHandUseCase setOnHand;
 
-  StockController(
-      ReadStockUseCase read, DecrementStockUseCase decrement, SetOnHandUseCase setOnHand) {
+  StockController(ReadStockUseCase read, SetOnHandUseCase setOnHand) {
     this.read = read;
-    this.decrement = decrement;
     this.setOnHand = setOnHand;
   }
 
@@ -65,15 +59,6 @@ class StockController {
         .body(StockResponse.of(result.stock()));
   }
 
-  /** Returns the new stock of every Variant in the batch. */
-  @PostMapping("/decrement")
-  @PreAuthorize("hasRole('CHECKOUT')")
-  List<StockResponse> decrement(@RequestBody DecrementRequest request) {
-    var stock = decrement.decrement(request.toDecrement()).stream().map(StockResponse::of).toList();
-    log.info("Decremented Stock of {} Variants", stock.size());
-    return stock;
-  }
-
   @ExceptionHandler(OnHandBelowReservedException.class)
   ProblemDetail belowReserved(OnHandBelowReservedException e) {
     var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
@@ -84,11 +69,6 @@ class StockController {
   @ExceptionHandler(UnknownVariantException.class)
   ProblemDetail unknownVariant(UnknownVariantException e) {
     return StockProblems.unknownVariant(e);
-  }
-
-  @ExceptionHandler(InsufficientStockException.class)
-  ProblemDetail insufficientStock(InsufficientStockException e) {
-    return StockProblems.insufficientStock(e);
   }
 
   @ExceptionHandler(InvalidStockRequestException.class)

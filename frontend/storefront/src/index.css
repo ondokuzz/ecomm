@@ -540,6 +540,10 @@ code {
   background: var(--color-success-soft);
   color: var(--color-success);
 }
+.alert-info {
+  background: var(--color-info-soft);
+  color: var(--color-info);
+}
 .alert-list {
   margin: var(--space-1) 0 var(--space-2);
   padding-left: var(--space-5);
@@ -2045,4 +2049,11 @@ main {
     animation-iteration-count: 1 !important;
     transition-duration: 1ms !important;
   }
+}
+
+/* A Checkout Session's "held until" notice, and the time it has left */
+
+.session-countdown {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
 }

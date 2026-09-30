@@ -6,10 +6,17 @@ import type { Order } from '../src/domain/order'
 /**
  * The Sprint 1 definition of done, end to end: browse seeded Products, pick a Variant, add them to
  * the Cart, check out with the mock payment, and see the Order confirmation and its Order Status.
+ * Checkout holds the Cart in a Checkout Session first, and paying takes the held Stock off on-hand.
  */
 
 // The demo checkout compares Stock before and after, so nothing else may check out meanwhile.
 test.describe.configure({ mode: 'serial' })
+
+/** A Variant's Stock as Inventory reports it: what's left to sell, and the units on hand. */
+interface Stock {
+  quantity: number
+  onHand: number
+}
 
 interface Credentials {
   email: string
@@ -20,7 +27,7 @@ interface ProductInStock {
   product: Product
   variant: Variant
   variantId: string
-  stock: number
+  stock: Stock
   /** The axis value to pick on the Product page to reach `variant`; none for the default Variant. */
   pick?: { axis: string; value: string }
 }
@@ -28,7 +35,7 @@ interface ProductInStock {
 const keycloakUrl = process.env.KEYCLOAK_URL ?? 'http://localhost:8180'
 const demoCustomer: Credentials = { email: 'demo@ecomm.local', password: 'demo' }
 
-test('the demo Customer checks out a picked Variant and another Product, and Stock goes down', async ({ page, request }) => {
+test('the demo Customer checks out a picked Variant and another Product, and on-hand Stock goes down', async ({ page, request }) => {
   const token = await tokenFor(request, demoCustomer)
   await emptyCart(request, token)
   const picked = await aNonDefaultVariantInStock(request)
@@ -78,6 +85,17 @@ test('the demo Customer checks out a picked Variant and another Product, and Sto
   const doneSteps = steps.getByRole('listitem').filter({ hasText: '(done)' })
   await expect(currentStep).toContainText('Payment')
   await expect(doneSteps).toHaveText([/^Cart/])
+  // The Checkout Session holds the Cart for 15 minutes: its Stock is reserved, not yet taken.
+  await expect(page.getByText(/held until/)).toBeVisible()
+  await expect(page.getByRole('timer', { name: 'Time left' })).toHaveText(/^1[45]:\d\d$/)
+  const checkoutLines = page.getByRole('list', { name: 'Checkout lines' })
+  for (const line of bought) {
+    await expect(checkoutLines.getByRole('link', { name: lineName(line), exact: true })).toBeVisible()
+    expect(await stockOf(request, line.variantId)).toEqual({
+      quantity: line.stock.quantity - 1,
+      onHand: line.stock.onHand,
+    })
+  }
   await page.getByRole('button', { name: /^Pay/ }).click()
 
   await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/)
@@ -110,8 +128,9 @@ test('the demo Customer checks out a picked Variant and another Product, and Sto
     await expect(card.getByRole('img', { name: product.name, exact: true })).toBeVisible()
   }
 
+  // Paying committed the Reservation: the units are off on-hand for good.
   for (const { variantId, stock } of bought) {
-    expect(await stockOf(request, variantId)).toBe(stock - 1)
+    expect(await stockOf(request, variantId)).toEqual({ quantity: stock.quantity - 1, onHand: stock.onHand - 1 })
   }
 })
 
@@ -197,10 +216,11 @@ async function orderOf(request: APIRequestContext, token: string, orderId: strin
   return (await response.json()) as Order
 }
 
-async function stockOf(request: APIRequestContext, variantId: string) {
+async function stockOf(request: APIRequestContext, variantId: string): Promise<Stock> {
   const response = await request.get(`/api/inventory/stock/${encodeURIComponent(variantId)}`)
   expect(response.ok()).toBeTruthy()
-  return ((await response.json()) as { quantity: number }).quantity
+  const { quantity, onHand } = (await response.json()) as Stock
+  return { quantity, onHand }
 }
 
 async function products(request: APIRequestContext): Promise<Product[]> {
@@ -221,7 +241,7 @@ async function aNonDefaultVariantInStock(request: APIRequestContext): Promise<Pr
       if (differing.length !== 1 || variant.price.amountMinor === first.price.amountMinor) continue
       const stock = await stockOf(request, variant.id)
       const [axis] = differing
-      if (stock > 0) return { product, variant, variantId: variant.id, stock, pick: { axis, value: variant.axisValues[axis] } }
+      if (stock.quantity > 0) return { product, variant, variantId: variant.id, stock, pick: { axis, value: variant.axisValues[axis] } }
     }
   }
   throw new Error('No seeded non-default Variant has Stock left; run `make seed-reset`')
@@ -233,7 +253,7 @@ async function aProductInStock(request: APIRequestContext, exceptSku?: string): 
     if (product.sku === exceptSku) continue
     const variant = defaultVariant(product)
     const stock = await stockOf(request, variant.id)
-    if (stock > 0) return { product, variant, variantId: variant.id, stock }
+    if (stock.quantity > 0) return { product, variant, variantId: variant.id, stock }
   }
   throw new Error('No seeded Product has Stock left; run `make seed-reset`')
 }

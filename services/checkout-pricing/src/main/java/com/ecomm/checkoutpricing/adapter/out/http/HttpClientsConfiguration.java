@@ -38,11 +38,6 @@ class HttpClientsConfiguration {
       UsernamePasswordAuthenticationToken.unauthenticated("checkout", null);
 
   @Bean
-  Clock clock() {
-    return Clock.systemUTC();
-  }
-
-  @Bean
   OAuth2AuthorizedClientManager checkoutAuthorizedClientManager(
       ClientRegistrationRepository registrations,
       OAuth2AuthorizedClientService authorizedClients,

@@ -6,9 +6,10 @@ and testing conventions apply here. Data lives in the `inventory` database on th
 with the schema under Flyway ([`db/migration`](./src/main/resources/db/migration)).
 
 Stock is counted per Variant as **on-hand** units, some of which Reservations may hold. What is
-left is available to sell. Checkout still decrements Stock directly until Checkout Sessions start
-using Reservations; an event-sourced rebuild follows in Sprint 4 (see the
-[roadmap](../../docs/roadmap.md)).
+left is available to sell. Checkout takes Stock only through Reservations: a Checkout Session
+reserves the Cart's Stock, and paying it commits the Reservation
+([Checkout ADR 0001](../checkout-pricing/docs/adr/0001-checkout-sessions-hold-stock-through-reservations.md)).
+An event-sourced rebuild follows in Sprint 4 (see the [roadmap](../../docs/roadmap.md)).
 
 ## API
 
@@ -16,7 +17,6 @@ using Reservations; an event-sourced rebuild follows in Sprint 4 (see the
 |---|---|---|
 | `GET /stock/{variantId}` | anyone | `{"variantId", "quantity", "onHand", "reserved"}`; 404 for an unknown Variant |
 | `PUT /stock/{variantId}` | Staff | Sets on-hand Stock: 201 for a new Variant, 200 otherwise |
-| `POST /stock/decrement` | Checkout | Takes a batch off stock; 200 with each Variant's new stock |
 | `POST /reservations` | Checkout | Holds a batch for a Customer until `expiresAt`; 201 with the Reservation |
 | `POST /reservations/{id}/commit` | Checkout | Takes the held Stock off on-hand for good |
 | `POST /reservations/{id}/release` | Checkout | Gives the held Stock back |
@@ -28,22 +28,10 @@ Setting on-hand Stock needs a Staff token (`STAFF` role). It takes `{"onHand": 1
 Variant if Inventory doesn't stock it yet. Setting it below `reserved` is a 409 whose `reserved`
 says how many units Reservations hold; a negative or non-integer count is a 400.
 
-Decrementing and the Reservation endpoints are internal: they need Checkout's own token, with the
+The Reservation endpoints are internal: they need Checkout's own token, with the
 `CHECKOUT` role ([ADR 0002](../identity-access/docs/adr/0002-service-identity-by-client-credentials.md)),
 and the API gateway doesn't route them. On all of these a Customer's or the other role's token gets
 403, and no token gets 401.
-
-### Decrements
-
-A decrement looks like `{"items": [{"variantId": "PHN-PIXEL-9", "quantity": 2}, ...]}`. It applies
-in one transaction, whole or not at all, and can only take available Stock, never what Reservations
-hold:
-
-- If any Variant has too little available, it is a 409 whose `insufficientStock` lists those Variants.
-- If any Variant is unknown, it is a 404 whose `unknownVariants` lists them.
-- An empty batch, a missing `variantId`, or a quantity that isn't positive is a 400.
-
-A Variant listed twice is decremented by the total. Every error is a problem detail.
 
 ### Reservations
 
@@ -54,8 +42,14 @@ A Reservation holds a batch of Variants for one Customer, all or nothing:
  "items": [{"variantId": "PHN-PIXEL-9", "quantity": 2}]}
 ```
 
-It fails the way a decrement does (409 `insufficientStock`, 404 `unknownVariants`, 400 for a bad
-batch), and a missing `customerId` or an `expiresAt` that isn't in the future is a 400. `expiresAt`
+It applies in one transaction, whole or not at all, and can only hold available Stock:
+
+- If any Variant has too little available, it is a 409 whose `insufficientStock` lists those Variants.
+- If any Variant is unknown, it is a 404 whose `unknownVariants` lists them.
+- An empty batch, a missing `variantId`, a quantity that isn't positive, a missing `customerId`, or
+  an `expiresAt` that isn't in the future is a 400.
+
+A Variant listed twice is reserved for the total. Every error is a problem detail. `expiresAt`
 is kept to the microsecond. The 201 answers with `{"id", "customerId", "status", "expiresAt",
 "items"}` and a `Location` of `/reservations/{id}`.
 
@@ -85,7 +79,7 @@ non-negative. A Reservation is a `reservation` row (owner, status, expiry) and o
 `reservation_item` row per Variant. What a Variant has reserved is never stored: it is worked out
 from its `ACTIVE` Reservations and the clock.
 
-Every change that can take Stock (a decrement, a Reservation, a commit, setting on-hand) first
+Every change that can take Stock (a Reservation, a commit, setting on-hand) first
 locks its Variants' `stock` rows (`SELECT ... FOR UPDATE`, in Variant ID order so overlapping
 batches can't deadlock), then reads what Reservations hold of them, checks the whole batch, and
 writes it. So two Reservations of the last unit can't both succeed. Commit and release then lock
@@ -96,7 +90,7 @@ the Reservation's own row; the sweeper skips any Reservation that is locked.
 `V2__seed_stock.sql` gives stock to the first Variant of each of Catalog's
 [seed Products](../catalog/src/main/resources/seed/products.json), whose Variant ID is its SKU, and
 `V3__seed_variant_stock.sql` to the extra Variants of its multi-Variant ones, one of them sold out.
-They are migrations, so each runs once and a restart never undoes a decrement; `ReadStockApiTest`
+They are migrations, so each runs once and a restart never undoes a sale; `ReadStockApiTest`
 fails if they drift from Catalog's seed. To reset stock, drop and recreate the `inventory` database.
 
 ## Run it

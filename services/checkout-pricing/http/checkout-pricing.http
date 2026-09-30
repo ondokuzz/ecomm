@@ -1,6 +1,6 @@
-# Checks out the demo Customer's Cart against the compose stack (`docker compose up -d --build`).
-# Run the requests top to bottom in the IntelliJ HTTP client; the token request stores a token for
-# the ones after it.
+# Checks out the demo Customer's Cart against the compose stack (`docker compose up -d --build`), in
+# two steps: a Checkout Session holds the Cart, then paying it buys it. Run the requests top to
+# bottom in the IntelliJ HTTP client; the token request stores a token for the ones after it.
 
 @checkout = http://localhost:8086
 @cart = http://localhost:8083
@@ -21,7 +21,7 @@ DELETE {{cart}}/cart
 Authorization: Bearer {{customerToken}}
 
 ###
-POST {{checkout}}/checkout
+POST {{checkout}}/checkout/sessions
 Authorization: Bearer {{customerToken}}
 
 ### Fill the Cart: two of one Pixel 9 Variant (Obsidian, 256 GB), by its Variant ID
@@ -41,25 +41,47 @@ Content-Type: application/json
 ### Stock before checkout
 GET {{inventory}}/stock/PHN-PIXEL-9-OBSIDIAN-256
 
-### Check out: 200 with the Order in PAID
-POST {{checkout}}/checkout
+### Start checkout: 201 with the Checkout Session, priced from Catalog, held for 15 minutes
+POST {{checkout}}/checkout/sessions
+Authorization: Bearer {{customerToken}}
+
+> {% client.global.set("sessionId", response.body.id); %}
+
+### Two fewer available, as many on hand: a Reservation holds them
+GET {{inventory}}/stock/PHN-PIXEL-9-OBSIDIAN-256
+
+### The session, until it expires; 404 after
+GET {{checkout}}/checkout/sessions/current
+Authorization: Bearer {{customerToken}}
+
+### Starting again replaces it and releases its Reservation
+POST {{checkout}}/checkout/sessions
+Authorization: Bearer {{customerToken}}
+
+> {% client.global.set("sessionId", response.body.id); %}
+
+### Pay: 200 with the Order in PAID
+POST {{checkout}}/checkout/sessions/{{sessionId}}/pay
 Authorization: Bearer {{customerToken}}
 
 > {% client.global.set("orderId", response.body.orderId); %}
 
-### The Order, at each Variant's Price in Catalog, with its tax (zero for now) and the total its
-### Payment was for
+### The Order, at the session's Prices, with its tax (zero for now) and the total its Payment was for
 GET {{orders}}/orders/{{orderId}}
 Authorization: Bearer {{customerToken}}
 
-### Two fewer of that Variant in stock
+### Two fewer on hand now: the Reservation was committed
 GET {{inventory}}/stock/PHN-PIXEL-9-OBSIDIAN-256
 
-### The Cart is empty again
+### The Cart is empty again, and the session is over: 404
 GET {{cart}}/cart
 Authorization: Bearer {{customerToken}}
 
-### More than there is in stock: 409 naming the Variant; the Order is cancelled, the Cart kept
+###
+POST {{checkout}}/checkout/sessions/{{sessionId}}/pay
+Authorization: Bearer {{customerToken}}
+
+### More than there is in stock: 409 naming the Variant, and no session
 PUT {{cart}}/cart/items/PHN-PIXEL-9
 Authorization: Bearer {{customerToken}}
 Content-Type: application/json
@@ -67,12 +89,8 @@ Content-Type: application/json
 {"quantity": 10000}
 
 ###
-POST {{checkout}}/checkout
-Authorization: Bearer {{customerToken}}
-
-###
-GET {{orders}}/orders
+POST {{checkout}}/checkout/sessions
 Authorization: Bearer {{customerToken}}
 
 ### Without a token: 401
-POST {{checkout}}/checkout
+POST {{checkout}}/checkout/sessions

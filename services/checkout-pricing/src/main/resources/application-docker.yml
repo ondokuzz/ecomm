@@ -1,5 +1,9 @@
 # Active inside Docker Compose (SPRING_PROFILES_ACTIVE=docker).
 spring:
+  data:
+    redis:
+      host: redis
+      port: 6379
   security:
     oauth2:
       client:

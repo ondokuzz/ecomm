@@ -36,11 +36,12 @@ GET {{gateway}}/api/catalog/categories
 X-Correlation-Id: not valid!
 
 ### An internal endpoint: 404, token or not
-POST {{gateway}}/api/inventory/stock/decrement
+POST {{gateway}}/api/inventory/reservations
 Authorization: Bearer {{customerToken}}
 Content-Type: application/json
 
-{"items": [{"variantId": "PHN-PIXEL-9", "quantity": 1}]}
+{"customerId": "me", "expiresAt": "2030-01-01T00:00:00Z",
+ "items": [{"variantId": "PHN-PIXEL-9", "quantity": 1}]}
 
 ### Order placement is internal too: 404
 POST {{gateway}}/api/order-management/orders

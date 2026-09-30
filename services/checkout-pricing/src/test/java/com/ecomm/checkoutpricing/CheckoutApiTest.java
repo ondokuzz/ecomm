@@ -30,10 +30,12 @@ import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.client.RestTestClient;
+import org.testcontainers.containers.GenericContainer;
 
 /**
  * Base for HTTP-seam tests. One WireMock server stands in for every service Checkout calls, and for
- * Keycloak's token endpoint; each test starts with no stubs and no cached Checkout token.
+ * Keycloak's token endpoint; one Redis container holds the Checkout Sessions. Each test starts with
+ * no stubs, no Checkout Sessions and no cached Checkout token, at the real time.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureRestTestClient
@@ -43,11 +45,15 @@ abstract class CheckoutApiTest {
   static final String TOKEN_PATH = "/realms/ecomm/protocol/openid-connect/token";
   static final String CUSTOMER_ID = "customer-42";
   static final String ORDER_ID = "7f1c2a3b-0000-4000-8000-000000000001";
+  static final String RESERVATION_ID = "5e2d1c0b-0000-4000-8000-000000000001";
 
   static final WireMockServer DOWNSTREAM = new WireMockServer(wireMockConfig().dynamicPort());
 
+  static final GenericContainer<?> REDIS = new GenericContainer<>("redis:7").withExposedPorts(6379);
+
   static {
     DOWNSTREAM.start();
+    REDIS.start();
   }
 
   @DynamicPropertySource
@@ -62,9 +68,14 @@ abstract class CheckoutApiTest {
     registry.add(
         "spring.security.oauth2.client.provider.keycloak.token-uri", () -> url + TOKEN_PATH);
     registry.add("spring.security.oauth2.client.registration.checkout.client-secret", () -> "test");
+    registry.add("spring.data.redis.host", REDIS::getHost);
+    registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
   }
 
-  /** A clock the tests move forward, to bring Checkout's cached token near its expiry. */
+  /**
+   * A clock the tests move forward, to bring Checkout's cached token near its expiry or a Checkout
+   * Session past its own.
+   */
   @TestConfiguration
   static class Clocks {
 
@@ -80,8 +91,9 @@ abstract class CheckoutApiTest {
   @Autowired OAuth2AuthorizedClientService authorizedClients;
 
   @BeforeEach
-  void resetDownstream() {
+  void resetDownstream() throws Exception {
     DOWNSTREAM.resetAll();
+    REDIS.execInContainer("redis-cli", "FLUSHALL");
     authorizedClients.removeAuthorizedClient("checkout", "checkout");
     clock.reset();
   }
@@ -91,13 +103,54 @@ abstract class CheckoutApiTest {
     return FakeKeycloak.token(CUSTOMER_ID, "CUSTOMER");
   }
 
-  RestTestClient.ResponseSpec checkout() {
-    return checkout(customerToken());
+  RestTestClient.ResponseSpec startSession() {
+    return startSession(customerToken());
   }
 
-  RestTestClient.ResponseSpec checkout(String token) {
-    return http.post().uri("/checkout").headers(h -> h.setBearerAuth(token)).exchange();
+  RestTestClient.ResponseSpec startSession(String token) {
+    return http.post().uri("/checkout/sessions").headers(h -> h.setBearerAuth(token)).exchange();
   }
+
+  /** Starts a Checkout Session that must succeed, and returns its ID. */
+  String startedSessionId() {
+    return startSession()
+        .expectStatus()
+        .isCreated()
+        .expectBody(SessionView.class)
+        .returnResult()
+        .getResponseBody()
+        .id();
+  }
+
+  RestTestClient.ResponseSpec currentSession() {
+    return currentSession(customerToken());
+  }
+
+  RestTestClient.ResponseSpec currentSession(String token) {
+    return http.get()
+        .uri("/checkout/sessions/current")
+        .headers(h -> h.setBearerAuth(token))
+        .exchange();
+  }
+
+  RestTestClient.ResponseSpec pay(String sessionId) {
+    return pay(customerToken(), sessionId);
+  }
+
+  RestTestClient.ResponseSpec pay(String token, String sessionId) {
+    return http.post()
+        .uri("/checkout/sessions/{id}/pay", sessionId)
+        .headers(h -> h.setBearerAuth(token))
+        .exchange();
+  }
+
+  /** Both steps of checkout: starts a Checkout Session, which must succeed, then pays it. */
+  RestTestClient.ResponseSpec checkout() {
+    return pay(startedSessionId());
+  }
+
+  /** The part of a Checkout Session the tests read by type; the rest they read by JSON path. */
+  record SessionView(String id, Instant expiresAt) {}
 
   // --- Keycloak ---
 
@@ -151,12 +204,49 @@ abstract class CheckoutApiTest {
 
   // --- Inventory ---
 
-  static void stubDecrement() {
-    stubDecrement(okJson("[]"));
+  static void stubReserve() {
+    stubReserve(RESERVATION_ID);
   }
 
-  static void stubDecrement(ResponseDefinitionBuilder response) {
-    DOWNSTREAM.stubFor(post("/stock/decrement").willReturn(response));
+  /** Inventory reserves the batch as the Reservation {@code reservationId}. */
+  static void stubReserve(String reservationId) {
+    stubReserve(
+        aResponse()
+            .withStatus(201)
+            .withHeader("Content-Type", "application/json")
+            .withBody(
+                """
+                {"id": "%s", "customerId": "%s", "status": "ACTIVE",
+                 "expiresAt": "2030-01-01T00:00:00Z", "items": []}
+                """
+                    .formatted(reservationId, CUSTOMER_ID)));
+  }
+
+  static void stubReserve(ResponseDefinitionBuilder response) {
+    DOWNSTREAM.stubFor(post("/reservations").willReturn(response));
+  }
+
+  static void stubCommit() {
+    stubCommit(settledReservation("COMMITTED"));
+  }
+
+  static void stubCommit(ResponseDefinitionBuilder response) {
+    DOWNSTREAM.stubFor(post(urlPathMatching("/reservations/[^/]+/commit")).willReturn(response));
+  }
+
+  static void stubRelease() {
+    DOWNSTREAM.stubFor(
+        post(urlPathMatching("/reservations/[^/]+/release"))
+            .willReturn(settledReservation("RELEASED")));
+  }
+
+  private static ResponseDefinitionBuilder settledReservation(String status) {
+    return okJson(
+        """
+        {"id": "%s", "customerId": "%s", "status": "%s",
+         "expiresAt": "2030-01-01T00:00:00Z", "items": []}
+        """
+            .formatted(RESERVATION_ID, CUSTOMER_ID, status));
   }
 
   // --- Order Management ---
@@ -215,14 +305,16 @@ abstract class CheckoutApiTest {
     DOWNSTREAM.stubFor(post("/payments").willReturn(response));
   }
 
-  /** Every downstream answers as a successful checkout of one Pixel 9 needs. */
+  /** Every downstream answers as a successful checkout of two Pixel 9s needs. */
   static void stubSuccessfulCheckout() {
     stubServiceToken("checkout-token-1");
     stubCart("{\"variantId\": \"PHN-PIXEL-9\", \"quantity\": 2}");
     stubVariant("PHN-PIXEL-9", 79900);
+    stubReserve();
+    stubRelease();
     stubPlaceOrder();
-    stubDecrement();
     stubPayment();
+    stubCommit();
     stubStatusChange();
     stubClearCart();
   }

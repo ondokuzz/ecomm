@@ -20,12 +20,22 @@ import org.junit.jupiter.api.Test;
  */
 class OutboundIdentityApiTest extends CheckoutApiTest {
 
+  private String sessionIdStartedWith(String token) {
+    return startSession(token)
+        .expectStatus()
+        .isCreated()
+        .expectBody(SessionView.class)
+        .returnResult()
+        .getResponseBody()
+        .id();
+  }
+
   @Test
   void cartCallsCarryTheCustomersToken() {
     stubSuccessfulCheckout();
     var token = customerToken();
 
-    checkout(token).expectStatus().isOk();
+    pay(token, sessionIdStartedWith(token)).expectStatus().isOk();
 
     DOWNSTREAM.verify(
         getRequestedFor(urlEqualTo("/cart"))
@@ -54,8 +64,13 @@ class OutboundIdentityApiTest extends CheckoutApiTest {
     checkout().expectStatus().isOk();
 
     DOWNSTREAM.verify(
-        postRequestedFor(urlEqualTo("/stock/decrement"))
-            .withHeader("Authorization", checkoutToken));
+        postRequestedFor(urlEqualTo("/reservations"))
+            .withHeader("Authorization", checkoutToken)
+            .withRequestBody(namesTheCustomer));
+    DOWNSTREAM.verify(
+        postRequestedFor(urlEqualTo("/reservations/" + RESERVATION_ID + "/commit"))
+            .withHeader("Authorization", checkoutToken)
+            .withRequestBody(namesTheCustomer));
     DOWNSTREAM.verify(
         postRequestedFor(urlEqualTo("/orders"))
             .withHeader("Authorization", checkoutToken)
@@ -69,6 +84,19 @@ class OutboundIdentityApiTest extends CheckoutApiTest {
         postRequestedFor(urlEqualTo("/payments"))
             .withHeader("Authorization", checkoutToken)
             .withRequestBody(namesTheCustomer));
+  }
+
+  @Test
+  void releasingAReplacedReservationCarriesCheckoutsTokenAndNamesTheCustomer() {
+    stubSuccessfulCheckout();
+    startedSessionId();
+
+    startedSessionId();
+
+    DOWNSTREAM.verify(
+        postRequestedFor(urlEqualTo("/reservations/" + RESERVATION_ID + "/release"))
+            .withHeader("Authorization", equalTo("Bearer checkout-token-1"))
+            .withRequestBody(matchingJsonPath("$.customerId", equalTo(CUSTOMER_ID))));
   }
 
   @Test

@@ -54,7 +54,7 @@ abstract class InventoryApiTest {
   @Autowired RestTestClient http;
   @Autowired TestTimeSource clock;
 
-  /** Checkout's own token: the only caller allowed to decrement and reserve stock. */
+  /** Checkout's own token: the only caller allowed to reserve stock. */
   static String checkoutToken() {
     return FakeKeycloak.token("checkout", "CHECKOUT");
   }

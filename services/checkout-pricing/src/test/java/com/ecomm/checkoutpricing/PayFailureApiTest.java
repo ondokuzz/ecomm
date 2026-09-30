@@ -4,98 +4,50 @@ import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.delete;
 import static com.github.tomakehurst.wiremock.client.WireMock.deleteRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
-import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
-import static com.github.tomakehurst.wiremock.client.WireMock.notFound;
 import static com.github.tomakehurst.wiremock.client.WireMock.patchRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.serverError;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
 
 import com.github.tomakehurst.wiremock.matching.StringValuePattern;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 
 /**
- * A Cart that can't be checked out is refused before any Order exists. A step that fails after the
- * Order exists cancels it and leaves the Cart as it was.
+ * A step of paying that fails after the Order exists cancels it, and leaves the Cart and the
+ * Checkout Session as they were. A Stock commit failing after the Payment is authorized is no
+ * exception: the Payment stays authorized, a known limitation until the Sagas.
  */
-class CheckoutFailureApiTest extends CheckoutApiTest {
+class PayFailureApiTest extends CheckoutApiTest {
 
   @Test
-  void anEmptyCartIsABadRequest() {
+  void aCommitFailingAfterAuthorizationCancelsTheOrderAndKeepsTheCart() {
     stubSuccessfulCheckout();
-    stubCart("");
-
-    checkout()
-        .expectStatus()
-        .isBadRequest()
-        .expectHeader()
-        .contentType(MediaType.APPLICATION_PROBLEM_JSON);
-
-    DOWNSTREAM.verify(0, postRequestedFor(urlEqualTo("/orders")));
-  }
-
-  @Test
-  void aProductMissingFromTheCatalogIsAConflictNamingIt() {
-    stubSuccessfulCheckout();
-    stubCart(
-        """
-        {"variantId": "PHN-PIXEL-9", "quantity": 1}, {"variantId": "PHN-GONE", "quantity": 1}
-        """);
-    DOWNSTREAM.stubFor(get("/variants/PHN-GONE").willReturn(notFound()));
-
-    checkout()
-        .expectStatus()
-        .isEqualTo(409)
-        .expectHeader()
-        .contentType(MediaType.APPLICATION_PROBLEM_JSON)
-        .expectBody()
-        .jsonPath("$.unknownVariants[0]")
-        .isEqualTo("PHN-GONE")
-        .jsonPath("$.unknownVariants.length()")
-        .isEqualTo(1);
-
-    DOWNSTREAM.verify(0, postRequestedFor(urlEqualTo("/orders")));
-  }
-
-  @Test
-  void anOutOfStockVariantIsAConflictNamingIt() {
-    stubSuccessfulCheckout();
-    stubDecrement(
+    stubCommit(
         aResponse()
             .withStatus(409)
             .withHeader("Content-Type", "application/problem+json")
             .withBody(
                 """
-                {"status": 409, "detail": "Not enough stock", "insufficientStock": ["PHN-PIXEL-9"]}
-                """));
+                {"status": 409, "reservationExpired": "%s"}
+                """
+                    .formatted(RESERVATION_ID)));
 
-    checkout()
-        .expectStatus()
-        .isEqualTo(409)
-        .expectHeader()
-        .contentType(MediaType.APPLICATION_PROBLEM_JSON)
-        .expectBody()
-        .jsonPath("$.outOfStock[0]")
-        .isEqualTo("PHN-PIXEL-9");
-  }
+    checkout().expectStatus().isEqualTo(502);
 
-  @Test
-  void anOutOfStockVariantCancelsTheOrderAndKeepsTheCart() {
-    stubSuccessfulCheckout();
-    stubDecrement(aResponse().withStatus(409));
-
-    checkout().expectStatus().isEqualTo(409);
-
+    DOWNSTREAM.verify(postRequestedFor(urlEqualTo("/payments")));
     verifyCancelledAndCartKept();
-    DOWNSTREAM.verify(0, postRequestedFor(urlEqualTo("/payments")));
+    DOWNSTREAM.verify(
+        0,
+        patchRequestedFor(urlEqualTo("/orders/" + ORDER_ID + "/status")).withRequestBody(paid()));
   }
 
   @Test
   void anInventoryFailureCancelsTheOrderAndKeepsTheCart() {
     stubSuccessfulCheckout();
-    stubDecrement(serverError());
+    stubCommit(serverError());
 
     checkout().expectStatus().isEqualTo(502);
 
@@ -117,6 +69,7 @@ class CheckoutFailureApiTest extends CheckoutApiTest {
     DOWNSTREAM.verify(
         0,
         patchRequestedFor(urlEqualTo("/orders/" + ORDER_ID + "/status")).withRequestBody(paid()));
+    DOWNSTREAM.verify(0, postRequestedFor(urlPathMatching("/reservations/.*/commit")));
   }
 
   @Test
@@ -136,18 +89,21 @@ class CheckoutFailureApiTest extends CheckoutApiTest {
 
     checkout().expectStatus().isOk().expectBody().jsonPath("$.status").isEqualTo("PAID");
 
+    currentSession().expectStatus().isNotFound();
     DOWNSTREAM.verify(
         0,
         patchRequestedFor(urlEqualTo("/orders/" + ORDER_ID + "/status"))
             .withRequestBody(cancelled()));
   }
 
-  private static void verifyCancelledAndCartKept() {
+  /** The Order is cancelled for its Customer; the Cart and the Checkout Session stay. */
+  private void verifyCancelledAndCartKept() {
     DOWNSTREAM.verify(
         patchRequestedFor(urlEqualTo("/orders/" + ORDER_ID + "/status"))
             .withRequestBody(cancelled())
             .withRequestBody(matchingJsonPath("$.customerId", equalTo(CUSTOMER_ID))));
     DOWNSTREAM.verify(0, deleteRequestedFor(urlEqualTo("/cart")));
+    currentSession().expectStatus().isOk();
   }
 
   private static StringValuePattern cancelled() {

@@ -11,7 +11,7 @@ React, TypeScript, React Router and TanStack Query.
 | `/?category=` | Products, filtered by category | no |
 | `/products/{sku}?variant=` | A Product with a Variant picker, and the chosen Variant's image, Price, Stock and specs, laid out by its Category's attribute definitions; add it to the Cart | no (adding needs it) |
 | `/cart` | The Cart, priced from Catalog's current Prices; change quantities, remove lines or empty it | yes |
-| `/checkout` | The order summary, and a mock payment card with a "Pay" button | yes |
+| `/checkout` | Starts or resumes a Checkout Session: its lines, price breakdown and a countdown to when it expires, and a mock payment card with a "Pay" button | yes |
 | `/orders/{id}` | An Order: its Order Status timeline, its lines and summary; after checkout, the confirmation first | yes |
 | `/orders` | My Orders as cards, newest first | yes |
 
@@ -145,8 +145,8 @@ no CORS headers. In development the Vite dev proxy forwards `/api` to the gatewa
 port, 8000 ([`vite.config.ts`](./vite.config.ts)); in compose, nginx does
 ([`nginx.conf`](./nginx.conf)).
 
-A Cart holds no prices, so the Cart and checkout pages price it from Catalog for display.
-Checkout prices it again itself; what the Customer pays is what the Order shows.
+A Cart holds no prices, so the Cart page prices it from Catalog for display. The checkout page
+shows the Checkout Session instead, priced by Checkout; what the Customer pays is what it shows.
 
 The Cart page lists each line with its Variant's thumbnail and name, a quantity stepper and a
 remove button, beside an order summary (item count, subtotal, total) that stays in view on wide
@@ -155,10 +155,19 @@ the subtotal. "Empty cart" clears it through `DELETE /cart` once the Customer co
 focus to the empty state, since the button that had it is gone.
 
 Checkout shows where the Customer is (Cart → Payment → Done; the Order confirmation shows Done),
-the summary with its lines, and a
-drawn payment card: there is nothing to type, since the payment is mocked. When Checkout refuses a
-Cart for Products out of Stock or unknown to Catalog, it names their Variants, and the page names
-their Products (`checkoutProblem`, in [`src/domain/checkout.ts`](./src/domain/checkout.ts)).
+and a drawn payment card: there is nothing to type, since the payment is mocked. Arriving there
+resumes the Customer's Checkout Session when it still holds exactly their Cart
+(`sessionHoldsCart`), and starts a new one otherwise, which replaces the old and releases its
+Reservation.
+The page shows the session's lines at their held Prices, its price breakdown (subtotal, tax, total:
+`sessionSummaryRows`), and "held until" the session's expiry with a live `m:ss` countdown
+(`sessionCountdown`), all in [`src/domain/checkout.ts`](./src/domain/checkout.ts). The countdown is a
+`timer`, so screen readers aren't told every second; the clock time says it once. When the session
+expires, or paying finds it over (410 or 404), the page becomes "Your hold expired" with a "Start
+again" button, which always starts a new session. Pay is disabled while a payment is in flight.
+
+When Checkout refuses to start a session for Products out of Stock or unknown to Catalog, it names
+their Variants, and the page lists their Products (`checkoutProblem`) with a link back to the Cart.
 
 ## Run it
 
@@ -183,12 +192,13 @@ Sign in as `demo@ecomm.local` / `demo`, or register a new Customer.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: Money formatting, Cart pricing, checkout problems, quantities, Stock levels, toasts, category chips, Product specs by their Category's definitions, Customer initials, Orders and their timeline, Order Status colours, seed Product images, the Keycloak theme's copy of the tokens
+npm test          # Vitest: Money formatting, Cart pricing, checkout problems, the session countdown and price breakdown, quantities, Stock levels, toasts, category chips, Product specs by their Category's definitions, Customer initials, Orders and their timeline, Order Status colours, seed Product images, the Keycloak theme's copy of the tokens
 npm run test:e2e  # Playwright smoke test against the running compose stack (`make up`)
 ```
 
 The smoke test ([`e2e/sprint1.spec.ts`](./e2e/sprint1.spec.ts)) signs in on Keycloak for real,
-checks out two Products as the demo Customer (the confirmation, the confetti gone under reduced
-motion, the Order's lines by Product name, its timeline and its card on My Orders), empties a Cart
+checks out two Products as the demo Customer (the "held until" notice and its countdown, their Stock reserved but
+still on hand, then the confirmation, the confetti gone under reduced motion, the Order's lines by
+Product name, its timeline, its card on My Orders, and on-hand Stock down by one), empties a Cart
 through the confirmation, and registers a new Customer. It needs Chromium once:
 `npx playwright install chromium`. Set `STOREFRONT_URL` or `KEYCLOAK_URL` to aim it elsewhere.

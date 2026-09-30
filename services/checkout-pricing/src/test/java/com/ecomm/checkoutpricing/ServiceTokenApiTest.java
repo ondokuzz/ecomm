@@ -17,7 +17,7 @@ import org.springframework.http.MediaType;
 
 /**
  * Checkout's own token is cached, replaced once it has less than a minute left, and replaced on a
- * 401 before one retry. Keycloak being down before an Order exists is a 503.
+ * 401 before one retry. Keycloak being down when a Checkout Session starts is a 503.
  */
 class ServiceTokenApiTest extends CheckoutApiTest {
 
@@ -124,13 +124,13 @@ class ServiceTokenApiTest extends CheckoutApiTest {
   }
 
   @Test
-  void keycloakBeingDownBeforeTheOrderExistsIsA503() {
+  void keycloakBeingDownWhenASessionStartsIsA503() {
     stubSuccessfulCheckout();
     DOWNSTREAM.stubFor(
         post(TOKEN_PATH).willReturn(aResponse().withFault(Fault.CONNECTION_RESET_BY_PEER)));
 
     var problem =
-        checkout()
+        startSession()
             .expectStatus()
             .isEqualTo(503)
             .expectHeader()
@@ -140,7 +140,7 @@ class ServiceTokenApiTest extends CheckoutApiTest {
             .getResponseBody();
 
     assertThat(problem).contains("\"status\":503");
-    assertThat(DOWNSTREAM.findAll(postRequestedFor(urlEqualTo("/orders")))).isEmpty();
+    currentSession().expectStatus().isNotFound();
   }
 
   /**

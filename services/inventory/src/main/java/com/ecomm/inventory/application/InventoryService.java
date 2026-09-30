@@ -1,6 +1,5 @@
 package com.ecomm.inventory.application;
 
-import com.ecomm.inventory.application.port.in.DecrementStockUseCase;
 import com.ecomm.inventory.application.port.in.ReadStockUseCase;
 import com.ecomm.inventory.application.port.in.ReleaseExpiredReservationsUseCase;
 import com.ecomm.inventory.application.port.in.ReserveStockUseCase;
@@ -30,7 +29,6 @@ import java.util.stream.Collectors;
  */
 public class InventoryService
     implements ReadStockUseCase,
-        DecrementStockUseCase,
         SetOnHandUseCase,
         ReserveStockUseCase,
         SettleReservationUseCase,
@@ -66,16 +64,6 @@ public class InventoryService
                             onHand,
                             reservations.activeFor(List.of(variantId)),
                             time.now())));
-  }
-
-  @Override
-  public List<Stock> decrement(StockBatch decrement) {
-    return transactions.inTransaction(
-        () -> {
-          var decremented = decrement.decrementFrom(lockStock(decrement.variantIds()));
-          stock.setOnHand(onHandOf(decremented));
-          return decremented;
-        });
   }
 
   @Override
@@ -161,9 +149,5 @@ public class InventoryService
     return onHand.entrySet().stream()
         .map(e -> Stock.of(e.getKey(), e.getValue(), holding, now))
         .collect(Collectors.toMap(Stock::variantId, Function.identity()));
-  }
-
-  private static Map<String, Integer> onHandOf(Collection<Stock> stock) {
-    return stock.stream().collect(Collectors.toMap(Stock::variantId, Stock::onHand));
   }
 }

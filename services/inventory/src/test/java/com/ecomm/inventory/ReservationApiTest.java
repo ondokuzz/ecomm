@@ -154,7 +154,7 @@ class ReservationApiTest extends InventoryApiTest {
   }
 
   @Test
-  void committingDecrementsOnHand() {
+  void committingTakesTheStockOffOnHand() {
     var a = newVariant(10);
     var b = newVariant(4);
     var reservation = reserved(item(a, 3), item(b, 4));

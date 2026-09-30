@@ -1,8 +1,10 @@
 package com.ecomm.checkoutpricing.adapter.out.http;
 
+import com.ecomm.checkoutpricing.application.port.in.DownstreamFailureException;
 import com.ecomm.checkoutpricing.application.port.out.InventoryPort;
 import com.ecomm.checkoutpricing.domain.CartLine;
 import com.ecomm.checkoutpricing.domain.OutOfStockException;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -11,8 +13,9 @@ import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 /**
- * Inventory's {@code POST /stock/decrement}, called with Checkout's token. A 409 (not enough Stock)
- * or a 404 (a Variant Inventory doesn't stock) means the Cart can't be sold as it is.
+ * Inventory's {@code /reservations}, called with Checkout's token, naming the Customer each
+ * Reservation belongs to. Reserving answers a 409 (not enough Stock) or a 404 (a Variant Inventory
+ * doesn't stock) when the Cart can't be sold as it is.
  */
 @Component
 class InventoryClient implements InventoryPort {
@@ -23,23 +26,68 @@ class InventoryClient implements InventoryPort {
     this.http = http;
   }
 
-  private record DecrementBody(List<Item> items) {}
+  private record ReserveBody(String customerId, Instant expiresAt, List<Item> items) {}
 
   private record Item(String variantId, int quantity) {}
 
+  private record CustomerBody(String customerId) {}
+
+  private record ReservationBody(String id) {}
+
   @Override
-  public void decrement(List<CartLine> lines) {
+  public String reserve(String customerId, List<CartLine> lines, Instant expiresAt) {
     var body =
-        new DecrementBody(lines.stream().map(l -> new Item(l.variantId(), l.quantity())).toList());
+        new ReserveBody(
+            customerId,
+            expiresAt,
+            lines.stream().map(l -> new Item(l.variantId(), l.quantity())).toList());
+    var reservation =
+        Downstream.call(
+            "Inventory",
+            () -> {
+              try {
+                return http.post()
+                    .uri("/reservations")
+                    .body(body)
+                    .retrieve()
+                    .body(ReservationBody.class);
+              } catch (HttpClientErrorException.Conflict e) {
+                throw new OutOfStockException(variantIds(e, "insufficientStock", lines));
+              } catch (HttpClientErrorException.NotFound e) {
+                throw new OutOfStockException(variantIds(e, "unknownVariants", lines));
+              }
+            });
+    if (reservation == null || reservation.id() == null) {
+      throw new DownstreamFailureException("Inventory made a Reservation without an ID", null);
+    }
+    return reservation.id();
+  }
+
+  @Override
+  public void commit(String customerId, String reservationId) {
+    Downstream.run(
+        "Inventory",
+        () ->
+            http.post()
+                .uri("/reservations/{id}/commit", reservationId)
+                .body(new CustomerBody(customerId))
+                .retrieve()
+                .toBodilessEntity());
+  }
+
+  @Override
+  public void release(String customerId, String reservationId) {
     Downstream.run(
         "Inventory",
         () -> {
           try {
-            http.post().uri("/stock/decrement").body(body).retrieve().toBodilessEntity();
-          } catch (HttpClientErrorException.Conflict e) {
-            throw new OutOfStockException(variantIds(e, "insufficientStock", lines));
-          } catch (HttpClientErrorException.NotFound e) {
-            throw new OutOfStockException(variantIds(e, "unknownVariants", lines));
+            http.post()
+                .uri("/reservations/{id}/release", reservationId)
+                .body(new CustomerBody(customerId))
+                .retrieve()
+                .toBodilessEntity();
+          } catch (HttpClientErrorException.NotFound | HttpClientErrorException.Conflict e) {
+            // Gone, or already committed: either way it holds nothing for this session any more.
           }
         });
   }

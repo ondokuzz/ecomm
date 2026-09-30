@@ -6,8 +6,8 @@ import java.util.Set;
 import java.util.TreeMap;
 
 /**
- * Units of several Variants taken together: decremented at once, or held by one Reservation. It
- * applies whole or not at all. A Variant listed more than once counts for the total.
+ * Units of several Variants taken together, as one Reservation holds them. It applies whole or not
+ * at all. A Variant listed more than once counts for the total.
  */
 public final class StockBatch {
 
@@ -93,14 +93,5 @@ public final class StockBatch {
     var left = new TreeMap<String, Integer>();
     onHand.forEach((id, units) -> left.put(id, units - quantityOf(id)));
     return left;
-  }
-
-  /**
-   * Takes this batch off {@code stock}'s on-hand counts, after {@link #requireAvailableIn} checks
-   * it may.
-   */
-  public List<Stock> decrementFrom(Map<String, Stock> stock) {
-    requireAvailableIn(stock);
-    return variantIds().stream().map(id -> stock.get(id).decrementBy(quantityOf(id))).toList();
   }
 }

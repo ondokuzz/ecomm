@@ -21,9 +21,11 @@ class OutboundCallLogApiTest extends CheckoutApiTest {
     assertThat(output)
         .contains("GET " + DOWNSTREAM.baseUrl() + "/cart -> 200")
         .contains("GET " + DOWNSTREAM.baseUrl() + "/variants/PHN-PIXEL-9 -> 200")
+        .contains("POST " + DOWNSTREAM.baseUrl() + "/reservations -> 201")
         .contains("POST " + DOWNSTREAM.baseUrl() + "/orders -> 201")
-        .contains("POST " + DOWNSTREAM.baseUrl() + "/stock/decrement -> 200")
         .contains("POST " + DOWNSTREAM.baseUrl() + "/payments -> 201")
+        .contains(
+            "POST " + DOWNSTREAM.baseUrl() + "/reservations/" + RESERVATION_ID + "/commit -> 200")
         .contains("PATCH " + DOWNSTREAM.baseUrl() + "/orders/" + ORDER_ID + "/status -> 200")
         .contains("DELETE " + DOWNSTREAM.baseUrl() + "/cart -> 204");
   }
@@ -31,10 +33,10 @@ class OutboundCallLogApiTest extends CheckoutApiTest {
   @Test
   void aRefusedCallIsLoggedWithItsStatus(CapturedOutput output) {
     stubSuccessfulCheckout();
-    stubDecrement(aResponse().withStatus(409));
+    stubReserve(aResponse().withStatus(409));
 
-    checkout();
+    startSession();
 
-    assertThat(output).contains("POST " + DOWNSTREAM.baseUrl() + "/stock/decrement -> 409");
+    assertThat(output).contains("POST " + DOWNSTREAM.baseUrl() + "/reservations -> 409");
   }
 }

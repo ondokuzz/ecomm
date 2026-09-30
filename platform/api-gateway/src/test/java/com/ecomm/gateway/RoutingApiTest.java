@@ -21,7 +21,7 @@ class RoutingApiTest extends GatewayApiTest {
     "/api/catalog/products, /products",
     "/api/inventory/stock/PHN-PIXEL-9, /stock/PHN-PIXEL-9",
     "/api/cart/cart, /cart",
-    "/api/checkout-pricing/checkout, /checkout",
+    "/api/checkout-pricing/checkout/sessions/current, /checkout/sessions/current",
     "/api/order-management/orders/7f1c, /orders/7f1c"
   })
   void eachServiceIsReachedWithThePrefixStripped(String path, String downstreamPath) {
@@ -49,6 +49,7 @@ class RoutingApiTest extends GatewayApiTest {
     "POST, /api/inventory/stock/decrement",
     "POST, /api/inventory/stock/decrement/",
     "POST, /api/inventory/reservations",
+    "POST, /api/inventory/reservations/",
     "POST, /api/inventory/reservations/r-1/commit",
     "DELETE, /api/inventory/reservations/r-1",
     "POST, /api/order-management/orders",
@@ -74,7 +75,7 @@ class RoutingApiTest extends GatewayApiTest {
 
   @ParameterizedTest
   @CsvSource({
-    "POST, /api/inventory/stock/decrement",
+    "POST, /api/inventory/reservations",
     "POST, /api/order-management/orders",
     "POST, /api/payment/payments"
   })

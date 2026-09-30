@@ -1,25 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useAuth } from 'react-oidc-context'
-import type { CheckoutResult, Order } from '../domain/order'
-import { cartKey } from './cart'
-import { stockKey } from './catalog'
+import type { Order } from '../domain/order'
 import { api } from './http'
 
-const ordersKey = ['orders']
-
-/** Checks out the Customer's Cart: Checkout prices it, takes Stock, authorizes payment and places the Order. */
-export function useCheckout() {
-  const token = useAuth().user?.access_token
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: () => api<CheckoutResult>('checkout-pricing', '/checkout', { method: 'POST', token }),
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: cartKey })
-      queryClient.invalidateQueries({ queryKey: ordersKey })
-      queryClient.invalidateQueries({ queryKey: stockKey })
-    },
-  })
-}
+export const ordersKey = ['orders']
 
 export function useOrder(id: string) {
   const token = useAuth().user?.access_token
