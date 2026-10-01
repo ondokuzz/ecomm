@@ -6,6 +6,8 @@ import { Layout } from './components/Layout'
 import { NotFound } from './components/NotFound'
 import { CategoryEditorPage } from './pages/CategoryEditorPage'
 import { CategoryListPage } from './pages/CategoryListPage'
+import { ProductEditorPage } from './pages/ProductEditorPage'
+import { ProductListPage } from './pages/ProductListPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -24,7 +26,10 @@ export function App() {
           <RequireStaff>
             <Routes>
               <Route element={<Layout />}>
-                <Route index element={<Navigate to="/categories" replace />} />
+                <Route index element={<Navigate to="/products" replace />} />
+                <Route path="products" element={<ProductListPage />} />
+                <Route path="products/new" element={<ProductEditorPage />} />
+                <Route path="products/:sku" element={<ProductEditorPage />} />
                 <Route path="categories" element={<CategoryListPage />} />
                 <Route path="categories/new" element={<CategoryEditorPage />} />
                 <Route path="categories/:slug" element={<CategoryEditorPage />} />

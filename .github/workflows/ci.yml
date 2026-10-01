@@ -92,12 +92,17 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: frontend/storefront/package-lock.json
+          cache-dependency-path: |
+            frontend/storefront/package-lock.json
+            frontend/admin-console/package-lock.json
       - run: make up
         working-directory: .
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+      # The Admin Console's suite, against the same stack and with the same Chromium.
+      - run: npm ci && npm run test:e2e
+        working-directory: frontend/admin-console
       - if: failure()
         run: docker compose logs --no-color --timestamps > compose.log
         working-directory: .
@@ -108,5 +113,7 @@ jobs:
           path: |
             frontend/storefront/playwright-report/
             frontend/storefront/test-results/
+            frontend/admin-console/playwright-report/
+            frontend/admin-console/test-results/
             compose.log
           if-no-files-found: ignore

@@ -317,6 +317,25 @@ input[type='checkbox'] {
   gap: var(--space-4);
   max-width: 44rem;
 }
+textarea.input {
+  padding: var(--space-1) var(--space-2);
+  resize: vertical;
+}
+.toolbar {
+  display: grid;
+  grid-template-columns: minmax(10rem, 14rem) minmax(12rem, 22rem);
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+@media (max-width: 40rem) {
+  .toolbar {
+    grid-template-columns: 1fr;
+  }
+}
+.form-grid.currency {
+  max-width: 16rem;
+  margin-bottom: var(--space-3);
+}
 .form-actions {
   display: flex;
   gap: var(--space-2);
@@ -617,6 +636,23 @@ input[type='checkbox'] {
 .definitions td:nth-child(3) {
   min-width: 14rem;
   width: 40%;
+}
+.variants td {
+  min-width: 7rem;
+  padding: var(--space-2);
+}
+.variants td:nth-child(1) {
+  min-width: 12rem;
+}
+.variants td:nth-child(1) .readonly {
+  display: inline-block;
+  margin-top: var(--space-1);
+  white-space: nowrap;
+}
+.variants td.num,
+.variants td.actions {
+  min-width: 0;
+  vertical-align: middle;
 }
 .tag-list {
   display: flex;

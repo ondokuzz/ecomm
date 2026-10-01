@@ -22,6 +22,9 @@ export function Layout() {
             Ecomm <span className="brand-tag">Admin</span>
           </Link>
           <nav className="site-nav" aria-label="Sections">
+            <NavLink to="/products" className="nav-link">
+              Products
+            </NavLink>
             <NavLink to="/categories" className="nav-link">
               Categories
             </NavLink>

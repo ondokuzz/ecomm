@@ -22,8 +22,8 @@ The first build takes several minutes. Then open http://localhost:8080, where yo
    under **My Orders**.
 
 Staff work in the [Admin Console](./frontend/admin-console/README.md) on http://localhost:8090:
-sign in as `staff@ecomm.local` / `staff` to create and edit Categories and their attribute
-definitions. The demo Customer is refused there.
+sign in as `staff@ecomm.local` / `staff` to create and edit Products with their Variants, Prices
+and Stock, and Categories with their attribute definitions. The demo Customer is refused there.
 
 The smoke test walks the same path in Chromium against the running stack. As the demo Customer it
 adds two Products, checks out with the approving test card, expects `PAID` on the confirmation page and checks through the
@@ -36,6 +36,9 @@ cd frontend/storefront
 npm ci && npx playwright install chromium   # once
 npm run test:e2e
 ```
+
+The Admin Console has its own, in which Staff create a Product with two Variants and their Stock
+and a Customer picks either on the Storefront: `npm run test:e2e` in `frontend/admin-console`.
 
 | Command | |
 |---|---|
@@ -71,7 +74,7 @@ to `main`, with four jobs:
 | `backend` | `./gradlew check` on JDK 21: Spotless, unit and Testcontainers tests, and `HexagonalRules` |
 | `frontend (<app>)` | `npm ci`, `lint`, `typecheck`, `test` and `build` for each app in its matrix: the Storefront and the Admin Console |
 | `images` | `docker compose build` of every service and frontend image. On a push to `main` it also pushes them to GHCR as `ghcr.io/ondokuzz/ecomm/<service>`, tagged with the commit SHA and `main` |
-| `e2e` | `make up`, then the Playwright suite in Chromium. When it fails, the `e2e-failure` artifact keeps the Playwright report, traces and `docker compose logs` |
+| `e2e` | `make up`, then the Storefront's and the Admin Console's Playwright suites in Chromium. When it fails, the `e2e-failure` artifact keeps the Playwright reports, traces and `docker compose logs` |
 
 A new frontend app joins the `frontend` job by adding its directory name to `matrix.app`, and its
 `frontend (<app>)` check to the required checks below.
