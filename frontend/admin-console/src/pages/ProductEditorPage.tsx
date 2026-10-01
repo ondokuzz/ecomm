@@ -1,5 +1,5 @@
-import { type FormEvent, type ReactNode, useId, useState } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
+import { type FormEvent, type ReactNode, useEffect, useId, useState } from 'react'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 import { useCategories } from '../api/categories'
 import { failureOf, isNotFound } from '../api/failure'
 import { type FieldErrors, fieldErrorsOf } from '../api/fieldErrors'
@@ -99,6 +99,14 @@ function BackLink() {
 type Unsaved = 'invalid' | 'stock'
 
 /**
+ * What creating a Product carries to its own page when Inventory refused some of its On-hand
+ * counts: each count as typed, and Inventory's reason.
+ */
+interface RefusedStockState {
+  refusedStock: { variantId: string; onHand: string; message: string }[]
+}
+
+/**
  * The Product form: its Category, which decides its attribute fields and Variant axes, its details
  * and images, and a table of Variants with their Prices and Stock. Saving sends the Product to
  * Catalog, then each changed on-hand count to Inventory. Each field either refuses shows its
@@ -116,15 +124,31 @@ function ProductEditor({
   onHand: OnHandByVariant
 }) {
   const navigate = useNavigate()
+  const location = useLocation()
   const save = useSaveProduct()
-  const [form, setForm] = useState<ProductForm>(() =>
-    formOf(product, categories.find((c) => c.slug === (product?.category ?? initialCategory)), onHand),
-  )
-  // The Product's SKU once Catalog has it, and each Variant's on-hand count as Inventory last said.
-  const [savedSku, setSavedSku] = useState(product?.sku)
+  // Read once, then dropped from history, so a reload shows the Product as Inventory has it.
+  const [refused] = useState(() => (location.state as RefusedStockState | null)?.refusedStock ?? [])
+  useEffect(() => {
+    if (location.state) navigate(location.pathname, { replace: true, state: null })
+  }, [location.state, location.pathname, navigate])
+  const [form, setForm] = useState<ProductForm>(() => {
+    const loaded = formOf(product, categories.find((c) => c.slug === (product?.category ?? initialCategory)), onHand)
+    const typed = new Map(refused.map((r) => [r.variantId, r.onHand]))
+    return { ...loaded, variants: loaded.variants.map((v) => ({ ...v, onHand: typed.get(v.id) ?? v.onHand })) }
+  })
+  // Catalog has the Product once there is one here.
+  const savedSku = product?.sku
+  // Each Variant's on-hand count as Inventory last said.
   const [loadedOnHand, setLoadedOnHand] = useState(onHand)
-  const [errors, setErrors] = useState<FieldErrors>({})
-  const [unsaved, setUnsaved] = useState<Unsaved>()
+  const [errors, setErrors] = useState<FieldErrors>(() =>
+    Object.fromEntries(
+      refused.flatMap(({ variantId, message }) => {
+        const index = form.variants.findIndex((v) => v.id === variantId)
+        return index < 0 ? [] : [[`variants[${index}].onHand`, message]]
+      }),
+    ),
+  )
+  const [unsaved, setUnsaved] = useState<Unsaved | undefined>(refused.length > 0 ? 'stock' : undefined)
   const stocks = useStocks(form.variants.filter((variant) => variant.saved).map((variant) => variant.id))
   const stockOf = (variantId: string) =>
     stocks.find((stock) => stock.data?.variantId === variantId)?.data ?? undefined
@@ -207,9 +231,22 @@ function ProductEditor({
             navigate('/products', { state: { saved: saved.name } satisfies SavedState })
             return
           }
-          // Catalog has the Product now: its SKU and Variant IDs are fixed, and saving again updates it.
+          if (savedSku === undefined) {
+            // A new Product has its own page now, which a reload or Back must find; it shows the refusals.
+            navigate(`/products/${encodeURIComponent(saved.sku)}`, {
+              replace: true,
+              state: {
+                refusedStock: stockFailures.map(({ change, error }) => ({
+                  variantId: change.variantId,
+                  onHand: form.variants[change.index]!.onHand,
+                  message: failureOf(error).message,
+                })),
+              } satisfies RefusedStockState,
+            })
+            return
+          }
+          // Its SKU and Variant IDs are fixed, and saving again retries the counts still to set.
           const failed = new Set(stockFailures.map(({ change }) => change.index))
-          setSavedSku(saved.sku)
           setForm((current) => ({ ...current, variants: current.variants.map((v) => ({ ...v, saved: true })) }))
           setLoadedOnHand((current) => ({
             ...current,

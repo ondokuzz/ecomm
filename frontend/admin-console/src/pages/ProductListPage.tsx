@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 import { useCategories } from '../api/categories'
-import { useDeleteProduct, useProducts } from '../api/products'
+import { failureOf } from '../api/failure'
+import { type DeletedProduct, useDeleteProduct, useProducts } from '../api/products'
 import { ErrorMessage, SkeletonRows } from '../components/Status'
 import { Button, ButtonLink } from '../components/ui/Button'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
@@ -22,7 +23,7 @@ export function ProductListPage() {
   const categories = useCategories()
   const remove = useDeleteProduct()
   const [deleting, setDeleting] = useState<Product>()
-  const [deleted, setDeleted] = useState<string>()
+  const [deleted, setDeleted] = useState<{ name: string } & DeletedProduct>()
   const location = useLocation()
   const navigate = useNavigate()
   // Read once, then dropped from history, so a reload or Back doesn't say it again.
@@ -44,15 +45,15 @@ export function ProductListPage() {
 
   const confirmDelete = () => {
     if (!deleting) return
-    remove.mutate(deleting.sku, {
-      onSuccess: () => setDeleted(deleting.name),
+    remove.mutate(deleting, {
+      onSuccess: (result) => setDeleted({ name: deleting.name, ...result }),
       onSettled: () => setDeleting(undefined),
     })
   }
 
   const categoryName = (slug: string) => categories.data?.find((c) => c.slug === slug)?.name ?? slug
   const shown = products.data?.filter((product) => matchesSearch(product, query))
-  const notice = deleted ? `Deleted ${deleted}.` : saved ? `Saved ${saved}.` : undefined
+  const notice = deleted ? `Deleted ${deleted.name}.` : saved ? `Saved ${saved}.` : undefined
 
   return (
     <>
@@ -98,12 +99,8 @@ export function ProductListPage() {
           </div>
         )}
       </div>
-      {remove.error && (
-        <ErrorMessage
-          error={remove.error}
-          title={`Couldn't delete ${products.data?.find((p) => p.sku === remove.variables)?.name ?? remove.variables}`}
-        />
-      )}
+      {remove.error && <ErrorMessage error={remove.error} title={`Couldn't delete ${remove.variables?.name}`} />}
+      {deleted && deleted.stockFailures.length > 0 && <StockLeft failures={deleted.stockFailures} />}
 
       {products.error ? (
         <ErrorMessage
@@ -201,12 +198,31 @@ export function ProductListPage() {
         onCancel={() => setDeleting(undefined)}
       >
         {deleting &&
-          `${variantCount(deleting.variants.length)} go with it, and Customers can no longer buy them. This can't be undone.`}
+          `${variantsAndStock(deleting.variants.length)} go with it, and Customers can no longer buy them. This can't be undone.`}
       </ConfirmDialog>
     </>
   )
 }
 
-function variantCount(count: number): string {
-  return count === 1 ? 'Its Variant' : `All ${count} of its Variants`
+/** The Variants of a deleted Product whose Stock Inventory kept, each with Inventory's reason. */
+function StockLeft({ failures }: { failures: DeletedProduct['stockFailures'] }) {
+  return (
+    <div className="alert alert-danger" role="alert">
+      <Icon name="alert" />
+      <div className="alert-body">
+        <strong>Inventory still stocks some of its Variants</strong>
+        <ul className="plain-list">
+          {failures.map(({ variantId, error }) => (
+            <li key={variantId}>
+              <code>{variantId}</code>: {failureOf(error).message}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  )
+}
+
+function variantsAndStock(count: number): string {
+  return count === 1 ? 'Its Variant and its Stock' : `All ${count} of its Variants and their Stock`
 }

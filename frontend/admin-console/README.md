@@ -39,12 +39,14 @@ The Variants table has one row per Variant:
 - **Variant ID.** Typed for a new row, usually the SKU for the first. A saved Variant's ID is shown
   read-only, since Carts, Orders and Stock name it.
 - **One value per Variant axis.**
-- **Price**, typed as a decimal such as `799.00` in the Product's one currency (`EUR` unless
-  changed) and sent as Money, `{"amountMinor": 79900, "currency": "EUR"}`. `moneyOf` and
+- **Price**, typed as a decimal such as `799.00` in the Product's one currency and sent as Money, `{"amountMinor": 79900, "currency": "EUR"}`. `moneyOf` and
   `decimalOf` in [`src/domain/money.ts`](./src/domain/money.ts) convert digit by digit, so no
   floating-point rounding creeps in. A decimal with more fraction digits than the currency has,
   such as `799.001`, or with a thousands separator, is refused beside the field before anything is
   sent.
+
+  The currency is `EUR` unless changed. It must be an ISO 4217 currency the browser knows, so three
+  letters such as `ABC`, or `XXX` for "no currency", are refused beside the field too.
 - **Images**, separated by commas. When there are any, they replace the Product's own, which are
   typed one per line above the table.
 - **On hand**, the units Inventory physically holds, which Staff set. **Reserved** and
@@ -59,14 +61,18 @@ count that changed, or belongs to a Variant Inventory doesn't stock yet, to Inve
 (`PUT /stock/{variantId}`, Staff only). Catalog must have the Variants first. If Inventory refuses a
 count, such as one below what Reservations hold, the Product stays saved and the editor stays open,
 showing Inventory's message beside that count. Saving again then updates the Product and retries
-the counts still to set. `productRequest` and `stockChanges` in
+the counts still to set. A new Product moves to its own page, `/products/{sku}`, keeping the
+refused counts as typed with their messages, so a reload or Back finds the saved Product rather
+than an empty form. A reload shows the counts as Inventory has them. `productRequest` and `stockChanges` in
 [`src/domain/product.ts`](./src/domain/product.ts) turn the form into those requests.
 
 Catalog keeps every Variant a Product has had until the Product is deleted. Removing a saved row
 and saving is refused with a 409 naming the Variant IDs it must keep, shown above the form.
 
-Deleting a Product goes through a ConfirmDialog, and takes its Variants with it. Inventory keeps
-their Stock rows, which nothing reads once Catalog no longer has the Variants.
+Deleting a Product goes through a ConfirmDialog. It takes the Variants with it, then has Inventory
+stop stocking each (`DELETE /stock/{variantId}`, Staff only). Catalog goes first, so nothing more
+can be bought. A Variant Inventory doesn't stock is skipped. Inventory keeps the Stock of a Variant
+that Reservations still hold, and the list names each such Variant with Inventory's reason.
 
 ## Validation errors
 
@@ -156,11 +162,17 @@ npm run build
 npm run test:e2e  # Playwright against the running compose stack (`make up`)
 ```
 
-The Playwright test ([`e2e/products.spec.ts`](./e2e/products.spec.ts)) signs in on Keycloak as
-`staff@ecomm.local`. It creates a Product in `phones` with two Variants and sets their Stock, then
-checks Catalog and Inventory through their APIs. On the Storefront it picks the second Variant and
-sees its Price and Stock. Finally it deletes the Product through the ConfirmDialog, and through
-Catalog's API if the test failed before that. Each run's SKU is new, since the Variants' Stock rows
-stay in Inventory. It runs against the console on 8090; set `ADMIN_CONSOLE_URL` to use Vite's
+The Playwright tests ([`e2e/products.spec.ts`](./e2e/products.spec.ts)) sign in on Keycloak as
+`staff@ecomm.local` and create a Product in `phones` with two Variants and their Stock.
+
+- **The main flow** checks Catalog and Inventory through their APIs. On the Storefront it picks
+  the second Variant and sees its Price and Stock. Then it deletes the Product through the
+  ConfirmDialog and checks that Catalog and Inventory no longer have it or its Stock.
+- **A refused count** has Inventory refuse one Variant's count. The test stands in for Inventory
+  there, since a new Variant has no Reservations. It checks that the new Product opens on its own
+  page with the refusal beside that count, then sets the count by saving again.
+
+Each test removes its Product and Stock through Catalog's and Inventory's APIs if it failed before
+doing so itself, so the stack is left as it was. It runs against the console on 8090; set `ADMIN_CONSOLE_URL` to use Vite's
 5174, and `STOREFRONT_URL` or `KEYCLOAK_URL` for other hosts. Install Chromium once with
 `npx playwright install chromium`.

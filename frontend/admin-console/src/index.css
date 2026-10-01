@@ -654,6 +654,11 @@ textarea.input {
   min-width: 0;
   vertical-align: middle;
 }
+.plain-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
 .tag-list {
   display: flex;
   flex-wrap: wrap;

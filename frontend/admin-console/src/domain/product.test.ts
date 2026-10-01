@@ -195,8 +195,12 @@ describe('productRequest', () => {
 
   it('names a currency that isn’t an ISO 4217 code', () => {
     const form = formOf(pixel, phones, stock)
-    form.currency = 'Euro'
-    expect(productRequest(form, phones).errors).toEqual({ currency: 'must be an ISO 4217 code, such as EUR' })
+    for (const currency of ['Euro', 'ABC']) {
+      form.currency = currency
+      expect(productRequest(form, phones).errors, currency).toEqual({
+        currency: 'must be an ISO 4217 code, such as EUR',
+      })
+    }
   })
 
   it('takes a blank on-hand count as leaving Stock alone, and refuses one that isn’t a whole number', () => {

@@ -33,12 +33,11 @@ export function decimalOf(money: Money): string {
   return digits === 0 ? padded : `${padded.slice(0, -digits)}.${padded.slice(-digits)}`
 }
 
-/** How many fraction digits `currency` has, or undefined when it isn't an ISO 4217 code. */
+// The ISO 4217 currencies the browser knows, which leaves out codes such as XXX (no currency) and XTS (testing).
+const currencies = new Set(Intl.supportedValuesOf('currency'))
+
+/** How many fraction digits `currency` has, or undefined when it isn't an ISO 4217 currency. */
 function minorDigitsOf(currency: string): number | undefined {
-  if (!/^[A-Z]{3}$/.test(currency)) return undefined
-  try {
-    return new Intl.NumberFormat('en', { style: 'currency', currency }).resolvedOptions().maximumFractionDigits
-  } catch {
-    return undefined
-  }
+  if (!currencies.has(currency)) return undefined
+  return new Intl.NumberFormat('en', { style: 'currency', currency }).resolvedOptions().maximumFractionDigits
 }

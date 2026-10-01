@@ -48,6 +48,13 @@ describe('moneyOf', () => {
     expect(moneyOf('1.00', 'EURO')).toBeUndefined()
     expect(moneyOf('1.00', '')).toBeUndefined()
   })
+
+  it('refuses three letters that name no currency to price in', () => {
+    expect(moneyOf('1.00', 'ABC')).toBeUndefined()
+    // ISO 4217 codes for testing and for "no currency" are no currency to price in.
+    expect(moneyOf('1.00', 'XTS')).toBeUndefined()
+    expect(moneyOf('1.00', 'XXX')).toBeUndefined()
+  })
 })
 
 describe('decimalOf', () => {

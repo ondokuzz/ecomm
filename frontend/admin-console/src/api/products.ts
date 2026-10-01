@@ -95,16 +95,41 @@ export function useSaveProduct() {
   })
 }
 
-/** Deletes a Product with its Variants, which frees their IDs. Inventory keeps their Stock rows. */
+/** What deleting a Product came to: the Variants whose Stock Inventory wouldn't remove, and why. */
+export interface DeletedProduct {
+  stockFailures: { variantId: string; error: unknown }[]
+}
+
+/**
+ * Deletes a Product with its Variants, which frees their IDs, then has Inventory stop stocking
+ * each of them. Catalog goes first, so Customers can no longer buy what is being removed. A Variant
+ * Inventory doesn't stock is already gone; one whose Stock Reservations still hold stays, and is
+ * reported in `stockFailures`.
+ */
 export function useDeleteProduct() {
   const token = useAuth().user?.access_token
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (sku: string) =>
-      api<void>('catalog', `/products/${encodeURIComponent(sku)}`, { method: 'DELETE', token }),
-    onSuccess: () =>
+    mutationFn: async (product: Product): Promise<DeletedProduct> => {
+      await api<void>('catalog', `/products/${encodeURIComponent(product.sku)}`, { method: 'DELETE', token })
+      const results = await Promise.allSettled(
+        product.variants.map(({ id }) =>
+          api<void>('inventory', `/stock/${encodeURIComponent(id)}`, { method: 'DELETE', token }).catch(
+            (error: unknown) => {
+              if (!isNotFound(error)) throw error
+            },
+          ),
+        ),
+      )
+      const stockFailures = results.flatMap((result, i) =>
+        result.status === 'rejected' ? [{ variantId: product.variants[i]!.id, error: result.reason as unknown }] : [],
+      )
+      return { stockFailures }
+    },
+    onSettled: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: productsKey }),
+        queryClient.invalidateQueries({ queryKey: stockKey }),
         queryClient.invalidateQueries({ queryKey: categoriesKey }),
       ]),
   })
