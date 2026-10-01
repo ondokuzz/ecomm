@@ -68,6 +68,16 @@ public record Stock(String variantId, int onHand, int reserved) {
     return new Stock(variantId, onHand, reserved);
   }
 
+  /**
+   * Checks that Inventory can stop stocking the Variant. Throws {@link StockReservedException}
+   * while Reservations hold some of it.
+   */
+  public void requireUnreserved() {
+    if (reserved > 0) {
+      throw new StockReservedException(variantId, reserved);
+    }
+  }
+
   private static void requireValidOnHand(int onHand) {
     if (onHand < 0) {
       throw new InvalidStockRequestException("onHand cannot be negative");

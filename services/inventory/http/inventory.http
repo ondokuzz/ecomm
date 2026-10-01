@@ -177,3 +177,14 @@ Content-Type: application/json
 {"customerId": "http-file-customer", "expiresAt": "2030-01-01T00:00:00Z", "items": [
   {"variantId": "PHN-PIXEL-9", "quantity": 1}
 ]}
+
+### Staff stock a Variant only to stop stocking it again
+PUT {{inventory}}/stock/HTTP-FILE-VARIANT
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{"onHand": 3}
+
+### Stop stocking it: 204, then its stock is a 404. While Reservations hold some, 409 with reserved
+DELETE {{inventory}}/stock/HTTP-FILE-VARIANT
+Authorization: Bearer {{staffToken}}

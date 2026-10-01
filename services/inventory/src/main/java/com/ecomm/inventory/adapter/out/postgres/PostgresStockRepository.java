@@ -66,4 +66,9 @@ class PostgresStockRepository implements StockRepository {
                 .param("id", variantId)
                 .update());
   }
+
+  @Override
+  public void delete(String variantId) {
+    jdbc.sql("DELETE FROM stock WHERE variant_id = :id").param("id", variantId).update();
+  }
 }

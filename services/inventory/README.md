@@ -17,6 +17,7 @@ An event-sourced rebuild follows in Sprint 4 (see the [roadmap](../../docs/roadm
 |---|---|---|
 | `GET /stock/{variantId}` | anyone | `{"variantId", "quantity", "onHand", "reserved"}`; 404 for an unknown Variant |
 | `PUT /stock/{variantId}` | Staff | Sets on-hand Stock: 201 for a new Variant, 200 otherwise |
+| `DELETE /stock/{variantId}` | Staff | Stops stocking a Variant: 204; 404 for an unknown Variant, 409 while Reservations hold some |
 | `POST /reservations` | Checkout | Holds a batch for a Customer until `expiresAt`; 201 with the Reservation |
 | `POST /reservations/{id}/commit` | Checkout | Takes the held Stock off on-hand for good |
 | `POST /reservations/{id}/release` | Checkout | Gives the held Stock back |
@@ -27,6 +28,12 @@ expired yet hold (`reserved`).
 Setting on-hand Stock needs a Staff token (`STAFF` role). It takes `{"onHand": 12}` and adds the
 Variant if Inventory doesn't stock it yet. Setting it below `reserved` is a 409 whose `reserved`
 says how many units Reservations hold; a negative or non-integer count is a 400.
+
+Staff stop stocking a Variant when its Product leaves the Catalog; the
+[Admin Console](../../frontend/admin-console/README.md) does it when it deletes a Product. Its
+stock is then a 404, and reserving it is a 404 with `unknownVariants`, until Staff set its on-hand
+Stock again. While Reservations hold some of it, it is a 409 whose `reserved` says how many; once
+they are committed, released or expired, it can go. Its past Reservations stay.
 
 The Reservation endpoints are internal: they need Checkout's own token, with the
 `CHECKOUT` role ([ADR 0002](../identity-access/docs/adr/0002-service-identity-by-client-credentials.md)),
@@ -76,7 +83,8 @@ is the `TimeSource` port.
 
 One `stock` row per Variant holds its `on_hand` count, with a check constraint keeping it
 non-negative. A Reservation is a `reservation` row (owner, status, expiry) and one
-`reservation_item` row per Variant. What a Variant has reserved is never stored: it is worked out
+`reservation_item` row per Variant. A `reservation_item` names its Variant without a foreign key
+to `stock`, so a Reservation outlives the Stock it once held when Staff stop stocking the Variant. What a Variant has reserved is never stored: it is worked out
 from its `ACTIVE` Reservations and the clock.
 
 Every change that can take Stock (a Reservation, a commit, setting on-hand) first

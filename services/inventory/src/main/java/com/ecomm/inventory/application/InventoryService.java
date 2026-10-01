@@ -2,6 +2,7 @@ package com.ecomm.inventory.application;
 
 import com.ecomm.inventory.application.port.in.ReadStockUseCase;
 import com.ecomm.inventory.application.port.in.ReleaseExpiredReservationsUseCase;
+import com.ecomm.inventory.application.port.in.RemoveStockUseCase;
 import com.ecomm.inventory.application.port.in.ReserveStockUseCase;
 import com.ecomm.inventory.application.port.in.SetOnHandUseCase;
 import com.ecomm.inventory.application.port.in.SettleReservationUseCase;
@@ -30,6 +31,7 @@ import java.util.stream.Collectors;
 public class InventoryService
     implements ReadStockUseCase,
         SetOnHandUseCase,
+        RemoveStockUseCase,
         ReserveStockUseCase,
         SettleReservationUseCase,
         ReleaseExpiredReservationsUseCase {
@@ -77,6 +79,20 @@ public class InventoryService
           var changed = lockStock(List.of(variantId)).get(variantId).withOnHand(onHand);
           stock.setOnHand(Map.of(variantId, onHand));
           return new Result(changed, false);
+        });
+  }
+
+  @Override
+  public boolean removeStock(String variantId) {
+    return transactions.inTransaction(
+        () -> {
+          var current = lockStock(List.of(variantId)).get(variantId);
+          if (current == null) {
+            return false;
+          }
+          current.requireUnreserved();
+          stock.delete(variantId);
+          return true;
         });
   }
 

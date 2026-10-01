@@ -26,4 +26,7 @@ public interface StockRepository {
 
   /** Overwrites the on-hand counts of existing Variants. */
   void setOnHand(Map<String, Integer> onHandByVariant);
+
+  /** Drops the Variant's row. */
+  void delete(String variantId);
 }

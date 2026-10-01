@@ -88,6 +88,13 @@ abstract class InventoryApiTest {
         .exchange();
   }
 
+  RestTestClient.ResponseSpec removeStock(String token, String variantId) {
+    return http.delete()
+        .uri("/stock/{variantId}", variantId)
+        .headers(h -> h.setBearerAuth(token))
+        .exchange();
+  }
+
   /** A Variant no other test uses, with {@code onHand} units, set up by Staff. */
   String newVariant(int onHand) {
     var variantId = "TEST-" + UUID.randomUUID();
