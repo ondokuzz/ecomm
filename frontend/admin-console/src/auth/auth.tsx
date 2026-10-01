@@ -103,6 +103,11 @@ export function RequireStaff({ children }: { children: ReactNode }) {
   const redirecting = useRef(false)
   // Only a failed sign-in callback stops the redirect; a failed silent restore just means signed out.
   const signinFailed = auth.error?.source === 'signinCallback'
+  // The user is loaded before the callback returns to the page Staff asked for, and the router
+  // catches up with that return a render later. Until it does it is still at the callback's `/`,
+  // whose redirect would run after the return, and win. hasAuthParams reads only search and hash.
+  const location = useLocation()
+  const atCallback = hasAuthParams(location as unknown as Location)
 
   useEffect(() => {
     // After a failed sign-in, let the user choose to try again rather than loop back to Keycloak.
@@ -120,7 +125,7 @@ export function RequireStaff({ children }: { children: ReactNode }) {
       </Gate>
     )
   }
-  if (!auth.isAuthenticated) return <Gate title="Taking you to sign in…" />
+  if (!auth.isAuthenticated || atCallback) return <Gate title="Taking you to sign in…" />
   if (!isStaff(auth.user?.access_token)) return <NotStaff />
   return children
 }
