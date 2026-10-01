@@ -34,8 +34,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The Admin Console joins by adding its directory name, admin-console.
-        app: [storefront]
+        # Each app under frontend/, by its directory name.
+        app: [storefront, admin-console]
     name: frontend (${{ matrix.app }})
     runs-on: ubuntu-latest
     defaults:

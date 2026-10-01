@@ -20,16 +20,18 @@ public record Category(String slug, String name, List<AttributeDefinition> attri
   public Category {
     if (!isSlug(slug)) {
       throw new InvalidCategoryException(
-          "slug must be lowercase letters, digits and hyphens, e.g. 'phones'");
+          "slug", "must be lowercase letters, digits and hyphens, e.g. 'phones'");
     }
     if (name == null || name.isBlank()) {
-      throw new InvalidCategoryException("name is required");
+      throw new InvalidCategoryException("name", "is required");
     }
     attributes = attributes == null ? List.of() : List.copyOf(attributes);
     var names = new HashSet<String>();
-    for (var definition : attributes) {
-      if (!names.add(definition.name())) {
-        throw new InvalidCategoryException("attribute " + definition.name() + " is defined twice");
+    for (var i = 0; i < attributes.size(); i++) {
+      var attribute = attributes.get(i).name();
+      if (!names.add(attribute)) {
+        throw new InvalidCategoryException(
+            "attributes[" + i + "].name", "repeats the attribute " + attribute);
       }
     }
   }

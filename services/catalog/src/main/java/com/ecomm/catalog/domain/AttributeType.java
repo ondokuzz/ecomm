@@ -16,6 +16,21 @@ public enum AttributeType {
   /** One of the definition's values. */
   ENUM;
 
+  /** What an attribute definition's {@code type} must be, as told to whoever got it wrong. */
+  public static final String EXPECTED = "must be TEXT, NUMBER, BOOLEAN or ENUM";
+
+  /** The type named {@code name}, or an {@link InvalidCategoryException} on its {@code type}. */
+  public static AttributeType named(String name) {
+    if (name == null) {
+      return null;
+    }
+    try {
+      return valueOf(name);
+    } catch (IllegalArgumentException e) {
+      throw new InvalidCategoryException("type", EXPECTED);
+    }
+  }
+
   /** Why {@code value} doesn't fit this type, or null when it does. */
   String problemWith(String value, List<String> values) {
     return switch (this) {

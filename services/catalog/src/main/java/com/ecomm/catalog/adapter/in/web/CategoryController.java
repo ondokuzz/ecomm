@@ -85,8 +85,11 @@ class CategoryController {
     return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
   }
 
+  /** Names the offending field in {@code errors}, the shape a Product's violations take. */
   @ExceptionHandler(InvalidCategoryException.class)
   ProblemDetail invalid(InvalidCategoryException e) {
-    return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+    var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+    problem.setProperty("errors", List.of(e.violation()));
+    return problem;
   }
 }

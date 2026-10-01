@@ -130,6 +130,14 @@ takes its tokens, fonts and favicon from here, copied by
 npm run keycloak-theme   # after changing the tokens in src/index.css, the fonts or public/favicon.svg
 ```
 
+The [Admin Console](../admin-console/README.md) wears the same tokens, fonts and favicon, copied
+into it by [`scripts/admin-console-brand.ts`](./scripts/admin-console-brand.ts). Run it after the
+same changes:
+
+```sh
+npm run admin-console-brand
+```
+
 Tokens are kept in memory only, never in web storage. A reload drops them, so on start the app
 asks Keycloak for new ones in a hidden iframe at `/silent-renew`; with a live Keycloak session the
 Customer stays signed in, without one they stay signed out. Silent renew refreshes the access token
@@ -270,7 +278,7 @@ Sign in as `demo@ecomm.local` / `demo`, or register a new Customer.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: failed responses as messages and support references, Money formatting, Cart pricing, checkout problems, the session countdown and price breakdown, Coupon rejections, test cards and payment failures, quantities, Stock levels, toasts, category chips, Product specs by their Category's definitions, Customer initials, Orders and their timeline, Order Status colours, seed Product images, the Keycloak theme's copy of the tokens
+npm test          # Vitest: failed responses as messages and support references, Money formatting, Cart pricing, checkout problems, the session countdown and price breakdown, Coupon rejections, test cards and payment failures, quantities, Stock levels, toasts, category chips, Product specs by their Category's definitions, Customer initials, Orders and their timeline, Order Status colours, seed Product images, the Keycloak theme's and the Admin Console's copies of the tokens
 npm run test:e2e  # Playwright smoke and error-states tests against the running compose stack (`make up`)
 ```
 

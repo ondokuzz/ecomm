@@ -1,8 +1,13 @@
 package com.ecomm.catalog;
 
+import static org.junit.jupiter.params.provider.Arguments.arguments;
+
 import java.util.List;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
@@ -103,36 +108,76 @@ class ManageCategoriesApiTest extends CatalogApiTest {
         .contentType(MediaType.APPLICATION_PROBLEM_JSON);
   }
 
+  static Stream<Arguments> invalidCategories() {
+    return Stream.of(
+        arguments(
+            """
+            {"slug": "Smart Watches", "name": "Smart watches"}
+            """,
+            "slug"),
+        arguments(
+            """
+            {"slug": "bad-no-name"}
+            """,
+            "name"),
+        arguments(
+            """
+            {"slug": "bad-unnamed", "name": "Bad", "attributes": [
+              {"type": "TEXT", "required": true, "variantAxis": false}]}
+            """,
+            "attributes[0].name"),
+        arguments(
+            """
+            {"slug": "bad-enum", "name": "Bad", "attributes": [
+              {"name": "brand", "type": "TEXT", "required": true, "variantAxis": false},
+              {"name": "size", "type": "ENUM", "values": [], "required": true, "variantAxis": false}]}
+            """,
+            "attributes[1].values"),
+        arguments(
+            """
+            {"slug": "bad-type", "name": "Bad", "attributes": [
+              {"name": "size", "type": "COLOUR", "required": true, "variantAxis": false}]}
+            """,
+            "attributes[0].type"),
+        arguments(
+            """
+            {"slug": "bad-twice", "name": "Bad", "attributes": [
+              {"name": "size", "type": "TEXT", "required": true, "variantAxis": false},
+              {"name": "size", "type": "NUMBER", "required": false, "variantAxis": false}]}
+            """,
+            "attributes[1].name"));
+  }
+
+  /** Each mistake is named by its field, so the Admin Console can show it beside that field. */
   @ParameterizedTest
-  @ValueSource(
-      strings = {
-        """
-        {"slug": "Smart Watches", "name": "Smart watches"}
-        """,
-        """
-        {"slug": "bad-no-name"}
-        """,
-        """
-        {"slug": "bad-enum", "name": "Bad", "attributes": [
-          {"name": "size", "type": "ENUM", "values": [], "required": true, "variantAxis": false}]}
-        """,
-        """
-        {"slug": "bad-type", "name": "Bad", "attributes": [
-          {"name": "size", "type": "COLOUR", "required": true, "variantAxis": false}]}
-        """,
-        """
-        {"slug": "bad-twice", "name": "Bad", "attributes": [
-          {"name": "size", "type": "TEXT", "required": true, "variantAxis": false},
-          {"name": "size", "type": "NUMBER", "required": false, "variantAxis": false}]}
-        """,
-        "not json"
-      })
-  void anInvalidCategoryIsABadRequest(String body) {
+  @MethodSource("invalidCategories")
+  void anInvalidCategoryIsABadRequestNamingTheField(String body, String field) {
     http.post()
         .uri("/categories")
         .headers(h -> h.setBearerAuth(staffToken()))
         .contentType(MediaType.APPLICATION_JSON)
         .body(body)
+        .exchange()
+        .expectStatus()
+        .isBadRequest()
+        .expectHeader()
+        .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+        .expectBody()
+        .jsonPath("$.errors.length()")
+        .isEqualTo(1)
+        .jsonPath("$.errors[0].field")
+        .isEqualTo(field)
+        .jsonPath("$.errors[0].message")
+        .isNotEmpty();
+  }
+
+  @Test
+  void aCategoryThatIsNotJsonIsABadRequest() {
+    http.post()
+        .uri("/categories")
+        .headers(h -> h.setBearerAuth(staffToken()))
+        .contentType(MediaType.APPLICATION_JSON)
+        .body("not json")
         .exchange()
         .expectStatus()
         .isBadRequest()
@@ -178,7 +223,10 @@ class ManageCategoriesApiTest extends CatalogApiTest {
         .body(category("screens", "Screens"))
         .exchange()
         .expectStatus()
-        .isBadRequest();
+        .isBadRequest()
+        .expectBody()
+        .jsonPath("$.errors[0].field")
+        .isEqualTo("slug");
   }
 
   @Test

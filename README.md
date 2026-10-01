@@ -21,6 +21,10 @@ The first build takes several minutes. Then open http://localhost:8080, where yo
 4. see the Order confirmation with its Order Status, **Paid**, and its discount, and find the Order
    under **My Orders**.
 
+Staff work in the [Admin Console](./frontend/admin-console/README.md) on http://localhost:8090:
+sign in as `staff@ecomm.local` / `staff` to create and edit Categories and their attribute
+definitions. The demo Customer is refused there.
+
 The smoke test walks the same path in Chromium against the running stack. As the demo Customer it
 adds two Products, checks out with the approving test card, expects `PAID` on the confirmation page and checks through the
 Inventory API that the Checkout Session reserved their Stock and paying took it off on-hand. It
@@ -47,11 +51,11 @@ any service's Postgres database that is missing, so a stack from before Promotio
 everything, Keycloak's users included, run `docker compose down -v`.
 
 The browser reaches the services only through the [API gateway](./platform/api-gateway/README.md),
-on 8000, which the Storefront's nginx sends `/api/` to. Each service also publishes a host port:
+on 8000, which the Storefront's and the Admin Console's nginx send `/api/` to. Each service also publishes a host port:
 Keycloak on 8180 (`admin` / `admin`), Catalog to Checkout on 8081–8086 and Promotions on 8087 (see
 each service's README).
 Those bypass the gateway, for development only. Override one that is already taken, e.g.
-`POSTGRES_PORT=5433 make up`; Couchbase's ports and the Storefront's 8080 are fixed. Kafka and
+`POSTGRES_PORT=5433 make up`; Couchbase's ports, the Storefront's 8080 and the Admin Console's 8090 are fixed. Kafka and
 Mongo are behind the `full` profile until Sprint 3 (`docker compose --profile full up -d`).
 
 Each Spring service is capped at 384 MB, with 60% of it for the heap, and Keycloak at 512 MB, so
@@ -65,7 +69,7 @@ to `main`, with four jobs:
 | Job | What it checks |
 |---|---|
 | `backend` | `./gradlew check` on JDK 21: Spotless, unit and Testcontainers tests, and `HexagonalRules` |
-| `frontend (<app>)` | `npm ci`, `lint`, `typecheck`, `test` and `build` for each app in its matrix; today the Storefront |
+| `frontend (<app>)` | `npm ci`, `lint`, `typecheck`, `test` and `build` for each app in its matrix: the Storefront and the Admin Console |
 | `images` | `docker compose build` of every service and frontend image. On a push to `main` it also pushes them to GHCR as `ghcr.io/ondokuzz/ecomm/<service>`, tagged with the commit SHA and `main` |
 | `e2e` | `make up`, then the Playwright suite in Chromium. When it fails, the `e2e-failure` artifact keeps the Playwright report, traces and `docker compose logs` |
 
@@ -75,7 +79,7 @@ A new frontend app joins the `frontend` job by adding its directory name to `mat
 Making the checks block a merge is a manual step, done once, since a workflow cannot require
 itself. In the repository's **Settings → Branches**, add a branch protection rule (or ruleset) for
 `main`, turn on **Require status checks to pass before merging**, and choose `backend`,
-`frontend (storefront)`, `images` and `e2e`. A check appears in that list only after it has run
+`frontend (storefront)`, `frontend (admin-console)`, `images` and `e2e`. A check appears in that list only after it has run
 once. On a private repository, branch protection needs a paid GitHub plan.
 
 ## Layout

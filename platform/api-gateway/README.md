@@ -41,7 +41,7 @@ network; outside Docker they are the services' dev host ports.
   among them. Hiding Promotions' `POST /discounts/evaluate` means nobody can probe Coupon codes
   outside a checkout; Staff still reach `/coupons` through the gateway.
 
-The gateway sends no CORS headers: browsers reach it on the Storefront's own origin.
+The gateway sends no CORS headers: browsers reach it on the Storefront's or the Admin Console's own origin, through its nginx.
 
 ## Correlation IDs and the access log
 

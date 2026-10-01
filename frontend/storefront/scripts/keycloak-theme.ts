@@ -17,7 +17,7 @@ const resourcesUrl = new URL('../../../services/identity-access/themes/ecomm/log
 const darkModeClass = 'pf-v5-theme-dark'
 
 /** The Storefront's fonts, by fontsource package and the one Latin, upright file the theme needs. */
-const fonts = [
+export const fonts = [
   { pkg: 'inter', face: 'inter-latin-wght-normal' },
   { pkg: 'bricolage-grotesque', face: 'bricolage-grotesque-latin-wght-normal' },
 ]
@@ -86,7 +86,7 @@ export function themeFiles(): ThemeFile[] {
 }
 
 /** The `{ ... }` body of the rule that starts at `from`. */
-function ruleBody(css: string, from: number): string {
+export function ruleBody(css: string, from: number): string {
   if (from < 0) throw new Error('Rule not found')
   const open = css.indexOf('{', from)
   let depth = 0

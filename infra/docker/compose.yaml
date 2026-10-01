@@ -257,6 +257,24 @@ services:
       timeout: 3s
       retries: 10
 
+  admin-console:
+    build:
+      context: ../../frontend/admin-console
+    image: ${IMAGE_PREFIX:-ecomm}/admin-console:${IMAGE_TAG:-latest}
+    # Fixed: http://localhost:8090 is one of the admin-console client's redirect origins in the
+    # realm file, so login breaks on any other port.
+    ports: ["8090:8090"]
+    mem_limit: 64m
+    depends_on:
+      keycloak: { condition: service_healthy }
+      api-gateway: { condition: service_healthy }
+    healthcheck:
+      # nginx listens on IPv4 only, and localhost resolves to ::1 first.
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8090/"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
   kafka:
     image: apache/kafka:4.3.1
     profiles: [full]

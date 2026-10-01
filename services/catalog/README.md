@@ -48,6 +48,16 @@ a repeated combination as `variants[2].axisValues`. A Product whose `category` n
 a 400 with the field `category`. Changing a Category's definitions never rewrites existing
 Products: the new rules apply on each Product's next write.
 
+An invalid Category is a 400 in the same shape, naming its first mistake: `slug` (not lowercase
+letters, digits and hyphens, or not the path's on an update), `name`, or a definition's field by
+its position, such as `attributes[1].type`, `attributes[1].values` (missing for an `ENUM`, or given
+for another type) or `attributes[2].name` (missing, or repeating an earlier one):
+
+```json
+{"status": 400, "detail": "Category is invalid: attributes[1].values are required for an ENUM",
+ "errors": [{"field": "attributes[1].values", "message": "are required for an ENUM"}]}
+```
+
 ### Products and Variants
 
 A Product is sold as one or more Variants, such as a phone's colour and storage combinations. Each

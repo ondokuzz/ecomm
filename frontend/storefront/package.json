@@ -12,7 +12,8 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "images": "node scripts/generate-product-images.ts",
-    "keycloak-theme": "node scripts/keycloak-theme.ts"
+    "keycloak-theme": "node scripts/keycloak-theme.ts",
+    "admin-console-brand": "node scripts/admin-console-brand.ts"
   },
   "dependencies": {
     "@fontsource-variable/bricolage-grotesque": "^5.3.0",

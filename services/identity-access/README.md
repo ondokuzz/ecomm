@@ -13,10 +13,35 @@ The `ecomm` realm is defined in [`realm/realm-ecomm.json`](./realm/realm-ecomm.j
 | Access-token lifespan | 15 minutes |
 | SSL | not required (`sslRequired: none`), **for local development only**: Docker can present requests from the host with a public source IP, which the default (`external`) would refuse over plain HTTP |
 | `storefront` | public client, Authorization Code + PKCE S256, redirects `http://localhost:8080/*` and `http://localhost:5173/*` (and their `127.0.0.1` equivalents) |
-| `admin-console` | public client, reserved for Sprint 2 (no redirect URIs yet) |
+| `admin-console` | public client for the [Admin Console](../../frontend/admin-console/README.md), Authorization Code + PKCE S256, redirects `http://localhost:8090/*` and `http://localhost:5174/*` (and their `127.0.0.1` equivalents) |
 | `dev-cli` | public client with the password grant, **for local development and tests only** |
 | `checkout` | confidential client with client credentials only; its service account holds `CHECKOUT`. Secret `checkout-dev-secret`, **for local development only** |
 | Seeded users | `demo@ecomm.local` / `demo` (CUSTOMER), `staff@ecomm.local` / `staff` (STAFF) |
+
+## The Admin Console client
+
+The [Admin Console](../../frontend/admin-console/README.md) signs Staff in through the public
+`admin-console` client, with Authorization Code + PKCE S256. Its redirect and post-logout redirect
+URIs are the console's compose origin, `http://localhost:8090`, and its Vite dev origin,
+`http://localhost:5174`, each also as `127.0.0.1`. Its web origins are `+`, so the browser may call
+Keycloak's token endpoint from those origins. Any user may sign in through it, since Keycloak
+doesn't check roles at login. The console turns away anyone without `STAFF`, and Catalog refuses
+their requests.
+
+A realm imported before the client had its redirect URIs keeps the empty ones, since the import
+skips an existing realm, and Keycloak refuses the console's login with "Invalid parameter:
+redirect_uri". Either delete the realm and restart Keycloak (see above), or apply the client from
+the realm file to the running realm. From the repo root:
+
+```sh
+kc() { docker compose exec -T keycloak /opt/keycloak/bin/kcadm.sh "$@" \
+  --no-config --server http://localhost:8080 --realm master --user admin --password admin; }
+id=$(kc get clients -r ecomm -q clientId=admin-console --fields id --format csv --noquotes)
+jq '.clients[] | select(.clientId == "admin-console")' services/identity-access/realm/realm-ecomm.json \
+  | kc update "clients/$id" -r ecomm -f - --merge
+```
+
+The same works for any other client, by its `clientId`.
 
 ## Login theme
 
