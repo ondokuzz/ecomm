@@ -11,15 +11,20 @@ import java.util.List;
 record CategoryRequest(String slug, String name, List<DefinitionRequest> attributes) {
 
   /**
-   * {@code required} and {@code variantAxis} are false when left out. {@code type} is read here
-   * rather than by Jackson, so an unknown one is refused naming its field.
+   * {@code required} and {@code variantAxis} are false when left out; they are wrappers because
+   * Jackson refuses a missing primitive. {@code type} is read here rather than by Jackson, so an
+   * unknown one is refused naming its field.
    */
   record DefinitionRequest(
-      String name, String type, List<String> values, boolean required, boolean variantAxis) {
+      String name, String type, List<String> values, Boolean required, Boolean variantAxis) {
 
     AttributeDefinition toDefinition() {
       return new AttributeDefinition(
-          name, AttributeType.named(type), values, required, variantAxis);
+          name,
+          AttributeType.named(type),
+          values,
+          Boolean.TRUE.equals(required),
+          Boolean.TRUE.equals(variantAxis));
     }
   }
 

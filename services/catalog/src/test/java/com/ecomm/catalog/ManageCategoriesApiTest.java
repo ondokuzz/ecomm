@@ -75,6 +75,26 @@ class ManageCategoriesApiTest extends CatalogApiTest {
   }
 
   @Test
+  void aDefinitionThatLeavesOutRequiredAndVariantAxisIsNeither() {
+    http.post()
+        .uri("/categories")
+        .headers(h -> h.setBearerAuth(staffToken()))
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(
+            """
+            {"slug": "watches", "name": "Watches", "attributes": [{"name": "brand", "type": "TEXT"}]}
+            """)
+        .exchange()
+        .expectStatus()
+        .isCreated()
+        .expectBody()
+        .jsonPath("$.attributes[0].required")
+        .isEqualTo(false)
+        .jsonPath("$.attributes[0].variantAxis")
+        .isEqualTo(false);
+  }
+
+  @Test
   void creatingACategoryWithATakenSlugIsAConflict() {
     create("drones", "Drones");
 
