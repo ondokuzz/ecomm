@@ -16,7 +16,7 @@ import { CheckoutSteps } from '../components/CheckoutSteps'
 import { EmptyCart } from '../components/EmptyCart'
 import { ProductLines } from '../components/ProductLines'
 import { CheckoutSkeleton } from '../components/PageSkeletons'
-import { EmptyState, ErrorMessage, ErrorState, SupportReference } from '../components/Status'
+import { EmptyState, ErrorMessage, ErrorState, LookupError, SupportReference } from '../components/Status'
 import { Button, ButtonLink } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { Icon } from '../components/ui/Icon'
@@ -156,7 +156,7 @@ function HeldUntilNotice({ expiresAt, left }: { expiresAt: string; left: string 
 /** What the session comes to, with its lines at their held Prices, and `children` below the breakdown. */
 function SessionSummary({ session, children }: { session: CheckoutSession; children?: ReactNode }) {
   const headingId = useId()
-  const variants = useVariants(session.lines.map((line) => line.variantId))
+  const { variants, failure } = useVariants(session.lines.map((line) => line.variantId))
   const lines = session.lines.map((line) => {
     const variant = variants[line.variantId]
     return variant ? { ...line, variant, name: variantName(variant) } : line
@@ -164,6 +164,7 @@ function SessionSummary({ session, children }: { session: CheckoutSession; child
   return (
     <Card className="order-summary" aria-labelledby={headingId} role="region">
       <h2 id={headingId}>Order summary</h2>
+      <LookupError failure={failure} title="We couldn't load your items' names" />
       <ProductLines lines={lines} label="Checkout lines" compact />
       <dl>
         <div>
@@ -296,7 +297,7 @@ function SessionExpired({ onStartAgain }: { onStartAgain: () => void }) {
 /** Why a session couldn't start. Products out of Stock or gone from Catalog are listed, with a way back to the Cart. */
 function StartError({ error, retrying, onRetry }: { error: unknown; retrying: boolean; onRetry: () => void }) {
   const cart = useCart()
-  const variants = useVariants((cart.data?.items ?? []).map((item) => item.variantId))
+  const { variants } = useVariants((cart.data?.items ?? []).map((item) => item.variantId))
   const lines: CartLine[] = (cart.data?.items ?? []).map((item) => {
     const variant = variants[item.variantId]
     return variant ? { ...item, variant, name: variantName(variant) } : item

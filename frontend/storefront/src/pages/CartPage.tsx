@@ -4,13 +4,13 @@ import { CartSkeleton } from '../components/PageSkeletons'
 import { ProductLines } from '../components/ProductLines'
 import { EmptyCart } from '../components/EmptyCart'
 import { OrderSummary } from '../components/OrderSummary'
-import { ErrorMessage, ErrorState } from '../components/Status'
+import { ErrorMessage, ErrorState, LookupError } from '../components/Status'
 import { Button, ButtonLink } from '../components/ui/Button'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { Icon } from '../components/ui/Icon'
 
 export function CartPage() {
-  const { cart, priced } = usePricedCart()
+  const { cart, priced, variantsFailure } = usePricedCart()
   const setQuantity = useSetQuantity()
   const remove = useRemoveFromCart()
   const clear = useClearCart()
@@ -41,6 +41,7 @@ export function CartPage() {
         </Button>
       </div>
       {clear.error && <ErrorMessage error={clear.error} />}
+      <LookupError failure={variantsFailure} title="We couldn't load your items' names and prices" />
       <div className="cart-layout">
         <div className="cart-main">
           <ProductLines

@@ -1,6 +1,6 @@
 import { useQueries, useQuery } from '@tanstack/react-query'
 import type { Category, Product, VariantDetail } from '../domain/catalog'
-import { isNotFound } from './failure'
+import { type LookupFailure, isNotFound, lookupFailure } from './failure'
 import { api } from './http'
 
 export function useCategories() {
@@ -43,11 +43,20 @@ function variantQuery(variantId: string) {
   }
 }
 
-/** Some Variants, as each loads; an ID maps to undefined while its Variant loads, or when Catalog doesn't have it. */
-export function useVariants(variantIds: string[]): Record<string, VariantDetail | undefined> {
+/**
+ * Some Variants, as each loads; an ID maps to undefined while its Variant loads, or when Catalog
+ * doesn't have it. `failure` says when Catalog couldn't be asked, so the page can say so.
+ */
+export function useVariants(variantIds: string[]): {
+  variants: Record<string, VariantDetail | undefined>
+  failure?: LookupFailure
+} {
   const unique = [...new Set(variantIds)]
-  const variants = useQueries({ queries: unique.map(variantQuery) })
-  return Object.fromEntries(unique.map((variantId, i) => [variantId, variants[i]?.data ?? undefined]))
+  const results = useQueries({ queries: unique.map(variantQuery) })
+  return {
+    variants: Object.fromEntries(unique.map((variantId, i) => [variantId, results[i]?.data ?? undefined])),
+    failure: lookupFailure(results),
+  }
 }
 
 /** How many units of a Variant Inventory has; null data once loaded means it has no Stock record. */
@@ -67,10 +76,19 @@ export function useStock(variantId: string) {
   return useQuery(stockQuery(variantId))
 }
 
-/** Several Variants' Stock, as each loads; an ID maps to undefined until known, or when Inventory has no record. */
-export function useStocks(variantIds: string[]): Record<string, number | undefined> {
-  const stocks = useQueries({ queries: variantIds.map(stockQuery) })
-  return Object.fromEntries(variantIds.map((variantId, i) => [variantId, stocks[i]?.data ?? undefined]))
+/**
+ * Several Variants' Stock, as each loads; an ID maps to undefined until known, or when Inventory has
+ * no record. `failure` says when Inventory couldn't be asked.
+ */
+export function useStocks(variantIds: string[]): {
+  stocks: Record<string, number | undefined>
+  failure?: LookupFailure
+} {
+  const results = useQueries({ queries: variantIds.map(stockQuery) })
+  return {
+    stocks: Object.fromEntries(variantIds.map((variantId, i) => [variantId, results[i]?.data ?? undefined])),
+    failure: lookupFailure(results),
+  }
 }
 
 // Null rather than undefined: TanStack Query treats a query that resolves to undefined as failed.

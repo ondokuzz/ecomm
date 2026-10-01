@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from 'react-oidc-context'
 import { type Cart, type PricedCart, priceCart } from '../domain/cart'
 import { useVariants } from './catalog'
+import type { LookupFailure } from './failure'
 import { api } from './http'
 
 export const cartKey = ['cart']
@@ -16,12 +17,19 @@ export function useCart() {
   })
 }
 
-/** The Cart priced from Catalog's current Prices, while each line's Variant loads. */
-export function usePricedCart(): { cart: ReturnType<typeof useCart>; priced?: PricedCart } {
+/**
+ * The Cart priced from Catalog's current Prices, while each line's Variant loads; `variantsFailure`
+ * says when Catalog couldn't be asked, which leaves the lines unpriced.
+ */
+export function usePricedCart(): {
+  cart: ReturnType<typeof useCart>
+  priced?: PricedCart
+  variantsFailure?: LookupFailure
+} {
   const cart = useCart()
-  const variants = useVariants((cart.data?.items ?? []).map((item) => item.variantId))
+  const { variants, failure } = useVariants((cart.data?.items ?? []).map((item) => item.variantId))
   if (!cart.data) return { cart }
-  return { cart, priced: priceCart(cart.data, variants) }
+  return { cart, priced: priceCart(cart.data, variants), variantsFailure: failure }
 }
 
 export function useSetQuantity() {

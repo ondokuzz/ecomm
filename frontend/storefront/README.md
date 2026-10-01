@@ -202,9 +202,24 @@ No page is ever left blank, and every error a service answers carries a support 
   error occurred." says no more; a request that got no answer says to check the connection. The
   reference is the problem detail's `correlationId`, or the `X-Correlation-Id` response header
   when the body has none (`errorFrom` in [`src/api/http.ts`](./src/api/http.ts)), so support can
-  find the request in the gateway's and services' logs. Smaller failures, such as a quantity that
-  didn't change or a payment that didn't go through, show the same message and reference inline.
-  A request that got no answer has no reference.
+  find the request in nginx's, the gateway's and the services' logs. Smaller failures, such as a
+  quantity that didn't change or a payment that didn't go through, show the same message and
+  reference inline. A request that got no answer has no reference.
+- **Where the reference comes from.** In compose, nginx gives every `/api/` request its Correlation
+  ID before the gateway sees it ([`nginx.conf`](./nginx.conf)): the caller's when well-formed,
+  nginx's own `$request_id` otherwise. The gateway keeps it, so it is the same ID end to end, and
+  when the gateway itself is down, nginx's own 502 page still carries it in `X-Correlation-Id` and
+  nginx's access line logs it (`correlationId=…`), within 3 seconds rather than a minute
+(`proxy_connect_timeout`). A failed 5xx or network read is retried twice
+  first, and each attempt is a request with an ID of its own: the reference names the last, and
+  the earlier ones failed the same way just before it.
+- **Lookups beside the content.** Some pages look things up beside their main content: Variant
+  names, images and Prices on the Cart, Checkout, My Orders and Order pages, Stock on the Product
+  page, the category chips. When one fails the page still shows what it has, falling back as
+  before (a Variant ID for its name, "Stock unknown"), and says what didn't load, with its
+  reference and "Try again" (`LookupError` in [`Status`](./src/components/Status.tsx), from
+  `lookupFailure`). A Category's attribute definitions only order the specs, so when they don't
+  load the specs keep the Product's own order and nothing is said.
 - **Error boundary.** A page that fails to render shows "Something went wrong" with "Try again" and
   a way back to the Products, inside the header and footer
   ([`ErrorBoundary`](./src/components/ErrorBoundary.tsx)). Moving to another page clears it.
@@ -223,11 +238,12 @@ No page is ever left blank, and every error a service answers carries a support 
   keep theirs beside them). Screen readers hear "Loading…" once.
 
 To see the panel for real, stop a service and open one of its pages; the reference it shows is
-the `correlationId` of the gateway's log lines for that request:
+the `correlationId` of the gateway's log lines for that request. Stop the gateway instead and it is
+on nginx's access line:
 
 ```sh
 docker compose stop catalog          # from the repo root; then open http://localhost:8080
-docker compose logs api-gateway | grep <reference>
+docker compose logs api-gateway storefront | grep <reference>
 docker compose start catalog
 ```
 
@@ -267,6 +283,7 @@ Approve and sees `PAID`, empties a Cart
 through the confirmation, and registers a new Customer. The error-states test
 ([`e2e/error-states.spec.ts`](./e2e/error-states.spec.ts)) opens unknown route, Product and Order
 addresses and sees the Not Found page, answers the Product list with a 500 and sees the panel's
-reference and "Try again" recover, and refuses My Orders' token once and sees the Customer go to
-Keycloak and come back to My Orders. They need Chromium once:
+reference and "Try again" recover, fails the Product page's Stock lookup and sees it say so with its
+reference, and refuses a token, once on My Orders' data and once on "Add to cart", and sees the
+Customer go to Keycloak and come back to the same page. They need Chromium once:
 `npx playwright install chromium`. Set `STOREFRONT_URL` or `KEYCLOAK_URL` to aim it elsewhere.

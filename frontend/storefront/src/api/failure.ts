@@ -38,3 +38,27 @@ export function isUnauthorized(error: unknown): boolean {
 export function isNotFound(error: unknown): boolean {
   return error instanceof ApiError && error.status === 404
 }
+
+/** Some lookups a page shows beside its main content, such as Variant names or Stock, as TanStack Query reports each. */
+interface Lookup {
+  error: unknown
+  isFetching: boolean
+  refetch: () => unknown
+}
+
+/** One of a page's lookups failed: the first failure, and a way to retry every one that did. */
+export interface LookupFailure {
+  error: unknown
+  retrying: boolean
+  retry: () => void
+}
+
+export function lookupFailure(lookups: Lookup[]): LookupFailure | undefined {
+  const failed = lookups.filter((lookup) => lookup.error)
+  if (failed.length === 0) return undefined
+  return {
+    error: failed[0]!.error,
+    retrying: lookups.some((lookup) => lookup.isFetching),
+    retry: () => failed.forEach((lookup) => lookup.refetch()),
+  }
+}

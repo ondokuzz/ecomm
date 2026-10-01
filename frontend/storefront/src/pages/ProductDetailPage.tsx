@@ -3,10 +3,11 @@ import { Link, useParams, useSearchParams } from 'react-router'
 import { useAuth } from 'react-oidc-context'
 import { useCart, useSetQuantity } from '../api/cart'
 import { useCategory, useProduct, useStock, useStocks } from '../api/catalog'
+import { lookupFailure } from '../api/failure'
 import { useAuthPending, useSignin } from '../auth/session'
 import { ProductImage } from '../components/ProductImage'
 import { NotFound } from '../components/NotFound'
-import { ErrorMessage, ErrorState } from '../components/Status'
+import { ErrorMessage, ErrorState, LookupError } from '../components/Status'
 import { VariantPicker } from '../components/VariantPicker'
 import { Badge, type Tone } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
@@ -50,7 +51,9 @@ function ProductDetail({ product }: { product: Product }) {
   const [params, setParams] = useSearchParams()
   const variant = chosenVariant(product, params.get('variant'))
   const stock = useStock(variant.id)
-  const stocks = useStocks(product.variants.map((v) => v.id))
+  const { stocks, failure: stocksFailure } = useStocks(product.variants.map((v) => v.id))
+  // The chosen Variant's own lookup first, then the picker's; one message says Inventory couldn't be asked.
+  const stockFailure = lookupFailure([stock]) ?? stocksFailure
   // How many units Inventory has; undefined while unknown, or when it has no Stock record.
   const available = stock.data ?? undefined
   // Until the Category loads (or if it fails to), the specs keep the Product's own order.
@@ -77,6 +80,7 @@ function ProductDetail({ product }: { product: Product }) {
             />
           )}
           {stock.isPending ? <Badge>Checking stock…</Badge> : <StockIndicator quantity={available} />}
+          <LookupError failure={stockFailure} title="We couldn't check the stock" />
           {/* A fresh quantity for each Variant. */}
           <AddToCart key={variant.id} productName={product.name} variantId={variant.id} available={available} />
         </Card>

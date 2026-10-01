@@ -1,20 +1,45 @@
 import { type ReactNode, useEffect, useRef } from 'react'
-import { failureOf, isUnauthorized } from '../api/failure'
+import { type LookupFailure, failureOf, isUnauthorized } from '../api/failure'
 import { Button } from './ui/Button'
 import { Icon } from './ui/Icon'
 
-/** Shows why a request failed, using the problem detail's message when the service sent one, and its reference. */
-export function ErrorMessage({ error }: { error: unknown }) {
+/**
+ * Shows why a request failed, using the problem detail's message when the service sent one, and its
+ * reference. With a `title`, it says what didn't load; with `onRetry`, it offers to try again.
+ */
+export function ErrorMessage({
+  error,
+  title,
+  retrying,
+  onRetry,
+}: {
+  error: unknown
+  title?: string
+  retrying?: boolean
+  onRetry?: () => void
+}) {
   const { message, reference } = failureOf(error)
   return (
     <div className="alert alert-danger" role="alert">
       <Icon name="alert" size={18} />
       <div className="alert-body">
+        {title && <strong>{title}</strong>}
         <span>{message}</span>
         {reference && <SupportReference reference={reference} />}
       </div>
+      {onRetry && !isUnauthorized(error) && (
+        <Button size="sm" className="alert-action" loading={retrying} onClick={onRetry}>
+          Try again
+        </Button>
+      )}
     </div>
   )
+}
+
+/** A failed lookup beside a page's main content, such as Variant names or Stock, saying what it left out. */
+export function LookupError({ failure, title }: { failure: LookupFailure | undefined; title: string }) {
+  if (!failure) return null
+  return <ErrorMessage error={failure.error} title={title} retrying={failure.retrying} onRetry={failure.retry} />
 }
 
 /**

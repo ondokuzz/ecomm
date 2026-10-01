@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { failureOf, isNotFound, isUnauthorized } from './failure'
+import { describe, expect, it, vi } from 'vitest'
+import { failureOf, isNotFound, isUnauthorized, lookupFailure } from './failure'
 import { ApiError, NetworkError, errorFrom } from './http'
 
 const problemJson = { 'Content-Type': 'application/problem+json' }
@@ -99,5 +99,31 @@ describe('isUnauthorized and isNotFound', () => {
     expect(isNotFound(new ApiError(404, {}))).toBe(true)
     expect(isNotFound(new ApiError(500, {}))).toBe(false)
     expect(isNotFound(new Error('404'))).toBe(false)
+  })
+})
+
+describe('lookupFailure', () => {
+  const lookup = (error: unknown, isFetching = false) => ({ error, isFetching, refetch: vi.fn() })
+
+  it('is undefined while every lookup is fine', () => {
+    expect(lookupFailure([lookup(null), lookup(null)])).toBeUndefined()
+    expect(lookupFailure([])).toBeUndefined()
+  })
+
+  it('names the first failure, and retries only the lookups that failed', () => {
+    const first = new ApiError(500, { correlationId: 'first' })
+    const lookups = [lookup(null), lookup(first), lookup(new ApiError(503, {}))]
+    const failure = lookupFailure(lookups)!
+    expect(failure.error).toBe(first)
+
+    failure.retry()
+    expect(lookups[0]!.refetch).not.toHaveBeenCalled()
+    expect(lookups[1]!.refetch).toHaveBeenCalled()
+    expect(lookups[2]!.refetch).toHaveBeenCalled()
+  })
+
+  it('is retrying while any lookup is fetching again', () => {
+    expect(lookupFailure([lookup(new Error('x')), lookup(null, true)])!.retrying).toBe(true)
+    expect(lookupFailure([lookup(new Error('x'))])!.retrying).toBe(false)
   })
 })

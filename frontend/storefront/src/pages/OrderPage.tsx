@@ -10,7 +10,7 @@ import { OrderTimeline } from '../components/OrderTimeline'
 import { OrderSkeleton } from '../components/PageSkeletons'
 import { ProductLines } from '../components/ProductLines'
 import { NotFound } from '../components/NotFound'
-import { ErrorState } from '../components/Status'
+import { ErrorState, LookupError } from '../components/Status'
 import { Card } from '../components/ui/Card'
 import { Icon } from '../components/ui/Icon'
 import { formatMoney } from '../domain/money'
@@ -21,7 +21,7 @@ export function OrderPage() {
   const { id = '' } = useParams()
   const [params] = useSearchParams()
   const query = useOrder(id)
-  const variants = useVariants(query.data?.lines.map((line) => line.variantId) ?? [])
+  const { variants, failure: variantsFailure } = useVariants(query.data?.lines.map((line) => line.variantId) ?? [])
 
   if (query.isPending) return <OrderSkeleton />
   // Order Management answers 404 for another Customer's Order too, so it is never told apart.
@@ -68,6 +68,7 @@ export function OrderPage() {
           </Card>
           <Card>
             <h2 className="card-title">Products</h2>
+            <LookupError failure={variantsFailure} title="We couldn't load the products' names and pictures" />
             <ProductLines lines={nameOrderLines(order, variants)} label="Order lines" compact />
           </Card>
         </div>

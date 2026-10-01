@@ -45,7 +45,9 @@ The gateway sends no CORS headers: browsers reach it on the Storefront's own ori
 
 ## Correlation IDs and the access log
 
-The gateway is where a request's Correlation ID is usually born. It applies the same rule as every
+For a browser the Correlation ID is born just before the gateway, in the Storefront's nginx, so its
+own error pages carry it when the gateway is down ([Storefront](../../frontend/storefront/README.md#error-states));
+for any other caller the gateway is where it is born. It applies the same rule as every
 service (`service-commons`): the caller's `X-Correlation-Id` if it is at most 64 characters of
 `[A-Za-z0-9-]`, a new UUID otherwise. It sets that ID on the forwarded request, replacing whatever
 the caller sent, and on the response, once, even though the service echoes it too. The 401 and 404

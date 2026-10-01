@@ -80,7 +80,14 @@ function CategoryChips({ category }: { category: string | undefined }) {
               </li>
             ))}
       </ul>
-      {categories.error && <ErrorMessage error={categories.error} />}
+      {categories.error && (
+        <ErrorMessage
+          error={categories.error}
+          title="We couldn't load the categories"
+          retrying={categories.isFetching}
+          onRetry={() => categories.refetch()}
+        />
+      )}
     </nav>
   )
 }

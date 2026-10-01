@@ -557,6 +557,11 @@ code {
 .alert-body {
   display: grid;
   gap: var(--space-1);
+  min-width: 0;
+}
+.alert-action {
+  flex: none;
+  margin-left: auto;
 }
 
 /* The Correlation ID a failed request answered with, to quote to support; one click selects it. */

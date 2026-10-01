@@ -4,7 +4,7 @@ import { useOrders } from '../api/orders'
 import { OrderStatusBadge } from '../components/OrderStatusBadge'
 import { OrdersSkeleton } from '../components/PageSkeletons'
 import { ProductThumb } from '../components/ProductImage'
-import { EmptyState, ErrorState } from '../components/Status'
+import { EmptyState, ErrorState, LookupError } from '../components/Status'
 import { ButtonLink } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import type { VariantDetail } from '../domain/catalog'
@@ -17,7 +17,7 @@ const maxThumbnails = 3
 /** The Customer's Orders as cards, newest first. */
 export function OrdersPage() {
   const orders = useOrders()
-  const variants = useVariants(
+  const { variants, failure: variantsFailure } = useVariants(
     (orders.data ?? []).flatMap((order) => order.lines.slice(0, maxThumbnails).map((line) => line.variantId)),
   )
 
@@ -36,6 +36,7 @@ export function OrdersPage() {
   return (
     <section>
       <h1>My orders</h1>
+      <LookupError failure={variantsFailure} title="We couldn't load the products' pictures" />
       {orders.data.length === 0 ? (
         <EmptyState
           title="No orders yet"
