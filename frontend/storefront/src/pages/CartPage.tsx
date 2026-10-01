@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useClearCart, usePricedCart, useRemoveFromCart, useSetQuantity } from '../api/cart'
+import { CartSkeleton } from '../components/PageSkeletons'
 import { ProductLines } from '../components/ProductLines'
 import { EmptyCart } from '../components/EmptyCart'
 import { OrderSummary } from '../components/OrderSummary'
-import { ErrorMessage, Loading } from '../components/Status'
+import { ErrorMessage, ErrorState } from '../components/Status'
 import { Button, ButtonLink } from '../components/ui/Button'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { Icon } from '../components/ui/Icon'
@@ -15,8 +16,17 @@ export function CartPage() {
   const clear = useClearCart()
   const [confirmingClear, setConfirmingClear] = useState(false)
 
-  if (cart.isPending) return <Loading />
-  if (cart.error) return <ErrorMessage error={cart.error} />
+  if (cart.isPending) return <CartSkeleton />
+  if (cart.error) {
+    return (
+      <ErrorState
+        title="We couldn't load your cart"
+        error={cart.error}
+        retrying={cart.isFetching}
+        onRetry={() => cart.refetch()}
+      />
+    )
+  }
   // Emptying the Cart removes the button and dialog that had focus, so focus moves to the empty state.
   if (!priced || priced.lines.length === 0) return <EmptyCart focusTitle={clear.isSuccess} />
 

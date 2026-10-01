@@ -2,8 +2,9 @@ import { Link } from 'react-router'
 import { useVariants } from '../api/catalog'
 import { useOrders } from '../api/orders'
 import { OrderStatusBadge } from '../components/OrderStatusBadge'
+import { OrdersSkeleton } from '../components/PageSkeletons'
 import { ProductThumb } from '../components/ProductImage'
-import { EmptyState, ErrorMessage, Loading } from '../components/Status'
+import { EmptyState, ErrorState } from '../components/Status'
 import { ButtonLink } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import type { VariantDetail } from '../domain/catalog'
@@ -20,8 +21,17 @@ export function OrdersPage() {
     (orders.data ?? []).flatMap((order) => order.lines.slice(0, maxThumbnails).map((line) => line.variantId)),
   )
 
-  if (orders.isPending) return <Loading />
-  if (orders.error) return <ErrorMessage error={orders.error} />
+  if (orders.isPending) return <OrdersSkeleton />
+  if (orders.error) {
+    return (
+      <ErrorState
+        title="We couldn't load your orders"
+        error={orders.error}
+        retrying={orders.isFetching}
+        onRetry={() => orders.refetch()}
+      />
+    )
+  }
 
   return (
     <section>

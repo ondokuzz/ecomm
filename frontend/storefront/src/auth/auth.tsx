@@ -1,7 +1,9 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { AuthProvider, hasAuthParams, useAuth } from 'react-oidc-context'
 import { useLocation, useNavigate } from 'react-router'
+import { useQueryClient } from '@tanstack/react-query'
 import type { User } from 'oidc-client-ts'
+import { isUnauthorized } from '../api/failure'
 import { oidcSettings } from './oidc'
 import { SessionKnown, type SigninState, useAuthPending, useSignin } from './session'
 
@@ -14,7 +16,10 @@ export function StorefrontAuthProvider({ children }: { children: ReactNode }) {
   }
   return (
     <AuthProvider {...oidcSettings} onSigninCallback={onSigninCallback}>
-      <RestoreSession>{children}</RestoreSession>
+      <RestoreSession>
+        <SigninOnExpiry />
+        {children}
+      </RestoreSession>
     </AuthProvider>
   )
 }
@@ -45,6 +50,43 @@ function RestoreSession({ children }: { children: ReactNode }) {
     attempt.finally(() => setRestoring(false))
   }, [auth])
   return <SessionKnown.Provider value={!auth.isLoading && !restoring}>{children}</SessionKnown.Provider>
+}
+
+/**
+ * A 401 in the middle of a flow means the Customer's sign-in expired and silent renew couldn't
+ * refresh it, say because their Keycloak session ended. Whichever request it was, a page's query or
+ * an action, send them to sign in again and bring them back to the page they were on.
+ */
+function SigninOnExpiry() {
+  const queryClient = useQueryClient()
+  const { signin } = useSignin()
+  const latestSignin = useRef(signin)
+  const redirecting = useRef(false)
+  useEffect(() => {
+    latestSignin.current = signin
+  })
+
+  useEffect(() => {
+    const onError = (error: unknown) => {
+      if (!isUnauthorized(error) || redirecting.current) return
+      redirecting.current = true
+      // If Keycloak can't be reached, the page's error panel stays and a later 401 tries again.
+      latestSignin.current().catch(() => {
+        redirecting.current = false
+      })
+    }
+    // Query and mutation cache events share this shape: an update whose action is the failure.
+    const onEvent = (event: { type: string; action?: { type: string; error?: unknown } }) => {
+      if (event.type === 'updated' && event.action?.type === 'error') onError(event.action.error)
+    }
+    const queries = queryClient.getQueryCache().subscribe(onEvent)
+    const mutations = queryClient.getMutationCache().subscribe(onEvent)
+    return () => {
+      queries()
+      mutations()
+    }
+  }, [queryClient])
+  return null
 }
 
 /** Renders its children for a signed-in Customer, and sends anyone else to Keycloak to sign in. */

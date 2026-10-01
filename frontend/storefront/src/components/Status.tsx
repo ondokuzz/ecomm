@@ -1,34 +1,26 @@
 import { type ReactNode, useEffect, useRef } from 'react'
-import { ApiError } from '../api/http'
+import { failureOf, isUnauthorized } from '../api/failure'
 import { Button } from './ui/Button'
 import { Icon } from './ui/Icon'
-import { Skeleton } from './ui/Skeleton'
 
-/** Placeholder lines while a page's data loads; screen readers hear "Loading…". */
-export function Loading() {
+/** Shows why a request failed, using the problem detail's message when the service sent one, and its reference. */
+export function ErrorMessage({ error }: { error: unknown }) {
+  const { message, reference } = failureOf(error)
   return (
-    <div className="loading" role="status">
-      <span className="visually-hidden">Loading…</span>
-      <Skeleton width="40%" height="2.25rem" radius="var(--radius-md)" />
-      <Skeleton width="90%" />
-      <Skeleton width="75%" />
-      <Skeleton width="60%" />
+    <div className="alert alert-danger" role="alert">
+      <Icon name="alert" size={18} />
+      <div className="alert-body">
+        <span>{message}</span>
+        {reference && <SupportReference reference={reference} />}
+      </div>
     </div>
   )
 }
 
-/** Shows why a request failed, using the problem detail's message when the service sent one. */
-export function ErrorMessage({ error }: { error: unknown }) {
-  const message = errorText(error)
-  return (
-    <p className="alert alert-danger" role="alert">
-      <Icon name="alert" size={18} />
-      <span>{message}</span>
-    </p>
-  )
-}
-
-/** A request that failed in place of a page's main content, with the reason and a way to try again. */
+/**
+ * A request that failed in place of a page's main content: the error panel, with the reason, the
+ * support reference and a way to try again.
+ */
 export function ErrorState({
   title,
   error,
@@ -40,17 +32,50 @@ export function ErrorState({
   retrying: boolean
   onRetry: () => void
 }) {
+  const { message, reference } = failureOf(error)
+  return (
+    <ErrorPanel title={title} message={message} reference={reference}>
+      {/* An expired sign-in is already on its way to Keycloak; trying again would only fail the same way. */}
+      {!isUnauthorized(error) && (
+        <Button variant="primary" loading={retrying} onClick={onRetry}>
+          Try again
+        </Button>
+      )}
+    </ErrorPanel>
+  )
+}
+
+/** The error panel's look: an icon, what failed and why, the ways on as `children`, and the reference. */
+export function ErrorPanel({
+  title,
+  message,
+  reference,
+  children,
+}: {
+  title: string
+  message: string
+  reference?: string
+  children: ReactNode
+}) {
   return (
     <div className="empty error-state" role="alert">
       <span className="error-state-icon">
         <Icon name="alert" size={28} />
       </span>
       <h2>{title}</h2>
-      <p>{errorText(error)}</p>
-      <Button variant="primary" loading={retrying} onClick={onRetry}>
-        Try again
-      </Button>
+      <p>{message}</p>
+      {children}
+      {reference && <SupportReference reference={reference} />}
     </div>
+  )
+}
+
+/** The Correlation ID of a failed request, which support finds it by in the services' logs. */
+export function SupportReference({ reference }: { reference: string }) {
+  return (
+    <small className="support-reference">
+      Reference: <code>{reference}</code>
+    </small>
   )
 }
 
@@ -84,8 +109,4 @@ export function EmptyState({
       {action}
     </div>
   )
-}
-
-function errorText(error: unknown): string {
-  return error instanceof ApiError ? error.message : 'Something went wrong. Please try again.'
 }

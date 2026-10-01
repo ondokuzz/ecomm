@@ -5,6 +5,7 @@ import { useCart } from '../api/cart'
 import { useAuthPending, useSignin, useSignout } from '../auth/session'
 import { itemCount } from '../domain/cart'
 import { customerInitials, customerLabel } from '../domain/customer'
+import { RouteErrorBoundary } from './ErrorBoundary'
 import { Button } from './ui/Button'
 import { buttonClass } from './ui/buttonClass'
 import { Icon } from './ui/Icon'
@@ -36,7 +37,9 @@ export function Layout() {
         </div>
       </header>
       <main>
-        <Outlet />
+        <RouteErrorBoundary>
+          <Outlet />
+        </RouteErrorBoundary>
       </main>
       <Footer />
     </>

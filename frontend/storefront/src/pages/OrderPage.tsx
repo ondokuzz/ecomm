@@ -1,13 +1,16 @@
 import { useId } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { useVariants } from '../api/catalog'
+import { isNotFound } from '../api/failure'
 import { useOrder } from '../api/orders'
 import { CheckoutSteps } from '../components/CheckoutSteps'
 import { OrderConfirmation } from '../components/OrderConfirmation'
 import { OrderStatusBadge } from '../components/OrderStatusBadge'
 import { OrderTimeline } from '../components/OrderTimeline'
+import { OrderSkeleton } from '../components/PageSkeletons'
 import { ProductLines } from '../components/ProductLines'
-import { ErrorMessage, Loading } from '../components/Status'
+import { NotFound } from '../components/NotFound'
+import { ErrorState } from '../components/Status'
 import { Card } from '../components/ui/Card'
 import { Icon } from '../components/ui/Icon'
 import { formatMoney } from '../domain/money'
@@ -20,8 +23,25 @@ export function OrderPage() {
   const query = useOrder(id)
   const variants = useVariants(query.data?.lines.map((line) => line.variantId) ?? [])
 
-  if (query.isPending) return <Loading />
-  if (query.error) return <ErrorMessage error={query.error} />
+  if (query.isPending) return <OrderSkeleton />
+  // Order Management answers 404 for another Customer's Order too, so it is never told apart.
+  if (isNotFound(query.error)) {
+    return (
+      <NotFound title="Order not found" back={{ label: 'All my orders', to: '/orders' }}>
+        We couldn't find that order among yours.
+      </NotFound>
+    )
+  }
+  if (query.error) {
+    return (
+      <ErrorState
+        title="We couldn't load this order"
+        error={query.error}
+        retrying={query.isFetching}
+        onRetry={() => query.refetch()}
+      />
+    )
+  }
   const order = query.data
   const placed = params.has('placed')
   const Heading = placed ? 'h2' : 'h1'

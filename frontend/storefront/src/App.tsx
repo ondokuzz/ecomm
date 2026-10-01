@@ -3,8 +3,7 @@ import { BrowserRouter, Route, Routes } from 'react-router'
 import { ApiError } from './api/http'
 import { RequireAuth, StorefrontAuthProvider } from './auth/auth'
 import { Layout } from './components/Layout'
-import { EmptyState } from './components/Status'
-import { ButtonLink } from './components/ui/Button'
+import { NotFound } from './components/NotFound'
 import { Toaster } from './components/ui/Toast'
 import { CartPage } from './pages/CartPage'
 import { CheckoutPage } from './pages/CheckoutPage'
@@ -43,20 +42,5 @@ export function App() {
         </StorefrontAuthProvider>
       </BrowserRouter>
     </QueryClientProvider>
-  )
-}
-
-function NotFound() {
-  return (
-    <EmptyState
-      title="Page not found"
-      action={
-        <ButtonLink variant="primary" to="/">
-          Back to products
-        </ButtonLink>
-      }
-    >
-      There is nothing at this address.
-    </EmptyState>
   )
 }

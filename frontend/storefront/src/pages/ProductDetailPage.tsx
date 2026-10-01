@@ -5,10 +5,11 @@ import { useCart, useSetQuantity } from '../api/cart'
 import { useCategory, useProduct, useStock, useStocks } from '../api/catalog'
 import { useAuthPending, useSignin } from '../auth/session'
 import { ProductImage } from '../components/ProductImage'
-import { EmptyState, ErrorMessage, ErrorState } from '../components/Status'
+import { NotFound } from '../components/NotFound'
+import { ErrorMessage, ErrorState } from '../components/Status'
 import { VariantPicker } from '../components/VariantPicker'
 import { Badge, type Tone } from '../components/ui/Badge'
-import { Button, ButtonLink } from '../components/ui/Button'
+import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { Icon } from '../components/ui/Icon'
 import { QuantityStepper } from '../components/ui/QuantityStepper'
@@ -36,21 +37,9 @@ export function ProductDetailPage() {
   }
   if (!product.data) {
     return (
-      <EmptyState
-        title="Product not found"
-        illustration={
-          <span className="empty-icon">
-            <Icon name="search" size={28} />
-          </span>
-        }
-        action={
-          <ButtonLink variant="primary" to="/">
-            Back to products
-          </ButtonLink>
-        }
-      >
+      <NotFound title="Product not found">
         We couldn't find a product with the code <code>{sku}</code>. It may have been removed from the Catalog.
-      </EmptyState>
+      </NotFound>
     )
   }
   return <ProductDetail product={product.data} />

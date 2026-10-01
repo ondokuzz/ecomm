@@ -7,6 +7,7 @@ import type { CheckoutResult } from '../domain/order'
 import { type PaymentFailure, paymentFailure } from '../domain/payment'
 import { cartKey } from './cart'
 import { stockKey } from './catalog'
+import { isNotFound } from './failure'
 import { ApiError, api } from './http'
 import { ordersKey } from './orders'
 
@@ -40,7 +41,7 @@ async function currentSession(token: string | undefined): Promise<CheckoutSessio
   try {
     return await api<CheckoutSession>('checkout-pricing', '/checkout/sessions/current', { token })
   } catch (error) {
-    if (error instanceof ApiError && error.status === 404) return undefined
+    if (isNotFound(error)) return undefined
     throw error
   }
 }

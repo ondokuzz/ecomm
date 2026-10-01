@@ -1,6 +1,7 @@
 import { useQueries, useQuery } from '@tanstack/react-query'
 import type { Category, Product, VariantDetail } from '../domain/catalog'
-import { ApiError, api } from './http'
+import { isNotFound } from './failure'
+import { api } from './http'
 
 export function useCategories() {
   return useQuery({ queryKey: ['categories'], queryFn: () => api<Category[]>('catalog', '/categories') })
@@ -74,6 +75,6 @@ export function useStocks(variantIds: string[]): Record<string, number | undefin
 
 // Null rather than undefined: TanStack Query treats a query that resolves to undefined as failed.
 function orNullOn404(error: unknown): null {
-  if (error instanceof ApiError && error.status === 404) return null
+  if (isNotFound(error)) return null
   throw error
 }

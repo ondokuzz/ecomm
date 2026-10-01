@@ -191,6 +191,46 @@ demo Coupon is `WELCOME10`, 10% off.
 When Checkout refuses to start a session for Products out of Stock or unknown to Catalog, it names
 their Variants, and the page lists their Products (`checkoutProblem`) with a link back to the Cart.
 
+## Error states
+
+No page is ever left blank, and every error a service answers carries a support reference.
+
+- **Error panel.** When a page's data fails to load, the panel takes the content's place: what went
+  wrong, "Try again", and "Reference: <Correlation ID>". `failureOf` in
+  [`src/api/failure.ts`](./src/api/failure.ts) works both out. A 4xx is in the service's own words, since
+  it says what to change; a 5xx says it is on the shop's side, as the service's own "An unexpected
+  error occurred." says no more; a request that got no answer says to check the connection. The
+  reference is the problem detail's `correlationId`, or the `X-Correlation-Id` response header
+  when the body has none (`errorFrom` in [`src/api/http.ts`](./src/api/http.ts)), so support can
+  find the request in the gateway's and services' logs. Smaller failures, such as a quantity that
+  didn't change or a payment that didn't go through, show the same message and reference inline.
+  A request that got no answer has no reference.
+- **Error boundary.** A page that fails to render shows "Something went wrong" with "Try again" and
+  a way back to the Products, inside the header and footer
+  ([`ErrorBoundary`](./src/components/ErrorBoundary.tsx)). Moving to another page clears it.
+- **Not Found.** An unknown route, a Product Catalog doesn't have and an Order Order Management
+  doesn't have show the Not Found page ([`NotFound`](./src/components/NotFound.tsx)). Order
+  Management answers 404 for another Customer's Order too, so it is never told apart from one that
+  doesn't exist.
+- **Expired sign-in.** Silent renew keeps the access token fresh, but when the Keycloak session
+  behind it ends, a service answers 401. Any 401, from a page's query or an action such as paying,
+  sends the Customer to log in and brings them back to the page they were on (`SigninOnExpiry` in
+  [`src/auth/auth.tsx`](./src/auth/auth.tsx)). Meanwhile the panel says "Your sign-in has expired.
+  Taking you to log in…", without "Try again". What the page held only in memory, such as the
+  chosen test card, starts over.
+- **Loading.** Each page shows a skeleton in its own layout while it loads, so nothing jumps when
+  the content arrives ([`PageSkeletons`](./src/components/PageSkeletons.tsx); the Product pages
+  keep theirs beside them). Screen readers hear "Loading…" once.
+
+To see the panel for real, stop a service and open one of its pages; the reference it shows is
+the `correlationId` of the gateway's log lines for that request:
+
+```sh
+docker compose stop catalog          # from the repo root; then open http://localhost:8080
+docker compose logs api-gateway | grep <reference>
+docker compose start catalog
+```
+
 ## Run it
 
 In compose, nginx serves the production build on http://localhost:8080:
@@ -214,8 +254,8 @@ Sign in as `demo@ecomm.local` / `demo`, or register a new Customer.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: Money formatting, Cart pricing, checkout problems, the session countdown and price breakdown, Coupon rejections, test cards and payment failures, quantities, Stock levels, toasts, category chips, Product specs by their Category's definitions, Customer initials, Orders and their timeline, Order Status colours, seed Product images, the Keycloak theme's copy of the tokens
-npm run test:e2e  # Playwright smoke test against the running compose stack (`make up`)
+npm test          # Vitest: failed responses as messages and support references, Money formatting, Cart pricing, checkout problems, the session countdown and price breakdown, Coupon rejections, test cards and payment failures, quantities, Stock levels, toasts, category chips, Product specs by their Category's definitions, Customer initials, Orders and their timeline, Order Status colours, seed Product images, the Keycloak theme's copy of the tokens
+npm run test:e2e  # Playwright smoke and error-states tests against the running compose stack (`make up`)
 ```
 
 The smoke test ([`e2e/sprint1.spec.ts`](./e2e/sprint1.spec.ts)) signs in on Keycloak for real,
@@ -224,5 +264,9 @@ still on hand, then the confirmation, the confetti gone under reduced motion, th
 Product name, its timeline, its card on My Orders, and on-hand Stock down by one), pays with the
 Decline card and sees the decline inline with the session kept, then pays the same session with
 Approve and sees `PAID`, empties a Cart
-through the confirmation, and registers a new Customer. It needs Chromium once:
+through the confirmation, and registers a new Customer. The error-states test
+([`e2e/error-states.spec.ts`](./e2e/error-states.spec.ts)) opens unknown route, Product and Order
+addresses and sees the Not Found page, answers the Product list with a 500 and sees the panel's
+reference and "Try again" recover, and refuses My Orders' token once and sees the Customer go to
+Keycloak and come back to My Orders. They need Chromium once:
 `npx playwright install chromium`. Set `STOREFRONT_URL` or `KEYCLOAK_URL` to aim it elsewhere.

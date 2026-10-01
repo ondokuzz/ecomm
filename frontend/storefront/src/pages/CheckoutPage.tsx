@@ -10,11 +10,13 @@ import {
   usePayCheckoutSession,
   useSessionCoupon,
 } from '../api/checkout'
+import { failureOf } from '../api/failure'
 import { ApiError } from '../api/http'
 import { CheckoutSteps } from '../components/CheckoutSteps'
 import { EmptyCart } from '../components/EmptyCart'
 import { ProductLines } from '../components/ProductLines'
-import { EmptyState, ErrorMessage, ErrorState, Loading } from '../components/Status'
+import { CheckoutSkeleton } from '../components/PageSkeletons'
+import { EmptyState, ErrorMessage, ErrorState, SupportReference } from '../components/Status'
 import { Button, ButtonLink } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { Icon } from '../components/ui/Icon'
@@ -47,10 +49,19 @@ export function CheckoutPage() {
     setAttempt((n) => n + 1)
   }
 
-  if (cart.isPending) return <Loading />
-  if (cart.error) return <ErrorMessage error={cart.error} />
+  if (cart.isPending) return <CheckoutSkeleton />
+  if (cart.error) {
+    return (
+      <ErrorState
+        title="We couldn't load your cart"
+        error={cart.error}
+        retrying={cart.isFetching}
+        onRetry={() => cart.refetch()}
+      />
+    )
+  }
   if (cart.data.items.length === 0) return <EmptyCart>There is nothing to check out yet.</EmptyCart>
-  if (session.isPending) return <Loading />
+  if (session.isPending) return <CheckoutSkeleton />
   if (session.error) return <StartError error={session.error} retrying={session.isFetching} onRetry={startAgain} />
 
   const countdown = sessionCountdown(session.data.expiresAt, now)
@@ -368,12 +379,14 @@ function TestCardPicker({
 function PayError({ error }: { error: unknown }) {
   const failure = payFailureOf(error)
   if (!failure) return <ErrorMessage error={error} />
+  const { reference } = failureOf(error)
   return (
     <div className={`alert alert-danger pay-error pay-error-${failure.kind}`} role="alert">
       <Icon name="alert" size={18} />
-      <div>
+      <div className="alert-body">
         <strong>{failure.title}</strong>
         <span>{failure.message}</span>
+        {reference && <SupportReference reference={reference} />}
       </div>
     </div>
   )
