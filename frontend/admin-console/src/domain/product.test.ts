@@ -1,14 +1,21 @@
 import { describe, expect, it } from 'vitest'
 import type { Category } from './category'
+import { currenciesOf } from './money'
 import {
   type Product,
   type ProductForm,
   blankVariant,
   formOf,
   matchesSearch,
+  productFieldErrors,
   productRequest,
   stockChanges,
 } from './product'
+
+const currencies = currenciesOf([
+  { code: 'EUR', minorDigits: 2 },
+  { code: 'JPY', minorDigits: 0 },
+])
 
 const phones: Category = {
   slug: 'phones',
@@ -49,7 +56,7 @@ const stock = { 'PHN-PIXEL-9': 12, 'PHN-PIXEL-9-PORCELAIN-256': undefined }
 
 describe('formOf', () => {
   it('lays a Product out for editing: Prices as decimals, its images one per line and a Variant’s on one, saved Variants with their On-hand counts', () => {
-    expect(formOf(pixel, phones, stock)).toEqual({
+    expect(formOf(pixel, phones, stock, currencies)).toEqual({
       sku: 'PHN-PIXEL-9',
       name: 'Google Pixel 9',
       category: 'phones',
@@ -79,7 +86,7 @@ describe('formOf', () => {
   })
 
   it('starts a new Product in EUR with one blank Variant for the Category’s axes', () => {
-    expect(formOf(undefined, phones, {})).toEqual({
+    expect(formOf(undefined, phones, {}, currencies)).toEqual({
       sku: '',
       name: '',
       category: 'phones',
@@ -99,14 +106,14 @@ describe('formOf', () => {
   })
 
   it('starts with no Category until one is chosen', () => {
-    expect(formOf(undefined, undefined, {}).category).toBe('')
+    expect(formOf(undefined, undefined, {}, currencies).category).toBe('')
     expect(blankVariant(undefined).axisValues).toEqual({})
   })
 })
 
 describe('productRequest', () => {
   it('sends the form back as Catalog takes it', () => {
-    expect(productRequest(formOf(pixel, phones, stock), phones)).toEqual({
+    expect(productRequest(formOf(pixel, phones, stock, currencies), phones, currencies)).toEqual({
       request: {
         sku: 'PHN-PIXEL-9',
         name: 'Google Pixel 9',
@@ -134,7 +141,7 @@ describe('productRequest', () => {
 
   it('trims what was typed, leaves out blank attributes, and splits images on new lines and commas', () => {
     const form: ProductForm = {
-      ...formOf(undefined, phones, {}),
+      ...formOf(undefined, phones, {}, currencies),
       sku: ' PHN-NEW ',
       name: ' New phone ',
       attributes: { brand: ' Acme ', screen: '  ' },
@@ -144,7 +151,7 @@ describe('productRequest', () => {
         { ...blankVariant(phones), id: ' PHN-NEW ', axisValues: { color: ' Red ', storage: '128 GB' }, price: ' 10 ' },
       ],
     }
-    expect(productRequest(form, phones)).toEqual({
+    expect(productRequest(form, phones, currencies)).toEqual({
       request: {
         sku: 'PHN-NEW',
         name: 'New phone',
@@ -165,26 +172,26 @@ describe('productRequest', () => {
   })
 
   it('sends only what the Category defines, so attributes it no longer has drop out', () => {
-    const form = formOf(pixel, phones, stock)
+    const form = formOf(pixel, phones, stock, currencies)
     form.attributes = { ...form.attributes, weight: '198 g' }
     form.variants[0]!.axisValues = { ...form.variants[0]!.axisValues, finish: 'Matte' }
-    const { request } = productRequest(form, phones)
+    const { request } = productRequest(form, phones, currencies)
     expect(request?.attributes).toEqual({ brand: 'Google', screen: '6.3 in' })
     expect(request?.variants[0]!.axisValues).toEqual({ color: 'Obsidian', storage: '128 GB' })
   })
 
   it('leaves out a blank axis value, for Catalog to name', () => {
-    const form = formOf(pixel, phones, stock)
+    const form = formOf(pixel, phones, stock, currencies)
     form.variants[1]!.axisValues = { color: 'Porcelain', storage: '' }
-    expect(productRequest(form, phones).request?.variants[1]!.axisValues).toEqual({ color: 'Porcelain' })
+    expect(productRequest(form, phones, currencies).request?.variants[1]!.axisValues).toEqual({ color: 'Porcelain' })
   })
 
   it('names each Price and on-hand count it can’t read, by the field Catalog would use, and sends nothing', () => {
-    const form = formOf(pixel, phones, stock)
+    const form = formOf(pixel, phones, stock, currencies)
     form.variants[0]!.price = '799,00'
     form.variants[1]!.price = ''
     form.variants[1]!.onHand = '-1'
-    expect(productRequest(form, phones)).toEqual({
+    expect(productRequest(form, phones, currencies)).toEqual({
       errors: {
         'variants[0].price': 'must be a Price such as 799.00',
         'variants[1].price': 'must be a Price such as 799.00',
@@ -193,32 +200,48 @@ describe('productRequest', () => {
     })
   })
 
-  it('names a currency that isn’t an ISO 4217 code', () => {
-    const form = formOf(pixel, phones, stock)
-    for (const currency of ['Euro', 'ABC']) {
+  it('names a currency Catalog doesn’t price in', () => {
+    const form = formOf(pixel, phones, stock, currencies)
+    for (const currency of ['Euro', 'ABC', 'XXX']) {
       form.currency = currency
-      expect(productRequest(form, phones).errors, currency).toEqual({
-        currency: 'must be an ISO 4217 code, such as EUR',
+      expect(productRequest(form, phones, currencies).errors, currency).toEqual({
+        currency: 'must be a currency Catalog prices in, such as EUR',
       })
     }
   })
 
   it('takes a blank on-hand count as leaving Stock alone, and refuses one that isn’t a whole number', () => {
-    const form = formOf(pixel, phones, stock)
+    const form = formOf(pixel, phones, stock, currencies)
     form.variants[0]!.onHand = ''
-    expect(productRequest(form, phones).errors).toEqual({})
+    expect(productRequest(form, phones, currencies).errors).toEqual({})
     for (const onHand of ['1.5', 'ten', '1e3']) {
       form.variants[0]!.onHand = onHand
-      expect(productRequest(form, phones).errors, onHand).toEqual({
+      expect(productRequest(form, phones, currencies).errors, onHand).toEqual({
         'variants[0].onHand': 'must be a whole number, 0 or more',
       })
     }
   })
 })
 
+describe('productFieldErrors', () => {
+  it('names a Variant’s price currency by the editor’s one currency field', () => {
+    expect(
+      productFieldErrors({
+        'variants[1].price.currency': 'must be an ISO 4217 currency with a minor unit',
+        'variants[0].price': 'is required',
+        'attributes.screen': 'is required',
+      }),
+    ).toEqual({
+      currency: 'must be an ISO 4217 currency with a minor unit',
+      'variants[0].price': 'is required',
+      'attributes.screen': 'is required',
+    })
+  })
+})
+
 describe('stockChanges', () => {
   it('sets the On-hand count of each Variant whose count changed, or that Inventory doesn’t stock yet', () => {
-    const form = formOf(pixel, phones, stock)
+    const form = formOf(pixel, phones, stock, currencies)
     form.variants[0]!.onHand = '15'
     form.variants[1]!.onHand = '3'
     form.variants.push({ ...blankVariant(phones), id: ' PHN-PIXEL-9-NEW ', onHand: '0' })
@@ -230,7 +253,7 @@ describe('stockChanges', () => {
   })
 
   it('leaves alone a count that didn’t change, or was left blank', () => {
-    const form = formOf(pixel, phones, stock)
+    const form = formOf(pixel, phones, stock, currencies)
     form.variants[0]!.onHand = ' 12 '
     expect(stockChanges(form, stock)).toEqual([])
   })

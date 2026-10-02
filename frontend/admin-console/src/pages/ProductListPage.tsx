@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 import { useCategories } from '../api/categories'
+import { useCurrencies } from '../api/currencies'
 import { failureOf } from '../api/failure'
 import { type DeletedProduct, useDeleteProduct, useProducts } from '../api/products'
 import { ErrorMessage, SkeletonRows } from '../components/Status'
@@ -21,6 +22,7 @@ export function ProductListPage() {
   const query = params.get('q') ?? ''
   const products = useProducts(category || undefined)
   const categories = useCategories()
+  const currencies = useCurrencies()
   const remove = useDeleteProduct()
   const [deleting, setDeleting] = useState<Product>()
   const [deleted, setDeleted] = useState<{ name: string } & DeletedProduct>()
@@ -153,7 +155,7 @@ export function ProductListPage() {
                     </td>
                     <td>{categoryName(product.category)}</td>
                     <td className="num">{product.variants.length}</td>
-                    <td className="num">{formatMoney(product.priceFrom)}</td>
+                    <td className="num">{currencies.data && formatMoney(product.priceFrom, currencies.data)}</td>
                     <td className="actions">
                       <ButtonLink
                         to={`/products/${encodeURIComponent(product.sku)}`}

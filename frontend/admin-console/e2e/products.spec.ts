@@ -1,5 +1,5 @@
 import { type APIRequestContext, type Page, expect, test } from '@playwright/test'
-import { formatMoney } from '../src/domain/money'
+import { type Currencies, type Currency, currenciesOf, formatMoney } from '../src/domain/money'
 import type { Product, Stock } from '../src/domain/product'
 
 /**
@@ -53,6 +53,7 @@ test.afterEach(async ({ request }) => {
 
 test('Staff create a Product with two Variants and their Stock, and Customers can pick either on the Storefront', async ({ page, request }) => {
   const { sku, name, variants } = phone
+  const currencies = await currenciesOfCatalog(request)
   await createInConsole(page)
 
   await expect(page).toHaveURL(/\/products$/)
@@ -60,7 +61,7 @@ test('Staff create a Product with two Variants and their Stock, and Customers ca
   await page.getByLabel('Search').fill(sku)
   const listed = page.getByRole('row').filter({ hasText: sku })
   await expect(listed).toContainText(name)
-  await expect(listed).toContainText(formatMoney({ amountMinor: 79900, currency: 'EUR' }))
+  await expect(listed).toContainText(formatMoney({ amountMinor: 79900, currency: 'EUR' }, currencies))
 
   // Catalog has the Product as typed, its Prices as Money, and Inventory their On-hand counts.
   const product = await productOf(request, sku)
@@ -83,13 +84,13 @@ test('Staff create a Product with two Variants and their Stock, and Customers ca
   const storefront = await page.context().newPage()
   await storefront.goto(`${storefrontUrl}/products/${encodeURIComponent(sku)}`)
   await expect(storefront.getByRole('heading', { name, exact: true })).toBeVisible()
-  await expect(storefront.locator('.purchase-panel .price')).toHaveText(formatMoney({ amountMinor: 79900, currency: 'EUR' }, 'en-US'))
+  await expect(storefront.locator('.purchase-panel .price')).toHaveText(formatMoney({ amountMinor: 79900, currency: 'EUR' }, currencies, 'en-US'))
   const cobalt = storefront.getByRole('group', { name: 'color' }).getByRole('radio', { name: 'Cobalt' })
   await cobalt.click()
   await expect(cobalt).toBeChecked()
   await expect(storefront).toHaveURL(new RegExp(`[?&]variant=${encodeURIComponent(variants[1]!.id)}$`))
   await expect(storefront.getByRole('group', { name: 'storage' }).getByRole('radio', { name: '128 GB' })).toBeChecked()
-  await expect(storefront.locator('.purchase-panel .price')).toHaveText(formatMoney({ amountMinor: 89950, currency: 'EUR' }, 'en-US'))
+  await expect(storefront.locator('.purchase-panel .price')).toHaveText(formatMoney({ amountMinor: 89950, currency: 'EUR' }, currencies, 'en-US'))
   await expect(storefront.getByText('Only 3 left')).toBeVisible()
   await storefront.close()
 
@@ -186,6 +187,13 @@ async function tokenFor(request: APIRequestContext, user: Credentials) {
   })
   expect(response.ok()).toBeTruthy()
   return ((await response.json()) as { access_token: string }).access_token
+}
+
+/** The currencies Catalog prices in, which anyone may read through the gateway. */
+async function currenciesOfCatalog(request: APIRequestContext): Promise<Currencies> {
+  const response = await request.get('/api/catalog/currencies')
+  expect(response.ok()).toBeTruthy()
+  return currenciesOf((await response.json()) as Currency[])
 }
 
 async function productOf(request: APIRequestContext, sku: string): Promise<Product> {

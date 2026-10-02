@@ -45,8 +45,13 @@ The Variants table has one row per Variant:
   such as `799.001`, or with a thousands separator, is refused beside the field before anything is
   sent.
 
-  The currency is `EUR` unless changed. It must be an ISO 4217 currency the browser knows, so three
-  letters such as `ABC`, or `XXX` for "no currency", are refused beside the field too.
+  The currency is `EUR` unless changed, and must be one of the Currencies Catalog lists at
+  `GET /currencies`, which the field suggests. Prices are read and written by the Minor unit
+  Catalog gives each Currency, never the browser's: browsers' `Intl` data says HUF has 0 digits
+  where ISO 4217 says 2, so `1000` would become a hundredth of the Price meant (see the
+  [Catalog README](../../services/catalog/README.md#currencies)). The editor waits for the list,
+  and a currency outside it, such as `ABC` or `XXX`, is refused beside the field. So is Catalog's
+  own refusal of a Variant's currency, `variants[i].price.currency`.
 - **Images**, separated by commas. When there are any, they replace the Product's own, which are
   typed one per line above the table.
 - **On hand**, the units Inventory physically holds, which Staff set. **Reserved** and

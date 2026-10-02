@@ -1,6 +1,7 @@
 import { type FormEvent, type ReactNode, useEffect, useId, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 import { useCategories } from '../api/categories'
+import { useCurrencies } from '../api/currencies'
 import { failureOf, isNotFound } from '../api/failure'
 import { type FieldErrors, fieldErrorsOf } from '../api/fieldErrors'
 import { useProduct, useSaveProduct, useStocks } from '../api/products'
@@ -10,6 +11,7 @@ import { Button, ButtonLink } from '../components/ui/Button'
 import { Icon } from '../components/ui/Icon'
 import { Input } from '../components/ui/Input'
 import type { AttributeDefinition, Category } from '../domain/category'
+import type { Currencies } from '../domain/money'
 import {
   type OnHandByVariant,
   type Product,
@@ -20,6 +22,7 @@ import {
   axesOf,
   blankVariant,
   formOf,
+  productFieldErrors,
   productRequest,
   stockChanges,
 } from '../domain/product'
@@ -34,6 +37,7 @@ export function ProductEditorPage() {
   const [params] = useSearchParams()
   const product = useProduct(sku)
   const categories = useCategories()
+  const currencies = useCurrencies()
   const stocks = useStocks(product.data?.variants.map((variant) => variant.id) ?? [])
   const stockError = stocks.find((stock) => stock.error)
 
@@ -42,9 +46,11 @@ export function ProductEditorPage() {
     ? { error: product.error, title: "Couldn't load the Product", query: product }
     : categories.error
       ? { error: categories.error, title: "Couldn't load the Categories", query: categories }
-      : stockError
-        ? { error: stockError.error, title: "Couldn't load the Stock", query: stockError }
-        : undefined
+      : currencies.error
+        ? { error: currencies.error, title: "Couldn't load the currencies", query: currencies }
+        : stockError
+          ? { error: stockError.error, title: "Couldn't load the Stock", query: stockError }
+          : undefined
   if (failed) {
     return (
       <>
@@ -59,7 +65,9 @@ export function ProductEditorPage() {
     )
   }
   const loading =
-    !categories.data || (sku !== undefined && (!product.data || stocks.some((stock) => stock.data === undefined)))
+    !categories.data ||
+    !currencies.data ||
+    (sku !== undefined && (!product.data || stocks.some((stock) => stock.data === undefined)))
   if (loading) {
     return (
       <div aria-busy="true">
@@ -77,6 +85,7 @@ export function ProductEditorPage() {
       key={sku ?? 'new'}
       product={product.data}
       categories={categories.data!}
+      currencies={currencies.data!}
       initialCategory={params.get('category') ?? undefined}
       onHand={onHand}
     />
@@ -115,11 +124,13 @@ interface RefusedStockState {
 function ProductEditor({
   product,
   categories,
+  currencies,
   initialCategory,
   onHand,
 }: {
   product?: Product
   categories: Category[]
+  currencies: Currencies
   initialCategory?: string
   onHand: OnHandByVariant
 }) {
@@ -132,7 +143,8 @@ function ProductEditor({
     if (location.state) navigate(location.pathname, { replace: true, state: null })
   }, [location.state, location.pathname, navigate])
   const [form, setForm] = useState<ProductForm>(() => {
-    const loaded = formOf(product, categories.find((c) => c.slug === (product?.category ?? initialCategory)), onHand)
+    const chosen = categories.find((c) => c.slug === (product?.category ?? initialCategory))
+    const loaded = formOf(product, chosen, onHand, currencies)
     const typed = new Map(refused.map((r) => [r.variantId, r.onHand]))
     return { ...loaded, variants: loaded.variants.map((v) => ({ ...v, onHand: typed.get(v.id) ?? v.onHand })) }
   })
@@ -215,7 +227,7 @@ function ProductEditor({
   const submit = (event: FormEvent) => {
     event.preventDefault()
     save.reset()
-    const { request, errors: invalid } = productRequest(form, category)
+    const { request, errors: invalid } = productRequest(form, category, currencies)
     if (!request) {
       setErrors(invalid)
       setUnsaved('invalid')
@@ -259,7 +271,7 @@ function ProductEditor({
           )
           setUnsaved('stock')
         },
-        onError: (error) => setErrors(fieldErrorsOf(error)),
+        onError: (error) => setErrors(productFieldErrors(fieldErrorsOf(error))),
       },
     )
   }
@@ -432,9 +444,15 @@ function ProductEditor({
                   maxLength={3}
                   spellCheck={false}
                   autoCapitalize="characters"
+                  list={`${id}-currencies`}
                   {...field('currency')}
                 />
-                <span className="hint">Every Variant of a Product is priced in one currency.</span>
+                <datalist id={`${id}-currencies`}>
+                  {[...currencies.keys()].map((code) => (
+                    <option key={code} value={code} />
+                  ))}
+                </datalist>
+                <span className="hint">Every Variant of a Product is priced in one of the currencies Catalog prices in.</span>
                 <FieldError id={errorId('currency')} message={errors.currency} />
               </label>
             </div>

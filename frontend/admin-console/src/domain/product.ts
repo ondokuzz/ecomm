@@ -1,6 +1,6 @@
 import type { FieldErrors } from '../api/fieldErrors'
 import type { Category } from './category'
-import { type Money, decimalOf, moneyOf } from './money'
+import { type Currencies, type Money, decimalOf, moneyOf } from './money'
 
 /**
  * A purchasable version of a Product, told apart from its siblings by its axis values. Its Variant
@@ -91,8 +91,16 @@ export function blankVariant(category: Category | undefined): VariantForm {
   }
 }
 
-/** `product` laid out for editing with its Variants' On-hand counts, or a new Product in `category`. */
-export function formOf(product: Product | undefined, category: Category | undefined, onHand: OnHandByVariant): ProductForm {
+/**
+ * `product` laid out for editing with its Variants' On-hand counts, its Prices as decimals in
+ * Catalog's `currencies`, or a new Product in `category`.
+ */
+export function formOf(
+  product: Product | undefined,
+  category: Category | undefined,
+  onHand: OnHandByVariant,
+  currencies: Currencies,
+): ProductForm {
   if (!product) {
     return {
       sku: '',
@@ -115,7 +123,7 @@ export function formOf(product: Product | undefined, category: Category | undefi
       id: variant.id,
       saved: true,
       axisValues: { ...variant.axisValues },
-      price: decimalOf(variant.price),
+      price: decimalOf(variant.price, currencies),
       images: variant.images.join(', '),
       onHand: onHand[variant.id]?.toString() ?? '',
     })),
@@ -125,19 +133,21 @@ export function formOf(product: Product | undefined, category: Category | undefi
 /**
  * The form as Catalog takes it, or the fields it can't send. Text is trimmed and blank attribute
  * and axis values are left out, for Catalog to name if they are required. Only what `category`
- * defines is sent. A Price must read as Money in the form's currency, and an on-hand count must
- * be a whole number or blank; these are named as `variants[i].price` and `variants[i].onHand`.
+ * defines is sent. The currency must be one of Catalog's `currencies`, a Price must read as Money
+ * in it, and an on-hand count must be a whole number or blank; these are named as `currency`,
+ * `variants[i].price` and `variants[i].onHand`.
  */
 export function productRequest(
   form: ProductForm,
   category: Category | undefined,
+  currencies: Currencies,
 ): { request: ProductRequest; errors: FieldErrors } | { request?: undefined; errors: FieldErrors } {
   const errors: FieldErrors = {}
-  const currencyValid = moneyOf('0', form.currency) !== undefined
-  if (!currencyValid) errors.currency = 'must be an ISO 4217 code, such as EUR'
+  const currencyValid = moneyOf('0', form.currency, currencies) !== undefined
+  if (!currencyValid) errors.currency = 'must be a currency Catalog prices in, such as EUR'
 
   const variants = form.variants.map((variant, index) => {
-    const price = moneyOf(variant.price, form.currency)
+    const price = moneyOf(variant.price, form.currency, currencies)
     if (!price && currencyValid) errors[`variants[${index}].price`] = 'must be a Price such as 799.00'
     if (variant.onHand.trim() !== '' && onHandOf(variant) === undefined) {
       errors[`variants[${index}].onHand`] = 'must be a whole number, 0 or more'
@@ -162,6 +172,19 @@ export function productRequest(
     },
     errors,
   }
+}
+
+/**
+ * Catalog's field errors as the editor's fields. Every Variant is priced in the form's one
+ * currency, so a Variant's `variants[i].price.currency` is the `currency` field.
+ */
+export function productFieldErrors(errors: FieldErrors): FieldErrors {
+  return Object.fromEntries(
+    Object.entries(errors).map(([field, message]) => [
+      /^variants\[\d+\]\.price\.currency$/.test(field) ? 'currency' : field,
+      message,
+    ]),
+  )
 }
 
 /** A Variant whose On-hand count to set through Inventory, by its row in the form. */
