@@ -1,7 +1,7 @@
 import { type ReactNode, useId } from 'react'
 import { type Cart, type PricedCart, itemCountLabel } from '../domain/cart'
-import { formatMoney } from '../domain/money'
 import { Card } from './ui/Card'
+import { useFormatMoney } from '../api/currencies'
 
 /**
  * What the Cart comes to: its item count, subtotal and total, with the page's next step as
@@ -16,6 +16,7 @@ export function OrderSummary({
   priced: PricedCart
   children?: ReactNode
 }) {
+  const formatMoney = useFormatMoney()
   const headingId = useId()
   // Checkout adds no tax or shipping yet, so the total is the subtotal.
   const total = priced.total ? formatMoney(priced.total) : '—'

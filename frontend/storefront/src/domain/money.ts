@@ -4,11 +4,37 @@ export interface Money {
   currency: string
 }
 
-/** Renders Money as currency, with as many fraction digits as the currency has minor units. */
-export function formatMoney(money: Money, locale?: string): string {
-  const format = new Intl.NumberFormat(locale, { style: 'currency', currency: money.currency })
-  const minorDigits = format.resolvedOptions().maximumFractionDigits ?? 2
-  return format.format(money.amountMinor / 10 ** minorDigits)
+/** A Currency as Catalog lists it: its ISO 4217 code and how many digits its Minor unit has. */
+export interface Currency {
+  code: string
+  minorDigits: number
+}
+
+/**
+ * Catalog's Currencies by code. Money is shown by these alone: browsers' own currency data
+ * disagrees with ISO 4217 on some Minor units (HUF has 2 digits, not 0), and an amount shown with
+ * the wrong one is off a hundredfold.
+ */
+export type Currencies = ReadonlyMap<string, Currency>
+
+export function currenciesOf(list: readonly Currency[]): Currencies {
+  return new Map(list.map((currency) => [currency.code, currency]))
+}
+
+/**
+ * Renders Money as currency, with as many fraction digits as Catalog gives its Currency. Throws
+ * for a Currency Catalog doesn't list, rather than guess its Minor unit.
+ */
+export function formatMoney(money: Money, currencies: Currencies, locale?: string): string {
+  const currency = currencies.get(money.currency)
+  if (!currency) throw new Error(`Catalog lists no Currency ${money.currency}`)
+  const format = new Intl.NumberFormat(locale, {
+    style: 'currency',
+    currency: money.currency,
+    minimumFractionDigits: currency.minorDigits,
+    maximumFractionDigits: currency.minorDigits,
+  })
+  return format.format(money.amountMinor / 10 ** currency.minorDigits)
 }
 
 export function timesMoney(money: Money, quantity: number): Money {

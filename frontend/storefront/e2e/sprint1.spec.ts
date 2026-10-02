@@ -1,6 +1,6 @@
 import { type APIRequestContext, type Page, expect, test } from '@playwright/test'
 import { type Product, type Variant, defaultVariant } from '../src/domain/catalog'
-import { formatMoney } from '../src/domain/money'
+import { type Currencies, type Currency, currenciesOf, formatMoney } from '../src/domain/money'
 import type { Order } from '../src/domain/order'
 
 /**
@@ -41,6 +41,7 @@ test('the demo Customer checks out a picked Variant and another Product, and on-
   await emptyCart(request, token)
   const picked = await aNonDefaultVariantInStock(request)
   const bought = [picked, await aProductInStock(request, picked.product.sku)]
+  const currencies = await currenciesOfCatalog(request)
 
   await page.goto('/')
   await page.getByRole('button', { name: 'Log in' }).click()
@@ -60,7 +61,7 @@ test('the demo Customer checks out a picked Variant and another Product, and on-
       await option.click()
       await expect(option).toBeChecked()
       await expect(page).toHaveURL(new RegExp(`[?&]variant=${encodeURIComponent(variant.id)}$`))
-      await expect(page.locator('.purchase-panel .price')).toHaveText(formatMoney(variant.price, 'en-US'))
+      await expect(page.locator('.purchase-panel .price')).toHaveText(formatMoney(variant.price, currencies, 'en-US'))
     }
     await expect(page.getByText(/^(In stock|Only \d+ left)$/)).toBeVisible()
     await page.getByRole('button', { name: 'Add to cart' }).click()
@@ -182,6 +183,7 @@ test('WELCOME10 takes 10% off at checkout, and the PAID Order shows the discount
   })
   expect(put.ok()).toBeTruthy()
   const subtotal = variant.price
+  const currencies = await currenciesOfCatalog(request)
   // 10%, rounded down to the minor unit.
   const discount = { ...subtotal, amountMinor: Math.floor(subtotal.amountMinor / 10) }
   const discounted = { ...subtotal, amountMinor: subtotal.amountMinor - discount.amountMinor }
@@ -203,19 +205,19 @@ test('WELCOME10 takes 10% off at checkout, and the PAID Order shows the discount
   await summary.getByRole('button', { name: 'Apply' }).click()
   await expect(summary).toContainText('WELCOME10 applied')
   await expect(summary.getByText('Discount (WELCOME10)')).toBeVisible()
-  await expect(summary).toContainText(formatMoney({ ...discount, amountMinor: -discount.amountMinor }, 'en-US'))
-  await expect(page.getByRole('button', { name: `Pay ${formatMoney(discounted, 'en-US')}` })).toBeVisible()
+  await expect(summary).toContainText(formatMoney({ ...discount, amountMinor: -discount.amountMinor }, currencies, 'en-US'))
+  await expect(page.getByRole('button', { name: `Pay ${formatMoney(discounted, currencies, 'en-US')}` })).toBeVisible()
 
   // Removing it puts the total back; applying it again takes it off again.
   await summary.getByRole('button', { name: 'Remove coupon WELCOME10' }).click()
   await expect(summary.getByText('Discount (WELCOME10)')).toBeHidden()
-  await expect(page.getByRole('button', { name: `Pay ${formatMoney(subtotal, 'en-US')}` })).toBeVisible()
+  await expect(page.getByRole('button', { name: `Pay ${formatMoney(subtotal, currencies, 'en-US')}` })).toBeVisible()
   await couponField.fill('WELCOME10')
   await summary.getByRole('button', { name: 'Apply' }).click()
   await expect(summary.getByText('Discount (WELCOME10)')).toBeVisible()
 
   await testCard(page, 'Approve').check()
-  await page.getByRole('button', { name: `Pay ${formatMoney(discounted, 'en-US')}` }).click()
+  await page.getByRole('button', { name: `Pay ${formatMoney(discounted, currencies, 'en-US')}` }).click()
 
   await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/)
   await expect(page.locator('.status-paid')).toHaveText('Paid')
@@ -328,6 +330,13 @@ async function stockOf(request: APIRequestContext, variantId: string): Promise<S
   expect(response.ok()).toBeTruthy()
   const { quantity, onHand } = (await response.json()) as Stock
   return { quantity, onHand }
+}
+
+/** The Currencies Catalog prices in, whose Minor units the Storefront shows Money by. */
+async function currenciesOfCatalog(request: APIRequestContext): Promise<Currencies> {
+  const response = await request.get('/api/catalog/currencies')
+  expect(response.ok()).toBeTruthy()
+  return currenciesOf((await response.json()) as Currency[])
 }
 
 async function products(request: APIRequestContext): Promise<Product[]> {

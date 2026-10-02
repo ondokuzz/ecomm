@@ -10,6 +10,7 @@ import {
   usePayCheckoutSession,
   useSessionCoupon,
 } from '../api/checkout'
+import { useFormatMoney } from '../api/currencies'
 import { failureOf } from '../api/failure'
 import { ApiError } from '../api/http'
 import { CheckoutSteps } from '../components/CheckoutSteps'
@@ -24,7 +25,6 @@ import { Input } from '../components/ui/Input'
 import { type CartLine, itemCountLabel } from '../domain/cart'
 import { variantName } from '../domain/catalog'
 import { type CheckoutSession, checkoutProblem, sessionCountdown, sessionSummaryRows } from '../domain/checkout'
-import { formatMoney } from '../domain/money'
 import { type TestCard, defaultTestCard, testCards } from '../domain/payment'
 
 /**
@@ -33,6 +33,7 @@ import { type TestCard, defaultTestCard, testCards } from '../domain/payment'
  * card places the Order; a declined or failed payment says why, and the Customer can pay again.
  */
 export function CheckoutPage() {
+  const formatMoney = useFormatMoney()
   const cart = useCart()
   // Each "Start again" is a new attempt, which always starts a fresh session.
   const [attempt, setAttempt] = useState(0)
@@ -155,6 +156,7 @@ function HeldUntilNotice({ expiresAt, left }: { expiresAt: string; left: string 
 
 /** What the session comes to, with its lines at their held Prices, and `children` below the breakdown. */
 function SessionSummary({ session, children }: { session: CheckoutSession; children?: ReactNode }) {
+  const formatMoney = useFormatMoney()
   const headingId = useId()
   const { variants, failure } = useVariants(session.lines.map((line) => line.variantId))
   const lines = session.lines.map((line) => {

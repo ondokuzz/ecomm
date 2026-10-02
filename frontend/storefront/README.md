@@ -153,6 +153,14 @@ no CORS headers. In development the Vite dev proxy forwards `/api` to the gatewa
 port, 8000 ([`vite.config.ts`](./vite.config.ts)); in compose, nginx does
 ([`nginx.conf`](./nginx.conf)).
 
+Every Price, total and Discount is Money: an `amountMinor` in its Currency's Minor unit. The
+Storefront shows it by the Minor unit Catalog gives the Currency at `GET /currencies`, fetched once
+(`useFormatMoney` in [`src/api/currencies.ts`](./src/api/currencies.ts)), never by the browser's
+own currency data: `Intl` gives HUF, IDR, IQD and others 0 digits where ISO 4217 gives 2 or 3, and
+an amount shown that way is off a hundredfold (see the
+[Catalog README](../../services/catalog/README.md#currencies)). Until the list is in, or for a
+Currency it doesn't have, Money shows as a dash rather than a guess.
+
 A Cart holds no prices, so the Cart page prices it from Catalog for display. The checkout page
 shows the Checkout Session instead, priced by Checkout; what the Customer pays is what it shows.
 
@@ -278,7 +286,7 @@ Sign in as `demo@ecomm.local` / `demo`, or register a new Customer.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: failed responses as messages and support references, Money formatting, Cart pricing, checkout problems, the session countdown and price breakdown, Coupon rejections, test cards and payment failures, quantities, Stock levels, toasts, category chips, Product specs by their Category's definitions, Customer initials, Orders and their timeline, Order Status colours, seed Product images, the Keycloak theme's and the Admin Console's copies of the tokens
+npm test          # Vitest: failed responses as messages and support references, Money formatting by Catalog's Minor units, Cart pricing, checkout problems, the session countdown and price breakdown, Coupon rejections, test cards and payment failures, quantities, Stock levels, toasts, category chips, Product specs by their Category's definitions, Customer initials, Orders and their timeline, Order Status colours, seed Product images, the Keycloak theme's and the Admin Console's copies of the tokens
 npm run test:e2e  # Playwright smoke and error-states tests against the running compose stack (`make up`)
 ```
 

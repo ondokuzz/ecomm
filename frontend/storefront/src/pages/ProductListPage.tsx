@@ -1,13 +1,13 @@
 import { useEffect, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { useCategories, useProducts } from '../api/catalog'
+import { useFormatMoney } from '../api/currencies'
 import { ProductImage } from '../components/ProductImage'
 import { EmptyState, ErrorMessage, ErrorState } from '../components/Status'
 import { ButtonLink } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { Skeleton } from '../components/ui/Skeleton'
 import { type CategoryChip, type Product, cardPrice, categoryChips, productCountLabel } from '../domain/catalog'
-import { formatMoney } from '../domain/money'
 
 export function ProductListPage() {
   const [params] = useSearchParams()
@@ -126,6 +126,7 @@ function ProductCard({ product }: { product: Product }) {
 
 /** The card's Price: "From" the lowest when the Variants' Prices differ. */
 function CardPrice({ product }: { product: Product }) {
+  const formatMoney = useFormatMoney()
   const { price, from } = cardPrice(product)
   return (
     <span className="price">

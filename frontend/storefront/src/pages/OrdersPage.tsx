@@ -1,5 +1,6 @@
 import { Link } from 'react-router'
 import { useVariants } from '../api/catalog'
+import { useFormatMoney } from '../api/currencies'
 import { useOrders } from '../api/orders'
 import { OrderStatusBadge } from '../components/OrderStatusBadge'
 import { OrdersSkeleton } from '../components/PageSkeletons'
@@ -8,7 +9,6 @@ import { EmptyState, ErrorState, LookupError } from '../components/Status'
 import { ButtonLink } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import type { VariantDetail } from '../domain/catalog'
-import { formatMoney } from '../domain/money'
 import { type Order, orderItemCountLabel, orderReference } from '../domain/order'
 
 /** How many of an Order's lines its card shows a thumbnail for; the rest are counted. */
@@ -61,6 +61,7 @@ export function OrdersPage() {
 }
 
 function OrderCard({ order, variants }: { order: Order; variants: Record<string, VariantDetail | undefined> }) {
+  const formatMoney = useFormatMoney()
   const more = order.lines.length - maxThumbnails
   return (
     <li>

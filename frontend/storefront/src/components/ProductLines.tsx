@@ -1,6 +1,7 @@
 import { Link } from 'react-router'
+import { useFormatMoney } from '../api/currencies'
 import type { VariantDetail } from '../domain/catalog'
-import { type Money, formatMoney } from '../domain/money'
+import type { Money } from '../domain/money'
 import { ProductThumb } from './ProductImage'
 import { Button } from './ui/Button'
 import { Icon } from './ui/Icon'
@@ -37,6 +38,7 @@ export function ProductLines({
   disabled?: boolean
   compact?: boolean
 }) {
+  const formatMoney = useFormatMoney()
   return (
     <ul className={cx('cart-lines', compact && 'compact')} aria-label={label}>
       {lines.map((line) => {

@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router'
 import { useAuth } from 'react-oidc-context'
 import { useCart, useSetQuantity } from '../api/cart'
 import { useCategory, useProduct, useStock, useStocks } from '../api/catalog'
+import { useFormatMoney } from '../api/currencies'
 import { lookupFailure } from '../api/failure'
 import { useAuthPending, useSignin } from '../auth/session'
 import { ProductImage } from '../components/ProductImage'
@@ -18,7 +19,6 @@ import { Skeleton } from '../components/ui/Skeleton'
 import { useToast } from '../components/ui/toasts'
 import { quantityOf } from '../domain/cart'
 import { type Product, chosenVariant, specs, variantAxes } from '../domain/catalog'
-import { formatMoney } from '../domain/money'
 import { type StockLevel, stockLevel } from '../domain/stock'
 
 export function ProductDetailPage() {
@@ -47,6 +47,7 @@ export function ProductDetailPage() {
 }
 
 function ProductDetail({ product }: { product: Product }) {
+  const formatMoney = useFormatMoney()
   // The chosen Variant lives in the URL, so a reload or a shared link keeps it.
   const [params, setParams] = useSearchParams()
   const variant = chosenVariant(product, params.get('variant'))

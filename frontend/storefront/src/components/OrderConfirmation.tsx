@@ -1,11 +1,12 @@
 import type { CSSProperties } from 'react'
+import { useFormatMoney } from '../api/currencies'
 import { type Order, orderItemCountLabel, orderReference } from '../domain/order'
-import { formatMoney } from '../domain/money'
 import { ButtonLink } from './ui/Button'
 import { Icon } from './ui/Icon'
 
 /** The celebration after checkout: a big check, a burst of confetti, the Order in brief, and where to go next. */
 export function OrderConfirmation({ order }: { order: Order }) {
+  const formatMoney = useFormatMoney()
   return (
     <div className="confirmation">
       <Confetti />

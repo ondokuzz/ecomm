@@ -1,6 +1,7 @@
 import { useId } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { useVariants } from '../api/catalog'
+import { useFormatMoney } from '../api/currencies'
 import { isNotFound } from '../api/failure'
 import { useOrder } from '../api/orders'
 import { CheckoutSteps } from '../components/CheckoutSteps'
@@ -13,7 +14,6 @@ import { NotFound } from '../components/NotFound'
 import { ErrorState, LookupError } from '../components/Status'
 import { Card } from '../components/ui/Card'
 import { Icon } from '../components/ui/Icon'
-import { formatMoney } from '../domain/money'
 import { type Order, nameOrderLines, orderItemCountLabel, orderReference, orderSummaryRows } from '../domain/order'
 
 /** An Order, its Order Status and its lines, read from Order Management; after checkout, the confirmation first. */
@@ -80,6 +80,7 @@ export function OrderPage() {
 
 /** The Order in brief, beside its lines: when it was placed, how many items, what it comes to, and its full ID. */
 function OrderFacts({ order }: { order: Order }) {
+  const formatMoney = useFormatMoney()
   const headingId = useId()
   return (
     <Card className="order-summary" aria-labelledby={headingId} role="region">
