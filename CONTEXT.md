@@ -33,7 +33,7 @@ A specific purchasable version of a Product (e.g. a color/storage combination), 
 _Avoid_: Option, Configuration
 
 **Stock**:
-How many units of a Variant are available to sell, counted per Variant ID and never negative: its On-hand units less what active Reservations hold of them. Inventory owns Stock. Checkout takes it only through Reservations, which hold several Variants as one batch that applies whole or not at all.
+How many units of a Variant are available to sell, counted per Variant ID and never negative: its On-hand units less what active Reservations hold of them. Inventory owns Stock. Checkout takes it only through Reservations, which hold several Variants as one batch that applies whole or not at all. Staff remove a Variant's Stock when its Product leaves the Catalog, but not while Reservations hold some of it; Inventory then doesn't stock the Variant, and nothing can reserve it, until Staff set its On-hand count again. Its past Reservations stay.
 _Avoid_: Inventory (that's the context, not the count)
 
 **On-hand**:
@@ -41,12 +41,20 @@ How many units of a Variant Inventory physically has, whether or not Reservation
 _Avoid_: Stock (Stock is what's left to sell), Physical stock
 
 **Price**:
-What a Variant sells for, as `Money`: an amount in the currency's minor unit. Catalog owns Price. A Cart holds no authoritative price: whatever a Cart shows is a copy. The Price that counts is the one Catalog holds when a Checkout Session starts, which the session keeps for its lifetime.
+What a Variant sells for, as `Money` in one of Catalog's Currencies; all of a Product's Variants are priced in the same one. Catalog owns Price. A Cart holds no authoritative price: whatever a Cart shows is a copy. The Price that counts is the one Catalog holds when a Checkout Session starts, which the session keeps for its lifetime.
 _Avoid_: Cost (what the platform pays a supplier)
 
 **Money**:
-An amount as an integer in its currency's minor unit, with the currency's ISO 4217 code, such as `{"amountMinor": 79900, "currency": "EUR"}` for €799.00. Prices, Order totals and Payments are all Money, and amounts in different currencies are never added together.
+An amount as an integer in its Currency's Minor unit, with the Currency's ISO 4217 code, such as `{"amountMinor": 79900, "currency": "EUR"}` for €799.00. Prices, Order totals and Payments are all Money, and amounts in different Currencies are never added together. Staff type a Price as a decimal such as `799.00`; it becomes Money digit by digit, by its Currency's Minor unit, never through floating point.
 _Avoid_: Amount (on its own), decimal or floating-point prices
+
+**Currency**:
+What Money is counted in: an ISO 4217 currency with a Minor unit, named by its code, such as `EUR`. Catalog lists the Currencies a Price can be in, with each one's Minor unit (`GET /currencies`), and that list is the one that counts: clients read and write Money by it rather than by their own currency data, which disagrees with ISO 4217 for some, such as HUF. Codes with no Minor unit, such as `XXX` (no currency) or `XAU` (gold), are no Currency to price in.
+_Avoid_: Currency code (the code names a Currency)
+
+**Minor unit**:
+The smallest unit of a Currency, which Money counts in: the cent for EUR, the yen itself for JPY. Its number of digits says where a decimal's point goes: 2 for EUR, 0 for JPY, 3 for BHD, so `amountMinor` 79900 is €799.00. ISO 4217 sets it, as Catalog's Currencies give it; an amount read with another Currency's digits is off by a power of ten.
+_Avoid_: Cents (one Currency's Minor unit), Decimals, Precision
 
 **Cart**:
 A Customer's in-progress, unconfirmed selection of Variants and quantities. Ephemeral — it is not an Order until checkout completes, and it lapses 7 days after the Customer last changed it. Each Customer has at most one Cart, and only they can see or change it.
