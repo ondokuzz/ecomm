@@ -12,6 +12,14 @@ _Avoid_: User, Account, Buyer
 A back-office person with the `STAFF` role. Staff manage the Catalog in the Admin Console, which turns away anyone without the role.
 _Avoid_: Admin, Operator
 
+**Storefront**:
+The web app where Customers browse the Catalog, keep a Cart, check out and follow their Orders. Anyone may browse it; a Cart, checkout and Orders need a Customer's sign-in. It is a UI over the contexts, not one itself, and reaches them only through the API gateway.
+_Avoid_: Shop, Site, Frontend (there are two)
+
+**Admin Console**:
+The web app where Staff manage the Catalog: Products with their Variants, Prices and Stock, and Categories with their Attribute definitions. Only Staff get in; a Customer who signs in is told it is for Staff. Like the Storefront it is a UI over the contexts, and each service still checks the Staff role on every change.
+_Avoid_: Admin panel, Back office, Dashboard
+
 **Product**:
 A sellable item in the Catalog, identified by SKU, with category-specific attributes and one or more Variants.
 _Avoid_: Item, SKU (SKU is an identifier, not the concept)
@@ -31,6 +39,10 @@ _Avoid_: Option, Dimension
 **Variant**:
 A specific purchasable version of a Product (e.g. a color/storage combination), with its own Price, Stock and, optionally, images. A Product has one or more, told apart by their axis values: one value per Variant axis of its Category, no two Variants of a Product alike. Each is identified by its Variant ID, unique across the Catalog and never changed, and it lasts as long as its Product; a Product's first Variant usually has the Product's SKU as its ID. Carts, Orders and Stock name Variants, never Products.
 _Avoid_: Option, Configuration
+
+**Variant picker**:
+How a Customer chooses a Variant on a Product's page in the Storefront: one group of choices per Variant axis, such as color and storage. Choosing a value leads to the Variant with that value and the chosen Variant's other values; a value no such Variant has can't be chosen. The chosen Variant's ID is in the page's URL, so it can be shared.
+_Avoid_: Option selector, Configurator
 
 **Stock**:
 How many units of a Variant are available to sell, counted per Variant ID and never negative: its On-hand units less what active Reservations hold of them. Inventory owns Stock. Checkout takes it only through Reservations, which hold several Variants as one batch that applies whole or not at all. Staff remove a Variant's Stock when its Product leaves the Catalog, but not while Reservations hold some of it; Inventory then doesn't stock the Variant, and nothing can reserve it, until Staff set its On-hand count again. Its past Reservations stay.
