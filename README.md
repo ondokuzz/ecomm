@@ -1,31 +1,76 @@
 # Ecomm Platform
 
-A from-scratch e-commerce platform, architected as fifteen bounded contexts across five parallel team tracks, planned over eight two-week sprints for a small (4-5 person) engineering team. Sprint 1's walking skeleton runs locally: browse Products, keep a Cart, check out with a mock payment and follow the Order.
+A from-scratch e-commerce platform, architected as fifteen bounded contexts across five parallel team tracks, planned over eight two-week sprints for a small (4-5 person) engineering team. Sprint 2 has hardened Sprint 1's walking skeleton, and it all runs locally: browse Products and pick their Variants, keep a Cart, check out with a Checkout Session that reserves its Stock, a Coupon and a mock payment that can decline, and follow the Order. Staff manage the Catalog in an Admin Console.
 
-## Run Sprint 1
+## Run Sprint 2
 
-You need Docker with about 8 GB of memory, `make`, and Node 24 for the smoke test.
+You need Docker with about 8 GB of memory, `make`, and Node 24 for the smoke tests.
 
 ```sh
 make up           # build and start the stack; returns once every service is healthy
 ```
 
-The first build takes several minutes. Then open http://localhost:8080, where you can:
+The first build takes several minutes. Then open the Storefront on http://localhost:8080, where you can:
 
-1. browse the 20 seeded Products by category;
+1. browse the 20 seeded Products by category. The Google Pixel 9, the Apple iPhone 16 and the Apple
+   MacBook Air 13 (M3) come in several Variants: pick one by its color and storage, each with its
+   own Price and Stock. One iPhone Variant starts sold out;
 2. sign in as `demo@ecomm.local` / `demo`, or register a new Customer on Keycloak's page;
-3. add Products to the Cart and go to checkout, which holds them and their Prices for 15 minutes,
-   enter the Coupon `WELCOME10` for 10% off, then pick a test card and press **Pay**. The payment is mocked: **Approve** pays, while
-   **Decline**, **Insufficient funds** and **Gateway error** each show why paying failed, and you
-   can pay again with another card while the hold lasts;
+3. add Products to the Cart and go to checkout, which holds them and their Prices for 15 minutes
+   and shows the time left. Enter the Coupon `WELCOME10` for 10% off, then pick a test card and press
+   **Pay**. Paying again with another card works while the Checkout Session lasts;
 4. see the Order confirmation with its Order Status, **Paid**, and its discount, and find the Order
    under **My Orders**.
 
+The payment gateway is mocked, and each test card stands for a Payment method:
+
+| Test card | Token | Paying it |
+|---|---|---|
+| Approve | `tok_approve` | pays: the Order is **Paid** |
+| Decline | `tok_decline` | is declined: "Your card was declined" |
+| Insufficient funds | `tok_insufficient_funds` | is declined for insufficient funds |
+| Gateway error | `tok_gateway_error` | fails at the gateway, and no Payment is recorded |
+
+A checkout left unpaid expires after 15 minutes, and the Storefront offers to start again. Its
+Reservation stops holding the Stock 2 minutes later, and Inventory's sweeper marks it `RELEASED`
+within 30 seconds of that ([Checkout ADR 0001](./services/checkout-pricing/docs/adr/0001-checkout-sessions-hold-stock-through-reservations.md)).
+`GET http://localhost:8000/api/inventory/stock/{variantId}` shows the Stock held and given back.
+
 Staff work in the [Admin Console](./frontend/admin-console/README.md) on http://localhost:8090:
 sign in as `staff@ecomm.local` / `staff` to create and edit Products with their Variants, Prices
-and Stock, and Categories with their attribute definitions. The demo Customer is refused there.
+and Stock, and Categories with their attribute definitions. A new Product shows on the Storefront
+at once. The demo Customer is refused there.
 
-The smoke test walks the same path in Chromium against the running stack. As the demo Customer it
+Every failed request on a Storefront page shows a support reference: the request's
+[Correlation ID](./CONTEXT.md). The services log JSON lines carrying it, so one request can be
+followed across them:
+
+```sh
+docker compose logs --no-log-prefix | grep '<Correlation ID>'
+```
+
+### Ports
+
+The browser reaches the services only through the [API gateway](./platform/api-gateway/README.md),
+which the Storefront's and the Admin Console's nginx send `/api/` to. Each service also publishes
+a host port, which bypasses the gateway, for development only (see each service's README):
+
+| Port | |
+|---|---|
+| 8080 | Storefront |
+| 8090 | Admin Console |
+| 8000 | API gateway |
+| 8180 | Keycloak (`admin` / `admin`) |
+| 8081–8086 | Catalog, Inventory, Cart, Payment, Order Management and Checkout & Pricing |
+| 8087 | Promotions |
+
+Override one that is already taken, e.g. `POSTGRES_PORT=5433 make up`; Couchbase's ports, the
+Storefront's 8080 and the Admin Console's 8090 are fixed. Kafka and Mongo are behind the `full`
+profile until Sprint 3 (`docker compose --profile full up -d`).
+
+### Smoke tests
+
+The Storefront's smoke test walks the Customer's path in Chromium against the running stack. As the demo Customer it
 adds two Products, checks out with the approving test card, expects `PAID` on the confirmation page and checks through the
 Inventory API that the Checkout Session reserved their Stock and paying took it off on-hand. It
 also pays with a declining card, sees the decline, then pays the same session with the approving
@@ -40,29 +85,38 @@ npm run test:e2e
 The Admin Console has its own, in which Staff create a Product with two Variants and their Stock
 and a Customer picks either on the Storefront: `npm run test:e2e` in `frontend/admin-console`.
 
+### Commands
+
 | Command | |
 |---|---|
 | `make up` | Build and start the stack, and wait until it is healthy |
 | `make down` | Stop the stack, keeping its data |
-| `make seed-reset` | Put the seed Categories, Products, Stock and Coupons back and drop every Cart, Reservation, Order and Payment; registered Customers stay |
+| `make seed-reset` | Put the seed Categories, Products, Stock and Coupons back and drop every Cart, Checkout Session, Reservation, Order and Payment; registered Customers stay |
 
-Every checkout takes Stock, so after many smoke-test runs `make seed-reset` refills it. A stack
-first seeded before Catalog had multi-Variant Products needs it once too, since the seed only loads
-into an empty Catalog ([Catalog README](./services/catalog/README.md#seed-data)). `make up` creates
-any service's Postgres database that is missing, so a stack from before Promotions gains its
-`promotions` database, and `WELCOME10`, without a reset. To wipe
+Every checkout takes Stock, so after many smoke-test runs `make seed-reset` refills it. To wipe
 everything, Keycloak's users included, run `docker compose down -v`.
 
-The browser reaches the services only through the [API gateway](./platform/api-gateway/README.md),
-on 8000, which the Storefront's and the Admin Console's nginx send `/api/` to. Each service also publishes a host port:
-Keycloak on 8180 (`admin` / `admin`), Catalog to Checkout on 8081–8086 and Promotions on 8087 (see
-each service's README).
-Those bypass the gateway, for development only. Override one that is already taken, e.g.
-`POSTGRES_PORT=5433 make up`; Couchbase's ports, the Storefront's 8080 and the Admin Console's 8090 are fixed. Kafka and
-Mongo are behind the `full` profile until Sprint 3 (`docker compose --profile full up -d`).
+### A stack from Sprint 1
 
-Each Spring service is capped at 384 MB, with 60% of it for the heap, and Keycloak at 512 MB, so
-the default stack fits in about 8 GB of Docker memory.
+`make up` on a stack first started under Sprint 1 rebuilds every service and adds the gateway,
+Promotions and the Admin Console. Two things don't update themselves:
+
+- **The seed.** Catalog loads its seed only into an empty bucket, so the multi-Variant Products
+  arrive only after `make seed-reset`, once ([Catalog README](./services/catalog/README.md#seed-data)).
+  `make up` creates any service's Postgres database that is missing, so Promotions gains its
+  `promotions` database, and `WELCOME10`, without a reset.
+- **The Keycloak realm.** Keycloak imports the realm only on its first start, so an existing realm
+  lacks the `admin-console` client's redirect URIs, and the Admin Console's sign-in fails with
+  "Invalid parameter: redirect_uri". Delete the realm and restart Keycloak, or apply the client to
+  the running realm with `kcadm`, as the [Identity & Access README](./services/identity-access/README.md#the-admin-console-client)
+  shows.
+
+### Memory
+
+Each Spring service is capped at 384 MB, with 60% of it for the heap, Keycloak at 512 MB and each
+nginx at 64 MB, so the default stack fits in about 8 GB of Docker memory; `docker stats` shows
+what it uses ([Sprint 2's reading](./docs/roadmap.md#sprint-2-weeks-34--harden-the-skeleton)).
+Couchbase, Postgres and Redis are uncapped.
 
 ## CI
 

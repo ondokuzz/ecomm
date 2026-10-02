@@ -3,8 +3,8 @@
 The one way in for browsers. A Spring Cloud Gateway service in its servlet (WebMVC) flavour, built
 on the [service template](../service-template/README.md) conventions and `service-commons`. It is a
 platform module, not a bounded context: it has no domain, so it has no hexagonal layers either.
-In compose it listens on host port 8000, and the Storefront's nginx sends it everything under
-`/api/`.
+In compose it listens on host port 8000, and the Storefront's and the Admin Console's nginx send it
+everything under `/api/`.
 
 It does three things and nothing more ([ADR 0010](../../docs/adr/0010-api-gateway-authenticates-at-the-edge.md)):
 **routes**, **authenticates at the edge**, and **hides internal endpoints**. Roles and ownership
@@ -45,8 +45,8 @@ The gateway sends no CORS headers: browsers reach it on the Storefront's or the 
 
 ## Correlation IDs and the access log
 
-For a browser the Correlation ID is born just before the gateway, in the Storefront's nginx, so its
-own error pages carry it when the gateway is down ([Storefront](../../frontend/storefront/README.md#error-states));
+For a browser the Correlation ID is born just before the gateway, in the Storefront's or the Admin
+Console's nginx, so the Storefront's own error pages carry it when the gateway is down ([Storefront](../../frontend/storefront/README.md#error-states));
 for any other caller the gateway is where it is born. It applies the same rule as every
 service (`service-commons`): the caller's `X-Correlation-Id` if it is at most 64 characters of
 `[A-Za-z0-9-]`, a new UUID otherwise. It sets that ID on the forwarded request, replacing whatever

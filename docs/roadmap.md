@@ -24,7 +24,7 @@ Eight two-week sprints, five tracks running in parallel for a 4-5 person team. S
 
 **Definition of done**: `docker-compose up` → browse seeded products → add to cart → check out with a mock payment → see an order confirmation and status — entirely local.
 
-> **Note (Sprint 1 implementation):** Kafka and Mongo are defined in Compose but sit behind the `full` profile (`docker compose --profile full up`), because nothing uses them until Sprint 3 and the default stack has to fit in about 8 GB of Docker memory. A plain `docker compose up` (or `make up`) starts everything the definition of done needs, with the [Storefront](../frontend/storefront/README.md) on http://localhost:8080. The root README's [Run Sprint 1](../README.md#run-sprint-1) walks through it, and a Playwright smoke test proves it.
+> **Note (Sprint 1 implementation):** Kafka and Mongo are defined in Compose but sit behind the `full` profile (`docker compose --profile full up`), because nothing uses them until Sprint 3 and the default stack has to fit in about 8 GB of Docker memory. A plain `docker compose up` (or `make up`) starts everything the definition of done needs, with the [Storefront](../frontend/storefront/README.md) on http://localhost:8080. The root README's run section walked through it, and a Playwright smoke test proved it; [Run Sprint 2](../README.md#run-sprint-2) has since taken its place, Sprint 1's path included.
 
 ## Sprint 2 (Weeks 3–4) — Harden the Skeleton
 
@@ -35,6 +35,19 @@ Eight two-week sprints, five tracks running in parallel for a 4-5 person team. S
 | C | Pluggable payment-gateway interface; first promotion rules; checkout price calculation |
 | D | Inventory reservation semantics (reserve on checkout, release on timeout) |
 | E | Admin console shell (staff login, catalog editor); storefront polish + error states |
+
+> **Note (Sprint 2 implementation):** The definition of done holds after `make up`: CI is green on `main`; a Customer picks a multi-Variant Product, opens checkout and sees their Checkout Session held for 15 minutes, applies `WELCOME10`, is declined once and then pays for a `PAID` Order with its Discount; Staff create a Product with two Variants and Stock in the Admin Console, and the Storefront shows it; an abandoned Checkout Session gives its Stock back once its Reservation expires; and one request can be followed across services in the logs by its Correlation ID. The root README's [Run Sprint 2](../README.md#run-sprint-2) walks through it. The Storefront's and the Admin Console's Playwright suites prove the Customer's and the Staff's paths in CI; the expiry and the Correlation ID were shown by hand.
+>
+> What the build settled on:
+>
+> - **Stock is held, not taken, at checkout.** Starting checkout opens a Checkout Session in Redis that holds the Cart's Stock through an Inventory Reservation for 15 minutes; the Reservation lasts 2 minutes longer, so a payment started just before expiry can still commit it. An expired Reservation stops holding Stock at once, and a sweeper marks it released every 30 seconds ([Checkout ADR 0001](../services/checkout-pricing/docs/adr/0001-checkout-sessions-hold-stock-through-reservations.md)). Reservations are not yet event-sourced; that is Sprint 4.
+> - **Checkout calls the other contexts directly**, as in Sprint 1, now carrying the Correlation ID; the Saga comes in Sprint 3. A declined or failed payment cancels the Order it placed but keeps the session, so the Customer can pay again.
+> - **The first promotion rules are Coupons** in a new Promotions service: a percentage or a fixed amount off, with a validity window and an optional minimum. Campaign rules are Sprint 3's.
+> - **The payment gateway is a port** with a mock adapter, driven by test tokens that approve, decline, decline for insufficient funds, or fail to answer.
+> - **The API gateway** (port 8000) routes `/api/<service>/`, rejects missing or invalid tokens and hides internal endpoints ([ADR 0010](./adr/0010-api-gateway-authenticates-at-the-edge.md)); each service still authorizes every request itself. Rate limiting and circuit breakers wait for Sprint 7.
+> - **Logs are JSON** (ECS) under the `docker` profile, each line carrying its Correlation ID. Metrics, tracing and dashboards wait for Sprint 4.
+> - **Memory:** the gateway, Promotions and the Admin Console join the default stack, which still fits in about 8 GB of Docker memory with the Sprint 1 caps: `docker stats` measured about 3.4 GB in use on 2026-10-02, with the eight Spring services at 180–250 MB each, Keycloak near its 512 MB cap and Couchbase at 1 GB, so no cap needed lowering.
+> - **Existing stacks** need `make seed-reset` once, and the Keycloak realm brought up to date for the Admin Console's sign-in ([A stack from Sprint 1](../README.md#a-stack-from-sprint-1)).
 
 ## Sprint 3 (Weeks 5–6) — Order CQRS/ES
 

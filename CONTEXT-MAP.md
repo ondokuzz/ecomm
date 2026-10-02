@@ -27,11 +27,13 @@ Not bounded contexts — UI layers over the above:
 | Storefront | `frontend/storefront` |
 | Admin Console | `frontend/admin-console` |
 
-Browsers reach the services only through the API gateway ([`platform/api-gateway`](./platform/api-gateway/README.md)), which the Storefront's nginx sends everything under `/api/` to. The gateway routes `/api/<service>/` to Catalog, Inventory, Cart, Checkout & Pricing, Order Management and Promotions, rejects a missing or invalid token at the edge, and never routes internal endpoints; each service still authorizes every request itself ([ADR 0010](./docs/adr/0010-api-gateway-authenticates-at-the-edge.md)).
+Browsers reach the services only through the API gateway ([`platform/api-gateway`](./platform/api-gateway/README.md)), which the Storefront's and the Admin Console's nginx send everything under `/api/` to. The gateway routes `/api/<service>/` to Catalog, Inventory, Cart, Checkout & Pricing, Order Management and Promotions, rejects a missing or invalid token at the edge, and never routes internal endpoints; each service still authorizes every request itself ([ADR 0010](./docs/adr/0010-api-gateway-authenticates-at-the-edge.md)).
+
+A request keeps one Correlation ID across every context. It gets one where it enters, unless the caller sent a well-formed one: in the Storefront's or the Admin Console's nginx for a browser, or at the gateway for any other caller. Every service logs it and returns it in problem details, and Checkout passes it on every call it makes to another context, so one request can be followed through the logs.
 
 ## Relationships
 
-> **Sprint 1:** Checkout calls Inventory, Order Management, Payment and Promotions directly and synchronously ([`services/checkout-pricing`](./services/checkout-pricing/README.md)). It now reserves and commits Stock through Inventory's Reservations, still directly: a Checkout Session reserves the Cart's Stock, and paying it commits the Reservation ([Checkout ADR 0001](./services/checkout-pricing/docs/adr/0001-checkout-sessions-hold-stock-through-reservations.md)). The Saga-based relationships below (Order Management → Inventory and → Payment) arrive in Sprint 3.
+> **Sprints 1–2:** Checkout calls Inventory, Order Management, Payment and Promotions directly and synchronously ([`services/checkout-pricing`](./services/checkout-pricing/README.md)). It now reserves and commits Stock through Inventory's Reservations, still directly: a Checkout Session reserves the Cart's Stock, and paying it commits the Reservation ([Checkout ADR 0001](./services/checkout-pricing/docs/adr/0001-checkout-sessions-hold-stock-through-reservations.md)). The Saga-based relationships below (Order Management → Inventory and → Payment) arrive in Sprint 3.
 
 - **Cart → Checkout & Pricing**: Checkout reads the Cart's contents to start a Checkout Session.
 - **Catalog → Checkout & Pricing**: a Checkout Session prices every line from Catalog's Price when it starts, never from the Cart, and keeps that Price for its lifetime.
