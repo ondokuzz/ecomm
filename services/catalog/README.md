@@ -13,6 +13,7 @@ and testing conventions apply here. Data lives in Couchbase ([ADR 0001](./docs/a
 | `GET /variants/{variantId}` | anyone | One Variant with its Product's SKU, name and images, 404 when missing |
 | `GET /categories` | anyone | Categories ordered by slug, with name, Product count and attribute definitions |
 | `GET /categories/{slug}` | anyone | One Category, 404 when missing |
+| `GET /currencies` | anyone | The Currencies a Price can be in, ordered by code, each with its Minor unit's digits |
 | `POST /products` | Staff | 201, or 409 when the SKU or a Variant ID is taken |
 | `PUT /products/{sku}` | Staff | Replaces the Product and its Variants; 404 when missing, 409 when it drops one of its Variant IDs or takes another Product's |
 | `DELETE /products/{sku}` | Staff | 204; 404 when missing |
@@ -69,8 +70,8 @@ Variant has:
   goes only when its whole Product is deleted, which frees its ID;
 - its `axisValues`, such as `{"color": "Obsidian", "storage": "256 GB"}`, returned in the order
   the Category defines its axes;
-- its `price`, such as `{"amountMinor": 89900, "currency": "EUR"}`, in one currency for every
-  Variant of a Product;
+- its `price`, such as `{"amountMinor": 89900, "currency": "EUR"}`, in one Currency for every
+  Variant of a Product (see [Currencies](#currencies));
 - optional `images`, which replace the Product's own.
 
 A Cart, an Order and Inventory's Stock all name Variant IDs, never SKUs. A Product has no Price of
@@ -98,6 +99,25 @@ or a checkout needs:
  "product": {"sku": "PHN-PIXEL-9", "name": "Google Pixel 9",
              "images": ["/images/products/phn-pixel-9/front.svg"]}}
 ```
+
+### Currencies
+
+A Price is in one of the Currencies `GET /currencies` lists: every ISO 4217 currency the JDK knows
+that has a Minor unit, with how many digits that has.
+
+```json
+[{"code": "BHD", "minorDigits": 3}, {"code": "EUR", "minorDigits": 2}, {"code": "JPY", "minorDigits": 0}]
+```
+
+`amountMinor` counts in that Minor unit, so clients turn it into a decimal and back by this list,
+never by their own currency data. Browsers' `Intl` data disagrees with ISO 4217 for some Currencies,
+such as HUF, IDR and IQD (0 digits instead of 2 or 3), and a Price read that way is off a
+hundredfold. Codes with no Minor unit, such as `XXX` or `XAU`, are refused.
+
+A Price Catalog can't read is a 400 naming its field:
+- a missing one is `variants[1].price`;
+- one without an `amountMinor` or a `currency` is also `variants[1].price`;
+- one in a currency the list doesn't have is `variants[1].price.currency`.
 
 [`http/catalog.http`](./http/catalog.http) exercises every endpoint against the compose stack.
 

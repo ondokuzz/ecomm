@@ -187,6 +187,43 @@ class ManageProductsApiTest extends CatalogApiTest {
     http.get().uri("/products/WRB-INVALID").exchange().expectStatus().isNotFound();
   }
 
+  @ParameterizedTest
+  @CsvSource(
+      delimiter = '|',
+      value = {
+        "{\"amountMinor\": 100, \"currency\": \"EURO\"} | variants[1].price.currency",
+        "{\"amountMinor\": 100, \"currency\": \"XXX\"}  | variants[1].price.currency",
+        "{\"amountMinor\": 100, \"currency\": \"XAU\"}  | variants[1].price.currency",
+        "{\"amountMinor\": 100}                         | variants[1].price",
+        "null                                         | variants[1].price",
+      })
+  void aPriceCatalogCantReadIsABadRequestNamingTheField(String price, String field) {
+    http.post()
+        .uri("/products")
+        .headers(h -> h.setBearerAuth(staffToken()))
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(
+            """
+            {"sku": "WRB-PRICED", "name": "Priced", "category": "wearables",
+             "attributes": {"brand": "Garmin", "strap": "metal"},
+             "variants": [
+               {"id": "WRB-PRICED", "axisValues": {"colour": "Black"},
+                "price": {"amountMinor": 100, "currency": "EUR"}},
+               {"id": "WRB-PRICED-WHITE", "axisValues": {"colour": "White"}, "price": %s}]}
+            """
+                .formatted(price))
+        .exchange()
+        .expectStatus()
+        .isBadRequest()
+        .expectBody()
+        .jsonPath("$.errors.length()")
+        .isEqualTo(1)
+        .jsonPath("$.errors[0].field")
+        .isEqualTo(field);
+
+    http.get().uri("/products/WRB-PRICED").exchange().expectStatus().isNotFound();
+  }
+
   @Test
   void everyOffendingAttributeIsNamed() {
     http.post()

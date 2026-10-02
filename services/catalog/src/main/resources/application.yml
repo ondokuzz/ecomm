@@ -15,7 +15,7 @@ ecomm:
       products: classpath:seed/products.json
   security:
     # Customers browse the Catalog without logging in; changes still need a Staff token.
-    public-read-paths: /products/**, /variants/**, /categories/**
+    public-read-paths: /products/**, /variants/**, /categories/**, /currencies
 
 management:
   endpoints:

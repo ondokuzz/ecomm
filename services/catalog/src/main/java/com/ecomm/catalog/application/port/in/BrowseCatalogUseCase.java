@@ -2,6 +2,7 @@ package com.ecomm.catalog.application.port.in;
 
 import com.ecomm.catalog.domain.CategorySummary;
 import com.ecomm.catalog.domain.Product;
+import java.util.Currency;
 import java.util.List;
 import java.util.Optional;
 
@@ -20,4 +21,7 @@ public interface BrowseCatalogUseCase {
 
   /** The Category with its Product count; empty when there is none with the slug. */
   Optional<CategorySummary> category(String slug);
+
+  /** Every currency a Price can be in, ordered by code. */
+  List<Currency> currencies();
 }

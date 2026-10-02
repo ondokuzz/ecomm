@@ -17,7 +17,7 @@ stay with the services, which still check every token themselves.
 
 | Service | Public reads (`GET`, no token) | Internal, never routed |
 |---|---|---|
-| `catalog` | `/products/**`, `/variants/**`, `/categories/**` | |
+| `catalog` | `/products/**`, `/variants/**`, `/categories/**`, `/currencies` | |
 | `inventory` | `/stock/*` | `/reservations/**`, and `/stock/decrement`, which Inventory no longer has |
 | `cart` | | |
 | `checkout-pricing` | | |

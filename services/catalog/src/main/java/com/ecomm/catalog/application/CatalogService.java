@@ -9,11 +9,13 @@ import com.ecomm.catalog.domain.Category;
 import com.ecomm.catalog.domain.CategorySummary;
 import com.ecomm.catalog.domain.FieldViolation;
 import com.ecomm.catalog.domain.InvalidProductException;
+import com.ecomm.catalog.domain.PriceCurrencies;
 import com.ecomm.catalog.domain.Product;
 import com.ecomm.catalog.domain.ProductAlreadyExistsException;
 import com.ecomm.catalog.domain.ProductNotFoundException;
 import com.ecomm.catalog.domain.VariantIdTakenException;
 import com.ecomm.catalog.domain.VariantIdsDroppedException;
+import java.util.Currency;
 import java.util.List;
 import java.util.Optional;
 
@@ -31,6 +33,11 @@ public class CatalogService
   @Override
   public Optional<Product> product(String sku) {
     return products.find(sku);
+  }
+
+  @Override
+  public List<Currency> currencies() {
+    return PriceCurrencies.all();
   }
 
   @Override

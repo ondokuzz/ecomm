@@ -24,6 +24,16 @@ public class InvalidProductException extends RuntimeException {
     this.violations = List.copyOf(violations);
   }
 
+  /** A Product whose one field Catalog can't read, apart from its Category's rules. */
+  public static InvalidProductException of(FieldViolation violation) {
+    return new InvalidProductException("Product is invalid: " + violation, List.of(violation));
+  }
+
+  private InvalidProductException(String message, List<FieldViolation> violations) {
+    super(message);
+    this.violations = violations;
+  }
+
   public List<FieldViolation> violations() {
     return violations;
   }

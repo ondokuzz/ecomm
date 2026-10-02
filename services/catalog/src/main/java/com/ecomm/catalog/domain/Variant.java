@@ -21,6 +21,10 @@ public record Variant(String id, Map<String, String> axisValues, Money price, Li
     if (price == null) {
       throw new InvalidProductException("Variant " + id + " needs a price");
     }
+    if (!PriceCurrencies.hasMinorUnit(price.currency())) {
+      throw new InvalidProductException(
+          "Variant " + id + " price must be in a currency with a minor unit, e.g. 'EUR'");
+    }
     if (price.amountMinor() < 0) {
       throw new InvalidProductException("Variant " + id + " price must not be negative");
     }

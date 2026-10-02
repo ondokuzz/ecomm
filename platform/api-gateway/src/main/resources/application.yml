@@ -10,7 +10,7 @@ ecomm:
     services:
       catalog:
         uri: http://localhost:8081
-        public-reads: [/products/**, /variants/**, /categories/**]
+        public-reads: [/products/**, /variants/**, /categories/**, /currencies]
       inventory:
         uri: http://localhost:8082
         public-reads: [/stock/*]

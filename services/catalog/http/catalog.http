@@ -21,6 +21,9 @@ grant_type=password&client_id=dev-cli&username=demo@ecomm.local&password=demo
 
 > {% client.global.set("customerToken", response.body.access_token); %}
 
+### The Currencies a Price can be in, each with its Minor unit's digits, no token needed
+GET {{catalog}}/currencies
+
 ### Categories with their attribute definitions, no token needed
 GET {{catalog}}/categories
 
