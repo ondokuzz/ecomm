@@ -12,13 +12,14 @@
 | Cart | `services/cart` | The ephemeral per-Customer Cart |
 | Checkout & Pricing | `services/checkout-pricing` | Cart-to-Order orchestration, price/tax calculation |
 | Promotions | `services/promotions` | Coupons, campaign rules |
-| Payment | `services/payment` | Gateway integration, authorization/capture/refund — event-sourced |
-| Order Management | `services/order-management` | Order lifecycle from placement to delivery — event-sourced |
-| Inventory | `services/inventory` | Stock levels, Reservations, replenishment — event-sourced |
+| Payment | `services/payment` | Gateway integration, authorization/capture/refund, kept as a ledger of Payment transactions |
+| Order Management | `services/order-management` | Order lifecycle from placement to delivery, with its Order Status history |
+| Inventory | `services/inventory` | Stock levels, Reservations, replenishment, kept as a ledger of Stock movements |
 | Fulfillment & Shipping | `services/fulfillment-shipping` | Pick/pack/ship, carrier hand-off |
-| Returns & Warranty | `services/returns-warranty` | RMA workflow, Warranty Window validation — event-sourced |
+| Returns & Warranty | `services/returns-warranty` | RMA workflow, Warranty Window validation, with each RMA's decision history |
 | Notifications | `services/notifications` | Email/SMS/push dispatch, triggered by domain events |
 | AI Support Assistant | `services/ai-support-assistant` | The Support Assistant, grounded in real order/payment/returns data |
+| Orchestration | `services/orchestration` | The Sagas — checkout, fulfillment and returns — as Temporal workflows; no domain data of its own |
 
 Not bounded contexts — UI layers over the above:
 
@@ -33,21 +34,19 @@ A request keeps one Correlation ID across every context. It gets one where it en
 
 ## Relationships
 
-> **Sprints 1–2:** Checkout calls Inventory, Order Management, Payment and Promotions directly and synchronously ([`services/checkout-pricing`](./services/checkout-pricing/README.md)). It now reserves and commits Stock through Inventory's Reservations, still directly: a Checkout Session reserves the Cart's Stock, and paying it commits the Reservation ([Checkout ADR 0001](./services/checkout-pricing/docs/adr/0001-checkout-sessions-hold-stock-through-reservations.md)). The Saga-based relationships below (Order Management → Inventory and → Payment) arrive in Sprint 3.
+> **Sprints 1–3:** Checkout calls Inventory, Order Management, Payment and Promotions directly and synchronously ([`services/checkout-pricing`](./services/checkout-pricing/README.md)). It reserves and commits Stock through Inventory's Reservations: a Checkout Session reserves the Cart's Stock, and paying it commits the Reservation ([Checkout ADR 0001](./services/checkout-pricing/docs/adr/0001-checkout-sessions-hold-stock-through-reservations.md)). From Sprint 4, paying starts the checkout Saga in Orchestration instead, and the relationships below that name Orchestration take over.
 
 - **Cart → Checkout & Pricing**: Checkout reads the Cart's contents to start a Checkout Session.
 - **Catalog → Checkout & Pricing**: a Checkout Session prices every line from Catalog's Price when it starts, never from the Cart, and keeps that Price for its lifetime.
 - **Checkout & Pricing → Promotions**: applying a Coupon to a Checkout Session asks Promotions what Discount it gives on the session's subtotal, or why it doesn't apply. Only Checkout may ask, with its own identity, and the gateway never routes it.
-- **Checkout & Pricing → Order Management**: a successful checkout creates an Order.
-- **Order Management → Inventory**: the fulfillment Saga dispatches Reservation commands; Inventory owns the Reservation lifecycle.
-- **Order Management → Payment**: the fulfillment Saga dispatches payment-capture commands; Payment emits authorization/capture/refund events back.
-- **Order Management → Fulfillment & Shipping**: `OrderPaid` is consumed to start pick/pack/ship.
+- **Checkout & Pricing → Orchestration**: paying a Checkout Session starts the checkout Saga through the Temporal client, with the session's ID as the workflow's.
+- **Orchestration → Order Management, Payment, Inventory, Cart, Checkout & Pricing**: the checkout Saga places the Order, authorizes the Payment, commits the Reservation, marks the Order paid, clears the Cart and ends the session. It compensates a failure by cancelling the Order and voiding an authorized Payment. Each step calls the context's command API with an idempotency key ([ADR 0009](./docs/adr/0009-sagas-on-temporal.md)); each context owns its own lifecycle.
+- **Orchestration → Fulfillment & Shipping, Payment, Order Management**: the fulfillment Saga drives pick/pack/ship once an Order is paid, captures the Payment and moves the Order along.
+- **Orchestration → Returns & Warranty, Payment, Inventory**: the returns Saga drives an RMA to its resolution, refunding through Payment and restocking through Inventory, and closes it when its Warranty Window lapses.
 - **Order Management → Notifications**: order-lifecycle events trigger customer notifications.
-- **Returns & Warranty → Payment**: an approved RMA triggers a refund.
-- **Returns & Warranty → Inventory**: an approved RMA triggers a restock.
 - **Order Management, Payment, Returns & Warranty → AI Support Assistant**: the assistant queries each context's read APIs to ground its answers in real Customer data.
-- **Identity & Access → all contexts**: every service trusts Keycloak-issued JWTs. A Customer's token names the Customer, and Checkout calls other contexts with its own client-credentials identity ([ADR 0002](./services/identity-access/docs/adr/0002-service-identity-by-client-credentials.md)).
-- **All contexts ↔ Kafka**: the shared event backbone — see [ADR 0006](./docs/adr/0006-kafka-as-single-event-backbone.md).
+- **Identity & Access → all contexts**: every service trusts Keycloak-issued JWTs. A Customer's token names the Customer. Checkout and Orchestration each call other contexts with their own client-credentials identity, and each command names the one caller allowed to make it ([ADR 0002](./services/identity-access/docs/adr/0002-service-identity-by-client-credentials.md)).
+- **All contexts ↔ Kafka**: the shared backbone for integration events, published from each context's outbox and versioned so consumers keep the newest ([ADR 0002](./docs/adr/0002-ledgers-and-outboxes-not-event-sourcing.md), [ADR 0006](./docs/adr/0006-kafka-as-single-event-backbone.md)). Commands never travel over it.
 
 ## Shared vocabulary
 

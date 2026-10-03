@@ -116,7 +116,7 @@ the Cart and the session as they were. A declined payment (402) and a gateway fa
 such steps: the session and its Reservation stay, so the Customer can pay it again, with another
 Payment method, until it expires. Each attempt places a new Order. That's the only compensation for now: if the commit fails
 after the Payment is authorized, the Payment stays authorized, the same known limitation as Sprint
-1, which the Sagas in Sprint 3 fix. A Cart that can't be cleared, or a session that can't be ended,
+1, which the checkout Saga fixes in Sprint 4. A Cart that can't be cleared, or a session that can't be ended,
 after the Order is paid is only logged, since the Customer keeps the paid Order either way.
 
 ## Checkout Sessions
@@ -164,7 +164,7 @@ No other status is retried.
 
 If Keycloak is unreachable when a session starts, or before the Order is placed, the step fails
 with a 503. If it becomes unreachable afterwards, the compensating `CANCELLED` can't be sent
-either, and the Order stays `PLACED`. That's a known Sprint 1 limitation, fixed by the Saga work.
+either, and the Order stays `PLACED`. That's a known Sprint 1 limitation, fixed by the checkout Saga in Sprint 4.
 
 [`http/checkout-pricing.http`](./http/checkout-pricing.http) checks out the demo Customer's Cart
 against the compose stack.

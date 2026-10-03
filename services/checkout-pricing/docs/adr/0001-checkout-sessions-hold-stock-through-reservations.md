@@ -14,5 +14,5 @@ Checkout happens in two steps. Starting it creates a Checkout Session: the Cart'
 - The Prices a Customer sees at checkout are the Prices they pay, even if Catalog changes them mid-session. A Price change only reaches new sessions.
 - Starting checkout again replaces the session and releases its Reservation first, so the old hold doesn't count against the new one.
 - Paying a session that has expired is a 410, and nothing happens. Once Redis has dropped it, 2 minutes later, paying it is a 404.
-- Until the Sagas arrive (Sprint 3), Checkout calls Inventory, Order Management and Payment directly. If the commit fails after the Payment is authorized, the Order is cancelled but the Payment stays authorized.
+- Until the checkout Saga arrives (Sprint 4, [ADR 0009](../../../../docs/adr/0009-sagas-on-temporal.md)), Checkout calls Inventory, Order Management and Payment directly. If the commit fails after the Payment is authorized, the Order is cancelled but the Payment stays authorized.
 - `POST /stock/decrement` is gone, and Staff setting on-hand Stock can never drop it below what active Reservations hold.

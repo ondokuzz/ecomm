@@ -5,8 +5,9 @@ Orders from placement to delivery. Built from
 and testing conventions apply here. Data lives in the `orders` database on the shared Postgres,
 with the schema under Flyway ([`db/migration`](./src/main/resources/db/migration)).
 
-For Sprint 1 an Order is a plain row whose status is overwritten on each change. It is rebuilt as
-CQRS + event sourcing in Sprint 3 (see the [roadmap](../../docs/roadmap.md)).
+For now an Order is a plain row whose status is overwritten on each change. Sprint 3 adds its
+Order Status history and publishes its events through an outbox (see the
+[roadmap](../../docs/roadmap.md) and [ADR 0002](../../docs/adr/0002-ledgers-and-outboxes-not-event-sourcing.md)).
 
 ## API
 

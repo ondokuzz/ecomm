@@ -40,8 +40,8 @@ Eight two-week sprints, five tracks running in parallel for a 4-5 person team. S
 >
 > What the build settled on:
 >
-> - **Stock is held, not taken, at checkout.** Starting checkout opens a Checkout Session in Redis that holds the Cart's Stock through an Inventory Reservation for 15 minutes; the Reservation lasts 2 minutes longer, so a payment started just before expiry can still commit it. An expired Reservation stops holding Stock at once, and a sweeper marks it released every 30 seconds ([Checkout ADR 0001](../services/checkout-pricing/docs/adr/0001-checkout-sessions-hold-stock-through-reservations.md)). Reservations are not yet event-sourced; that is Sprint 4.
-> - **Checkout calls the other contexts directly**, as in Sprint 1, now carrying the Correlation ID; the Saga comes in Sprint 3. A declined or failed payment cancels the Order it placed but keeps the session, so the Customer can pay again.
+> - **Stock is held, not taken, at checkout.** Starting checkout opens a Checkout Session in Redis that holds the Cart's Stock through an Inventory Reservation for 15 minutes; the Reservation lasts 2 minutes longer, so a payment started just before expiry can still commit it. An expired Reservation stops holding Stock at once, and a sweeper marks it released every 30 seconds ([Checkout ADR 0001](../services/checkout-pricing/docs/adr/0001-checkout-sessions-hold-stock-through-reservations.md)). Reservations keep no ledger of Stock movements yet; that is Sprint 3.
+> - **Checkout calls the other contexts directly**, as in Sprint 1, now carrying the Correlation ID; the checkout Saga comes in Sprint 4. A declined or failed payment cancels the Order it placed but keeps the session, so the Customer can pay again.
 > - **The first promotion rules are Coupons** in a new Promotions service: a percentage or a fixed amount off, with a validity window and an optional minimum. Campaign rules are Sprint 3's.
 > - **The payment gateway is a port** with a mock adapter, driven by test tokens that approve, decline, decline for insufficient funds, or fail to answer.
 > - **The API gateway** (port 8000) routes `/api/<service>/`, rejects missing or invalid tokens and hides internal endpoints ([ADR 0010](./adr/0010-api-gateway-authenticates-at-the-edge.md)); each service still authorizes every request itself. Rate limiting and circuit breakers wait for Sprint 7.
@@ -49,34 +49,36 @@ Eight two-week sprints, five tracks running in parallel for a 4-5 person team. S
 > - **Memory:** the gateway, Promotions and the Admin Console join the default stack, which still fits in about 8 GB of Docker memory with the Sprint 1 caps: `docker stats` measured about 3.4 GB in use on 2026-10-02, with the eight Spring services at 180–250 MB each, Keycloak near its 512 MB cap and Couchbase at 1 GB, so no cap needed lowering.
 > - **Existing stacks** need `make seed-reset` once, and the Keycloak realm brought up to date for the Admin Console's sign-in ([A stack from Sprint 1](../README.md#a-stack-from-sprint-1)).
 
-## Sprint 3 (Weeks 5–6) — Order CQRS/ES
+## Sprint 3 (Weeks 5–6) — Events & Order History
+
+No context is event-sourced: contexts keep append-only histories and ledgers where a requirement calls for them, and publish state-carrying, versioned integration events through transactional outboxes ([ADR 0002](./adr/0002-ledgers-and-outboxes-not-event-sourcing.md)).
 
 | Track | Delivers |
 |---|---|
-| A | Kafka topics, partitions & consumer-group design; shared domain-event schema (JSON Schema + registry) |
+| A | Kafka topics, partitions & consumer-group design; shared integration-event schemas (JSON Schema in the repo, registered in Apicurio); outbox publishing through Spring Modulith |
 | B | Search & Discovery v1 (faceted browse); Reviews & Ratings (post-purchase) |
 | C | Campaign rules engine; checkout applies promotions |
-| D | Order Management rebuilt as CQRS + event sourcing (Axon aggregate + Postgres event store); order-summary read projection; migrate Sprint-1 order data |
-| E | Order history/detail pages on the new read model; admin order list/detail |
+| D | Order Management: Order Status history, Order events through the outbox, order-summary read model, history backfilled for existing Orders; Inventory: ledger of Stock movements, Stock events through the outbox |
+| E | Order history/detail pages on the new read model, with the real Order Status timeline; admin order list/detail |
 
-## Sprint 4 (Weeks 7–8) — Payment & Inventory CQRS/ES
+## Sprint 4 (Weeks 7–8) — Checkout Saga & Payment Ledger
 
 | Track | Delivers |
 |---|---|
-| A | Idempotent, retrying event consumers; dead-letter topic handling; consumer-lag & error-rate dashboards |
+| A | Temporal server in Compose (Postgres persistence); Orchestration service and its client-credentials identity; idempotency keys on command APIs; retrying event consumers; dead-letter topic handling; consumer-lag & error-rate dashboards |
 | B | Recommendations v1 (co-occurrence from Order events) |
-| C | Payment rebuilt as CQRS + event sourcing; idempotent gateway-webhook handling |
-| D | Inventory rebuilt as CQRS + event sourcing; Redis-backed hot stock cache for checkout |
+| C | Checkout Saga on Temporal ([ADR 0009](./adr/0009-sagas-on-temporal.md)), closing the authorized-but-cancelled gap with a void; Payment rebuilt on a ledger of Payment transactions, with void; idempotent gateway-webhook handling |
+| D | Saga-facing commands on Order Management and Inventory; Redis-backed hot stock cache for checkout |
 | E | Storefront/admin reflect real payment + stock states |
 
 ## Sprint 5 (Weeks 9–10) — Fulfillment + Returns Foundations
 
 | Track | Delivers |
 |---|---|
-| A | Multi-warehouse config; secrets management hardening; Temporal server in Compose (Postgres persistence) |
+| A | Multi-warehouse config; secrets management hardening |
 | B | Warranty metadata on catalog items (length, manufacturer) |
 | C | Shipping-cost estimate (abstracted provider); address validation |
-| D | Fulfillment & Shipping — pick/pack/ship state machine, driven by a Temporal workflow Saga ([ADR 0009](./adr/0009-sagas-on-temporal.md)); Returns & Warranty v1 — request → approve/reject, IMEI/serial capture |
+| D | Fulfillment & Shipping — pick/pack/ship state machine, driven by a Saga in Orchestration ([ADR 0009](./adr/0009-sagas-on-temporal.md)); Returns & Warranty v1 — request → approve/reject, IMEI/serial capture |
 | E | Shipment tracking UI; admin fulfillment queue + RMA approval queue |
 
 ## Sprint 6 (Weeks 11–12) — Returns Completion
@@ -86,7 +88,7 @@ Eight two-week sprints, five tracks running in parallel for a 4-5 person team. S
 | A | Notification provider abstraction (email/SMS/push); message template system |
 | B | Reviews moderation; recommendation quality pass |
 | C | Promotion expiry/usage-limit edge cases; cart-abandonment detection |
-| D | Returns & Warranty completion — received → inspected → refund/exchange; Temporal durable timer auto-closing a request after the Warranty Window lapses; wired to Payment refund + Inventory restock events |
+| D | Returns & Warranty completion — received → inspected → refund/exchange; the returns Saga's durable timer auto-closing a request after the Warranty Window lapses; refund and restock through Payment's and Inventory's commands |
 | E | Return-request UI; admin RMA lifecycle UI; notifications wired to order/payment/fulfillment/return events |
 
 ## Sprint 7 (Weeks 13–14) — AI Assistant
@@ -106,7 +108,7 @@ Eight two-week sprints, five tracks running in parallel for a 4-5 person team. S
 | A | Load/performance testing; move to AWS (ECS/EKS + RDS + ElastiCache); Kubernetes manifests |
 | B | SEO pass (SSR, Core Web Vitals); catalog data-quality review |
 | C | Checkout conversion hardening; abandoned-cart recovery |
-| D | Event-replay + idempotency chaos testing on all event-sourced contexts |
+| D | Outbox, relay and Saga chaos testing: duplicate and reordered events, projection rebuilds from topics, retried and compensated Saga steps |
 | E | End-to-end UX polish; accessibility pass; admin completeness review |
 
 **Definition of done**: deployed to a real environment, load-tested, soft-launch ready.

@@ -45,4 +45,4 @@ When implementation surfaces a new domain term or sharpens an existing one, upda
 
 If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
 
-> _Contradicts ADR-0002 (CQRS + event sourcing scoped to four contexts), but worth reopening because…_
+> _Contradicts ADR-0002 (ledgers and outboxes, not event sourcing), but worth reopening because…_

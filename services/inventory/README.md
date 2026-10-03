@@ -9,7 +9,7 @@ Stock is counted per Variant as **on-hand** units, some of which Reservations ma
 left is available to sell. Checkout takes Stock only through Reservations: a Checkout Session
 reserves the Cart's Stock, and paying it commits the Reservation
 ([Checkout ADR 0001](../checkout-pricing/docs/adr/0001-checkout-sessions-hold-stock-through-reservations.md)).
-An event-sourced rebuild follows in Sprint 4 (see the [roadmap](../../docs/roadmap.md)).
+A ledger of Stock movements follows in Sprint 3 (see the [roadmap](../../docs/roadmap.md) and [ADR 0002](../../docs/adr/0002-ledgers-and-outboxes-not-event-sourcing.md)).
 
 ## API
 

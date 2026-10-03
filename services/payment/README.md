@@ -7,8 +7,9 @@ with the schema under Flyway ([`db/migration`](./src/main/resources/db/migration
 
 The gateway sits behind `PaymentGatewayPort`
 ([ADR 0005](../../docs/adr/0005-localization-compliance-abstracted.md)), so a real gateway joins the
-mock without touching the use cases. Capture and refund come later, and an event-sourced rebuild in
-Sprint 4 (see the [roadmap](../../docs/roadmap.md)).
+mock without touching the use cases. Capture and refund come later, and in Sprint 4 a Payment is rebuilt on a ledger of its
+Payment transactions (see the [roadmap](../../docs/roadmap.md) and
+[ADR 0002](../../docs/adr/0002-ledgers-and-outboxes-not-event-sourcing.md)).
 
 ## Gateways
 

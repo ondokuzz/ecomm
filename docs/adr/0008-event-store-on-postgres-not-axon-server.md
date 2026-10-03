@@ -1,7 +1,9 @@
+---
+status: withdrawn
+---
+
 # Event store on Postgres, not Axon Server
 
-Axon Framework's event-storage engine is pluggable. A JPA/Postgres-backed store gives the full aggregate/snapshot/projection programming model without adding a new datastore to operate, and with zero paid tier — Axon Server's clustering/HA features sit behind its paid Enterprise Edition, and its Standard Edition would still be one more service to run for capability not yet needed.
+Withdrawn on 2026-10-03: no context is event-sourced, so there is no event store to place ([ADR 0002](./0002-ledgers-and-outboxes-not-event-sourcing.md)).
 
-## Consequences
-
-Horizontal scaling of event *consumers* is still available without Axon Server, via Axon's JDBC/JPA-backed token store coordinating segment claims across instances. The documented upgrade trigger is command-routing complexity or event-store throughput actually becoming a bottleneck — not a default to reach for early.
+It decided that Axon Framework's event store would sit on Postgres through JPA, rather than on Axon Server, whose clustering and high availability are paid Enterprise features. That gave the aggregate, snapshot and projection model without another datastore to run.

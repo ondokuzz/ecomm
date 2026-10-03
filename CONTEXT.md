@@ -52,6 +52,10 @@ _Avoid_: Inventory (that's the context, not the count)
 How many units of a Variant Inventory physically has, whether or not Reservations hold them. Staff set it, never below what Reservations hold; committing a Reservation takes its units off it.
 _Avoid_: Stock (Stock is what's left to sell), Physical stock
 
+**Stock movement**:
+One change to a Variant's On-hand units or to what Reservations hold of them, recorded for good: units received, reserved, released, committed, adjusted by Staff, or restocked from a return, with how many and when. Inventory owns them, and never changes or deletes one: a mistake is corrected by another. A Variant's On-hand is the sum of its movements, so the counter Inventory keeps beside them can always be checked against them. Inventory records them from Sprint 3.
+_Avoid_: Stock change, Adjustment (one kind of movement), Transaction
+
 **Price**:
 What a Variant sells for, as `Money` in one of Catalog's Currencies; all of a Product's Variants are priced in the same one. Catalog owns Price. A Cart holds no authoritative price: whatever a Cart shows is a copy. The Price that counts is the one Catalog holds when a Checkout Session starts, which the session keeps for its lifetime.
 _Avoid_: Cost (what the platform pays a supplier)
@@ -114,6 +118,10 @@ _Avoid_: State (Status is the domain term; state is a general programming concep
 **Payment**:
 An Order's amount, as `Money`, taken through a payment gateway with a Payment method and recorded with the gateway's answer and its reference for it. A Payment is `AUTHORIZED` when the gateway has approved the amount but not yet captured it, or `DECLINED`, for good, with the gateway's decline reason (such as `insufficient_funds`). A gateway that fails to answer records no Payment at all. It belongs to the Customer who authorized it, and only they can see it. Capture and refund come later.
 _Avoid_: Charge, Transaction
+
+**Payment transaction**:
+One interaction with the payment gateway on a Payment, recorded for good: an authorization, capture, void or refund, with the amount, the gateway's answer and its reference for it. Payment owns them, and never changes or deletes one. A Payment's status and amounts are worked out from its transactions, which are what it is reconciled against the gateway by. Payment records them from Sprint 4.
+_Avoid_: Charge, Transaction (on its own), Payment event
 
 **Payment method**:
 How a Customer pays: an opaque token the payment gateway issued for their card, which Checkout passes on to Payment and nothing else reads. The mock gateway takes test tokens: `tok_approve` authorizes; `tok_decline` and `tok_insufficient_funds` decline; `tok_gateway_error` fails to answer.
