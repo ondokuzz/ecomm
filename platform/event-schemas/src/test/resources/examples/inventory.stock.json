@@ -4,5 +4,10 @@
   "variantId": "IPHONE16-BLK-128",
   "version": 7,
   "change": "RESERVED",
-  "stock": { "onHand": 30, "available": 27, "stocked": true }
+  "stock": {
+    "onHand": 30,
+    "available": 27,
+    "stocked": true,
+    "warehouse": "main"
+  }
 }
