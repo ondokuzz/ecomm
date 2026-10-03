@@ -69,6 +69,10 @@
         "stocked": {
           "type": "boolean",
           "description": "Whether Inventory keeps Stock for the Variant at all; false once it is removed."
+        },
+        "warehouse": {
+          "type": "string",
+          "description": "Throwaway: shows the CI compatibility check."
         }
       }
     }
