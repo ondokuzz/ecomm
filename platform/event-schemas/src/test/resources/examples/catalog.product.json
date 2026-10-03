@@ -1,0 +1,22 @@
+{
+  "eventId": "1d2e3f4a-5b6c-4d7e-8f9a-0b1c2d3e4f5a",
+  "occurredAt": "2026-10-03T12:00:00Z",
+  "sku": "IPHONE16",
+  "version": 3,
+  "change": "UPDATED",
+  "product": {
+    "name": "Apple iPhone 16",
+    "category": "phones",
+    "attributes": { "brand": "Apple", "screen": "6.1" },
+    "images": ["https://example.com/iphone16.jpg"],
+    "variants": [
+      {
+        "variantId": "IPHONE16-BLK-128",
+        "axisValues": { "color": "Black", "storage": "128 GB" },
+        "price": { "amountMinor": 79900, "currency": "EUR" },
+        "images": []
+      }
+    ],
+    "removed": false
+  }
+}

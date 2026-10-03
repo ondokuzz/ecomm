@@ -63,8 +63,8 @@ class CorrelationIdApiTest {
   }
 
   @DynamicPropertySource
-  static void keycloak(DynamicPropertyRegistry registry) {
-    FakeKeycloak.registerWith(registry);
+  static void infrastructure(DynamicPropertyRegistry registry) {
+    TestInfrastructure.registerWith(registry);
   }
 
   @Autowired RestTestClient http;

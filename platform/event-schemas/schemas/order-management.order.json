@@ -1,0 +1,222 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "order-management.order",
+  "description": "A snapshot of an Order, published when it is placed and whenever its Status changes. Keyed by orderId.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "eventId",
+    "occurredAt",
+    "orderId",
+    "version",
+    "change",
+    "order"
+  ],
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique per event; the same event delivered twice has the same eventId."
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the change was published, in the transaction that made it."
+    },
+    "orderId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "The Order's ID: the message key."
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "The aggregate's version, which goes up by at least one with every change. Apply an event only if it is newer than what you hold."
+    },
+    "change": {
+      "type": "string",
+      "enum": [
+        "PLACED",
+        "STATUS_CHANGED",
+        "BACKFILLED"
+      ],
+      "description": "Why the event was published."
+    },
+    "order": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "customerId",
+        "status",
+        "placedAt",
+        "lines",
+        "discounts",
+        "tax",
+        "subtotal",
+        "total",
+        "statusHistory"
+      ],
+      "properties": {
+        "customerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "PLACED",
+            "PAID",
+            "FULFILLED",
+            "SHIPPED",
+            "DELIVERED",
+            "CANCELLED",
+            "RETURNED"
+          ]
+        },
+        "placedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "lines": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "variantId",
+              "quantity",
+              "unitPrice"
+            ],
+            "properties": {
+              "variantId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "quantity": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "unitPrice": {
+                "$ref": "#/definitions/Money"
+              }
+            }
+          }
+        },
+        "discounts": {
+          "type": "array",
+          "description": "Every Discount the Order got, in the order they applied.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "source",
+              "amount"
+            ],
+            "properties": {
+              "source": {
+                "type": "string",
+                "enum": [
+                  "CAMPAIGN",
+                  "COUPON"
+                ]
+              },
+              "amount": {
+                "$ref": "#/definitions/Money"
+              },
+              "couponCode": {
+                "type": "string",
+                "description": "The Coupon's code, when source is COUPON."
+              },
+              "campaignId": {
+                "type": "string",
+                "description": "The Campaign's ID, when source is CAMPAIGN."
+              },
+              "campaignName": {
+                "type": "string",
+                "description": "The Campaign's name, when source is CAMPAIGN."
+              }
+            }
+          }
+        },
+        "tax": {
+          "$ref": "#/definitions/Money"
+        },
+        "subtotal": {
+          "$ref": "#/definitions/Money"
+        },
+        "total": {
+          "$ref": "#/definitions/Money"
+        },
+        "statusHistory": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Every Status the Order has been in, oldest first.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "status",
+              "at"
+            ],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "PLACED",
+                  "PAID",
+                  "FULFILLED",
+                  "SHIPPED",
+                  "DELIVERED",
+                  "CANCELLED",
+                  "RETURNED"
+                ]
+              },
+              "at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "changedBy": {
+                "type": "string",
+                "enum": [
+                  "CHECKOUT",
+                  "ORCHESTRATION"
+                ],
+                "description": "The caller that made the change."
+              },
+              "backfilled": {
+                "type": "boolean",
+                "description": "True for an entry reconstructed from an Order placed before histories were kept."
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "Money": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "An amount in a Currency's Minor unit (CONTEXT.md, Money).",
+      "required": [
+        "amountMinor",
+        "currency"
+      ],
+      "properties": {
+        "amountMinor": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The amount in its Currency's Minor unit."
+        },
+        "currency": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$",
+          "description": "The Currency's ISO 4217 code."
+        }
+      }
+    }
+  }
+}

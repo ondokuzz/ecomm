@@ -144,5 +144,13 @@ The AI-driven conversational agent that answers a Customer's questions about the
 _Avoid_: Chatbot, Bot
 
 **Correlation ID**:
-The ID that names one request as it passes from service to service, carried in the `X-Correlation-Id` header. It is taken from the caller when well-formed (at most 64 characters of `[A-Za-z0-9-]`) and generated otherwise. Every log line written while serving the request carries it, and so does every problem detail, where a Customer sees it as the support reference for an error. It is never used to decide anything.
+The ID that names one request as it passes from service to service, carried in the `X-Correlation-Id` header. It is taken from the caller when well-formed (at most 64 characters of `[A-Za-z0-9-]`) and generated otherwise. Every log line written while serving the request carries it, and so does every problem detail, where a Customer sees it as the support reference for an error. An Integration event a request causes carries it in the same header, so the consumers' log lines carry it too. It is never used to decide anything.
 _Avoid_: Request ID, Trace ID (tracing is a separate concern)
+
+**Integration event**:
+What one context publishes to Kafka so that others can learn a change it made: a snapshot of one aggregate, such as an Order or a Variant's Stock, carrying the state its consumers need, its version and why it was published. Each topic carries one kind, and its JSON Schema in the repo defines it. It is published in the same transaction as the change, through the Outbox, and delivered at least once and not strictly in order, so a consumer applies it only if its version is newer than the one it holds. It describes a change that has happened; it never asks a context to do something.
+_Avoid_: Domain event (one that stays inside a context), Message, Command
+
+**Outbox**:
+Where a context records an Integration event, in the same transaction as the change it describes, until Kafka has it. The Postgres-backed contexts use Spring Modulith's event publication registry; an event whose send failed stays there, visible, and is sent again.
+_Avoid_: Event store (no context is event-sourced)

@@ -1,0 +1,108 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "catalog.category",
+  "description": "A snapshot of a Category with its Attribute definitions, published whenever it is created, changed or removed. Keyed by slug.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "eventId",
+    "occurredAt",
+    "slug",
+    "version",
+    "change",
+    "category"
+  ],
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique per event; the same event delivered twice has the same eventId."
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the change was published, in the transaction that made it."
+    },
+    "slug": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The Category's slug: the message key."
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "The aggregate's version, which goes up by at least one with every change. Apply an event only if it is newer than what you hold."
+    },
+    "change": {
+      "type": "string",
+      "enum": [
+        "CREATED",
+        "UPDATED",
+        "REMOVED",
+        "BACKFILLED"
+      ],
+      "description": "Why the event was published."
+    },
+    "category": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "attributes",
+        "removed"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "attributes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "type",
+              "values",
+              "required",
+              "variantAxis"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "TEXT",
+                  "NUMBER",
+                  "BOOLEAN",
+                  "ENUM"
+                ]
+              },
+              "values": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "The allowed values of an ENUM attribute."
+              },
+              "required": {
+                "type": "boolean"
+              },
+              "variantAxis": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "removed": {
+          "type": "boolean",
+          "description": "True in the last event of a removed Category."
+        }
+      }
+    }
+  }
+}

@@ -63,10 +63,28 @@ a host port, which bypasses the gateway, for development only (see each service'
 | 8180 | Keycloak (`admin` / `admin`) |
 | 8081–8086 | Catalog, Inventory, Cart, Payment, Order Management and Checkout & Pricing |
 | 8087 | Promotions |
+| 8088 | Apicurio schema registry: the event schemas, under `/apis/registry/v3` |
+| 9092 | Kafka |
+| 27017 | Mongo |
 
 Override one that is already taken, e.g. `POSTGRES_PORT=5433 make up`; Couchbase's ports, the
-Storefront's 8080 and the Admin Console's 8090 are fixed. Kafka and Mongo are behind the `full`
-profile until Sprint 3 (`docker compose --profile full up -d`).
+Storefront's 8080 and the Admin Console's 8090 are fixed.
+
+### The event backbone
+
+Kafka, Mongo and the Apicurio schema registry run in the default stack. On every `make up`, two
+steps run once and exit before anything uses them ([ADR 0006](./docs/adr/0006-kafka-as-single-event-backbone.md)):
+
+- `kafka-topics` creates a topic for each event schema in [`platform/event-schemas`](./platform/event-schemas/README.md):
+  `order-management.order`, `inventory.stock`, `catalog.product` and `catalog.category`. Each is
+  log-compacted, with 6 partitions. The broker creates no topics itself, so producing to any other
+  topic fails.
+- `schema-registry-init` registers the schemas in Apicurio. It fails, and so does `make up`, if a
+  schema changed in a way that isn't backward compatible.
+
+`docker compose exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:19092 --describe`
+shows the topics, and `curl localhost:8088/apis/registry/v3/groups/default/artifacts` the schemas.
+How a service publishes and consumes events is in the [service template's README](./platform/service-template/README.md#integration-events).
 
 ### Smoke tests
 
@@ -114,18 +132,20 @@ Promotions and the Admin Console. Two things don't update themselves:
 ### Memory
 
 Each Spring service is capped at 384 MB, with 60% of it for the heap, Keycloak at 512 MB and each
-nginx at 64 MB, so the default stack fits in about 8 GB of Docker memory; `docker stats` shows
-what it uses ([Sprint 2's reading](./docs/roadmap.md#sprint-2-weeks-34--harden-the-skeleton)).
+nginx at 64 MB. Kafka and Mongo are capped at 512 MB each, with a 256 MB heap for Kafka and a
+256 MB cache for Mongo, and Apicurio at 384 MB. The default stack fits in about 8 GB of Docker
+memory; `docker stats` shows what it uses ([Sprint 2's reading](./docs/roadmap.md#sprint-2-weeks-34--harden-the-skeleton)).
 Couchbase, Postgres and Redis are uncapped.
 
 ## CI
 
 [`.github/workflows/ci.yml`](./.github/workflows/ci.yml) checks every pull request and every push
-to `main`, with four jobs:
+to `main`, with five jobs:
 
 | Job | What it checks |
 |---|---|
 | `backend` | `./gradlew check` on JDK 21: Spotless, unit and Testcontainers tests, and `HexagonalRules` |
+| `event-schemas` | Registers the event schemas from before the change in a throwaway Apicurio, then the change's own, so a schema change that isn't backward compatible, such as a field made required or removed, fails |
 | `frontend (<app>)` | `npm ci`, `lint`, `typecheck`, `test` and `build` for each app in its matrix: the Storefront and the Admin Console |
 | `images` | `docker compose build` of every service and frontend image. On a push to `main` it also pushes them to GHCR as `ghcr.io/ondokuzz/ecomm/<service>`, tagged with the commit SHA and `main` |
 | `e2e` | `make up`, then the Storefront's and the Admin Console's Playwright suites in Chromium. When it fails, the `e2e-failure` artifact keeps the Playwright reports, traces and `docker compose logs` |
@@ -136,14 +156,14 @@ A new frontend app joins the `frontend` job by adding its directory name to `mat
 Making the checks block a merge is a manual step, done once, since a workflow cannot require
 itself. In the repository's **Settings → Branches**, add a branch protection rule (or ruleset) for
 `main`, turn on **Require status checks to pass before merging**, and choose `backend`,
-`frontend (storefront)`, `frontend (admin-console)`, `images` and `e2e`. A check appears in that list only after it has run
+`event-schemas`, `frontend (storefront)`, `frontend (admin-console)`, `images` and `e2e`. A check appears in that list only after it has run
 once. On a private repository, branch protection needs a paid GitHub plan.
 
 ## Layout
 
 - `services/` — one directory per bounded context (see `CONTEXT.md` for the domain terms, `docs/adr/` for why each is shaped the way it is)
 - `frontend/storefront`, `frontend/admin-console` — the two customer/staff-facing React apps
-- `platform/` — shared, cross-service concerns: `service-commons`, the hexagonal-architecture service starter template, and the API gateway
+- `platform/` — shared, cross-service concerns: `service-commons`, the hexagonal-architecture service starter template, the API gateway, and `event-schemas`, the integration events' JSON Schemas
 - `infra/terraform` — infrastructure-as-code for the eventual AWS deployment
 
 ## Docs

@@ -1,2 +1,4 @@
 com.ecomm.commons.web.CommonsWebAutoConfiguration
 com.ecomm.commons.security.JwtResourceServerAutoConfiguration
+com.ecomm.commons.events.outbox.OutboxAutoConfiguration
+com.ecomm.commons.events.kafka.EventConsumerAutoConfiguration

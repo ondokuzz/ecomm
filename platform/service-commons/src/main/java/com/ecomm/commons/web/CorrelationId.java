@@ -28,7 +28,7 @@ public final class CorrelationId {
   }
 
   /** {@code incoming} if it is at most 64 characters of {@code [A-Za-z0-9-]}, else a new UUID. */
-  static String acceptOrGenerate(String incoming) {
+  public static String acceptOrGenerate(String incoming) {
     return incoming != null && WELL_FORMED.matcher(incoming).matches()
         ? incoming
         : UUID.randomUUID().toString();

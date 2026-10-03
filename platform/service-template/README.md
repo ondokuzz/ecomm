@@ -9,8 +9,9 @@ this one.
 | Package | Holds | May depend on |
 |---|---|---|
 | `domain` | Aggregates and value objects: pure Java | nothing framework-related (`com.ecomm.commons.money` is fine) |
-| `application` | Use cases (`port.in`), the ports they need (`port.out`), and their implementations | `domain` |
+| `application` | Use cases (`port.in`), the ports they need (`port.out`), and their implementations | `domain`, and `com.ecomm.commons.events` to publish and apply integration events |
 | `adapter.in.web` | REST controllers | `application.port.in`, `domain` |
+| `adapter.in.kafka` | `@KafkaListener`s for integration events | `application.port.in`, `domain` |
 | `adapter.out.<tech>` | Port implementations: databases, HTTP clients, clocks | `application.port.out`, `domain` |
 
 Adapters never touch use-case implementations, only the ports; in and out adapters never depend
@@ -65,6 +66,85 @@ A request's path through the services shows up in three kinds of line:
 
 Services don't log the requests they receive; that access log belongs to the [API gateway](../api-gateway/README.md).
 
+## Integration events
+
+A service tells others what changed by publishing integration events to Kafka, and learns what
+changed elsewhere by consuming them ([ADR 0002](../../docs/adr/0002-ledgers-and-outboxes-not-event-sourcing.md),
+[ADR 0006](../../docs/adr/0006-kafka-as-single-event-backbone.md)). The template carries what
+both need: Postgres, Kafka, Spring Modulith and Apicurio's serializer in `build.gradle.kts`,
+Modulith's `event_publication` table in `V1__event_publication.sql`, and the broker and registry in
+`application.yml`. `service-commons` configures the rest when they are on the classpath. A service
+that only consumes needs only `spring-boot-starter-kafka`.
+
+### Publishing
+
+1. Define the event's schema in [`platform/event-schemas`](../event-schemas/README.md). Its file
+   name is the topic, `<context>.<aggregate>`, and Compose creates the topic from it.
+2. Describe the event as a record in `application.port.out` that implements `IntegrationEvent`.
+   Its components are the event's fields: the aggregate's ID, `version`, `change` and the
+   aggregate's state. `topic()` names the topic and `aggregateId()` gives the message key. An empty
+   `Optional` or a `null` component is left out.
+3. In the use case, call `IntegrationEventPublisher.publish(event)` inside the transaction that
+   makes the change, through a `Transactions` port like Inventory's. The use case sees only the
+   port, and `HexagonalRules` fails the build if `application` touches Kafka, Apicurio or the outbox.
+
+The publisher adds `eventId` and `occurredAt`, and the Correlation ID of the current request as the
+`X-Correlation-Id` header. It records the event in the `event_publication` table, Spring Modulith's
+event publication registry, in the same transaction. Kafka gets it once the transaction commits:
+
+- **A rolled-back change publishes nothing**, and publishing outside a transaction throws.
+- **Every event is validated** against its topic's latest registered schema when it is produced.
+  One that doesn't match never reaches the topic and stays in the table as `FAILED`.
+- **A failed send is retried** every 30 seconds (`ecomm.events.outbox.resubmit-failed-every`), and
+  incomplete publications are sent again when the service restarts. Until a send succeeds, the row
+  shows it:
+
+  ```sql
+  SELECT publication_date, status, completion_attempts, serialized_event
+  FROM event_publication WHERE completion_date IS NULL;
+  ```
+
+Delivery is therefore at least once, and not strictly in order across retries.
+
+### Consuming
+
+A listener is an inbound adapter in `adapter.in.kafka`:
+
+```java
+@KafkaListener(topics = "catalog.product", groupId = "search-discovery.products")
+void on(ProductChanged event) {
+  products.apply(event.sku(), event.version(), ...);
+}
+```
+
+- **Name the group** `<consuming service>.<purpose>`. A new group reads its topics from the start,
+  so a projection starts complete.
+- **Declare only the fields you need.** The event arrives as the parameter's type, and unknown
+  fields are ignored. Consumers never validate against the schema.
+- **Apply an event only if it is newer.** In the use case, `Versions.applyIfNewer(event.version(),
+  stored, Stored::version, () -> save(...))` runs the change only when nothing is stored yet or
+  the event's version is higher. A duplicate or stale event is ignored. Read and write in one
+  transaction.
+- **The event's Correlation ID is in the MDC** while the listener runs, so its log lines carry it,
+  as do any calls or events it makes. An event without one gets a new one.
+- **A failure is retried** 3 times, after 0.5, 1 and 2 seconds (`ecomm.events.consumer.retries`,
+  `ecomm.events.consumer.initial-backoff`). The event is then logged at error level with its
+  `eventId`, topic, partition and offset, and skipped, so the partition moves on. An event that
+  can't be read at all is skipped at once. Dead-letter topics arrive in Sprint 4.
+
+### Testing
+
+`EventBackbone`, a `service-commons` test fixture, runs Kafka and Apicurio in Testcontainers, set up
+as in Compose. Register it with `EventBackbone.registerWith(registry)` beside `FakeKeycloak`. Before
+the application starts, create each topic and register its schema with
+`EventBackbone.createTopic(topic)` and `EventBackbone.registerSchemaOf(topic)` (see
+`TestInfrastructure`). `registerSchemaOf` reads `event-schemas/<topic>.json` from the classpath:
+add `testImplementation(project(":platform:event-schemas"))` for the real topics. The template's
+test-only topics keep theirs in `src/test/resources/event-schemas`.
+
+`PublishingEventsTest` and `ConsumingEventsTest` show both sides against a test-only Greeting
+topic. Assert on what reaches the topic, read with a plain consumer, not on the publisher's calls.
+
 ## Security
 
 `service-commons` makes every service an OAuth2 resource server that accepts only Keycloak-issued
@@ -107,17 +187,23 @@ RANDOM_PORT)` with `@AutoConfigureRestTestClient`), send real requests with `Res
 assert on status and body only (see `PingApiTest`). Authenticate with tokens from `FakeKeycloak`
 (a `service-commons` test fixture): register it with `@DynamicPropertySource` and send
 `FakeKeycloak.token("customer-id", "CUSTOMER")` as the bearer token. A
-service with a datastore runs it in Testcontainers. Pure domain tests are the exception, for dense
-rules such as state transitions.
+service with a datastore runs it in Testcontainers; the template's tests share one Postgres,
+Kafka and registry through `TestInfrastructure`. Pure domain tests are the exception, for dense
+rules such as state transitions. Integration events have a second seam, the topic: assert on what
+a change publishes there, and on what a consumer makes of the events sent to it (see
+[Testing](#testing)).
 
 ## Creating a new service
 
-1. Copy this directory to `services/<context>` and delete `build/` if present.
+1. Copy this directory to `services/<context>` and delete `build/` if present. A service that
+   neither publishes events nor keeps data in Postgres drops those dependencies, the migration
+   and the datasource and Kafka settings.
 2. Rename the base package `com.ecomm.template` to `com.ecomm.<context>` (no hyphens) and the
    application class, and update `@AnalyzeClasses` in `ArchitectureTest`.
 3. Set `spring.application.name` in `application.yml` and the expected name in `PingApiTest`
    (or replace ping with the service's first real endpoint).
-4. Set `MODULE` in the `Dockerfile` to `services/<context>`.
+4. Set `MODULE` in the `Dockerfile` to `services/<context>`. Name its database in
+   `spring.datasource.url` and add it to `infra/docker/postgres-databases.sh`.
 5. Add `":services:<context>"` to the root `settings.gradle.kts`.
 6. Run `./gradlew :services:<context>:check`.
 7. Add a committed `http/<context>.http` file for exercising the endpoints by hand.
@@ -125,7 +211,8 @@ rules such as state transitions.
 ## Run it
 
 ```sh
-docker compose up -d keycloak          # from the repo root
+docker compose up -d --wait keycloak kafka apicurio   # from the repo root
+docker compose exec postgres createdb -U ecomm service_template
 ./gradlew :platform:service-template:bootRun
 TOKEN=$(curl -s http://localhost:8180/realms/ecomm/protocol/openid-connect/token \
   -d grant_type=password -d client_id=dev-cli \

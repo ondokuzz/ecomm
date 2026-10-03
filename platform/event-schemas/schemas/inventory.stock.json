@@ -1,0 +1,76 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "inventory.stock",
+  "description": "A snapshot of a Variant's Stock, published whenever its On-hand, its available Stock or whether it is stocked changes. Keyed by variantId.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "eventId",
+    "occurredAt",
+    "variantId",
+    "version",
+    "change",
+    "stock"
+  ],
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique per event; the same event delivered twice has the same eventId."
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the change was published, in the transaction that made it."
+    },
+    "variantId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "The Variant's ID: the message key."
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "The aggregate's version, which goes up by at least one with every change. Apply an event only if it is newer than what you hold."
+    },
+    "change": {
+      "type": "string",
+      "enum": [
+        "ADJUSTED",
+        "RESERVED",
+        "RELEASED",
+        "COMMITTED",
+        "RECEIVED",
+        "RESTOCKED",
+        "REMOVED",
+        "BACKFILLED"
+      ],
+      "description": "Why the event was published."
+    },
+    "stock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "onHand",
+        "available",
+        "stocked"
+      ],
+      "properties": {
+        "onHand": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "available": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "On-hand less what Reservations hold."
+        },
+        "stocked": {
+          "type": "boolean",
+          "description": "Whether Inventory keeps Stock for the Variant at all; false once it is removed."
+        }
+      }
+    }
+  }
+}

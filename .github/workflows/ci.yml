@@ -1,5 +1,5 @@
-# Checks every pull request and every push to main: the backend, each frontend app, every image,
-# and the Playwright suite against the compose stack. On main it also publishes the images to GHCR.
+# Checks every pull request and every push to main: the backend, the event schemas' compatibility,
+# each frontend app, every image, and the Playwright suite against the compose stack. On main it also publishes the images to GHCR.
 name: CI
 
 # Pushes to other branches aren't checked on their own, so a pull request's commits run once.
@@ -29,6 +29,41 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
       # Spotless, unit and Testcontainers tests, and HexagonalRules.
       - run: ./gradlew check
+
+  # Registers the event schemas in a throwaway registry seeded with the schemas from before this
+  # change: the tip of the pull request's base branch, or the previous commit on main. The registry refuses a schema
+  # that isn't backward compatible, such as a field made required or removed, and the job fails.
+  event-schemas:
+    runs-on: ubuntu-latest
+    services:
+      apicurio:
+        image: apicurio/apicurio-registry:3.3.3
+        ports: ["8088:8080"]
+    env:
+      REGISTRY_URL: http://localhost:8088/apis/registry/v3
+      BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - run: timeout 120 sh -c 'until curl -sf "$REGISTRY_URL/system/info" >/dev/null; do sleep 2; done'
+      - name: Register the schemas from before this change
+        run: |
+          # A push that opens a branch has no previous commit; any other missing base is an error,
+          # not a reason to skip the check.
+          if [ -z "${BASE//0/}" ]; then
+            echo "No commit before this change."; exit 0
+          fi
+          git cat-file -e "$BASE^{commit}"
+          if git cat-file -e "$BASE:platform/event-schemas/schemas" 2>/dev/null; then
+            mkdir -p "$RUNNER_TEMP/base"
+            git archive "$BASE" platform/event-schemas/schemas | tar -x -C "$RUNNER_TEMP/base"
+            SCHEMAS_DIR="$RUNNER_TEMP/base/platform/event-schemas/schemas" platform/event-schemas/register.sh
+          else
+            echo "No event schemas before this change."
+          fi
+      - name: Register this change's schemas
+        run: platform/event-schemas/register.sh
 
   frontend:
     strategy:

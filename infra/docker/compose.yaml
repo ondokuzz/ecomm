@@ -6,10 +6,14 @@
 # Built images are named ecomm/<service>:latest; CI sets IMAGE_PREFIX and IMAGE_TAG to build them
 # as ghcr.io/<owner>/<repo>/<service>:<commit SHA>.
 #
-#   docker compose up -d                   # default stack
-#   docker compose --profile full up -d    # plus Kafka and Mongo (unused until Sprint 3)
+#   docker compose up -d                   # the whole stack
 
 name: ecomm
+
+# What a service that publishes integration events waits for: its topics and their schemas.
+x-event-backbone: &event-backbone
+  kafka-topics: { condition: service_completed_successfully }
+  schema-registry-init: { condition: service_completed_successfully }
 
 # Every Spring service: a JVM capped at 384 MB, of which its image gives 60% to the heap
 # (-XX:MaxRAMPercentage=60), and healthy once its actuator says UP.
@@ -142,6 +146,7 @@ services:
     image: ${IMAGE_PREFIX:-ecomm}/catalog:${IMAGE_TAG:-latest}
     ports: ["${CATALOG_PORT:-8081}:8080"]
     depends_on:
+      <<: *event-backbone
       couchbase-init: { condition: service_completed_successfully }
       keycloak: { condition: service_healthy }
 
@@ -153,6 +158,7 @@ services:
     image: ${IMAGE_PREFIX:-ecomm}/inventory:${IMAGE_TAG:-latest}
     ports: ["${INVENTORY_PORT:-8082}:8080"]
     depends_on:
+      <<: *event-backbone
       postgres-databases: { condition: service_completed_successfully }
       keycloak: { condition: service_healthy }
 
@@ -186,6 +192,7 @@ services:
     image: ${IMAGE_PREFIX:-ecomm}/order-management:${IMAGE_TAG:-latest}
     ports: ["${ORDER_MANAGEMENT_PORT:-8085}:8080"]
     depends_on:
+      <<: *event-backbone
       postgres-databases: { condition: service_completed_successfully }
       keycloak: { condition: service_healthy }
 
@@ -275,20 +282,94 @@ services:
       timeout: 3s
       retries: 10
 
+  # The event backbone (ADR 0006): one KRaft broker. Services reach it on kafka:19092, the host on
+  # localhost:9092. It creates no topics itself; kafka-topics does.
   kafka:
     image: apache/kafka:4.3.1
-    profiles: [full]
+    environment:
+      CLUSTER_ID: ecomm-local-kafka-0001
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_LISTENERS: INTERNAL://:19092,EXTERNAL://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:19092,EXTERNAL://localhost:${KAFKA_PORT:-9092}
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_HEAP_OPTS: -Xms256m -Xmx256m
+    mem_limit: 512m
     ports: ["${KAFKA_PORT:-9092}:9092"]
+    volumes:
+      - kafka-data:/var/lib/kafka/data
     healthcheck:
-      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null"]
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:19092 >/dev/null"]
       interval: 10s
       timeout: 10s
       retries: 20
       start_period: 20s
 
+  # Creates a topic per event schema, then exits; see the script.
+  kafka-topics:
+    image: apache/kafka:4.3.1
+    entrypoint: ["/init/kafka-topics.sh"]
+    mem_limit: 256m
+    environment:
+      KAFKA_HEAP_OPTS: -Xmx128m
+    volumes:
+      - ./kafka-topics.sh:/init/kafka-topics.sh:ro
+      - ../../platform/event-schemas/schemas:/schemas:ro
+    depends_on:
+      kafka: { condition: service_healthy }
+    restart: "no"
+
+  # The events' schema registry, stored in its own database on the shared Postgres. Its UI isn't
+  # part of the stack; browse the API at http://localhost:8088/apis/registry/v3.
+  apicurio:
+    image: apicurio/apicurio-registry:3.3.3
+    environment:
+      APICURIO_STORAGE_KIND: sql
+      APICURIO_STORAGE_SQL_KIND: postgresql
+      APICURIO_DATASOURCE_URL: jdbc:postgresql://postgres:5432/apicurio
+      APICURIO_DATASOURCE_USERNAME: ecomm
+      APICURIO_DATASOURCE_PASSWORD: ecomm
+      # The image gives the heap 80%; leave the same headroom as the Spring services.
+      JAVA_OPTS_APPEND: -XX:MaxRAMPercentage=60
+    mem_limit: 384m
+    ports: ["${APICURIO_PORT:-8088}:8080"]
+    depends_on:
+      postgres-databases: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:9000/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  # Registers every event schema in platform/event-schemas with BACKWARD compatibility, then exits.
+  # It fails, and so does `make up`, if a schema changed incompatibly since it was last registered.
+  schema-registry-init:
+    image: curlimages/curl:8.22.0
+    entrypoint: ["/schemas/register.sh"]
+    mem_limit: 32m
+    environment:
+      REGISTRY_URL: http://apicurio:8080/apis/registry/v3
+    volumes:
+      - ../../platform/event-schemas:/schemas:ro
+    depends_on:
+      apicurio: { condition: service_healthy }
+    restart: "no"
+
   mongo:
     image: mongo:7
-    profiles: [full]
+    # WiredTiger's cache would otherwise take half the memory the VM has, beyond the cap.
+    command: ["--wiredTigerCacheSizeGB", "0.25"]
+    mem_limit: 512m
     ports: ["${MONGO_PORT:-27017}:27017"]
     volumes:
       - mongo-data:/data/db
@@ -301,4 +382,5 @@ services:
 volumes:
   postgres-data:
   couchbase-data:
+  kafka-data:
   mongo-data:

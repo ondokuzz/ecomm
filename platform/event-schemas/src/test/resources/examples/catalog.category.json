@@ -1,0 +1,15 @@
+{
+  "eventId": "2e3f4a5b-6c7d-4e8f-9a0b-1c2d3e4f5a6b",
+  "occurredAt": "2026-10-03T12:00:00Z",
+  "slug": "phones",
+  "version": 1,
+  "change": "CREATED",
+  "category": {
+    "name": "Phones",
+    "attributes": [
+      { "name": "brand", "type": "TEXT", "values": [], "required": true, "variantAxis": false },
+      { "name": "color", "type": "ENUM", "values": ["Black", "Blue"], "required": true, "variantAxis": true }
+    ],
+    "removed": false
+  }
+}

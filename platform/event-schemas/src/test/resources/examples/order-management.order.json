@@ -1,0 +1,25 @@
+{
+  "eventId": "6f1c2b9e-3a4d-4e5f-8a7b-1c2d3e4f5a6b",
+  "occurredAt": "2026-10-03T12:00:05Z",
+  "orderId": "0b6f3c1e-9d2a-4b7c-8e5f-2a1b3c4d5e6f",
+  "version": 2,
+  "change": "STATUS_CHANGED",
+  "order": {
+    "customerId": "3f2a1b0c-customer",
+    "status": "PAID",
+    "placedAt": "2026-10-03T12:00:00Z",
+    "lines": [
+      { "variantId": "IPHONE16-BLK-128", "quantity": 1, "unitPrice": { "amountMinor": 79900, "currency": "EUR" } }
+    ],
+    "discounts": [
+      { "source": "COUPON", "couponCode": "WELCOME10", "amount": { "amountMinor": 7990, "currency": "EUR" } }
+    ],
+    "tax": { "amountMinor": 0, "currency": "EUR" },
+    "subtotal": { "amountMinor": 79900, "currency": "EUR" },
+    "total": { "amountMinor": 71910, "currency": "EUR" },
+    "statusHistory": [
+      { "status": "PLACED", "at": "2026-10-03T12:00:00Z", "changedBy": "CHECKOUT" },
+      { "status": "PAID", "at": "2026-10-03T12:00:05Z", "changedBy": "CHECKOUT" }
+    ]
+  }
+}
