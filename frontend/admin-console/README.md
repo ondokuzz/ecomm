@@ -1,7 +1,7 @@
 # Admin Console
 
 The back-office React app where Staff manage the Catalog: Products with their Variants, Prices and
-Stock, and Categories with their attribute definitions. Built on the Storefront's stack:
+Stock, and Categories with their attribute definitions; and Promotions: Coupons and Campaigns. Built on the Storefront's stack:
 Vite, React, TypeScript, React Router and TanStack Query, with `oidc-client-ts`.
 
 ## Pages
@@ -14,6 +14,12 @@ Vite, React, TypeScript, React Router and TanStack Query, with `oidc-client-ts`.
 | `/categories` | Every Category in a table: name, slug, attribute definitions (Variant axes highlighted), Product count. Edit or delete each |
 | `/categories/new` | A new Category: name, slug and attribute definitions |
 | `/categories/{slug}` | A Category's name and attribute definitions. The slug can't change, since Products name their Category by it |
+| `/promotions/coupons` | Every Coupon in a table: code, discount, minimum, validity and whether it is on. Switch each on or off, edit or delete it. `/promotions` opens here |
+| `/promotions/coupons/new` | A new Coupon |
+| `/promotions/coupons/{code}` | A Coupon. The code can't change, since Orders record it |
+| `/promotions/campaigns` | Every Campaign by priority: name, discount, Categories, minimum, validity and its state, running, scheduled, over or off. Switch each on or off, edit or delete it |
+| `/promotions/campaigns/new` | A new Campaign |
+| `/promotions/campaigns/{id}` | A Campaign |
 
 `/` opens the Products. Every page needs a Staff sign-in.
 
@@ -79,12 +85,45 @@ stop stocking each (`DELETE /stock/{variantId}`, Staff only). Catalog goes first
 can be bought. A Variant Inventory doesn't stock is skipped. Inventory keeps the Stock of a Variant
 that Reservations still hold, and the list names each such Variant with Inventory's reason.
 
+## Promotions
+
+Promotions is one section of the navigation, with a tab each for Coupons and Campaigns. Their
+editors share the discount, the minimum subtotal, the validity window and the switch:
+
+- **Discount.** A percentage off, a whole number from 1 to 100, or a fixed amount off.
+- **Money.** The amount off and the minimum are each typed as a decimal in one of the Currencies
+  Catalog prices in, as a Price is, and sent as Money (see [Money](#the-product-editor) above). A
+  blank minimum is none.
+- **Validity.** From and until, in the browser's own time zone, to the minute. They are sent as
+  instants, so a Campaign saved in Istanbul starts at the same moment for Staff in Lisbon. Seconds
+  are dropped, so saving a seeded Coupon or Campaign rounds its window down to the minute.
+- **Switched on.** Each list also switches a Coupon or Campaign on or off in one click, sending it
+  back as it is with only `active` changed.
+
+A new Coupon or Campaign starts as a percentage off, switched on, from the current minute for a week.
+A Coupon also has its code, typed once. A Campaign has a name, a priority, which no other Campaign
+may have, and the Categories it is limited to, ticked from Catalog's list. None ticked means every
+line. A Category the Campaign has but Catalog no longer does is still listed, marked "not in
+Catalog", so it can be unticked.
+
+`formOf`, `couponRequest` and `campaignRequest` in [`src/domain/coupon.ts`](./src/domain/coupon.ts)
+and [`src/domain/campaign.ts`](./src/domain/campaign.ts), over the shared terms in
+[`src/domain/promotion.ts`](./src/domain/promotion.ts), convert between each and its form. Before
+sending, they name a percentage, an amount, a currency, a time or a priority that can't be sent,
+by the field Promotions would name. Promotions checks the rest, such as a code that isn't one, a
+window that ends before it starts, a taken priority or a Category Catalog doesn't have.
+
+Deleting goes through a ConfirmDialog, which suggests switching off instead.
+
 ## Validation errors
 
-Catalog checks every write. A 400 names each offending field in its problem detail's `errors`,
+Catalog and Promotions check every write. A 400 names each offending field in its problem detail's `errors`,
 such as a Category's `attributes[1].values` or a Product's `attributes.screen`,
 `variants[1].axisValues.storage` or, for two Variants alike, `variants[2].axisValues` (see the
-[Catalog README](../../services/catalog/README.md#categories-and-attribute-definitions)).
+[Catalog README](../../services/catalog/README.md#categories-and-attribute-definitions)), or a
+Campaign's `discount.amountOff.currency` or `categories[1]` (see the
+[Promotions README](../../services/promotions/README.md#errors)). A Campaign's Category errors show
+under its Categories, each with the Category's slug.
 `fieldErrorsOf` in [`src/api/fieldErrors.ts`](./src/api/fieldErrors.ts) turns those into a message
 per field, which the editor shows beside the field, marking it `aria-invalid`. A message stays
 until its field is edited. Adding, removing or moving a row clears every row's messages, since the
@@ -126,8 +165,8 @@ squarer corners. Dark mode follows `prefers-color-scheme`, as in the Storefront.
 
 ## Calling the services
 
-The browser reaches Catalog at `/api/catalog/…` and Inventory at `/api/inventory/…` on the
-console's own origin. Everything under
+The browser reaches Catalog at `/api/catalog/…`, Inventory at `/api/inventory/…` and Promotions at
+`/api/promotions/…` on the console's own origin. Everything under
 `/api/` goes to the [API gateway](../../platform/api-gateway/README.md), which checks the token and
 routes it. In development the Vite dev proxy forwards `/api` to the gateway's compose host port,
 8000 ([`vite.config.ts`](./vite.config.ts)). In compose, nginx does it
@@ -162,13 +201,17 @@ how to apply the client to an existing realm.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: failed requests as messages and references, field errors from problem details, the STAFF role in an access token, a Category and a Product to and from their editor's form, decimals to and from Money
+npm test          # Vitest: failed requests as messages and references, field errors from problem details, the STAFF role in an access token, a Category, a Product, a Coupon and a Campaign to and from their editor's form, decimals to and from Money
 npm run build
 npm run test:e2e  # Playwright against the running compose stack (`make up`)
 ```
 
-The Playwright tests ([`e2e/products.spec.ts`](./e2e/products.spec.ts)) sign in on Keycloak as
-`staff@ecomm.local` and create a Product in `phones` with two Variants and their Stock.
+The Playwright tests sign in on Keycloak as `staff@ecomm.local`.
+[`e2e/promotions.spec.ts`](./e2e/promotions.spec.ts) creates, edits, switches off and deletes a
+Coupon and a Campaign, checking each through Promotions' API, and sees Promotions refuse a window
+that ends before it starts and the seeded Audio week's priority beside the field.
+[`e2e/products.spec.ts`](./e2e/products.spec.ts) creates a Product in `phones` with two Variants and
+their Stock.
 
 - **The main flow** checks Catalog and Inventory through their APIs. On the Storefront it picks
   the second Variant and sees its Price and Stock. Then it deletes the Product through the
@@ -177,7 +220,7 @@ The Playwright tests ([`e2e/products.spec.ts`](./e2e/products.spec.ts)) sign in 
   there, since a new Variant has no Reservations. It checks that the new Product opens on its own
   page with the refusal beside that count, then sets the count by saving again.
 
-Each test removes its Product and Stock through Catalog's and Inventory's APIs if it failed before
-doing so itself, so the stack is left as it was. It runs against the console on 8090; set `ADMIN_CONSOLE_URL` to use Vite's
+Each test removes its Product and Stock, Coupon or Campaign through the services' APIs if it failed
+before doing so itself, so the stack is left as it was. It runs against the console on 8090; set `ADMIN_CONSOLE_URL` to use Vite's
 5174, and `STOREFRONT_URL` or `KEYCLOAK_URL` for other hosts. Install Chromium once with
 `npx playwright install chromium`.

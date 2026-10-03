@@ -1,5 +1,5 @@
-# Exercises Promotions against the compose stack (`make up`): Staff manage Coupons, and Checkout
-# evaluates one. Run the requests top to bottom in the IntelliJ HTTP client; the token requests
+# Exercises Promotions against the compose stack (`make up`): Staff manage Coupons and Campaigns,
+# and Checkout evaluates a Coupon. Run the requests top to bottom in the IntelliJ HTTP client; the token requests
 # store tokens for the ones after them.
 
 @promotions = http://localhost:8087
@@ -51,7 +51,7 @@ Content-Type: application/json
 {"code": "SPRING25", "discount": {"type": "PERCENT_OFF", "percentOff": 5},
  "validFrom": "2026-01-01T00:00:00Z", "validUntil": "2030-01-01T00:00:00Z", "active": true}
 
-### A percentage past 100: 400
+### A percentage past 100: 400, naming discount.percentOff in errors
 POST {{promotions}}/coupons
 Authorization: Bearer {{staffToken}}
 Content-Type: application/json
@@ -142,4 +142,73 @@ Authorization: Bearer {{staffToken}}
 
 ###
 GET {{promotions}}/coupons/SPRING25
+Authorization: Bearer {{staffToken}}
+
+### Every Campaign by priority, with its state; the seeded Audio week among them
+GET {{promotions}}/campaigns
+Authorization: Bearer {{staffToken}}
+
+### A Campaign: 5 EUR off phones over 200 EUR; its ID comes back, and in Location
+POST {{promotions}}/campaigns
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{"name": "Phone weekend", "discount": {"type": "AMOUNT_OFF", "amountOff": {"amountMinor": 500, "currency": "EUR"}},
+ "categories": ["phones"], "minimumSubtotal": {"amountMinor": 20000, "currency": "EUR"},
+ "validFrom": "2026-01-01T00:00:00Z", "validUntil": "2030-01-01T00:00:00Z", "active": true, "priority": 20}
+
+> {% client.global.set("campaignId", response.body.id); %}
+
+### Read it back: state running
+GET {{promotions}}/campaigns/{{campaignId}}
+Authorization: Bearer {{staffToken}}
+
+### Audio week's priority: 400, naming priority
+POST {{promotions}}/campaigns
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{"name": "Clash", "discount": {"type": "PERCENT_OFF", "percentOff": 5},
+ "validFrom": "2026-01-01T00:00:00Z", "validUntil": "2030-01-01T00:00:00Z", "active": true, "priority": 10}
+
+### A Category Catalog doesn't have: 400, naming categories[1]
+POST {{promotions}}/campaigns
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{"name": "Toasters", "discount": {"type": "PERCENT_OFF", "percentOff": 5},
+ "categories": ["audio", "toasters"], "validFrom": "2026-01-01T00:00:00Z",
+ "validUntil": "2030-01-01T00:00:00Z", "active": true, "priority": 21}
+
+### A window that ends before it starts: 400, naming validUntil
+POST {{promotions}}/campaigns
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{"name": "Backwards", "discount": {"type": "PERCENT_OFF", "percentOff": 5},
+ "validFrom": "2030-01-01T00:00:00Z", "validUntil": "2026-01-01T00:00:00Z", "active": true, "priority": 22}
+
+### Switch it off: replace every field but the ID; state off
+PUT {{promotions}}/campaigns/{{campaignId}}
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{"name": "Phone weekend", "discount": {"type": "AMOUNT_OFF", "amountOff": {"amountMinor": 500, "currency": "EUR"}},
+ "categories": ["phones"], "minimumSubtotal": {"amountMinor": 20000, "currency": "EUR"},
+ "validFrom": "2026-01-01T00:00:00Z", "validUntil": "2030-01-01T00:00:00Z", "active": false, "priority": 20}
+
+### A Customer can't see Campaigns: 403
+GET {{promotions}}/campaigns
+Authorization: Bearer {{customerToken}}
+
+### Through the gateway, Staff reach Campaigns
+GET {{gateway}}/api/promotions/campaigns
+Authorization: Bearer {{staffToken}}
+
+### Delete it: 204, then 404
+DELETE {{promotions}}/campaigns/{{campaignId}}
+Authorization: Bearer {{staffToken}}
+
+###
+GET {{promotions}}/campaigns/{{campaignId}}
 Authorization: Bearer {{staffToken}}

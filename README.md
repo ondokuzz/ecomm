@@ -109,7 +109,7 @@ and a Customer picks either on the Storefront: `npm run test:e2e` in `frontend/a
 |---|---|
 | `make up` | Build and start the stack, and wait until it is healthy |
 | `make down` | Stop the stack, keeping its data |
-| `make seed-reset` | Put the seed Categories, Products, Stock and Coupons back and drop every Cart, Checkout Session, Reservation, Order and Payment; registered Customers stay |
+| `make seed-reset` | Put the seed Categories, Products, Stock, Coupons and Campaigns back and drop every Cart, Checkout Session, Reservation, Order and Payment; registered Customers stay |
 
 Every checkout takes Stock, so after many smoke-test runs `make seed-reset` refills it. To wipe
 everything, Keycloak's users included, run `docker compose down -v`.

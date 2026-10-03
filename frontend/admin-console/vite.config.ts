@@ -18,5 +18,8 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts'],
+    // Validity windows are typed in local time; a zone nine hours off UTC, with no daylight saving,
+    // makes the conversion to and from instants show in the tests.
+    env: { TZ: 'Asia/Tokyo' },
   },
 })

@@ -4,9 +4,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.springframework.core.ParameterizedTypeReference;
 
-/** A fresh stack has one demo Coupon, so the demo checkout works out of the box. */
+/**
+ * A fresh stack has one demo Coupon and one demo Campaign, so the demo checkout works out of the
+ * box.
+ */
 class SeedApiTest extends PromotionsApiTest {
 
   @Test
@@ -46,5 +51,34 @@ class SeedApiTest extends PromotionsApiTest {
             """);
   }
 
+  @Test
+  void audioWeekIsFifteenPercentOffAudioRunningForAYear() {
+    var listed =
+        listCampaigns()
+            .expectStatus()
+            .isOk()
+            .expectBody(new ParameterizedTypeReference<List<SeededCampaign>>() {})
+            .returnResult()
+            .getResponseBody();
+    var audioWeek =
+        listed.stream().filter(c -> c.name().equals("Audio week")).findFirst().orElseThrow();
+
+    readCampaign(audioWeek.id())
+        .expectBody()
+        .json(
+            """
+            {"name": "Audio week",
+             "discount": {"type": "PERCENT_OFF", "percentOff": 15, "amountOff": null},
+             "categories": ["audio"], "minimumSubtotal": null, "active": true,
+             "state": "running"}
+            """);
+    var now = Instant.now();
+    assertThat(audioWeek.validFrom()).isBeforeOrEqualTo(now);
+    assertThat(Duration.between(audioWeek.validFrom(), audioWeek.validUntil()))
+        .isBetween(Duration.ofDays(365), Duration.ofDays(366));
+  }
+
   record Validity(Instant validFrom, Instant validUntil) {}
+
+  record SeededCampaign(String id, String name, Instant validFrom, Instant validUntil) {}
 }

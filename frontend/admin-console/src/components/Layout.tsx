@@ -28,6 +28,9 @@ export function Layout() {
             <NavLink to="/categories" className="nav-link">
               Categories
             </NavLink>
+            <NavLink to="/promotions" className="nav-link">
+              Promotions
+            </NavLink>
           </nav>
           <Account />
         </div>

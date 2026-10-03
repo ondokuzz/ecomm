@@ -4,10 +4,10 @@ import com.ecomm.commons.money.Money;
 import java.math.BigInteger;
 
 /**
- * What a Coupon takes off a subtotal: a percentage of it, or a fixed amount. Either way it is never
- * more than the subtotal.
+ * What a Coupon or a Campaign takes off a subtotal: a percentage of it, or a fixed amount. Either
+ * way it is never more than the subtotal.
  */
-public sealed interface CouponDiscount {
+public sealed interface DiscountRule {
 
   /** Whether this discount can apply to a subtotal in {@code subtotal}'s currency. */
   boolean appliesTo(Money subtotal);
@@ -20,11 +20,12 @@ public sealed interface CouponDiscount {
   Money on(Money subtotal);
 
   /** {@code percent}% off, from 1 to 100, rounded down to the currency's minor unit. */
-  record PercentOff(int percent) implements CouponDiscount {
+  record PercentOff(int percent) implements DiscountRule {
 
     public PercentOff {
       if (percent < 1 || percent > 100) {
-        throw new InvalidCouponException("percentOff must be an integer from 1 to 100");
+        throw new InvalidPromotionException(
+            "discount.percentOff", "must be an integer from 1 to 100");
       }
     }
 
@@ -47,14 +48,15 @@ public sealed interface CouponDiscount {
   }
 
   /** A fixed amount off, which applies only to a subtotal in the same currency. */
-  record AmountOff(Money amount) implements CouponDiscount {
+  record AmountOff(Money amount) implements DiscountRule {
 
     public AmountOff {
       if (amount == null) {
-        throw new InvalidCouponException("an AMOUNT_OFF discount needs an amountOff");
+        throw new InvalidPromotionException(
+            "discount.amountOff", "is needed for an AMOUNT_OFF discount");
       }
       if (amount.amountMinor() <= 0) {
-        throw new InvalidCouponException("amountOff must be positive");
+        throw new InvalidPromotionException("discount.amountOff", "must be positive");
       }
     }
 

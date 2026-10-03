@@ -44,7 +44,11 @@ class EdgeAuthenticationApiTest extends GatewayApiTest {
     "GET, /api/order-management/orders",
     "GET, /api/order-management/orders/7f1c",
     "GET, /api/promotions/coupons",
-    "POST, /api/promotions/coupons"
+    "POST, /api/promotions/coupons",
+    "GET, /api/promotions/campaigns",
+    "POST, /api/promotions/campaigns",
+    "PUT, /api/promotions/campaigns/7f1c",
+    "DELETE, /api/promotions/campaigns/7f1c"
   })
   void everythingElseIsUnauthorizedWithoutAToken(String method, String path) {
     http.method(HttpMethod.valueOf(method))

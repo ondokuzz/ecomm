@@ -9,11 +9,11 @@ import java.util.regex.Pattern;
  * A code a Customer enters at checkout for a discount. It applies while it is {@code active}, from
  * {@code validFrom} up to but not including {@code validUntil}, to a subtotal of at least its
  * optional {@code minimumSubtotal}. Its code is stored and matched upper-case. Throws {@link
- * InvalidCouponException} unless every field is valid.
+ * InvalidPromotionException}, naming the field, unless every field is valid.
  */
 public record Coupon(
     String code,
-    CouponDiscount discount,
+    DiscountRule discount,
     Money minimumSubtotal,
     Instant validFrom,
     Instant validUntil,
@@ -26,24 +26,14 @@ public record Coupon(
 
   public Coupon {
     if (code == null || !CODE.matcher(normalize(code)).matches()) {
-      throw new InvalidCouponException(
-          "code must be 1 to "
+      throw new InvalidPromotionException(
+          "code",
+          "must be 1 to "
               + MAX_CODE_LENGTH
               + " letters, digits, hyphens or underscores, without spaces");
     }
     code = normalize(code);
-    if (discount == null) {
-      throw new InvalidCouponException("a Coupon needs a discount");
-    }
-    if (minimumSubtotal != null && minimumSubtotal.amountMinor() < 0) {
-      throw new InvalidCouponException("minimumSubtotal can't be negative");
-    }
-    if (validFrom == null || validUntil == null) {
-      throw new InvalidCouponException("a Coupon needs validFrom and validUntil");
-    }
-    if (!validUntil.isAfter(validFrom)) {
-      throw new InvalidCouponException("validUntil must be after validFrom");
-    }
+    Terms.check(discount, minimumSubtotal, validFrom, validUntil);
   }
 
   /** {@code code} as Coupons are stored and matched: upper-case. */

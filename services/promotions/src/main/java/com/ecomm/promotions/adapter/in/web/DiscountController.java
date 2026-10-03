@@ -2,7 +2,7 @@ package com.ecomm.promotions.adapter.in.web;
 
 import com.ecomm.promotions.application.port.in.EvaluateDiscountUseCase;
 import com.ecomm.promotions.domain.CouponNotApplicableException;
-import com.ecomm.promotions.domain.InvalidCouponException;
+import com.ecomm.promotions.domain.InvalidPromotionException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -49,8 +49,8 @@ class DiscountController {
     return problem;
   }
 
-  @ExceptionHandler(InvalidCouponException.class)
-  ProblemDetail invalid(InvalidCouponException e) {
-    return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+  @ExceptionHandler(InvalidPromotionException.class)
+  ProblemDetail invalid(InvalidPromotionException e) {
+    return Problems.invalid(e);
   }
 }

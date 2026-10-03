@@ -3,7 +3,7 @@ package com.ecomm.promotions.adapter.in.web;
 import com.ecomm.promotions.application.port.in.ManageCouponsUseCase;
 import com.ecomm.promotions.domain.CouponAlreadyExistsException;
 import com.ecomm.promotions.domain.CouponNotFoundException;
-import com.ecomm.promotions.domain.InvalidCouponException;
+import com.ecomm.promotions.domain.InvalidPromotionException;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -88,8 +88,8 @@ class CouponController {
     return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
   }
 
-  @ExceptionHandler(InvalidCouponException.class)
-  ProblemDetail invalid(InvalidCouponException e) {
-    return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+  @ExceptionHandler(InvalidPromotionException.class)
+  ProblemDetail invalid(InvalidPromotionException e) {
+    return Problems.invalid(e);
   }
 }

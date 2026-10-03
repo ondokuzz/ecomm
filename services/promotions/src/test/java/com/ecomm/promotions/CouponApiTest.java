@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.MediaType;
@@ -296,6 +297,39 @@ class CouponApiTest extends PromotionsApiTest {
         .expectHeader()
         .contentType(MediaType.APPLICATION_PROBLEM_JSON);
     read("BAD").expectStatus().isNotFound();
+  }
+
+  @ParameterizedTest
+  @CsvSource(
+      delimiter = '|',
+      value = {
+        "code | {\"code\": \"HAS SPACE\", \"discount\": {\"type\": \"PERCENT_OFF\", \"percentOff\": 10}, \"validFrom\": \"2020-01-01T00:00:00Z\", \"validUntil\": \"2100-01-01T00:00:00Z\", \"active\": true}",
+        "discount.percentOff | {\"code\": \"BAD\", \"discount\": {\"type\": \"PERCENT_OFF\", \"percentOff\": 101}, \"validFrom\": \"2020-01-01T00:00:00Z\", \"validUntil\": \"2100-01-01T00:00:00Z\", \"active\": true}",
+        "discount.amountOff | {\"code\": \"BAD\", \"discount\": {\"type\": \"AMOUNT_OFF\", \"amountOff\": {\"amountMinor\": 0, \"currency\": \"EUR\"}}, \"validFrom\": \"2020-01-01T00:00:00Z\", \"validUntil\": \"2100-01-01T00:00:00Z\", \"active\": true}",
+        "discount.amountOff.currency | {\"code\": \"BAD\", \"discount\": {\"type\": \"AMOUNT_OFF\", \"amountOff\": {\"amountMinor\": 5, \"currency\": \"XYZ\"}}, \"validFrom\": \"2020-01-01T00:00:00Z\", \"validUntil\": \"2100-01-01T00:00:00Z\", \"active\": true}",
+        "minimumSubtotal | {\"code\": \"BAD\", \"discount\": {\"type\": \"PERCENT_OFF\", \"percentOff\": 10}, \"minimumSubtotal\": {\"amountMinor\": -1, \"currency\": \"EUR\"}, \"validFrom\": \"2020-01-01T00:00:00Z\", \"validUntil\": \"2100-01-01T00:00:00Z\", \"active\": true}",
+        "validUntil | {\"code\": \"BAD\", \"discount\": {\"type\": \"PERCENT_OFF\", \"percentOff\": 10}, \"validFrom\": \"2100-01-01T00:00:00Z\", \"validUntil\": \"2020-01-01T00:00:00Z\", \"active\": true}",
+        "active | {\"code\": \"BAD\", \"discount\": {\"type\": \"PERCENT_OFF\", \"percentOff\": 10}, \"validFrom\": \"2020-01-01T00:00:00Z\", \"validUntil\": \"2100-01-01T00:00:00Z\"}"
+      })
+  void anInvalidCouponNamesItsField(String field, String body) {
+    create(body)
+        .expectStatus()
+        .isBadRequest()
+        .expectBody()
+        .jsonPath("$.errors[0].field")
+        .isEqualTo(field);
+  }
+
+  @Test
+  void anotherCodeInTheBodyNamesTheCode() {
+    created(percentOff("KEEPMINE", 10));
+
+    update("KEEPMINE", percentOff("NOTMINE", 10))
+        .expectStatus()
+        .isBadRequest()
+        .expectBody()
+        .jsonPath("$.errors[0].field")
+        .isEqualTo("code");
   }
 
   record CouponView(String code) {}

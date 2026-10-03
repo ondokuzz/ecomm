@@ -1,6 +1,9 @@
 package com.ecomm.promotions;
 
+import com.ecomm.promotions.application.CampaignService;
 import com.ecomm.promotions.application.CouponService;
+import com.ecomm.promotions.application.port.out.CampaignRepository;
+import com.ecomm.promotions.application.port.out.CatalogPort;
 import com.ecomm.promotions.application.port.out.CouponRepository;
 import com.ecomm.promotions.application.port.out.TimeSource;
 import org.springframework.context.annotation.Bean;
@@ -13,9 +16,16 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 class UseCaseConfiguration {
 
-  /** Serves every Promotions use case: managing Coupons and evaluating one at checkout. */
+  /** Serves managing Coupons and evaluating one at checkout. */
   @Bean
   CouponService couponService(CouponRepository coupons, TimeSource time) {
     return new CouponService(coupons, time);
+  }
+
+  /** Serves managing Campaigns, checked against Catalog. */
+  @Bean
+  CampaignService campaignService(
+      CampaignRepository campaigns, CatalogPort catalog, TimeSource time) {
+    return new CampaignService(campaigns, catalog, time);
   }
 }

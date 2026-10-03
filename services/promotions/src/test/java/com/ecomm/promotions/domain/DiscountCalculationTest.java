@@ -31,7 +31,7 @@ class DiscountCalculationTest {
   })
   void aPercentageIsRoundedDownToTheMinorUnit(
       int percent, long subtotalMinor, String currency, long discountMinor) {
-    var discount = new CouponDiscount.PercentOff(percent);
+    var discount = new DiscountRule.PercentOff(percent);
 
     assertThat(discount.on(Money.of(subtotalMinor, currency)))
         .isEqualTo(Money.of(discountMinor, currency));
@@ -39,7 +39,7 @@ class DiscountCalculationTest {
 
   @Test
   void aPercentageOfAHugeSubtotalDoesNotOverflow() {
-    var discount = new CouponDiscount.PercentOff(50);
+    var discount = new DiscountRule.PercentOff(50);
 
     assertThat(discount.on(Money.of(Long.MAX_VALUE - 1, "EUR")))
         .isEqualTo(Money.of((Long.MAX_VALUE - 1) / 2, "EUR"));
@@ -47,21 +47,21 @@ class DiscountCalculationTest {
 
   @Test
   void aFixedAmountIsTakenOffInFull() {
-    var discount = new CouponDiscount.AmountOff(Money.of(5000, "EUR"));
+    var discount = new DiscountRule.AmountOff(Money.of(5000, "EUR"));
 
     assertThat(discount.on(Money.of(159800, "EUR"))).isEqualTo(Money.of(5000, "EUR"));
   }
 
   @Test
   void aFixedAmountIsCappedAtTheSubtotal() {
-    var discount = new CouponDiscount.AmountOff(Money.of(5000, "EUR"));
+    var discount = new DiscountRule.AmountOff(Money.of(5000, "EUR"));
 
     assertThat(discount.on(Money.of(1999, "EUR"))).isEqualTo(Money.of(1999, "EUR"));
   }
 
   @Test
   void aFixedAmountAppliesOnlyToASubtotalInItsCurrency() {
-    var discount = new CouponDiscount.AmountOff(Money.of(5000, "EUR"));
+    var discount = new DiscountRule.AmountOff(Money.of(5000, "EUR"));
 
     assertThat(discount.appliesTo(Money.of(159800, "EUR"))).isTrue();
     assertThat(discount.appliesTo(Money.of(159800, "USD"))).isFalse();
@@ -71,7 +71,7 @@ class DiscountCalculationTest {
 
   @Test
   void aPercentageAppliesToAnyCurrency() {
-    var discount = new CouponDiscount.PercentOff(10);
+    var discount = new DiscountRule.PercentOff(10);
 
     assertThat(discount.appliesTo(Money.of(1999, "JPY"))).isTrue();
     assertThat(discount.on(Money.of(1999, "USD"))).isEqualTo(Money.of(199, "USD"));
@@ -79,23 +79,23 @@ class DiscountCalculationTest {
 
   @Test
   void nothingIsTakenOffAZeroSubtotal() {
-    assertThat(new CouponDiscount.PercentOff(10).on(Money.of(0, "EUR")))
+    assertThat(new DiscountRule.PercentOff(10).on(Money.of(0, "EUR")))
         .isEqualTo(Money.of(0, "EUR"));
-    assertThat(new CouponDiscount.AmountOff(Money.of(5000, "EUR")).on(Money.of(0, "EUR")))
+    assertThat(new DiscountRule.AmountOff(Money.of(5000, "EUR")).on(Money.of(0, "EUR")))
         .isEqualTo(Money.of(0, "EUR"));
   }
 
   @ParameterizedTest
   @CsvSource({"0", "101", "-5"})
   void aPercentageIsFromOneToAHundred(int percent) {
-    assertThatThrownBy(() -> new CouponDiscount.PercentOff(percent))
-        .isInstanceOf(InvalidCouponException.class);
+    assertThatThrownBy(() -> new DiscountRule.PercentOff(percent))
+        .isInstanceOf(InvalidPromotionException.class);
   }
 
   @ParameterizedTest
   @CsvSource({"0", "-100"})
   void aFixedAmountIsPositive(long amountMinor) {
-    assertThatThrownBy(() -> new CouponDiscount.AmountOff(Money.of(amountMinor, "EUR")))
-        .isInstanceOf(InvalidCouponException.class);
+    assertThatThrownBy(() -> new DiscountRule.AmountOff(Money.of(amountMinor, "EUR")))
+        .isInstanceOf(InvalidPromotionException.class);
   }
 }

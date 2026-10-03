@@ -244,6 +244,26 @@ code {
   background: var(--color-danger-soft);
   color: var(--color-danger);
 }
+.badge-success {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+.badge-info {
+  background: var(--color-info-soft);
+  color: var(--color-info);
+}
+.badge-warning {
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+.badge-dot::before {
+  content: '';
+  width: 0.4rem;
+  height: 0.4rem;
+  margin-right: var(--space-1);
+  border-radius: 50%;
+  background: currentColor;
+}
 
 /* Form controls */
 
@@ -335,6 +355,34 @@ textarea.input {
 .form-grid.currency {
   max-width: 16rem;
   margin-bottom: var(--space-3);
+}
+/* An amount and its currency side by side, as one field. */
+.money-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 5.5rem;
+  gap: var(--space-2);
+}
+.choice-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  border: 0;
+}
+.choice-row label,
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.check-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+  padding: 0;
+  border: 0;
 }
 .form-actions {
   display: flex;
@@ -492,6 +540,28 @@ textarea.input {
 .nav-link.active {
   color: var(--color-primary-text);
   background: var(--color-primary-soft);
+}
+/* The sections within one area, such as Coupons and Campaigns within Promotions. */
+.subnav {
+  display: flex;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-line);
+}
+.subnav-link {
+  margin-bottom: -1px;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 2px solid transparent;
+  color: var(--color-muted);
+  font-weight: 600;
+}
+.subnav-link:hover {
+  color: var(--color-fg);
+  text-decoration: none;
+}
+.subnav-link.active {
+  color: var(--color-primary-text);
+  border-bottom-color: var(--color-primary);
 }
 .account {
   display: flex;

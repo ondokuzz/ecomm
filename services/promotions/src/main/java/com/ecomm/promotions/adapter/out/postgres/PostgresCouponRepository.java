@@ -1,11 +1,7 @@
 package com.ecomm.promotions.adapter.out.postgres;
 
-import com.ecomm.commons.money.Money;
 import com.ecomm.promotions.application.port.out.CouponRepository;
 import com.ecomm.promotions.domain.Coupon;
-import com.ecomm.promotions.domain.CouponDiscount;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.HashMap;
 import java.util.List;
@@ -20,9 +16,6 @@ import org.springframework.stereotype.Component;
 @Component
 class PostgresCouponRepository implements CouponRepository {
 
-  private static final String PERCENT_OFF = "PERCENT_OFF";
-  private static final String AMOUNT_OFF = "AMOUNT_OFF";
-
   private static final String COLUMNS =
       """
       code, discount_type, percent_off, amount_off_minor, amount_off_currency,
@@ -33,8 +26,8 @@ class PostgresCouponRepository implements CouponRepository {
       (rs, row) ->
           new Coupon(
               rs.getString("code"),
-              discount(rs),
-              money(rs, "minimum_subtotal_minor", "minimum_subtotal_currency"),
+              TermColumns.discount(rs),
+              TermColumns.minimumSubtotal(rs),
               rs.getTimestamp("valid_from").toInstant(),
               rs.getTimestamp("valid_until").toInstant(),
               rs.getBoolean("active"));
@@ -103,43 +96,10 @@ class PostgresCouponRepository implements CouponRepository {
   private static Map<String, Object> params(Coupon coupon) {
     var params = new HashMap<String, Object>();
     params.put("code", coupon.code());
-    switch (coupon.discount()) {
-      case CouponDiscount.PercentOff p -> {
-        params.put("discountType", PERCENT_OFF);
-        params.put("percentOff", p.percent());
-        params.put("amountOffMinor", null);
-        params.put("amountOffCurrency", null);
-      }
-      case CouponDiscount.AmountOff a -> {
-        params.put("discountType", AMOUNT_OFF);
-        params.put("percentOff", null);
-        params.put("amountOffMinor", a.amount().amountMinor());
-        params.put("amountOffCurrency", a.amount().currency().getCurrencyCode());
-      }
-    }
-    var minimum = coupon.minimumSubtotal();
-    params.put("minimumSubtotalMinor", minimum == null ? null : minimum.amountMinor());
-    params.put(
-        "minimumSubtotalCurrency", minimum == null ? null : minimum.currency().getCurrencyCode());
+    TermColumns.put(params, coupon.discount(), coupon.minimumSubtotal());
     params.put("validFrom", Timestamp.from(coupon.validFrom()));
     params.put("validUntil", Timestamp.from(coupon.validUntil()));
     params.put("active", coupon.active());
     return params;
-  }
-
-  private static CouponDiscount discount(ResultSet rs) throws SQLException {
-    return switch (rs.getString("discount_type")) {
-      case PERCENT_OFF -> new CouponDiscount.PercentOff(rs.getInt("percent_off"));
-      case AMOUNT_OFF ->
-          new CouponDiscount.AmountOff(money(rs, "amount_off_minor", "amount_off_currency"));
-      default ->
-          throw new IllegalStateException("unknown discount_type " + rs.getString("discount_type"));
-    };
-  }
-
-  private static Money money(ResultSet rs, String amountColumn, String currencyColumn)
-      throws SQLException {
-    var currency = rs.getString(currencyColumn);
-    return currency == null ? null : Money.of(rs.getLong(amountColumn), currency);
   }
 }

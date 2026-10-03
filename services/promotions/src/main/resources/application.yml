@@ -7,6 +7,11 @@ spring:
     username: ecomm
     password: ecomm
 
+# Catalog on its compose host port, for a Campaign's Categories and currencies.
+ecomm:
+  promotions:
+    catalog-url: http://localhost:8081
+
 management:
   endpoints:
     web:

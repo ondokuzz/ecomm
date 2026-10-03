@@ -93,11 +93,15 @@ A Customer's confirmed intent to purchase one or more Variants, tracked through 
 _Avoid_: Purchase, Transaction
 
 **Coupon**:
-A code a Customer enters at checkout for a Discount, under a Promotions campaign's rules. It takes a percentage (1 to 100) or a fixed amount of Money off, and applies only while it is active and within its validity window, to a subtotal of at least its optional minimum, in the same currency as its amount and minimum. Its code is matched whatever the case. Staff manage Coupons, which Promotions owns; a Checkout Session holds at most one, and an Order records the code of the Coupon behind its Discount. When one doesn't apply, the reason is one of `unknown`, `inactive`, `notYetValid`, `expired`, `belowMinimum` or `currencyMismatch`.
+A code a Customer enters at checkout for a Discount. It takes a percentage (1 to 100) or a fixed amount of Money off, and applies only while it is active and within its validity window, to a subtotal of at least its optional minimum, in the same currency as its amount and minimum. Its code is matched whatever the case. Staff manage Coupons, which Promotions owns; a Checkout Session holds at most one, and an Order records the code of the Coupon behind its Discount. When one doesn't apply, the reason is one of `unknown`, `inactive`, `notYetValid`, `expired`, `belowMinimum` or `currencyMismatch`.
 _Avoid_: Voucher, Promo code
 
+**Campaign**:
+A Discount Staff set up to apply to every qualifying Checkout Session by itself, with no code. Like a Coupon, it takes a percentage (1 to 100) or a fixed amount of Money off, has a validity window and an optional minimum subtotal, and is switched on or off. It may be limited to some of Catalog's Categories, applying to every line when it names none. Each has a unique integer priority, and Campaigns apply lowest first. At any moment it is running, scheduled, over or off. Staff manage Campaigns, which Promotions owns.
+_Avoid_: Sale, Promotion (the context), Automatic discount
+
 **Discount**:
-The amount a Coupon takes off a Checkout Session's subtotal, and so off the Order paid from it, recorded on both with the Coupon's code. Promotions works it out when the Coupon is applied: a percentage is rounded down to the currency's minor unit, and it is never more than the subtotal, so it can bring the total to zero, but not below. Tax is worked out on the subtotal less the Discount.
+The amount a Coupon takes off a Checkout Session's subtotal, and so off the Order paid from it, recorded on both with the Coupon's code. Promotions works it out when the Coupon is applied: a percentage is rounded down to the currency's minor unit, and it is never more than the subtotal, so it can bring the total to zero, but not below. Tax is worked out on the subtotal less the Discount. A Campaign defines a Discount in the same terms, though Checkout doesn't apply Campaigns yet.
 _Avoid_: Rebate, Markdown
 
 **Tax**:
