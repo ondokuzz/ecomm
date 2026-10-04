@@ -28,7 +28,8 @@ grant_type=client_credentials&client_id=checkout&client_secret=checkout-dev-secr
 
 > {% client.global.set("checkoutToken", response.body.access_token); %}
 
-### Checkout places an Order for the Customer: 201 with the Order in PLACED, its subtotal, tax and total
+### Checkout places an Order for the Customer: 201 with the Order in PLACED, its subtotal, tax, total
+### and its Order Status history, its placement by CHECKOUT
 POST {{orders}}/orders
 Authorization: Bearer {{checkoutToken}}
 Content-Type: application/json
@@ -52,18 +53,35 @@ Content-Type: application/json
  "discount": {"couponCode": "WELCOME10", "amount": {"amountMinor": 7990, "currency": "EUR"}},
  "tax": {"amountMinor": 14382, "currency": "EUR"}}
 
+> {% client.global.set("discountedOrderId", response.body.id); %}
+
 ### The Customer reads the first one back with their own token
 GET {{orders}}/orders/{{orderId}}
 Authorization: Bearer {{customerToken}}
 
-### Checkout marks it paid after authorizing the payment
+### Checkout marks it paid after authorizing the payment: its history gains PAID
 PATCH {{orders}}/orders/{{orderId}}/status
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+X-Correlation-Id: http-file-pay-1
+
+{"customerId": "{{customerId}}", "status": "PAID"}
+
+### Paid, then cancelled: the history shows PLACED, then PAID, then CANCELLED
+PATCH {{orders}}/orders/{{discountedOrderId}}/status
 Authorization: Bearer {{checkoutToken}}
 Content-Type: application/json
 
 {"customerId": "{{customerId}}", "status": "PAID"}
 
-### An illegal transition, PAID to DELIVERED: 409
+###
+PATCH {{orders}}/orders/{{discountedOrderId}}/status
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}", "status": "CANCELLED"}
+
+### An illegal transition, PAID to DELIVERED: 409, the history unchanged and no event published
 PATCH {{orders}}/orders/{{orderId}}/status
 Authorization: Bearer {{checkoutToken}}
 Content-Type: application/json
@@ -77,8 +95,16 @@ Content-Type: application/json
 
 {"customerId": "someone-else", "status": "CANCELLED"}
 
-### The Customer's Orders, newest first
+### The Customer's Orders, newest first: the first page of 20, with how many they have in all
 GET {{orders}}/orders
+Authorization: Bearer {{customerToken}}
+
+### Two to a page: the second page
+GET {{orders}}/orders?page=1&size=2
+Authorization: Bearer {{customerToken}}
+
+### A size out of range: 400
+GET {{orders}}/orders?size=101
 Authorization: Bearer {{customerToken}}
 
 ### An unknown Order: 404

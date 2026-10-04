@@ -2,12 +2,16 @@
 spring:
   datasource:
     url: jdbc:postgresql://postgres:5432/orders
+  kafka:
+    bootstrap-servers: kafka:19092
 
 # Keys come over the internal network; the issuer stays the browser-facing one tokens carry.
 ecomm:
   security:
     jwt:
       jwk-set-uri: http://keycloak:8080/realms/ecomm/protocol/openid-connect/certs
+  events:
+    schema-registry-url: http://apicurio:8080/apis/registry/v3
 
 # One JSON (ECS) object per line, with the service name and the MDC, including correlationId.
 logging:

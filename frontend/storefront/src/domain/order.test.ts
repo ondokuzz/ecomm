@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { VariantDetail } from './catalog'
 import {
   type Order,
-  type OrderStatus,
+  type StatusHistoryEntry,
   nameOrderLines,
   orderItemCountLabel,
   orderReference,
@@ -30,6 +30,10 @@ function order(overrides: Partial<Order> = {}): Order {
     tax: eur(0),
     total: eur(2250),
     placedAt: '2026-09-29T10:00:00Z',
+    statusHistory: [
+      { status: 'PLACED', at: '2026-09-29T10:00:00Z', changedBy: 'CHECKOUT', backfilled: false },
+      { status: 'PAID', at: '2026-09-29T10:00:05Z', changedBy: 'CHECKOUT', backfilled: false },
+    ],
     ...overrides,
   }
 }
@@ -88,32 +92,72 @@ describe('orderSummaryRows', () => {
 })
 
 describe('orderTimeline', () => {
-  const steps = (status: OrderStatus) => orderTimeline(status).map((step) => `${step.status}:${step.state}`)
+  const entry = (status: StatusHistoryEntry['status'], at: string, backfilled = false): StatusHistoryEntry => ({
+    status,
+    at,
+    changedBy: 'CHECKOUT',
+    backfilled,
+  })
+  const placed = entry('PLACED', '2026-09-29T10:00:00Z')
+  const paid = entry('PAID', '2026-09-29T10:00:05Z')
+  const steps = (...statusHistory: StatusHistoryEntry[]) =>
+    orderTimeline(order({ status: statusHistory[statusHistory.length - 1].status, statusHistory })).map(
+      (step) => `${step.status}:${step.state}${step.at ? `@${step.at}` : ''}`,
+    )
 
-  it('marks the steps before the current Order Status done, and the rest upcoming', () => {
-    expect(steps('PAID')).toEqual(['PLACED:done', 'PAID:current', 'FULFILLED:upcoming', 'SHIPPED:upcoming', 'DELIVERED:upcoming'])
+  it('shows each Status the Order has been in, with when, then the steps still to come', () => {
+    expect(steps(placed, paid)).toEqual([
+      'PLACED:done@2026-09-29T10:00:00Z',
+      'PAID:current@2026-09-29T10:00:05Z',
+      'FULFILLED:upcoming',
+      'SHIPPED:upcoming',
+      'DELIVERED:upcoming',
+    ])
   })
 
   it('starts at Placed', () => {
-    expect(steps('PLACED')[0]).toBe('PLACED:current')
+    expect(steps(placed)[0]).toBe('PLACED:current@2026-09-29T10:00:00Z')
   })
 
   it('ends at Delivered', () => {
-    expect(steps('DELIVERED')).toEqual(['PLACED:done', 'PAID:done', 'FULFILLED:done', 'SHIPPED:done', 'DELIVERED:current'])
+    const delivered = [placed, paid, entry('FULFILLED', 'f'), entry('SHIPPED', 's'), entry('DELIVERED', 'd')]
+    expect(steps(...delivered)).toEqual([
+      'PLACED:done@2026-09-29T10:00:00Z',
+      'PAID:done@2026-09-29T10:00:05Z',
+      'FULFILLED:done@f',
+      'SHIPPED:done@s',
+      'DELIVERED:current@d',
+    ])
   })
 
-  it('ends a cancelled Order at Cancelled, after Placed', () => {
-    expect(steps('CANCELLED')).toEqual(['PLACED:done', 'CANCELLED:current'])
+  it('shows that a cancelled Order was Paid first', () => {
+    expect(steps(placed, paid, entry('CANCELLED', 'c'))).toEqual([
+      'PLACED:done@2026-09-29T10:00:00Z',
+      'PAID:done@2026-09-29T10:00:05Z',
+      'CANCELLED:current@c',
+    ])
+  })
+
+  it('ends an Order cancelled before payment at Cancelled, after Placed', () => {
+    expect(steps(placed, entry('CANCELLED', 'c'))).toEqual(['PLACED:done@2026-09-29T10:00:00Z', 'CANCELLED:current@c'])
   })
 
   it('ends a returned Order at Returned, after Delivered', () => {
-    expect(steps('RETURNED')).toEqual([
+    const returned = [placed, paid, entry('FULFILLED', 'f'), entry('SHIPPED', 's'), entry('DELIVERED', 'd'), entry('RETURNED', 'r')]
+    expect(steps(...returned).map((step) => step.split('@')[0])).toEqual([
       'PLACED:done',
       'PAID:done',
       'FULFILLED:done',
       'SHIPPED:done',
       'DELIVERED:done',
       'RETURNED:current',
+    ])
+  })
+
+  it('gives no time for a backfilled Status, whose real time was never recorded', () => {
+    expect(steps(placed, entry('CANCELLED', '2026-09-29T10:00:00Z', true))).toEqual([
+      'PLACED:done@2026-09-29T10:00:00Z',
+      'CANCELLED:current',
     ])
   })
 })

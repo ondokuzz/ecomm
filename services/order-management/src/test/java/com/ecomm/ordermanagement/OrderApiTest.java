@@ -1,5 +1,6 @@
 package com.ecomm.ordermanagement;
 
+import com.ecomm.commons.events.EventBackbone;
 import com.ecomm.commons.security.FakeKeycloak;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,7 +13,9 @@ import org.springframework.test.web.servlet.client.RestTestClient;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
- * Base for HTTP-seam tests: the app runs against one Postgres container shared by every test class.
+ * Base for HTTP-seam tests: the app runs against one Postgres container shared by every test class,
+ * and the shared Kafka and schema registry from {@link EventBackbone}, with the Order topic created
+ * and its schema registered as the stack does.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureRestTestClient
@@ -21,16 +24,24 @@ abstract class OrderApiTest {
   private static final PostgreSQLContainer POSTGRES =
       new PostgreSQLContainer("postgres:16").withDatabaseName("orders");
 
+  /** The topic Order events are published to. */
+  static final String ORDERS_TOPIC = "order-management.order";
+
   static {
     POSTGRES.start();
+    EventBackbone.createTopic(ORDERS_TOPIC);
+    EventBackbone.registerSchemaOf(ORDERS_TOPIC);
   }
 
   @DynamicPropertySource
   static void infrastructure(DynamicPropertyRegistry registry) {
     FakeKeycloak.registerWith(registry);
+    EventBackbone.registerWith(registry);
     registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
     registry.add("spring.datasource.username", POSTGRES::getUsername);
     registry.add("spring.datasource.password", POSTGRES::getPassword);
+    // Sprint 2 Orders, there before histories and events (see BackfillApiTest).
+    registry.add("spring.flyway.locations", () -> "classpath:db/migration,classpath:db/testdata");
   }
 
   /** The Customer every test places Orders for, unless it names another. */
@@ -123,7 +134,10 @@ abstract class OrderApiTest {
       DiscountView discount,
       AmountView tax,
       AmountView total,
-      String placedAt) {}
+      String placedAt,
+      List<HistoryEntryView> statusHistory) {}
+
+  record HistoryEntryView(String status, String at, String changedBy, boolean backfilled) {}
 
   record LineView(String variantId, int quantity, AmountView unitPrice) {}
 

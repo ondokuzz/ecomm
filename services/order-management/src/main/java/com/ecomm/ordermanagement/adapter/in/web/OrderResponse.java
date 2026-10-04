@@ -6,7 +6,10 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
-/** An Order with its lines, and what it comes to: {@code discount} is null when it has none. */
+/**
+ * An Order with its lines, what it comes to, and its Order Status history, oldest first: {@code
+ * discount} is null when it has none.
+ */
 record OrderResponse(
     UUID id,
     String status,
@@ -15,7 +18,10 @@ record OrderResponse(
     Discount discount,
     Amount tax,
     Amount total,
-    Instant placedAt) {
+    Instant placedAt,
+    List<HistoryEntry> statusHistory) {
+
+  record HistoryEntry(String status, Instant at, String changedBy, boolean backfilled) {}
 
   record Line(String variantId, int quantity, Amount unitPrice) {}
 
@@ -39,6 +45,12 @@ record OrderResponse(
         order.discount().map(d -> new Discount(d.couponCode(), Amount.of(d.amount()))).orElse(null),
         Amount.of(order.tax()),
         Amount.of(order.total()),
-        order.placedAt());
+        order.placedAt(),
+        order.statusHistory().stream()
+            .map(
+                e ->
+                    new HistoryEntry(
+                        e.status().name(), e.at(), e.changedBy().name(), e.backfilled()))
+            .toList());
   }
 }

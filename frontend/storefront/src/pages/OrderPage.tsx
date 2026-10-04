@@ -64,7 +64,7 @@ export function OrderPage() {
         <div className="cart-main stack">
           <Card>
             <h2 className="card-title">Order progress</h2>
-            <OrderTimeline status={order.status} />
+            <OrderTimeline order={order} />
           </Card>
           <Card>
             <h2 className="card-title">Products</h2>

@@ -1,7 +1,8 @@
 import { type APIRequestContext, type Page, expect, test } from '@playwright/test'
 import { type Product, type Variant, defaultVariant } from '../src/domain/catalog'
 import { type Currencies, type Currency, currenciesOf, formatMoney } from '../src/domain/money'
-import type { Order } from '../src/domain/order'
+import { type Order, ordersPageSize } from '../src/domain/order'
+import type { Page as ListPage } from '../src/domain/paging'
 
 /**
  * The Sprint 1 definition of done, end to end: browse seeded Products, pick a Variant, add them to
@@ -112,10 +113,16 @@ test('the demo Customer checks out a picked Variant and another Product, and on-
   await expect(confetti).toBeHidden()
   // The badge is how the page renders Order Status PAID; the Order itself must say PAID too.
   await expect(page.locator('.status-paid')).toHaveText('Paid')
-  await expect(page.getByRole('list', { name: 'Order progress' }).locator('[aria-current=step]')).toHaveText('Paid')
+  await expect(page.getByRole('list', { name: 'Order progress' }).locator('[aria-current=step] .timeline-status')).toHaveText('Paid')
   const orderId = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!)
   const order = await orderOf(request, token, orderId)
   expect(order.status).toBe('PAID')
+  // The timeline is the Order's Status history, each step with when it happened.
+  expect(order.statusHistory.map((entry) => entry.status)).toEqual(['PLACED', 'PAID'])
+  const progress = page.getByRole('list', { name: 'Order progress' })
+  for (const entry of order.statusHistory) {
+    await expect(progress.locator(`time[datetime="${entry.at}"]`)).toBeVisible()
+  }
   const orderLines = page.getByRole('list', { name: 'Order lines' })
   for (const line of bought) {
     await expect(orderLines.getByRole('link', { name: lineName(line), exact: true })).toBeVisible()
@@ -129,6 +136,19 @@ test('the demo Customer checks out a picked Variant and another Product, and on-
   await expect(card).toContainText('2 items')
   for (const { product } of bought) {
     await expect(card.getByRole('img', { name: product.name, exact: true })).toBeVisible()
+  }
+  // The list is paged, newest first: the new Order is on the first page, and older ones further on.
+  const { total } = await ordersPageOf(request, token)
+  const pager = page.getByRole('navigation', { name: 'Order pages' })
+  if (total > ordersPageSize) {
+    await expect(pager).toContainText(`Page 1 of ${Math.ceil(total / ordersPageSize)}`)
+    await pager.getByRole('link', { name: 'Older orders' }).click()
+    await expect(page).toHaveURL(/\/orders\?page=2$/)
+    await expect(pager).toContainText('Page 2 of')
+    await expect(card).toBeHidden()
+    await page.goBack()
+  } else {
+    await expect(pager).toBeHidden()
   }
 
   // Paying committed the Reservation: the units are off on-hand for good.
@@ -315,6 +335,15 @@ async function tokenFor(request: APIRequestContext, user: Credentials) {
 async function emptyCart(request: APIRequestContext, token: string) {
   const response = await request.delete('/api/cart/cart', { headers: { Authorization: `Bearer ${token}` } })
   expect(response.status()).toBe(204)
+}
+
+/** The first page of the Customer's Orders, with how many they have in all. */
+async function ordersPageOf(request: APIRequestContext, token: string) {
+  const response = await request.get(`/api/order-management/orders?size=${ordersPageSize}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  expect(response.ok()).toBeTruthy()
+  return (await response.json()) as ListPage<Order>
 }
 
 async function orderOf(request: APIRequestContext, token: string, orderId: string) {

@@ -2,6 +2,7 @@ package com.ecomm.ordermanagement.domain;
 
 import com.ecomm.commons.money.Money;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Currency;
 import java.util.HashSet;
 import java.util.List;
@@ -12,6 +13,10 @@ import java.util.UUID;
  * A Customer's confirmed intent to purchase one or more Variants. It belongs to the Customer who
  * placed it, and only they may see it. Its total is the sum of its lines, less its {@code discount}
  * if it has one, plus its {@code tax}, all in one currency.
+ *
+ * <p>Its {@code statusHistory} holds every Order Status it has been in, oldest first, starting with
+ * its placement; entries are only ever appended. Its {@code version} starts at 1 and goes up by one
+ * with every change.
  */
 public record Order(
     UUID id,
@@ -19,11 +24,15 @@ public record Order(
     List<OrderLine> lines,
     Optional<Discount> discount,
     Money tax,
-    OrderStatus status,
-    Instant placedAt) {
+    List<StatusHistoryEntry> statusHistory,
+    long version) {
 
   public Order {
     lines = List.copyOf(lines);
+    statusHistory = List.copyOf(statusHistory);
+    if (statusHistory.isEmpty() || statusHistory.getFirst().status() != OrderStatus.PLACED) {
+      throw new IllegalArgumentException("an order's history starts with its placement");
+    }
   }
 
   /** The longest Customer ID an Order can hold. */
@@ -41,6 +50,7 @@ public record Order(
       List<OrderLine> lines,
       Optional<Discount> discount,
       Money tax,
+      Caller placedBy,
       Instant placedAt) {
     requireValidCustomerId(customerId);
     if (lines == null || lines.isEmpty()) {
@@ -68,7 +78,8 @@ public record Order(
     if (!tax.currency().equals(currency)) {
       throw new InvalidOrderException("the tax must be in the order's currency");
     }
-    var order = new Order(id, customerId, lines, discount, tax, OrderStatus.PLACED, placedAt);
+    var placement = StatusHistoryEntry.of(OrderStatus.PLACED, placedAt, placedBy);
+    var order = new Order(id, customerId, lines, discount, tax, List.of(placement), 1);
     // Rejects a total too large to hold, or below zero, before the Order is recorded.
     if (order.total().amountMinor() < 0) {
       throw new InvalidOrderException("the discount is larger than the lines plus the tax");
@@ -77,14 +88,27 @@ public record Order(
   }
 
   /**
-   * This Order in {@code next}. Throws {@link IllegalStatusTransitionException} unless its current
-   * status can move there.
+   * This Order in {@code next}, with the change appended to its history and its version one higher.
+   * Throws {@link IllegalStatusTransitionException} unless its current status can move there.
    */
-  public Order changeStatusTo(OrderStatus next) {
+  public Order changeStatusTo(OrderStatus next, Caller changedBy, Instant at) {
+    var status = status();
     if (!status.canBecome(next)) {
       throw new IllegalStatusTransitionException(status, next);
     }
-    return new Order(id, customerId, lines, discount, tax, next, placedAt);
+    var history = new ArrayList<>(statusHistory);
+    history.add(StatusHistoryEntry.of(next, at, changedBy));
+    return new Order(id, customerId, lines, discount, tax, history, version + 1);
+  }
+
+  /** The Order Status it is in now: the last one in its history. */
+  public OrderStatus status() {
+    return statusHistory.getLast().status();
+  }
+
+  /** When it was placed: the first entry in its history. */
+  public Instant placedAt() {
+    return statusHistory.getFirst().at();
   }
 
   /** The sum of every line's unit price times its quantity. */

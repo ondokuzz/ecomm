@@ -12,8 +12,8 @@ React, TypeScript, React Router and TanStack Query.
 | `/products/{sku}?variant=` | A Product with a Variant picker, and the chosen Variant's image, Price, Stock and specs, laid out by its Category's attribute definitions; add it to the Cart | no (adding needs it) |
 | `/cart` | The Cart, priced from Catalog's current Prices; change quantities, remove lines or empty it | yes |
 | `/checkout` | Starts or resumes a Checkout Session: its lines, price breakdown, a Coupon field and a countdown to when it expires, a test-card picker and a "Pay" button | yes |
-| `/orders/{id}` | An Order: its Order Status timeline, its lines and summary; after checkout, the confirmation first | yes |
-| `/orders` | My Orders as cards, newest first | yes |
+| `/orders/{id}` | An Order: its Order Status timeline, drawn from its Order Status history with times, its lines and summary; after checkout, the confirmation first | yes |
+| `/orders?page=` | My Orders as cards, newest first, 12 to a page; `page` counts from 1 | yes |
 
 ## Design
 
@@ -64,11 +64,16 @@ After checkout the Order page opens with a confirmation: a big check, confetti t
 Order's reference, item count and total, and "Continue shopping" / "View my orders". The confetti
 is decorative and hidden outright when the Customer prefers reduced motion.
 
+My Orders shows 12 Orders to a page, newest first, with "Newer orders" and "Older orders" links and
+the page in the URL (`/orders?page=2`) once there is more than one page.
+
 An Order is shown by its Order reference (`#3F2A9C1B`, the start of its ID; the full ID is in its
-summary). Its page has an Order Status timeline, Placed → Paid → Fulfilled → Shipped → Delivered
-with the current step marked; a cancelled Order ends at Cancelled after Placed, in red, since its
-Order Status doesn't say whether it was paid, and a returned one at Returned after Delivered, in
-amber. Its lines name their Products and Variants and show their thumbnails, looked up from Catalog,
+summary). Its page has an Order Status timeline drawn from the Order's Order Status history: every
+Status it has been in, each with when it got there, the current one marked, then, while it is on the
+main path, the steps still to come up to Delivered. A cancelled Order ends at Cancelled, in red,
+after Paid if it was paid, and a returned one at Returned after Delivered, in amber. A backfilled
+step, from an Order placed before histories were kept, shows no time, since its real time was never
+recorded. Its lines name their Products and Variants and show their thumbnails, looked up from Catalog,
 and fall back to the Variant ID when Catalog no longer has the Variant. Its summary shows what it comes to, as
 Order Management worked it out: the subtotal, a Discount line naming its Coupon when there is one,
 the tax and the total.
@@ -286,14 +291,15 @@ Sign in as `demo@ecomm.local` / `demo`, or register a new Customer.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: failed responses as messages and support references, Money formatting by Catalog's Minor units, Cart pricing, checkout problems, the session countdown and price breakdown, Coupon rejections, test cards and payment failures, quantities, Stock levels, toasts, category chips, Product specs by their Category's definitions, Customer initials, Orders and their timeline, Order Status colours, seed Product images, the Keycloak theme's and the Admin Console's copies of the tokens
+npm test          # Vitest: failed responses as messages and support references, Money formatting by Catalog's Minor units, Cart pricing, checkout problems, the session countdown and price breakdown, Coupon rejections, test cards and payment failures, quantities, Stock levels, toasts, category chips, Product specs by their Category's definitions, Customer initials, Orders and their timeline from the Order Status history, the Orders list's paging, Order Status colours, seed Product images, the Keycloak theme's and the Admin Console's copies of the tokens
 npm run test:e2e  # Playwright smoke and error-states tests against the running compose stack (`make up`)
 ```
 
 The smoke test ([`e2e/sprint1.spec.ts`](./e2e/sprint1.spec.ts)) signs in on Keycloak for real,
 checks out two Products as the demo Customer with the Approve test card (the "held until" notice and its countdown, their Stock reserved but
 still on hand, then the confirmation, the confetti gone under reduced motion, the Order's lines by
-Product name, its timeline, its card on My Orders, and on-hand Stock down by one), pays with the
+Product name, its timeline with Placed then Paid at the times Order Management recorded, its card on
+My Orders and, once the demo Customer has more than a page of Orders, the next page, and on-hand Stock down by one), pays with the
 Decline card and sees the decline inline with the session kept, then pays the same session with
 Approve and sees `PAID`, empties a Cart
 through the confirmation, and registers a new Customer. The error-states test

@@ -2,24 +2,16 @@ package com.ecomm.ordermanagement;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.sql.Timestamp;
-import java.time.Instant;
-import java.util.UUID;
-import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
-import org.springframework.jdbc.core.simple.JdbcClient;
 
 /**
  * An Order records the discount and tax Checkout sends with its lines, and its total is the lines,
  * less the discount, plus the tax: the amount its Payment is authorized for.
  */
 class OrderDiscountAndTaxApiTest extends OrderApiTest {
-
-  @Autowired DataSource dataSource;
 
   /** The two-line Order (1747.50 EUR) with {@code extra} fields added to its body. */
   static String twoLineOrderWith(String extra) {
@@ -164,28 +156,8 @@ class OrderDiscountAndTaxApiTest extends OrderApiTest {
 
   @Test
   void anOrderPlacedBeforeDiscountsAndTaxReadsBackWithNoDiscountAndZeroTax() {
-    // Only the columns the first migration created, as an Order placed before this one has.
-    var id = UUID.randomUUID();
-    var jdbc = JdbcClient.create(dataSource);
-    jdbc.sql(
-            """
-            INSERT INTO customer_order (id, customer_id, status, placed_at)
-            VALUES (:id, :customerId, 'PAID', :placedAt)
-            """)
-        .param("id", id)
-        .param("customerId", CUSTOMER)
-        .param("placedAt", Timestamp.from(Instant.parse("2026-09-01T10:00:00Z")))
-        .update();
-    jdbc.sql(
-            """
-            INSERT INTO order_line
-              (order_id, position, variant_id, quantity, unit_price_minor, currency)
-            VALUES (:id, 0, 'PHN-PIXEL-9', 1, 79900, 'EUR')
-            """)
-        .param("id", id)
-        .update();
-
-    var order = readBack(id.toString());
+    // Placed by a Sprint 1 stack, before this migration (db/testdata/V1_1__sprint1_order.sql).
+    var order = readBack("51000000-0000-4000-8000-000000000001");
 
     assertThat(order.discount()).isNull();
     assertThat(order.tax()).isEqualTo(new AmountView(0, "EUR"));

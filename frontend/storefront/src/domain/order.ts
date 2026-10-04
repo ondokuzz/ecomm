@@ -15,6 +15,18 @@ export interface Discount {
   amount: Money
 }
 
+/**
+ * One entry in an Order's Order Status history: the Status it moved to, when, and which caller moved
+ * it. A backfilled entry was reconstructed for an Order placed before histories were kept; its `at`
+ * is only the Order's placement time.
+ */
+export interface StatusHistoryEntry {
+  status: OrderStatus
+  at: string
+  changedBy: 'CHECKOUT'
+  backfilled: boolean
+}
+
 export interface Order {
   id: string
   status: OrderStatus
@@ -26,7 +38,12 @@ export interface Order {
   /** The subtotal, less the discount, plus the tax: what the Customer paid. */
   total: Money
   placedAt: string
+  /** Every Order Status the Order has been in, oldest first. */
+  statusHistory: StatusHistoryEntry[]
 }
+
+/** How many Orders a page of the Customer's list shows. */
+export const ordersPageSize = 12
 
 /** What checkout answers with: the new Order's ID and its Order Status. */
 export interface CheckoutResult {
@@ -106,21 +123,25 @@ export function nameOrderLines(order: Order, variantsById: Record<string, Varian
 export interface TimelineStep {
   status: OrderStatus
   state: 'done' | 'current' | 'upcoming'
+  /** When the Order reached this step; absent for a step still to come, or one whose time is unknown. */
+  at?: string
 }
 
 const mainPath: OrderStatus[] = ['PLACED', 'PAID', 'FULFILLED', 'SHIPPED', 'DELIVERED']
 
 /**
- * The Order Statuses an Order goes through, up to and including its current one. The main path
- * shows every step to come; Cancelled and Returned are final, so they end it.
+ * The Order Statuses an Order has been through, from its Order Status history, with when; then, while
+ * it is on the main path, every step still to come. Cancelled and Returned are final, so they end it.
  */
-export function orderTimeline(status: OrderStatus): TimelineStep[] {
-  // An Order can be cancelled once Placed or Paid; its Order Status doesn't say which.
-  const path: OrderStatus[] =
-    status === 'CANCELLED' ? ['PLACED', 'CANCELLED'] : status === 'RETURNED' ? [...mainPath, 'RETURNED'] : mainPath
-  const currentIndex = path.indexOf(status)
-  return path.map((step, i) => ({
-    status: step,
-    state: i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'upcoming',
+export function orderTimeline(order: Pick<Order, 'statusHistory'>): TimelineStep[] {
+  const history = order.statusHistory
+  const past: TimelineStep[] = history.map((entry, i) => ({
+    status: entry.status,
+    state: i === history.length - 1 ? 'current' : 'done',
+    ...(entry.backfilled ? {} : { at: entry.at }),
   }))
+  const onMainPath = mainPath.indexOf(history[history.length - 1].status)
+  const upcoming: TimelineStep[] =
+    onMainPath === -1 ? [] : mainPath.slice(onMainPath + 1).map((status) => ({ status, state: 'upcoming' }))
+  return [...past, ...upcoming]
 }

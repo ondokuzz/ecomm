@@ -4,12 +4,13 @@ import com.ecomm.commons.security.CurrentCustomer;
 import com.ecomm.ordermanagement.application.port.in.ChangeOrderStatusUseCase;
 import com.ecomm.ordermanagement.application.port.in.ConcurrentStatusChangeException;
 import com.ecomm.ordermanagement.application.port.in.FindOrdersUseCase;
+import com.ecomm.ordermanagement.application.port.in.Page;
 import com.ecomm.ordermanagement.application.port.in.PlaceOrderUseCase;
+import com.ecomm.ordermanagement.domain.Caller;
 import com.ecomm.ordermanagement.domain.IllegalStatusTransitionException;
 import com.ecomm.ordermanagement.domain.InvalidOrderException;
 import com.ecomm.ordermanagement.domain.Order;
 import java.net.URI;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
@@ -26,6 +27,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -38,6 +40,9 @@ import org.springframework.web.bind.annotation.RestController;
 class OrderController {
 
   private static final Logger log = LoggerFactory.getLogger(OrderController.class);
+
+  /** The most Orders a page of the list can hold. */
+  static final int MAX_PAGE_SIZE = 100;
 
   private final PlaceOrderUseCase place;
   private final FindOrdersUseCase find;
@@ -56,17 +61,33 @@ class OrderController {
   ResponseEntity<OrderResponse> place(@RequestBody PlaceOrderRequest request) {
     var order =
         place.place(
-            request.toCustomerId(), request.toOrderLines(), request.toDiscount(), request.toTax());
+            Caller.CHECKOUT,
+            request.toCustomerId(),
+            request.toOrderLines(),
+            request.toDiscount(),
+            request.toTax());
     log.info("Placed Order {}", order.id());
     return ResponseEntity.created(URI.create("/orders/" + order.id()))
         .body(OrderResponse.of(order));
   }
 
-  /** The Customer's Orders, newest first. */
+  /**
+   * A page of the Customer's Orders, newest first, with how many they have in all: {@code page}
+   * counts from 0, and {@code size} is 1 to {@value #MAX_PAGE_SIZE}.
+   */
   @GetMapping
   @PreAuthorize("hasRole('CUSTOMER')")
-  List<OrderResponse> orders(CurrentCustomer customer) {
-    return find.orders(customer.id()).stream().map(OrderResponse::of).toList();
+  Page<OrderResponse> orders(
+      CurrentCustomer customer,
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "20") int size) {
+    if (page < 0) {
+      throw new InvalidPageException("page counts from 0");
+    }
+    if (size < 1 || size > MAX_PAGE_SIZE) {
+      throw new InvalidPageException("size is 1 to " + MAX_PAGE_SIZE);
+    }
+    return find.orders(customer.id(), page, size).map(OrderResponse::of);
   }
 
   /**
@@ -88,7 +109,9 @@ class OrderController {
   OrderResponse changeStatus(@PathVariable String id, @RequestBody StatusChangeRequest request) {
     var customerId = request.toCustomerId();
     var next = request.toStatus();
-    var order = ownedOrder(id, orderId -> changeStatus.changeStatus(customerId, orderId, next));
+    var order =
+        ownedOrder(
+            id, orderId -> changeStatus.changeStatus(Caller.CHECKOUT, customerId, orderId, next));
     log.info("Moved Order {} to {}", id, next);
     return order;
   }
@@ -121,8 +144,8 @@ class OrderController {
     return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
   }
 
-  @ExceptionHandler(InvalidOrderException.class)
-  ProblemDetail invalid(InvalidOrderException e) {
+  @ExceptionHandler({InvalidOrderException.class, InvalidPageException.class})
+  ProblemDetail invalid(RuntimeException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
   }
 }

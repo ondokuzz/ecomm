@@ -6,6 +6,12 @@ spring:
     url: jdbc:postgresql://localhost:${POSTGRES_PORT:5432}/orders
     username: ecomm
     password: ecomm
+  kafka:
+    bootstrap-servers: localhost:${KAFKA_PORT:9092}
+
+ecomm:
+  events:
+    schema-registry-url: http://localhost:${APICURIO_PORT:8088}/apis/registry/v3
 
 management:
   endpoints:

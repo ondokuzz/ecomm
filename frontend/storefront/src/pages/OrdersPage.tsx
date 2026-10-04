@@ -1,4 +1,4 @@
-import { Link } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 import { useVariants } from '../api/catalog'
 import { useFormatMoney } from '../api/currencies'
 import { useOrders } from '../api/orders'
@@ -10,15 +10,17 @@ import { ButtonLink } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import type { VariantDetail } from '../domain/catalog'
 import { type Order, orderItemCountLabel, orderReference } from '../domain/order'
+import { type Page, pageCount, pageIndexFromUrl } from '../domain/paging'
 
 /** How many of an Order's lines its card shows a thumbnail for; the rest are counted. */
 const maxThumbnails = 3
 
-/** The Customer's Orders as cards, newest first. */
+/** The Customer's Orders as cards, newest first, a page at a time; the page is in the URL, counting from 1. */
 export function OrdersPage() {
-  const orders = useOrders()
+  const [params] = useSearchParams()
+  const orders = useOrders(pageIndexFromUrl(params.get('page')))
   const { variants, failure: variantsFailure } = useVariants(
-    (orders.data ?? []).flatMap((order) => order.lines.slice(0, maxThumbnails).map((line) => line.variantId)),
+    (orders.data?.items ?? []).flatMap((order) => order.lines.slice(0, maxThumbnails).map((line) => line.variantId)),
   )
 
   if (orders.isPending) return <OrdersSkeleton />
@@ -37,7 +39,7 @@ export function OrdersPage() {
     <section>
       <h1>My orders</h1>
       <LookupError failure={variantsFailure} title="We couldn't load the products' pictures" />
-      {orders.data.length === 0 ? (
+      {orders.data.total === 0 ? (
         <EmptyState
           title="No orders yet"
           illustration={<NoOrdersIllustration />}
@@ -50,13 +52,50 @@ export function OrdersPage() {
           Your orders show up here once you check out.
         </EmptyState>
       ) : (
-        <ul className="order-cards" aria-label="Orders">
-          {orders.data.map((order) => (
-            <OrderCard key={order.id} order={order} variants={variants} />
-          ))}
-        </ul>
+        <>
+          {orders.data.items.length === 0 ? (
+            <p className="muted">
+              There are no orders on this page. <Link to="/orders">Back to your newest orders</Link>
+            </p>
+          ) : (
+            <ul className="order-cards" aria-label="Orders">
+              {orders.data.items.map((order) => (
+                <OrderCard key={order.id} order={order} variants={variants} />
+              ))}
+            </ul>
+          )}
+          <Pager page={orders.data} />
+        </>
       )}
     </section>
+  )
+}
+
+/** Newer and older pages of Orders, and where this one sits; hidden while everything fits on one page. */
+function Pager({ page }: { page: Page<Order> }) {
+  const count = pageCount(page)
+  if (count === 1) return null
+  const shown = page.page + 1
+  return (
+    <nav className="pager" aria-label="Order pages">
+      {shown > 1 ? (
+        <ButtonLink to={shown === 2 ? '/orders' : `/orders?page=${shown - 1}`} rel="prev">
+          Newer orders
+        </ButtonLink>
+      ) : (
+        <span />
+      )}
+      <span className="muted">
+        Page {shown} of {count}
+      </span>
+      {shown < count ? (
+        <ButtonLink to={`/orders?page=${shown + 1}`} rel="next">
+          Older orders
+        </ButtonLink>
+      ) : (
+        <span />
+      )}
+    </nav>
   )
 }
 

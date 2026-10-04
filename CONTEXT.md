@@ -119,6 +119,10 @@ _Avoid_: Item
 The lifecycle stage of an Order: `Placed → Paid → Fulfilled → Shipped → Delivered`, with `Returned` and `Cancelled` as branches off that path. An Order can be `Cancelled` until it is Fulfilled and `Returned` once Delivered; both are final.
 _Avoid_: State (Status is the domain term; state is a general programming concept)
 
+**Order Status history**:
+Every Order Status an Order has been in, oldest first, starting with its placement: for each, when the Order reached it and which caller moved it there (`CHECKOUT` for now). Order Management appends an entry with every change, in the same transaction, and never changes or deletes one; the Order's current Order Status is its last entry. An Order placed before histories were kept (Sprints 1–2) has its placement and, if it had moved on, its Order Status then, marked _backfilled_ and timed at its placement, since the real time was never recorded.
+_Avoid_: Status log, audit trail, timeline (the timeline is how the Storefront draws it)
+
 **Payment**:
 An Order's amount, as `Money`, taken through a payment gateway with a Payment method and recorded with the gateway's answer and its reference for it. A Payment is `AUTHORIZED` when the gateway has approved the amount but not yet captured it, or `DECLINED`, for good, with the gateway's decline reason (such as `insufficient_funds`). A gateway that fails to answer records no Payment at all. It belongs to the Customer who authorized it, and only they can see it. Capture and refund come later.
 _Avoid_: Charge, Transaction
