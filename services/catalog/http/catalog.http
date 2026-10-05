@@ -1,4 +1,6 @@
 # Exercises every Catalog endpoint against the compose stack (`docker compose up -d --build`).
+# Each change also publishes a catalog.product or catalog.category event; the README shows how to
+# watch the topics.
 # Run the requests top to bottom in the IntelliJ HTTP client; the token requests store tokens for
 # the ones after them.
 
@@ -45,7 +47,7 @@ GET {{catalog}}/products/PHN-PIXEL-9
 ### A missing Product: 404
 GET {{catalog}}/products/NO-SUCH-SKU
 
-### One Variant, its Price and axis values, with its Product's SKU, name and images
+### One Variant, its Price and axis values, with its Product's SKU, name, Category and images
 GET {{catalog}}/variants/PHN-PIXEL-9-OBSIDIAN-256
 
 ### A missing Variant: 404
@@ -68,6 +70,7 @@ Content-Type: application/json
 }
 
 ### Staff create a Product with two Variants along the phones' axes: 201
+# Published as a catalog.product event with change CREATED.
 POST {{catalog}}/products
 Authorization: Bearer {{staffToken}}
 Content-Type: application/json
@@ -75,6 +78,7 @@ Content-Type: application/json
 {
   "sku": "PHN-DEMO-PHONE",
   "name": "Demo Phone",
+  "description": "A phone for trying the Catalog out. Search looks in this text.",
   "category": "phones",
   "attributes": {"brand": "Demo", "screen": "6.1 in"},
   "images": ["/images/products/phn-demo-phone/front.svg"],
@@ -139,6 +143,7 @@ Content-Type: application/json
 }
 
 ### Staff delete the demo phone: 204
+# Published as its last state, with change REMOVED and removed: true.
 DELETE {{catalog}}/products/PHN-DEMO-PHONE
 Authorization: Bearer {{staffToken}}
 
@@ -185,6 +190,7 @@ Content-Type: application/json
 }
 
 ### Staff update it: 200
+# Published with change UPDATED and a higher version. It sends no description, so it has none.
 PUT {{catalog}}/products/AUD-DEMO-BUDS
 Authorization: Bearer {{staffToken}}
 Content-Type: application/json

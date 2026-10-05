@@ -14,6 +14,7 @@ import java.util.stream.IntStream;
 record ProductRequest(
     String sku,
     String name,
+    String description,
     String category,
     Map<String, String> attributes,
     List<String> images,
@@ -68,6 +69,7 @@ record ProductRequest(
     return new Product(
         sku,
         name,
+        description,
         category,
         attributes,
         images,

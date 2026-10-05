@@ -84,6 +84,7 @@ class SeedDataLoader implements ApplicationRunner {
   record SeedProduct(
       String sku,
       String name,
+      String description,
       String category,
       Map<String, String> attributes,
       List<String> images,
@@ -93,6 +94,7 @@ class SeedDataLoader implements ApplicationRunner {
       return new Product(
           sku,
           name,
+          description,
           category,
           attributes,
           images,

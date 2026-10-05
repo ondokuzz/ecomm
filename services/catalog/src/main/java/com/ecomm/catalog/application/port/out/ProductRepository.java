@@ -5,6 +5,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * The Catalog's Products. Writes, and {@link #nextVersion}, must run inside {@link
+ * Transactions#inTransaction}.
+ */
 public interface ProductRepository {
 
   Optional<Product> find(String sku);
@@ -35,6 +39,16 @@ public interface ProductRepository {
   /** Replaces an existing Product; returns false, storing nothing, when there is none. */
   boolean replace(Product product);
 
-  /** Returns false when there was no Product to remove. */
-  boolean remove(String sku);
+  /** Removes the Product and returns it as it was; empty when there was none. */
+  Optional<Product> remove(String sku);
+
+  /**
+   * Raises the version of the Product with SKU {@code sku} and returns it: one more than the last,
+   * or 1 when it has never had one. A SKU keeps its version after its Product is removed, so a
+   * Product created again with it carries on from there.
+   */
+  long nextVersion(String sku);
+
+  /** Whether the SKU has a version; only a Product stored before Product events has none. */
+  boolean hasVersion(String sku);
 }

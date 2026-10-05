@@ -5,10 +5,20 @@ spring:
     connection-string: couchbase://localhost
     username: admin
     password: password
+  kafka:
+    bootstrap-servers: localhost:${KAFKA_PORT:9092}
+    producer:
+      properties:
+        # How long a send waits for a topic's metadata: the outbox relay gives up on a pass after
+        # a few of these, so it bounds how long a pass takes while Kafka is down.
+        "[max.block.ms]": 10000
 
 ecomm:
   catalog:
     bucket: catalog
+    # The local cluster is one node, with no replica to make a write durable on; a production
+    # cluster leaves this out and keeps the SDK's MAJORITY.
+    transaction-durability: NONE
     # Loaded on startup, only into an empty bucket: Categories first, then their Products.
     seed:
       categories: classpath:seed/categories.json
@@ -16,6 +26,8 @@ ecomm:
   security:
     # Customers browse the Catalog without logging in; changes still need a Staff token.
     public-read-paths: /products/**, /variants/**, /categories/**, /currencies
+  events:
+    schema-registry-url: http://localhost:${APICURIO_PORT:8088}/apis/registry/v3
 
 management:
   endpoints:

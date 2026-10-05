@@ -9,12 +9,14 @@ import java.util.Optional;
 
 /**
  * A sellable item in the Catalog, identified by its SKU, and sold as one or more Variants, each at
- * its own Price. Its attributes and its Variants' axis values must satisfy its Category's
- * definitions whenever it is written; see {@link Category#violations(Product)}.
+ * its own Price. Its {@code description}, free text for Customers to read, is optional: null when
+ * it has none. Its attributes and its Variants' axis values must satisfy its Category's definitions
+ * whenever it is written; see {@link Category#violations(Product)}.
  */
 public record Product(
     String sku,
     String name,
+    String description,
     String category,
     Map<String, String> attributes,
     List<String> images,
@@ -23,6 +25,7 @@ public record Product(
   public Product {
     requireText(sku, "sku");
     requireText(name, "name");
+    description = description == null || description.isBlank() ? null : description;
     requireText(category, "category");
     if (!Category.isSlug(category)) {
       throw new InvalidProductException(
@@ -69,6 +72,7 @@ public record Product(
     return new Product(
         sku,
         name,
+        description,
         category,
         attributes,
         images,

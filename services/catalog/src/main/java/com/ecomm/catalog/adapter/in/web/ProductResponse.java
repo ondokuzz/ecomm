@@ -7,11 +7,13 @@ import java.util.Map;
 
 /**
  * A Product as clients see it: its purchasable Variants, and {@code priceFrom}, the lowest of their
- * Prices. Clients add Variant IDs, not SKUs, to a Cart.
+ * Prices. {@code description} is null when it has none. Clients add Variant IDs, not SKUs, to a
+ * Cart.
  */
 record ProductResponse(
     String sku,
     String name,
+    String description,
     String category,
     Map<String, String> attributes,
     PriceResponse priceFrom,
@@ -32,6 +34,7 @@ record ProductResponse(
     return new ProductResponse(
         product.sku(),
         product.name(),
+        product.description(),
         product.category(),
         product.attributes(),
         PriceResponse.of(product.priceFrom()),

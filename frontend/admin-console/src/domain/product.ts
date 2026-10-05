@@ -19,6 +19,8 @@ export interface Variant {
 export interface Product {
   sku: string
   name: string
+  /** Free text for Customers; null when it has none. */
+  description: string | null
   category: string
   attributes: Record<string, string>
   images: string[]
@@ -27,8 +29,11 @@ export interface Product {
   variants: Variant[]
 }
 
-/** A Product as Staff send it: no `priceFrom`, which Catalog works out. */
-export type ProductRequest = Omit<Product, 'priceFrom'>
+/**
+ * A Product as Staff send it: no `priceFrom`, which Catalog works out, and no `description` when it
+ * has none. Saving replaces the whole Product, so a description left out is removed.
+ */
+export type ProductRequest = Omit<Product, 'priceFrom' | 'description'> & { description?: string }
 
 /** A Variant's Stock as Inventory answers it: `quantity` is what's left to sell. */
 export interface Stock {
@@ -61,6 +66,8 @@ export interface VariantForm {
 export interface ProductForm {
   sku: string
   name: string
+  /** Blank when it has none. */
+  description: string
   category: string
   attributes: Record<string, string>
   /** One per line. */
@@ -105,6 +112,7 @@ export function formOf(
     return {
       sku: '',
       name: '',
+      description: '',
       category: category?.slug ?? '',
       attributes: {},
       images: '',
@@ -115,6 +123,7 @@ export function formOf(
   return {
     sku: product.sku,
     name: product.name,
+    description: product.description ?? '',
     category: product.category,
     attributes: { ...product.attributes },
     images: product.images.join('\n'),
@@ -131,8 +140,8 @@ export function formOf(
 }
 
 /**
- * The form as Catalog takes it, or the fields it can't send. Text is trimmed and blank attribute
- * and axis values are left out, for Catalog to name if they are required. Only what `category`
+ * The form as Catalog takes it, or the fields it can't send. Text is trimmed and a blank
+ * description, attribute or axis value is left out, for Catalog to name if they are required. Only what `category`
  * defines is sent. The currency must be one of Catalog's `currencies`, a Price must read as Money
  * in it, and an on-hand count must be a whole number or blank; these are named as `currency`,
  * `variants[i].price` and `variants[i].onHand`.
@@ -161,10 +170,12 @@ export function productRequest(
   })
   if (Object.keys(errors).length > 0) return { errors }
 
+  const description = form.description.trim()
   return {
     request: {
       sku: form.sku.trim(),
       name: form.name.trim(),
+      ...(description === '' ? {} : { description }),
       category: form.category,
       attributes: valuesFor(attributesOf(category), form.attributes),
       images: splitList(form.images),

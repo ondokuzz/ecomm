@@ -80,6 +80,46 @@ class ManageProductsApiTest extends CatalogApiTest {
   }
 
   @Test
+  void aProductMayHaveADescriptionAndAnUpdateReplacesIt() {
+    var described =
+        product("WRB-FORERUNNER-965", "Garmin Forerunner 965", 44900)
+            .replace("\"category\"", "\"description\": \"AMOLED, 14-day battery.\", \"category\"");
+    http.post()
+        .uri("/products")
+        .headers(h -> h.setBearerAuth(staffToken()))
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(described)
+        .exchange()
+        .expectStatus()
+        .isCreated()
+        .expectBody()
+        .jsonPath("$.description")
+        .isEqualTo("AMOLED, 14-day battery.");
+    http.get()
+        .uri("/products/WRB-FORERUNNER-965")
+        .exchange()
+        .expectBody()
+        .jsonPath("$.description")
+        .isEqualTo("AMOLED, 14-day battery.");
+
+    http.put()
+        .uri("/products/WRB-FORERUNNER-965")
+        .headers(h -> h.setBearerAuth(staffToken()))
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(product("WRB-FORERUNNER-965", "Garmin Forerunner 965", 44900))
+        .exchange()
+        .expectStatus()
+        .isOk();
+
+    http.get()
+        .uri("/products/WRB-FORERUNNER-965")
+        .exchange()
+        .expectBody()
+        .jsonPath("$.description")
+        .isEmpty();
+  }
+
+  @Test
   void creatingAProductWithATakenSkuIsAConflict() {
     create("WRB-VENU-3", "Garmin Venu 3", 44900);
 

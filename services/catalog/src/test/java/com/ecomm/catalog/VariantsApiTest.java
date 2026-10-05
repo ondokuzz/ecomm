@@ -307,7 +307,7 @@ class VariantsApiTest extends CatalogApiTest {
   }
 
   @Test
-  void anyoneCanLookUpAVariantWithItsProductsSkuNameAndImages() {
+  void anyoneCanLookUpAVariantWithItsProductsSkuNameCategoryAndImages() {
     create(
             tablet(
                 "TAB-LOOKUP",
@@ -338,6 +338,8 @@ class VariantsApiTest extends CatalogApiTest {
         .isEqualTo("TAB-LOOKUP")
         .jsonPath("$.product.name")
         .isEqualTo("Tablet TAB-LOOKUP")
+        .jsonPath("$.product.category")
+        .isEqualTo("e-readers")
         .jsonPath("$.product.images")
         .isEqualTo(List.of("/images/products/tab-lookup/front.svg"));
   }

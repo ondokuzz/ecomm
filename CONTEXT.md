@@ -21,7 +21,7 @@ The web app where Staff manage the Catalog: Products with their Variants, Prices
 _Avoid_: Admin panel, Back office, Dashboard
 
 **Product**:
-A sellable item in the Catalog, identified by SKU, with category-specific attributes and one or more Variants.
+A sellable item in the Catalog, identified by SKU, with an optional description, category-specific attributes and one or more Variants.
 _Avoid_: Item, SKU (SKU is an identifier, not the concept)
 
 **Category**:
@@ -160,5 +160,5 @@ What one context publishes to Kafka so that others can learn a change it made: a
 _Avoid_: Domain event (one that stays inside a context), Message, Command
 
 **Outbox**:
-Where a context records an Integration event, in the same transaction as the change it describes, until Kafka has it. The Postgres-backed contexts use Spring Modulith's event publication registry; an event whose send failed stays there, visible, and is sent again.
+Where a context records an Integration event, in the same transaction as the change it describes, until Kafka has it. The Postgres-backed contexts use Spring Modulith's event publication registry; Catalog writes an outbox document in the same Couchbase transaction, which a relay in Catalog sends. Either way, an event whose send failed stays there, visible, and is sent again.
 _Avoid_: Event store (no context is event-sourced)

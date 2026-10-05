@@ -32,6 +32,7 @@ const phones: Category = {
 const pixel: Product = {
   sku: 'PHN-PIXEL-9',
   name: 'Google Pixel 9',
+  description: 'Google’s phone, with Gemini built in.',
   category: 'phones',
   attributes: { brand: 'Google', screen: '6.3 in' },
   images: ['/images/front.svg', '/images/back.svg'],
@@ -59,6 +60,7 @@ describe('formOf', () => {
     expect(formOf(pixel, phones, stock, currencies)).toEqual({
       sku: 'PHN-PIXEL-9',
       name: 'Google Pixel 9',
+      description: 'Google’s phone, with Gemini built in.',
       category: 'phones',
       attributes: { brand: 'Google', screen: '6.3 in' },
       images: '/images/front.svg\n/images/back.svg',
@@ -89,6 +91,7 @@ describe('formOf', () => {
     expect(formOf(undefined, phones, {}, currencies)).toEqual({
       sku: '',
       name: '',
+      description: '',
       category: 'phones',
       attributes: {},
       images: '',
@@ -117,6 +120,7 @@ describe('productRequest', () => {
       request: {
         sku: 'PHN-PIXEL-9',
         name: 'Google Pixel 9',
+        description: 'Google’s phone, with Gemini built in.',
         category: 'phones',
         attributes: { brand: 'Google', screen: '6.3 in' },
         images: ['/images/front.svg', '/images/back.svg'],
@@ -169,6 +173,20 @@ describe('productRequest', () => {
       },
       errors: {},
     })
+  })
+
+  it('trims a description, and sends none when it is blank', () => {
+    const form = formOf(pixel, phones, stock, currencies)
+    expect(productRequest({ ...form, description: '  Fast.\n' }, phones, currencies).request?.description).toBe(
+      'Fast.',
+    )
+    expect(productRequest({ ...form, description: '   ' }, phones, currencies).request).not.toHaveProperty(
+      'description',
+    )
+  })
+
+  it('edits a Product that has no description as a blank one', () => {
+    expect(formOf({ ...pixel, description: null }, phones, stock, currencies).description).toBe('')
   })
 
   it('sends only what the Category defines, so attributes it no longer has drop out', () => {

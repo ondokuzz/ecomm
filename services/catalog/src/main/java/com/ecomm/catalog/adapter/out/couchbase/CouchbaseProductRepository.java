@@ -40,12 +40,19 @@ class CouchbaseProductRepository implements ProductRepository {
 
   private final Scope scope;
   private final Collection collection;
+  private final CouchbaseTransactions transactions;
+  private final AggregateVersions versions;
 
-  CouchbaseProductRepository(Cluster cluster, @Value("${ecomm.catalog.bucket}") String bucketName) {
+  CouchbaseProductRepository(
+      Cluster cluster,
+      @Value("${ecomm.catalog.bucket}") String bucketName,
+      CouchbaseTransactions transactions) {
     var bucket = cluster.bucket(bucketName);
     bucket.waitUntilReady(Duration.ofSeconds(60));
     this.scope = bucket.defaultScope();
     this.collection = bucket.defaultCollection();
+    this.transactions = transactions;
+    this.versions = new AggregateVersions(collection, transactions, TYPE);
     scope.query(
         "CREATE INDEX idx_product_category IF NOT EXISTS ON `_default`(category, name)"
             + " WHERE type = 'product'");
@@ -145,7 +152,9 @@ class CouchbaseProductRepository implements ProductRepository {
   @Override
   public boolean insert(Product product) {
     try {
-      collection.insert(product.sku(), toDocument(product));
+      transactions
+          .required("Store a Product")
+          .insert(collection, product.sku(), toDocument(product));
       return true;
     } catch (DocumentExistsException e) {
       return false;
@@ -154,8 +163,9 @@ class CouchbaseProductRepository implements ProductRepository {
 
   @Override
   public boolean replace(Product product) {
+    var context = transactions.required("Store a Product");
     try {
-      collection.replace(product.sku(), toDocument(product));
+      context.replace(context.get(collection, product.sku()), toDocument(product));
       return true;
     } catch (DocumentNotFoundException e) {
       return false;
@@ -163,13 +173,25 @@ class CouchbaseProductRepository implements ProductRepository {
   }
 
   @Override
-  public boolean remove(String sku) {
+  public Optional<Product> remove(String sku) {
+    var context = transactions.required("Remove a Product");
     try {
-      collection.remove(sku);
-      return true;
+      var current = context.get(collection, sku);
+      context.remove(current);
+      return Optional.of(fromDocument(current.contentAsObject()));
     } catch (DocumentNotFoundException e) {
-      return false;
+      return Optional.empty();
     }
+  }
+
+  @Override
+  public long nextVersion(String sku) {
+    return versions.next(sku);
+  }
+
+  @Override
+  public boolean hasVersion(String sku) {
+    return versions.exists(sku);
   }
 
   private List<Product> query(String statement, QueryOptions options) {
@@ -187,6 +209,7 @@ class CouchbaseProductRepository implements ProductRepository {
         .put("type", TYPE)
         .put("sku", product.sku())
         .put("name", product.name())
+        .put("description", product.description())
         .put("category", product.category())
         .put("attributes", JsonObject.from(Map.copyOf(product.attributes())))
         .put("images", JsonArray.from(List.copyOf(product.images())))
@@ -226,6 +249,7 @@ class CouchbaseProductRepository implements ProductRepository {
     return new Product(
         document.getString("sku"),
         document.getString("name"),
+        document.getString("description"),
         document.getString("category"),
         attributes,
         strings(document.getArray("images")),

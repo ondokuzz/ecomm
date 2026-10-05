@@ -369,6 +369,23 @@ function ProductEditor({
             />
             <FieldError id={errorId('name')} message={errors.name} />
           </label>
+          <label className="field field-span">
+            <span>
+              Description <span className="hint">(optional)</span>
+            </span>
+            <textarea
+              className="input"
+              rows={4}
+              value={form.description}
+              onChange={(e) => {
+                setForm({ ...form, description: e.target.value })
+                clearErrors('description')
+              }}
+              {...field('description')}
+            />
+            <span className="hint">What Customers read about the Product, and what search looks in.</span>
+            <FieldError id={errorId('description')} message={errors.description} />
+          </label>
         </div>
       </section>
 

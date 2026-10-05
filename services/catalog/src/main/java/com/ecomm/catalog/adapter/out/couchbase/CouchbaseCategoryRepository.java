@@ -33,13 +33,19 @@ class CouchbaseCategoryRepository implements CategoryRepository {
 
   private final Scope scope;
   private final Collection collection;
+  private final CouchbaseTransactions transactions;
+  private final AggregateVersions versions;
 
   CouchbaseCategoryRepository(
-      Cluster cluster, @Value("${ecomm.catalog.bucket}") String bucketName) {
+      Cluster cluster,
+      @Value("${ecomm.catalog.bucket}") String bucketName,
+      CouchbaseTransactions transactions) {
     var bucket = cluster.bucket(bucketName);
     bucket.waitUntilReady(Duration.ofSeconds(60));
     this.scope = bucket.defaultScope();
     this.collection = bucket.defaultCollection();
+    this.transactions = transactions;
+    this.versions = new AggregateVersions(collection, transactions, TYPE);
     scope.query(
         "CREATE INDEX idx_category_slug IF NOT EXISTS ON `_default`(slug)"
             + " WHERE type = 'category'");
@@ -70,7 +76,9 @@ class CouchbaseCategoryRepository implements CategoryRepository {
   @Override
   public boolean insert(Category category) {
     try {
-      collection.insert(key(category.slug()), toDocument(category));
+      transactions
+          .required("Store a Category")
+          .insert(collection, key(category.slug()), toDocument(category));
       return true;
     } catch (DocumentExistsException e) {
       return false;
@@ -79,8 +87,9 @@ class CouchbaseCategoryRepository implements CategoryRepository {
 
   @Override
   public boolean replace(Category category) {
+    var context = transactions.required("Store a Category");
     try {
-      collection.replace(key(category.slug()), toDocument(category));
+      context.replace(context.get(collection, key(category.slug())), toDocument(category));
       return true;
     } catch (DocumentNotFoundException e) {
       return false;
@@ -88,13 +97,25 @@ class CouchbaseCategoryRepository implements CategoryRepository {
   }
 
   @Override
-  public boolean remove(String slug) {
+  public Optional<Category> remove(String slug) {
+    var context = transactions.required("Remove a Category");
     try {
-      collection.remove(key(slug));
-      return true;
+      var current = context.get(collection, key(slug));
+      context.remove(current);
+      return Optional.of(fromDocument(current.contentAsObject()));
     } catch (DocumentNotFoundException e) {
-      return false;
+      return Optional.empty();
     }
+  }
+
+  @Override
+  public long nextVersion(String slug) {
+    return versions.next(slug);
+  }
+
+  @Override
+  public boolean hasVersion(String slug) {
+    return versions.exists(slug);
   }
 
   private static String key(String slug) {

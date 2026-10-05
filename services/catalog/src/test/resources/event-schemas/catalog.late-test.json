@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "catalog.late-test",
+  "description": "Test-only: the event of a topic that doesn't exist until a test creates it, so that sending to it fails until then.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["eventId", "occurredAt", "id", "version"],
+  "properties": {
+    "eventId": { "type": "string", "format": "uuid" },
+    "occurredAt": { "type": "string", "format": "date-time" },
+    "id": { "type": "string", "minLength": 1 },
+    "version": { "type": "integer", "minimum": 0 }
+  }
+}
