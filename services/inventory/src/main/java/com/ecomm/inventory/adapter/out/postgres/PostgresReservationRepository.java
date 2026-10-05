@@ -98,17 +98,28 @@ class PostgresReservationRepository implements ReservationRepository {
   }
 
   @Override
-  public List<UUID> releaseExpired(Instant now) {
+  public List<Reservation> expired(Instant now) {
+    return query(
+        SELECT + "WHERE r.status = 'ACTIVE' AND r.expires_at <= :now",
+        Map.of("now", Timestamp.from(now)));
+  }
+
+  @Override
+  public List<UUID> releaseExpired(Collection<UUID> ids, Instant now) {
+    if (ids.isEmpty()) {
+      return List.of();
+    }
     return jdbc.sql(
             """
             UPDATE reservation SET status = 'RELEASED'
             WHERE id IN (
               SELECT id FROM reservation
-              WHERE status = 'ACTIVE' AND expires_at <= :now
+              WHERE id IN (:ids) AND status = 'ACTIVE' AND expires_at <= :now
               ORDER BY id
               FOR UPDATE SKIP LOCKED)
             RETURNING id
             """)
+        .param("ids", ids)
         .param("now", Timestamp.from(now))
         .query(UUID.class)
         .list();

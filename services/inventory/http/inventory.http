@@ -1,4 +1,5 @@
 # Exercises every Inventory endpoint against the compose stack (`docker compose up -d --build`).
+# Each change also publishes an inventory.stock event; the README shows how to watch the topic.
 # Run the requests top to bottom in the IntelliJ HTTP client; the token requests store tokens for
 # the ones after them.
 
@@ -36,11 +37,12 @@ GET {{inventory}}/stock/PHN-PIXEL-9
 GET {{inventory}}/stock/NO-SUCH-VARIANT
 
 ### Staff set a Variant's on-hand Stock: 200, or 201 for a Variant Inventory didn't stock yet
+# Recorded as an ADJUSTED movement of the difference, with the reason, which is optional.
 PUT {{inventory}}/stock/PHN-PIXEL-9
 Authorization: Bearer {{staffToken}}
 Content-Type: application/json
 
-{"onHand": 30}
+{"onHand": 30, "reason": "stocktake"}
 
 ### A negative on-hand count: 400
 PUT {{inventory}}/stock/PHN-PIXEL-9
@@ -177,6 +179,19 @@ Content-Type: application/json
 {"customerId": "http-file-customer", "expiresAt": "2030-01-01T00:00:00Z", "items": [
   {"variantId": "PHN-PIXEL-9", "quantity": 1}
 ]}
+
+### The Variant's Stock movements, newest first, and whether On-hand equals their sum (balanced)
+# The oldest is the opening balance the ledger's migration recorded.
+GET {{inventory}}/stock/PHN-PIXEL-9/movements?page=0&size=20
+Authorization: Bearer {{staffToken}}
+
+### Only Staff read movements; Checkout's token gets 403, and no token 401
+GET {{inventory}}/stock/PHN-PIXEL-9/movements
+Authorization: Bearer {{checkoutToken}}
+
+### Movements through the gateway, which routes them with a token
+GET http://localhost:8000/api/inventory/stock/PHN-PIXEL-9/movements?size=5
+Authorization: Bearer {{staffToken}}
 
 ### Staff stock a Variant only to stop stocking it again
 PUT {{inventory}}/stock/HTTP-FILE-VARIANT

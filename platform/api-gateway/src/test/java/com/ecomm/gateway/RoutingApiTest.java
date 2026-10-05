@@ -20,6 +20,7 @@ class RoutingApiTest extends GatewayApiTest {
   @CsvSource({
     "/api/catalog/products, /products",
     "/api/inventory/stock/PHN-PIXEL-9, /stock/PHN-PIXEL-9",
+    "/api/inventory/stock/PHN-PIXEL-9/movements?page=1, /stock/PHN-PIXEL-9/movements?page=1",
     "/api/cart/cart, /cart",
     "/api/checkout-pricing/checkout/sessions/current, /checkout/sessions/current",
     "/api/order-management/orders/7f1c, /orders/7f1c",

@@ -9,7 +9,9 @@ Stock is counted per Variant as **on-hand** units, some of which Reservations ma
 left is available to sell. Checkout takes Stock only through Reservations: a Checkout Session
 reserves the Cart's Stock, and paying it commits the Reservation
 ([Checkout ADR 0001](../checkout-pricing/docs/adr/0001-checkout-sessions-hold-stock-through-reservations.md)).
-A ledger of Stock movements follows in Sprint 3 (see the [roadmap](../../docs/roadmap.md) and [ADR 0002](../../docs/adr/0002-ledgers-and-outboxes-not-event-sourcing.md)).
+Every change to On-hand, or to what Reservations hold, is recorded as a Stock movement in a ledger
+beside the Stock counter, so On-hand can be checked against it, and is published as an
+`inventory.stock` event ([ADR 0002](../../docs/adr/0002-ledgers-and-outboxes-not-event-sourcing.md)).
 
 ## API
 
@@ -17,6 +19,7 @@ A ledger of Stock movements follows in Sprint 3 (see the [roadmap](../../docs/ro
 |---|---|---|
 | `GET /stock/{variantId}` | anyone | `{"variantId", "quantity", "onHand", "reserved"}`; 404 for an unknown Variant |
 | `PUT /stock/{variantId}` | Staff | Sets on-hand Stock: 201 for a new Variant, 200 otherwise |
+| `GET /stock/{variantId}/movements` | Staff | A page of the Variant's Stock movements, newest first, and whether On-hand equals their sum |
 | `DELETE /stock/{variantId}` | Staff | Stops stocking a Variant: 204; 404 for an unknown Variant, 409 while Reservations hold some |
 | `POST /reservations` | Checkout | Holds a batch for a Customer until `expiresAt`; 201 with the Reservation |
 | `POST /reservations/{id}/commit` | Checkout | Takes the held Stock off on-hand for good |
@@ -25,9 +28,11 @@ A ledger of Stock movements follows in Sprint 3 (see the [roadmap](../../docs/ro
 `quantity` is what is available to sell: `onHand` less what `ACTIVE` Reservations that haven't
 expired yet hold (`reserved`).
 
-Setting on-hand Stock needs a Staff token (`STAFF` role). It takes `{"onHand": 12}` and adds the
-Variant if Inventory doesn't stock it yet. Setting it below `reserved` is a 409 whose `reserved`
-says how many units Reservations hold; a negative or non-integer count is a 400.
+Setting on-hand Stock needs a Staff token (`STAFF` role). It takes `{"onHand": 12}`, and
+optionally a `reason` of up to 200 characters (`{"onHand": 12, "reason": "stocktake"}`), and adds
+the Variant if Inventory doesn't stock it yet. Setting it below `reserved` is a 409 whose `reserved`
+says how many units Reservations hold; a negative or non-integer count, or a reason that is too
+long, is a 400.
 
 Staff stop stocking a Variant when its Product leaves the Catalog; the
 [Admin Console](../../frontend/admin-console/README.md) does it when it deletes a Product. Its
@@ -73,9 +78,87 @@ belongs to another Customer, is a 404.
 
 **Expiry.** An `ACTIVE` Reservation stops holding Stock the moment its `expiresAt` passes, so its
 units are available again straight away. Every 30 seconds a sweeper marks expired `ACTIVE`
-Reservations `RELEASED`; that is housekeeping, and nothing a caller sees depends on when it runs.
+Reservations `RELEASED`, recording their `RELEASED` movements and publishing their Variants' Stock.
+Nothing a caller reads from the API depends on when it runs; the ledger and the events wait for it.
 Set `ecomm.inventory.reservation-sweeper.enabled=false` to turn it off, as the tests do. The clock
 is the `TimeSource` port.
+
+### Stock movements
+
+Every change to a Variant's On-hand units, or to what Reservations hold of them, records Stock
+movements in the same transaction. Movements are never changed or deleted. Each says by how much
+it changed On-hand (`onHandChange`) and what Reservations hold (`reservedChange`):
+
+| Kind | When | `onHandChange` | `reservedChange` |
+|---|---|---|---|
+| `ADJUSTED` | Staff set On-hand: the difference, with their `reason`. Stopping stocking a Variant takes it to 0, with reason `stopped stocking` | ± the difference | 0 |
+| `RESERVED` | A Reservation is made, one per Variant | 0 | + its quantity |
+| `RELEASED` | A Reservation is released, by Checkout or by the sweeper once it has expired | 0 | − its quantity |
+| `COMMITTED` | A Reservation is committed | − its quantity | − its quantity |
+| `RECEIVED`, `RESTOCKED` | Units arrive from a supplier, or a return goes back on hand. Unused until replenishment and returns exist | + | 0 |
+
+Setting On-hand to what it already is, committing or releasing a Reservation again, and anything
+refused record nothing. A movement made by a Reservation names it as `reservationId`; otherwise,
+like a missing `reason`, it is `null`.
+
+`GET /stock/{variantId}/movements?page=0&size=20` (Staff only; `size` up to 100) answers:
+
+```json
+{"variantId": "PHN-PIXEL-9", "onHand": 23, "onHandFromMovements": 23, "balanced": true,
+ "items": [{"kind": "COMMITTED", "onHandChange": -2, "reservedChange": -2,
+            "reservationId": "…", "reason": null, "at": "2026-10-05T10:00:00Z"},
+           {"kind": "ADJUSTED", "onHandChange": 25, "reservedChange": 0,
+            "reservationId": null, "reason": "opening balance", "at": "2026-10-04T09:00:00Z"}],
+ "page": 0, "size": 20, "total": 2}
+```
+
+`onHandFromMovements` is the sum of every `onHandChange`, and `balanced` says whether it equals
+`onHand`; both are read in one snapshot. An unknown Variant is a 404, Customers and Checkout get
+403, and no token gets 401. The gateway routes it, with a token.
+
+What Reservations hold isn't checked the same way: a Reservation stops holding Stock the moment it
+expires, but its `RELEASED` movement waits for the sweep.
+
+## Stock events
+
+Each change publishes one `inventory.stock` event per Variant it touched, in its transaction. The
+event is keyed by the Variant's ID and carries the Correlation ID of the request as its
+`X-Correlation-Id` header. Its schema,
+[`inventory.stock.json`](../../platform/event-schemas/schemas/inventory.stock.json), is the
+definition:
+
+```json
+{"eventId": "…", "occurredAt": "2026-10-05T10:00:00Z", "variantId": "PHN-PIXEL-9",
+ "version": 42, "change": "RESERVED",
+ "stock": {"onHand": 25, "available": 23, "stocked": true}}
+```
+
+- `change` is the kind of movement, `REMOVED` when Staff stop stocking the Variant, or
+  `BACKFILLED`.
+- `available` is `quantity` in `GET /stock/{variantId}`. The `REMOVED` event has `stocked: false`
+  and 0 for both counts.
+- `version` goes up with every change. All Variants draw it from one sequence, so it isn't
+  contiguous per Variant, and a Variant stocked again after its removal still moves on from its
+  last version. Consumers apply an event only when it is newer than what they hold.
+- A Reservation's expiry changes `available` at once, but its event is published by the next
+  sweep, at most 30 seconds later. Search's "in stock" can lag by that much.
+- A refused change, such as a Reservation of more than is available, publishes nothing.
+
+Watch the topic on the compose stack with:
+
+```sh
+docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 \
+  --topic inventory.stock --from-beginning --property print.key=true --property print.headers=true
+```
+
+### Backfill
+
+A stack from Sprint 2 had Stock but no ledger. Migration `V7` gives each Variant an `ADJUSTED`
+movement of its On-hand, and each line of every `ACTIVE` Reservation, expired or not, a `RESERVED`
+movement, all with reason `opening balance`. Expired ones are then released by the next sweep like
+any other. On start, a job publishes every Variant stocked before Stock events once, with change
+`BACKFILLED`, so consumers start complete. Each is published in the transaction that marks it done,
+so a restart, or a second instance, publishes nothing more.
 
 [`http/inventory.http`](./http/inventory.http) exercises every endpoint against the compose stack.
 
@@ -87,11 +170,17 @@ non-negative. A Reservation is a `reservation` row (owner, status, expiry) and o
 to `stock`, so a Reservation outlives the Stock it once held when Staff stop stocking the Variant. What a Variant has reserved is never stored: it is worked out
 from its `ACTIVE` Reservations and the clock.
 
-Every change that can take Stock (a Reservation, a commit, setting on-hand) first
-locks its Variants' `stock` rows (`SELECT ... FOR UPDATE`, in Variant ID order so overlapping
-batches can't deadlock), then reads what Reservations hold of them, checks the whole batch, and
-writes it. So two Reservations of the last unit can't both succeed. Commit and release then lock
-the Reservation's own row; the sweeper skips any Reservation that is locked.
+Every change to Stock (a Reservation, a commit, a release, a sweep, setting on-hand) first locks
+its Variants' `stock` rows (`SELECT ... FOR UPDATE`, in Variant ID order so overlapping batches
+can't deadlock), then reads what Reservations hold of them, checks the whole batch, and writes it.
+So two Reservations of the last unit can't both succeed. Commit and release then lock the
+Reservation's own row; the sweeper skips any Reservation that is locked.
+
+Each `stock` row also holds the `version` of its last event, taken from the `stock_version`
+sequence on every write. Stock movements are `stock_movement` rows, only ever inserted and read
+newest first by their generated ID; like `reservation_item`, they name their Variant without a
+foreign key. Spring Modulith's `event_publication` table is the outbox, and
+`stock_awaiting_backfill_event` lists the Variants the startup job has still to publish.
 
 ## Seed data
 

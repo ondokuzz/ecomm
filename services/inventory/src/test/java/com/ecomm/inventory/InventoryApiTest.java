@@ -1,5 +1,6 @@
 package com.ecomm.inventory;
 
+import com.ecomm.commons.events.EventBackbone;
 import com.ecomm.commons.security.FakeKeycloak;
 import java.time.Duration;
 import java.time.Instant;
@@ -18,9 +19,11 @@ import org.springframework.test.web.servlet.client.RestTestClient;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
- * Base for HTTP-seam tests: the app runs against one Postgres container shared by every test class.
- * Besides the seed stock, a test-only migration adds {@code TEST-*} Variants; each test that
- * changes stock uses Variants of its own, from that migration or from {@link #newVariant}.
+ * Base for HTTP-seam tests: the app runs against one Postgres container shared by every test class,
+ * and the shared Kafka and schema registry from {@link EventBackbone}, with the Stock topic created
+ * and its schema registered as the stack does. Besides the seed stock, test-only migrations add
+ * Variants and Reservations as a Sprint 2 stack holds them; each test that changes stock uses
+ * Variants of its own, from those migrations or from {@link #newVariant}.
  *
  * <p>The clock is a {@link TestTimeSource} and the scheduled sweeper is off, so a test sees what
  * happens before any sweep and triggers one itself.
@@ -35,13 +38,19 @@ abstract class InventoryApiTest {
   private static final PostgreSQLContainer POSTGRES =
       new PostgreSQLContainer("postgres:16").withDatabaseName("inventory");
 
+  /** The topic Stock events are published to. */
+  static final String STOCK_TOPIC = "inventory.stock";
+
   static {
     POSTGRES.start();
+    EventBackbone.createTopic(STOCK_TOPIC);
+    EventBackbone.registerSchemaOf(STOCK_TOPIC);
   }
 
   @DynamicPropertySource
   static void infrastructure(DynamicPropertyRegistry registry) {
     FakeKeycloak.registerWith(registry);
+    EventBackbone.registerWith(registry);
     registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
     registry.add("spring.datasource.username", POSTGRES::getUsername);
     registry.add("spring.datasource.password", POSTGRES::getPassword);
@@ -191,6 +200,19 @@ abstract class InventoryApiTest {
     }
   }
 
+  /** The Variant's latest movements, up to 100, as Staff read them. */
+  LedgerView ledgerOf(String variantId) {
+    return http.get()
+        .uri("/stock/{variantId}/movements?size=100", variantId)
+        .headers(h -> h.setBearerAuth(staffToken()))
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody(LedgerView.class)
+        .returnResult()
+        .getResponseBody();
+  }
+
   /** The parts of a stock level a client reads, independent of the service's classes. */
   record StockView(String variantId, long quantity, long onHand, long reserved) {}
 
@@ -198,4 +220,33 @@ abstract class InventoryApiTest {
       String id, String customerId, String status, String expiresAt, List<ItemView> items) {}
 
   record ItemView(String variantId, int quantity) {}
+
+  record LedgerView(
+      String variantId,
+      int onHand,
+      long onHandFromMovements,
+      boolean balanced,
+      List<MovementView> items,
+      int page,
+      int size,
+      long total) {
+
+    /** The movements, with their times left out so they compare by what changed. */
+    List<MovementView> changes() {
+      return items.stream().map(MovementView::withoutTime).toList();
+    }
+  }
+
+  record MovementView(
+      String kind,
+      int onHandChange,
+      int reservedChange,
+      String reservationId,
+      String reason,
+      String at) {
+
+    MovementView withoutTime() {
+      return new MovementView(kind, onHandChange, reservedChange, reservationId, reason, null);
+    }
+  }
 }

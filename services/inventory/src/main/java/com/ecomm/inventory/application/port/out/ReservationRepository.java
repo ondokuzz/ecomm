@@ -28,10 +28,13 @@ public interface ReservationRepository {
    */
   List<Reservation> activeFor(Collection<String> variantIds);
 
+  /** The {@code ACTIVE} Reservations that expired by {@code now}, unlocked. */
+  List<Reservation> expired(Instant now);
+
   /**
-   * Marks every {@code ACTIVE} Reservation that expired by {@code now} as {@code RELEASED}, and
-   * returns their IDs. Skips any another transaction has locked, which is committing or releasing
-   * it.
+   * Marks those of {@code ids} still {@code ACTIVE} and expired by {@code now} as {@code RELEASED},
+   * and returns their IDs. Skips any another transaction has locked, which is committing or
+   * releasing it. Callers lock the stock rows they hold first.
    */
-  List<UUID> releaseExpired(Instant now);
+  List<UUID> releaseExpired(Collection<UUID> ids, Instant now);
 }

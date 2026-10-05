@@ -53,7 +53,7 @@ How many units of a Variant Inventory physically has, whether or not Reservation
 _Avoid_: Stock (Stock is what's left to sell), Physical stock
 
 **Stock movement**:
-One change to a Variant's On-hand units or to what Reservations hold of them, recorded for good: units received, reserved, released, committed, adjusted by Staff, or restocked from a return, with how many and when. Inventory owns them, and never changes or deletes one: a mistake is corrected by another. A Variant's On-hand is the sum of its movements, so the counter Inventory keeps beside them can always be checked against them. Inventory records them from Sprint 3.
+One change to a Variant's On-hand units or to what Reservations hold of them, recorded for good: units received, reserved, released, committed, adjusted by Staff, or restocked from a return, with how many and when. Inventory owns them, and never changes or deletes one: a mistake is corrected by another. A Variant's On-hand is the sum of its movements, so the counter Inventory keeps beside them can always be checked against them. A Variant's ledger starts with an opening balance: an adjustment equal to the On-hand it had when Inventory began recording movements, and a reservation for each active Reservation then holding some of it.
 _Avoid_: Stock change, Adjustment (one kind of movement), Transaction
 
 **Price**:
