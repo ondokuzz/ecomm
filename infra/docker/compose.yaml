@@ -49,6 +49,28 @@ services:
       timeout: 3s
       retries: 20
 
+  # A browser UI for the shared Postgres on http://localhost:5050, signed in and already connected
+  # as ecomm to every service's database. Desktop mode: no pgAdmin login, and no volume, so it
+  # starts afresh from pgadmin/ each time. Not in the default stack; `docker compose up -d pgadmin`
+  # starts it.
+  pgadmin:
+    image: dpage/pgadmin4:9.18
+    profiles: [tools]
+    environment:
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+      # Required by the image even in desktop mode, where nobody signs in with them.
+      PGADMIN_DEFAULT_EMAIL: admin@ecomm.dev
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_SERVER_JSON_FILE: /pgadmin/servers.json
+      PGPASS_FILE: /pgadmin/pgpass
+    mem_limit: 384m
+    ports: ["${PGADMIN_PORT:-5050}:80"]
+    volumes:
+      - ./pgadmin:/pgadmin:ro
+    depends_on:
+      postgres: { condition: service_healthy }
+
   # Creates each service's database that doesn't exist yet, then exits; see the script.
   postgres-databases:
     image: postgres:16

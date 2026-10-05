@@ -66,9 +66,18 @@ a host port, which bypasses the gateway, for development only (see each service'
 | 8088 | Apicurio schema registry: the event schemas, under `/apis/registry/v3` |
 | 9092 | Kafka |
 | 27017 | Mongo |
+| 5050 | pgAdmin, once started (below) |
 
 Override one that is already taken, e.g. `POSTGRES_PORT=5433 make up`; Couchbase's ports, the
 Storefront's 8080 and the Admin Console's 8090 are fixed.
+
+### Browsing Postgres
+
+`docker compose up -d pgadmin` starts pgAdmin on http://localhost:5050. It isn't part of `make up`.
+It opens without a login and is already connected to the shared Postgres as `ecomm`, so every
+service's database (`orders`, `inventory`, `payment`, `promotions`, …) is under **ecomm** in its
+tree. Its connection is in [`infra/docker/pgadmin`](./infra/docker/pgadmin). It keeps nothing
+between restarts, so saved queries and layout are lost when the container is recreated.
 
 ### The event backbone
 
@@ -133,7 +142,7 @@ Promotions and the Admin Console. Two things don't update themselves:
 
 Each Spring service is capped at 384 MB, with 60% of it for the heap, Keycloak at 512 MB and each
 nginx at 64 MB. Kafka and Mongo are capped at 512 MB each, with a 256 MB heap for Kafka and a
-256 MB cache for Mongo, and Apicurio at 384 MB. The default stack fits in about 8 GB of Docker
+256 MB cache for Mongo, and Apicurio and pgAdmin at 384 MB each. The default stack fits in about 8 GB of Docker
 memory; `docker stats` shows what it uses ([Sprint 2's reading](./docs/roadmap.md#sprint-2-weeks-34--harden-the-skeleton)).
 Couchbase, Postgres and Redis are uncapped.
 
