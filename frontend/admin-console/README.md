@@ -1,7 +1,8 @@
 # Admin Console
 
 The back-office React app where Staff manage the Catalog: Products with their Variants, Prices and
-Stock, and Categories with their attribute definitions; and Promotions: Coupons and Campaigns. Built on the Storefront's stack:
+Stock, and Categories with their attribute definitions; and Promotions: Coupons and Campaigns. Staff
+also read every Customer's Orders here, without being able to change them. Built on the Storefront's stack:
 Vite, React, TypeScript, React Router and TanStack Query, with `oidc-client-ts`.
 
 ## Pages
@@ -20,6 +21,8 @@ Vite, React, TypeScript, React Router and TanStack Query, with `oidc-client-ts`.
 | `/promotions/campaigns` | Every Campaign by priority: name, discount, Categories, minimum, validity and its state, running, scheduled, over or off. Switch each on or off, edit or delete it |
 | `/promotions/campaigns/new` | A new Campaign |
 | `/promotions/campaigns/{id}` | A Campaign |
+| `/orders` | Every Customer's Orders, newest first, 20 to a page: Order reference, when placed, Customer ID, items, total and Order Status. Filter by Status, Customer ID, the days placed and Order reference |
+| `/orders/{id}` | An Order: its ID, Customer ID, lines, Discount, tax and total, and its Order Status history |
 
 `/` opens the Products. Every page needs a Staff sign-in.
 
@@ -115,6 +118,27 @@ window that ends before it starts, a taken priority or a Category Catalog doesn'
 
 Deleting goes through a ConfirmDialog, which suggests switching off instead.
 
+## Orders
+
+Orders are read only. Nothing on these pages changes an Order; only Checkout does that. The list
+calls Order Management's `GET /staff/orders` and the page `GET /staff/orders/{id}`, both Staff only
+(see the [Order Management README](../../services/order-management/README.md#staffs-view)).
+
+The filters and the page live in the URL, as `?status=&customer=&from=&to=&reference=&page=`, so a
+filtered list can be reloaded or shared. Filtering goes back to the first page.
+
+- **Placed from** and **Placed to** are days in the browser's time zone, and both are included:
+  they are sent as the instants of the first day's midnight and of the midnight after the last.
+- **Order reference** is what a Customer quotes, such as `#3F2A9C1B`. The `#` is optional, and a
+  full Order ID works too. Anything but hex digits and hyphens is refused beside the field before
+  anything is sent.
+
+The Order page's back link returns to the list as it was filtered and paged. Its Status history is
+newest first, each change with its time to the second, in the browser's time zone, and the caller
+that made it, such as Checkout. A change backfilled for an Order placed before histories were kept
+has no time to show, and says so. `filtersOf`, `searchOf`, `ordersQueryOf` and `historyRowsOf` in
+[`src/domain/order.ts`](./src/domain/order.ts) do this.
+
 ## Validation errors
 
 Catalog and Promotions check every write. A 400 names each offending field in its problem detail's `errors`,
@@ -165,8 +189,8 @@ squarer corners. Dark mode follows `prefers-color-scheme`, as in the Storefront.
 
 ## Calling the services
 
-The browser reaches Catalog at `/api/catalog/…`, Inventory at `/api/inventory/…` and Promotions at
-`/api/promotions/…` on the console's own origin. Everything under
+The browser reaches Catalog at `/api/catalog/…`, Inventory at `/api/inventory/…`, Order Management
+at `/api/order-management/…` and Promotions at `/api/promotions/…` on the console's own origin. Everything under
 `/api/` goes to the [API gateway](../../platform/api-gateway/README.md), which checks the token and
 routes it. In development the Vite dev proxy forwards `/api` to the gateway's compose host port,
 8000 ([`vite.config.ts`](./vite.config.ts)). In compose, nginx does it
@@ -201,7 +225,7 @@ how to apply the client to an existing realm.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: failed requests as messages and references, field errors from problem details, the STAFF role in an access token, a Category, a Product, a Coupon and a Campaign to and from their editor's form, decimals to and from Money
+npm test          # Vitest: failed requests as messages and references, field errors from problem details, the STAFF role in an access token, a Category, a Product, a Coupon and a Campaign to and from their editor's form, decimals to and from Money, the Order list's filters to Order Management's query, and an Order's Status history
 npm run build
 npm run test:e2e  # Playwright against the running compose stack (`make up`)
 ```
@@ -219,6 +243,13 @@ their Stock.
 - **A refused count** has Inventory refuse one Variant's count. The test stands in for Inventory
   there, since a new Variant has no Reservations. It checks that the new Product opens on its own
   page with the refusal beside that count, then sets the count by saving again.
+
+[`e2e/orders.spec.ts`](./e2e/orders.spec.ts) places an Order for a Customer of its own as Checkout
+does, straight at Order Management on its host port (`ORDER_MANAGEMENT_URL`, default
+`http://localhost:8085`), since the gateway never routes placement. It pays and cancels the Order,
+then finds it in the console by its Order reference and by its Customer and Status, opens it and
+reads its history, each change with its time and caller. Orders are never deleted, so the test's
+Order stays, Cancelled.
 
 Each test removes its Product and Stock, Coupon or Campaign through the services' APIs if it failed
 before doing so itself, so the stack is left as it was. It runs against the console on 8090; set `ADMIN_CONSOLE_URL` to use Vite's

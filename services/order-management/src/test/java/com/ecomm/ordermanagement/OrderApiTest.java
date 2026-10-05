@@ -128,6 +128,7 @@ abstract class OrderApiTest {
   /** The parts of an Order a client reads, independent of the service's classes. */
   record OrderView(
       String id,
+      String customerId,
       String status,
       List<LineView> lines,
       AmountView subtotal,

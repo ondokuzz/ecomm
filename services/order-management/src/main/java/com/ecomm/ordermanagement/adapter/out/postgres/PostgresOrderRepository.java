@@ -5,6 +5,7 @@ import static java.util.stream.Collectors.mapping;
 import static java.util.stream.Collectors.toList;
 
 import com.ecomm.commons.money.Money;
+import com.ecomm.ordermanagement.application.port.in.OrderFilter;
 import com.ecomm.ordermanagement.application.port.out.OrderRepository;
 import com.ecomm.ordermanagement.domain.Caller;
 import com.ecomm.ordermanagement.domain.Discount;
@@ -13,6 +14,8 @@ import com.ecomm.ordermanagement.domain.OrderLine;
 import com.ecomm.ordermanagement.domain.OrderStatus;
 import com.ecomm.ordermanagement.domain.StatusHistoryEntry;
 import java.sql.Timestamp;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -173,6 +176,71 @@ class PostgresOrderRepository implements OrderRepository {
         .param("customerId", customerId)
         .query(Long.class)
         .single();
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public List<Order> findMatching(OrderFilter filter, long offset, int limit) {
+    var where = Where.of(filter);
+    return attach(
+        where
+            .bind(
+                jdbc.sql(
+                    "SELECT "
+                        + ORDER_COLUMNS
+                        + " FROM customer_order"
+                        + where.sql()
+                        + " ORDER BY placed_at DESC, id LIMIT :limit OFFSET :offset"))
+            .param("limit", limit)
+            .param("offset", offset)
+            .query(ORDER)
+            .list());
+  }
+
+  @Override
+  public long countMatching(OrderFilter filter) {
+    var where = Where.of(filter);
+    return where
+        .bind(jdbc.sql("SELECT count(*) FROM customer_order" + where.sql()))
+        .query(Long.class)
+        .single();
+  }
+
+  /** The {@code WHERE} clause a filter stands for, and the parameters it names. */
+  private record Where(String sql, Map<String, Object> params) {
+
+    static Where of(OrderFilter filter) {
+      var conditions = new ArrayList<String>();
+      var params = new HashMap<String, Object>();
+      if (filter.customerId() != null) {
+        conditions.add("customer_id = :customerId");
+        params.put("customerId", filter.customerId());
+      }
+      if (filter.status() != null) {
+        conditions.add("status = :status");
+        params.put("status", filter.status().name());
+      }
+      if (filter.placedFrom() != null) {
+        conditions.add("placed_at >= :placedFrom");
+        params.put("placedFrom", Timestamp.from(filter.placedFrom()));
+      }
+      if (filter.placedTo() != null) {
+        conditions.add("placed_at < :placedTo");
+        params.put("placedTo", Timestamp.from(filter.placedTo()));
+      }
+      if (filter.idPrefix() != null) {
+        // Hex digits and hyphens only, so nothing in it is a LIKE wildcard. No index serves it:
+        // it reads every Order, which is fine while Staff look up one Order at a time.
+        conditions.add("id::text LIKE :idPrefix");
+        params.put("idPrefix", filter.idPrefix() + "%");
+      }
+      return new Where(
+          conditions.isEmpty() ? "" : " WHERE " + String.join(" AND ", conditions), params);
+    }
+
+    JdbcClient.StatementSpec bind(JdbcClient.StatementSpec statement) {
+      return statement.params(params);
+    }
   }
 
   @Override

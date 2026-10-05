@@ -31,6 +31,9 @@ export function Layout() {
             <NavLink to="/promotions" className="nav-link">
               Promotions
             </NavLink>
+            <NavLink to="/orders" className="nav-link">
+              Orders
+            </NavLink>
           </nav>
           <Account />
         </div>

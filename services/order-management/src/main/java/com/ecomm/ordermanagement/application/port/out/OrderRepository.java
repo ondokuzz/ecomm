@@ -1,5 +1,6 @@
 package com.ecomm.ordermanagement.application.port.out;
 
+import com.ecomm.ordermanagement.application.port.in.OrderFilter;
 import com.ecomm.ordermanagement.domain.Order;
 import java.util.List;
 import java.util.Optional;
@@ -19,6 +20,14 @@ public interface OrderRepository {
 
   /** How many Orders the Customer has. */
   long countByCustomer(String customerId);
+
+  /**
+   * Up to {@code limit} of the Orders that match, newest first, skipping the first {@code offset}.
+   */
+  List<Order> findMatching(OrderFilter filter, long offset, int limit);
+
+  /** How many Orders match. */
+  long countMatching(OrderFilter filter);
 
   /**
    * Records the Order's latest Status change: its new Status and version, and the last entry of its

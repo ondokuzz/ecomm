@@ -34,7 +34,7 @@ export class NetworkError extends Error {
 }
 
 /** The services the console calls, each reached through the dev proxy or nginx at `/api/<service>`. */
-export type Service = 'catalog' | 'inventory' | 'promotions'
+export type Service = 'catalog' | 'inventory' | 'order-management' | 'promotions'
 
 interface RequestOptions {
   method?: string

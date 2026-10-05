@@ -10,6 +10,8 @@ import { CategoryEditorPage } from './pages/CategoryEditorPage'
 import { CategoryListPage } from './pages/CategoryListPage'
 import { CouponEditorPage } from './pages/CouponEditorPage'
 import { CouponListPage } from './pages/CouponListPage'
+import { OrderListPage } from './pages/OrderListPage'
+import { OrderPage } from './pages/OrderPage'
 import { ProductEditorPage } from './pages/ProductEditorPage'
 import { ProductListPage } from './pages/ProductListPage'
 
@@ -44,6 +46,8 @@ export function App() {
                 <Route path="promotions/campaigns" element={<CampaignListPage />} />
                 <Route path="promotions/campaigns/new" element={<CampaignEditorPage />} />
                 <Route path="promotions/campaigns/:id" element={<CampaignEditorPage />} />
+                <Route path="orders" element={<OrderListPage />} />
+                <Route path="orders/:id" element={<OrderPage />} />
                 <Route path="*" element={<NotFound />} />
               </Route>
             </Routes>

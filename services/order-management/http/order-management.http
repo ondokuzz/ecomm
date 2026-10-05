@@ -162,14 +162,54 @@ Content-Type: application/json
 ### Without a token: 401
 GET {{orders}}/orders
 
-### Staff have no Orders: 403
+### Staff token
 POST {{keycloak}}
 Content-Type: application/x-www-form-urlencoded
 
 grant_type=password&client_id=dev-cli&username=staff@ecomm.local&password=staff
 
-> {% client.global.set("staffToken", response.body.access_token); %}
+> {% client.global.set("staffToken", response.body.access_token);
+     client.global.set("orderReference", client.global.get("orderId").substring(0, 8).toUpperCase()); %}
 
-###
+### Staff have no Orders of their own: 403
 GET {{orders}}/orders
 Authorization: Bearer {{staffToken}}
+
+### Staff list every Customer's Orders, newest first, with how many there are in all
+GET {{orders}}/staff/orders
+Authorization: Bearer {{staffToken}}
+
+### Filtered: the demo Customer's paid Orders
+GET {{orders}}/staff/orders?customerId={{customerId}}&status=PAID
+Authorization: Bearer {{staffToken}}
+
+### Placed in October 2026, from its first instant up to, not including, November's
+GET {{orders}}/staff/orders?placedFrom=2026-10-01T00:00:00Z&placedTo=2026-11-01T00:00:00Z&size=5
+Authorization: Bearer {{staffToken}}
+
+### By the Order reference a Customer quotes, such as #3F2A9C1B: the first Order
+GET {{orders}}/staff/orders?idPrefix={{orderReference}}
+Authorization: Bearer {{staffToken}}
+
+### An unknown Status: 400
+GET {{orders}}/staff/orders?status=LOST
+Authorization: Bearer {{staffToken}}
+
+### Staff open the Customer's Order: its Customer ID and its history, each change's time and caller
+GET {{orders}}/staff/orders/{{orderId}}
+Authorization: Bearer {{staffToken}}
+
+### Staff can't change an Order: 403
+PATCH {{orders}}/orders/{{orderId}}/status
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}", "status": "CANCELLED"}
+
+### A Customer can't browse every Order: 403
+GET {{orders}}/staff/orders
+Authorization: Bearer {{customerToken}}
+
+###
+GET {{orders}}/staff/orders/{{orderId}}
+Authorization: Bearer {{customerToken}}

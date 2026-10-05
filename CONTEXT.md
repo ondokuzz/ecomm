@@ -109,7 +109,7 @@ What a market's tax rules add to an Order's lines, worked out by Checkout's `Tax
 _Avoid_: VAT (one kind of it)
 
 **Order reference**:
-The short handle the Storefront shows an Order by, such as `#3F2A9C1B`: the first eight characters of its ID, upper-cased. Order IDs are random UUIDs, so it tells a Customer's Orders apart; the full ID stays on the Order page. Display only; no service looks an Order up by it.
+The short handle the Storefront shows an Order by, such as `#3F2A9C1B`: the first eight characters of its ID, upper-cased. Order IDs are random UUIDs, so it tells a Customer's Orders apart; the full ID stays on the Order page. Staff find the Order a Customer quotes by it, as a prefix of the ID (Order Management's `idPrefix`); it isn't stored anywhere.
 
 **Order Line**:
 One Variant, its quantity, and its unit price captured when the Checkout Session started. The captured price stays with the Order even if the Variant's Price changes later.

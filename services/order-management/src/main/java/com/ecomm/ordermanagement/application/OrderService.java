@@ -2,9 +2,11 @@ package com.ecomm.ordermanagement.application;
 
 import com.ecomm.commons.events.IntegrationEventPublisher;
 import com.ecomm.commons.money.Money;
+import com.ecomm.ordermanagement.application.port.in.BrowseOrdersUseCase;
 import com.ecomm.ordermanagement.application.port.in.ChangeOrderStatusUseCase;
 import com.ecomm.ordermanagement.application.port.in.ConcurrentStatusChangeException;
 import com.ecomm.ordermanagement.application.port.in.FindOrdersUseCase;
+import com.ecomm.ordermanagement.application.port.in.OrderFilter;
 import com.ecomm.ordermanagement.application.port.in.Page;
 import com.ecomm.ordermanagement.application.port.in.PlaceOrderUseCase;
 import com.ecomm.ordermanagement.application.port.in.PublishBackfillUseCase;
@@ -25,6 +27,7 @@ import java.util.UUID;
 public class OrderService
     implements PlaceOrderUseCase,
         FindOrdersUseCase,
+        BrowseOrdersUseCase,
         ChangeOrderStatusUseCase,
         PublishBackfillUseCase {
 
@@ -76,6 +79,20 @@ public class OrderService
         page,
         size,
         orders.countByCustomer(customerId));
+  }
+
+  @Override
+  public Optional<Order> anyOrder(UUID id) {
+    return orders.find(id);
+  }
+
+  @Override
+  public Page<Order> orders(OrderFilter filter, int page, int size) {
+    return new Page<>(
+        orders.findMatching(filter, (long) page * size, size),
+        page,
+        size,
+        orders.countMatching(filter));
   }
 
   @Override

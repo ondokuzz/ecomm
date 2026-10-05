@@ -7,11 +7,12 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * An Order with its lines, what it comes to, and its Order Status history, oldest first: {@code
- * discount} is null when it has none.
+ * An Order with the Customer it belongs to, its lines, what it comes to, and its Order Status
+ * history, oldest first: {@code discount} is null when it has none.
  */
 record OrderResponse(
     UUID id,
+    String customerId,
     String status,
     List<Line> lines,
     Amount subtotal,
@@ -37,6 +38,7 @@ record OrderResponse(
   static OrderResponse of(Order order) {
     return new OrderResponse(
         order.id(),
+        order.customerId(),
         order.status().name(),
         order.lines().stream()
             .map(l -> new Line(l.variantId(), l.quantity(), Amount.of(l.unitPrice())))

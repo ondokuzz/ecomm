@@ -33,16 +33,14 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Checkout places a Customer's Orders and moves them along their Order Status with its own {@code
  * CHECKOUT} token, naming the Customer in the body. The Customer reads them with a {@code CUSTOMER}
- * token, whose {@code sub} must own the Order; Staff have no Orders.
+ * token, whose {@code sub} must own the Order. Staff have no Orders of their own, and read every
+ * Customer's through {@link StaffOrderController}.
  */
 @RestController
 @RequestMapping("/orders")
 class OrderController {
 
   private static final Logger log = LoggerFactory.getLogger(OrderController.class);
-
-  /** The most Orders a page of the list can hold. */
-  static final int MAX_PAGE_SIZE = 100;
 
   private final PlaceOrderUseCase place;
   private final FindOrdersUseCase find;
@@ -73,7 +71,7 @@ class OrderController {
 
   /**
    * A page of the Customer's Orders, newest first, with how many they have in all: {@code page}
-   * counts from 0, and {@code size} is 1 to {@value #MAX_PAGE_SIZE}.
+   * counts from 0, and {@code size} is 1 to {@value PageRequests#MAX_PAGE_SIZE}.
    */
   @GetMapping
   @PreAuthorize("hasRole('CUSTOMER')")
@@ -81,12 +79,7 @@ class OrderController {
       CurrentCustomer customer,
       @RequestParam(defaultValue = "0") int page,
       @RequestParam(defaultValue = "20") int size) {
-    if (page < 0) {
-      throw new InvalidPageException("page counts from 0");
-    }
-    if (size < 1 || size > MAX_PAGE_SIZE) {
-      throw new InvalidPageException("size is 1 to " + MAX_PAGE_SIZE);
-    }
+    PageRequests.check(page, size);
     return find.orders(customer.id(), page, size).map(OrderResponse::of);
   }
 
@@ -120,18 +113,10 @@ class OrderController {
    * The Order {@code action} returns for this ID; a 404 if the ID isn't a UUID or it finds none.
    */
   private static OrderResponse ownedOrder(String id, Function<UUID, Optional<Order>> action) {
-    return parse(id)
+    return OrderIds.parse(id)
         .flatMap(action)
         .map(OrderResponse::of)
         .orElseThrow(() -> new OrderNotFoundException(id));
-  }
-
-  private static Optional<UUID> parse(String id) {
-    try {
-      return Optional.of(UUID.fromString(id));
-    } catch (IllegalArgumentException e) {
-      return Optional.empty();
-    }
   }
 
   @ExceptionHandler(OrderNotFoundException.class)

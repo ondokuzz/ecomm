@@ -18,7 +18,8 @@ Checkout places Orders and changes their status with its own token, with the `CH
 Customer in the body. An Order belongs to that Customer, and they read it with their own token
 (`CUSTOMER`), whose `sub` must match. Another Customer's Order is a 404, the same as an unknown one,
 so its existence never leaks, and the same goes for a status change naming a Customer who doesn't
-own the Order. Any other token gets 403, and no token gets 401. Staff have no Orders.
+own the Order. Staff read every Customer's Orders under `/staff/orders` with a `STAFF` token, and
+nothing there changes an Order. Any other token gets 403, and no token gets 401.
 
 | Endpoint | Called by | |
 |---|---|---|
@@ -26,6 +27,8 @@ own the Order. Any other token gets 403, and no token gets 401. Staff have no Or
 | `PATCH /orders/{id}/status` | Checkout | Moves the Order: `{"customerId", "status": "PAID"}`; 200 with the Order, 409 if illegal |
 | `GET /orders/{id}` | Customer | The Customer's Order; 404 for an unknown ID or another Customer's |
 | `GET /orders?page=0&size=20` | Customer | A page of the Customer's Orders, newest first, with their total |
+| `GET /staff/orders?status=&customerId=&placedFrom=&placedTo=&idPrefix=&page=0&size=20` | Staff | A page of every Customer's Orders that match, newest first, with their total |
+| `GET /staff/orders/{id}` | Staff | Any Customer's Order; 404 for an unknown ID |
 
 An Order is placed for a Customer from the lines Checkout priced, an optional Discount and the tax:
 
@@ -42,7 +45,7 @@ quantity, and the `total` is the subtotal, less the discount, plus the tax: what
 the Payment for.
 
 ```json
-{"id": "…", "status": "PLACED",
+{"id": "…", "customerId": "…", "status": "PLACED",
  "lines": [{"variantId": "PHN-PIXEL-9", "quantity": 2,
             "unitPrice": {"amountMinor": 79900, "currency": "EUR"}}],
  "subtotal": {"amountMinor": 159800, "currency": "EUR"},
@@ -53,8 +56,9 @@ the Payment for.
                     "changedBy": "CHECKOUT", "backfilled": false}]}
 ```
 
-`statusHistory` is oldest first, and its last entry is the current `status`. `changedBy` is the
-caller that made the change, `CHECKOUT` for now.
+`customerId` is the Customer the Order belongs to: the `sub` of their token. `statusHistory` is
+oldest first, and its last entry is the current `status`. `changedBy` is the caller that made the
+change, `CHECKOUT` for now.
 
 `GET /orders` pages the list: `page` counts from 0 (default 0) and `size` is 1 to 100 (default
 20). Anything else is a 400. The page comes back with how many Orders the Customer has in all:
@@ -65,6 +69,27 @@ caller that made the change, `CHECKOUT` for now.
 
 A page past the last has no items and the same total. **This changed in Sprint 3**: the response
 used to be a bare array of every Order.
+
+### Staff's view
+
+`GET /staff/orders` pages every Customer's Orders the same way, newest first, and each filter
+narrows them. They combine, and one left out matches every Order:
+
+| Filter | Matches |
+|---|---|
+| `status` | Orders in that Order Status, such as `PAID` |
+| `customerId` | One Customer's Orders, by their `sub` |
+| `placedFrom` | Orders placed at or after this ISO 8601 instant, such as `2026-10-01T00:00:00Z` |
+| `placedTo` | Orders placed before this instant, so a day is `placedFrom` its midnight `placedTo` the next |
+| `idPrefix` | Orders whose ID starts with these hex digits and hyphens, in either case |
+
+`idPrefix` is how Staff find the Order a Customer quotes: the Storefront shows an Order's reference
+as the first eight hex digits of its ID, such as `#3F2A9C1B`, so `idPrefix=3F2A9C1B` finds it, and
+so does the full ID. An unknown `status`, an instant that isn't one, or an `idPrefix` that is
+empty, longer than an ID or has anything else in it, is a 400.
+
+`GET /staff/orders/{id}` is the Order whoever it belongs to, with its `customerId` and its Order
+Status history. Staff can't place or change an Order: those endpoints answer them with a 403.
 
 An Order without a Discount has `"discount": null`. Orders placed before Orders recorded their
 Discount and tax read back with none and a zero tax, which is what they were charged.
