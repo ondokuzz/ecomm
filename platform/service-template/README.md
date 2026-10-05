@@ -104,7 +104,13 @@ event publication registry, in the same transaction. Kafka gets it once the tran
   FROM event_publication WHERE completion_date IS NULL;
   ```
 
-Delivery is therefore at least once, and not strictly in order across retries.
+Sends go out one at a time, each waiting for Kafka to acknowledge the one before, so events usually
+arrive in the order their transactions committed. Delivery is still at least once, and not
+strictly in order: sends run on a pool of threads, so two events committed close together can go
+out in either order, and a retry or a restart sends an older event after newer ones. Restarting one
+of several instances can also resend an event another instance is sending. One send in flight
+also caps a service's publishing at about one Kafka round trip per event
+([ADR 0002](../../docs/adr/0002-ledgers-and-outboxes-not-event-sourcing.md)).
 
 ### Consuming
 

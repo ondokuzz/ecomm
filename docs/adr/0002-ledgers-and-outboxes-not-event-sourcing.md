@@ -24,6 +24,7 @@ Integration events are state-carrying: each one carries the state its consumers 
 
 - Axon Framework is not part of the stack, and there is no event store ([ADR 0008](./0008-event-store-on-postgres-not-axon-server.md) is withdrawn).
 - Every consumer must handle duplicates and out-of-order delivery by version. The same rule makes it safe to rebuild a projection by replaying a topic.
+- A service's outbox sends one event at a time, each waiting for Kafka's acknowledgement of the one before, and on startup sends again whatever it holds unsent. That keeps most events in commit order, but not all: sends run on a pool of threads, so two events committed close together can still go out in either order, and a retry or a restart sends an older event after newer ones. A restart can also send an event that another instance is sending at the same moment. One send in flight per instance also caps how fast a service can publish, at about one Kafka round trip per event; a service that outgrows that needs per-aggregate ordering by another means, such as a polling relay.
 - Read models are queries over the owning context's tables, or denormalized tables it maintains in the same transaction. Other contexts build their own from integration events.
 - Changing an event's shape is a reviewed change to its schema in the repo. The registry refuses a change that breaks backward compatibility.
 
@@ -36,3 +37,7 @@ This ADR used to be "CQRS + event sourcing: four contexts, not fifteen". It even
 - Payment and Inventory do need their facts, and a ledger table keeps them.
 - With Sagas on Temporal ([ADR 0009](./0009-sagas-on-temporal.md)), a workflow's history already records each process step, so event-sourced aggregates would have been a second record of the same lifecycle.
 - Axon 5, the line with a native Postgres event store, does not document Spring Boot 4 support and has no Kafka extension. Axon 4.13 supports Boot 4, but without Axon 5's newer consistency model, which is what a multi-Variant Reservation would have needed.
+
+## Revised 2026-10-06
+
+The Postgres services' outbox now sends events one at a time and sends again, on startup, what it holds unsent. Before, sends ran concurrently, and an event whose send a crash cut short stayed in the outbox until someone resubmitted it by hand. Consumers still order events by version: neither setting makes Kafka's order strict.

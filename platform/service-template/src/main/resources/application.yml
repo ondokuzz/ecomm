@@ -8,6 +8,10 @@ spring:
     password: ecomm
   kafka:
     bootstrap-servers: localhost:${KAFKA_PORT:9092}
+  modulith:
+    events:
+      # Send again, on startup, what the outbox holds unsent: a send cut short by a crash or restart.
+      republish-outstanding-events-on-restart: true
 
 ecomm:
   events:

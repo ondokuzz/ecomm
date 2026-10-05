@@ -20,7 +20,8 @@ import tools.jackson.databind.json.JsonMapper;
  * Publishing integration events through Spring Modulith's event publication registry and its Kafka
  * externalization, for a service that has both on its classpath (see {@link
  * OutboxIntegrationEventPublisher}). Each {@link OutboxedEvent} goes to its topic, keyed by its
- * aggregate's ID, with the Correlation ID as a header.
+ * aggregate's ID, with the Correlation ID as a header. Sends go out one at a time, each waiting
+ * for Kafka to acknowledge the one before.
  */
 @AutoConfiguration(
     afterName = {
@@ -46,6 +47,7 @@ public class OutboxAutoConfiguration {
         .selectByType(OutboxedEvent.class)
         .mapping(OutboxedEvent.class, OutboxedEvent::toMessage)
         .route(OutboxedEvent.class, e -> RoutingTarget.forTarget(e.topic()).andKey(e.key()))
+        .serializeExternalization(true)
         .build();
   }
 
