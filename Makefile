@@ -6,7 +6,7 @@ TOPICS := $(basename $(notdir $(wildcard platform/event-schemas/schemas/*.json))
 SEARCH_GROUPS := search-discovery.products search-discovery.categories search-discovery.stock
 REVIEWS_GROUPS := reviews-ratings.orders reviews-ratings.products
 
-.PHONY: up down seed-reset search-rebuild reviews-rebuild
+.PHONY: up down status seed-reset search-rebuild reviews-rebuild
 
 ## Build and start the default stack, and wait until every service is healthy.
 up:
@@ -15,6 +15,11 @@ up:
 ## Stop the stack, keeping its data.
 down:
 	$(COMPOSE) down
+
+## Say whether every service is running and healthy; name any that isn't, with its exit code and
+## whether it was killed for its memory cap.
+status:
+	@infra/docker/stack-status.sh
 
 ## Put the seed Categories, Products, Stock and Coupons back and drop every Cart, Checkout Session,
 ## Reservation, Order, Payment and review. Keycloak is left alone, so registered Customers stay. The
