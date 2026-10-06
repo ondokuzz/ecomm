@@ -22,7 +22,10 @@ The first build takes several minutes. Then open the Storefront on http://localh
    and shows the time left. Enter the Coupon `WELCOME10` for 10% off, then pick a test card and press
    **Pay**. Paying again with another card works while the Checkout Session lasts;
 4. see the Order confirmation with its Order Status, **Paid**, and its discount, and find the Order
-   under **My Orders**.
+   under **My Orders**;
+5. go back to a Product you paid for and review it: rate it, and give it a title and a few words.
+   Its stars show on its card and its page, and you can edit or delete your review there. On a
+   Product you haven't bought, the page says why you can't review it.
 
 The payment gateway is mocked, and each test card stands for a Payment method:
 
@@ -67,6 +70,7 @@ a host port, which bypasses the gateway, for development only (see each service'
 | 8081–8086 | Catalog, Inventory, Cart, Payment, Order Management and Checkout & Pricing |
 | 8087 | Promotions |
 | 8089 | Search & Discovery |
+| 8097 | Reviews & Ratings |
 | 8088 | Apicurio schema registry: the event schemas, under `/apis/registry/v3` |
 | 9092 | Kafka |
 | 27017 | Mongo |
@@ -122,8 +126,9 @@ and a Customer picks either on the Storefront: `npm run test:e2e` in `frontend/a
 |---|---|
 | `make up` | Build and start the stack, and wait until it is healthy |
 | `make down` | Stop the stack, keeping its data |
-| `make seed-reset` | Put the seed Categories, Products, Stock, Coupons and Campaigns back and drop every Cart, Checkout Session, Reservation, Order and Payment; registered Customers stay. It also empties the event topics and Search's projection, since the reset stores count their events' versions from 1 again |
+| `make seed-reset` | Put the seed Categories, Products, Stock, Coupons and Campaigns back and drop every Cart, Checkout Session, Reservation, Order, Payment and review; registered Customers stay. It also empties the event topics and Search's and Reviews' projections, since the reset stores count their events' versions from 1 again |
 | `make search-rebuild` | Rebuild Search's projection from the topics ([Search & Discovery](./services/search-discovery/README.md#rebuilding)) |
+| `make reviews-rebuild` | Rebuild Reviews' projection of Orders and Products from the topics, keeping the reviews ([Reviews & Ratings](./services/reviews-ratings/README.md#rebuilding)) |
 
 Every checkout takes Stock, so after many smoke-test runs `make seed-reset` refills it. To wipe
 everything, Keycloak's users included, run `docker compose down -v`.

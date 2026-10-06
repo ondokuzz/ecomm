@@ -9,7 +9,7 @@ React, TypeScript, React Router and TanStack Query.
 | Path | | Login |
 |---|---|---|
 | `/?q=&category=&…` | Products, searched and filtered, as Search & Discovery finds them: see [Search](#search) | no |
-| `/products/{sku}?variant=` | A Product with a Variant picker, and the chosen Variant's image, Price, Stock and specs, laid out by its Category's attribute definitions; add it to the Cart | no (adding needs it) |
+| `/products/{sku}?variant=` | A Product with a Variant picker, and the chosen Variant's image, Price, Stock and specs, laid out by its Category's attribute definitions; add it to the Cart. Below, its ratings and reviews: see [Reviews](#reviews) | no (adding and reviewing need it) |
 | `/cart` | The Cart, priced from Catalog's current Prices; change quantities, remove lines or empty it | yes |
 | `/checkout` | Starts or resumes a Checkout Session: its lines, price breakdown, a Coupon field and a countdown to when it expires, a test-card picker and a "Pay" button | yes |
 | `/orders/{id}` | An Order: its Order Status timeline, drawn from its Order Status history with times, its lines and summary; after checkout, the confirmation first | yes |
@@ -23,7 +23,8 @@ corner radii, shadows) as CSS custom properties on `:root`, redefined for dark m
 and Bricolage Grotesque for headings, are bundled through Fontsource rather than loaded from a CDN.
 
 The pages build from the shared components in [`src/components/ui`](./src/components/ui): Button,
-Card, Badge, Input, QuantityStepper, Skeleton, Icon, Toast and ConfirmDialog. The header's account menu and the
+Card, Badge, Input, QuantityStepper, Skeleton, Icon, Toast and ConfirmDialog. Stars, in
+[`StarRating.tsx`](./src/components/StarRating.tsx), show a rating to the nearest half star and pick one in the review form. The header's account menu and the
 small-screen menu are native `popover` elements, so the browser handles closing them on Escape or an
 outside click.
 
@@ -52,7 +53,8 @@ image (the Variant's own, when it has one) and the axis rows of the specs all fo
 Variant. The choice lives in `?variant=`, so a reload or a shared link keeps it; without one, or
 with one the Product doesn't have, the page shows the first Variant.
 
-Product cards show Search's `priceFrom`, prefixed "From" when the Variants' Prices differ.
+Product cards show Search's `priceFrom`, prefixed "From" when the Variants' Prices differ, and the
+Product's average rating and review count once it has a review.
 
 Cart and Order lines hold Variant IDs, so each is looked up through Catalog's
 `GET /variants/{id}` and named by its Product and axis values, such as "Google Pixel 9 · Obsidian ·
@@ -91,6 +93,27 @@ Facets. While a changed search loads, the last results stay in place.
 
 A Product reaches the list a moment after Catalog publishes it, once Search has the event; its own
 page reads Catalog directly, so it is there at once.
+
+## Reviews
+
+Ratings and reviews come from [Reviews & Ratings](../../services/reviews-ratings/README.md). A page of
+the listing asks `GET /rating-summaries` for all its Products' summaries in one request, and a card shows its
+stars, average and count; a card without reviews shows none, and the cards never wait for them.
+
+A Product page shows its stars and review count under its name, linking down to **Ratings &
+reviews**: the average, the stars, the count and a bar per star, then the reviews, newest first, five
+to a page, each with its author, date, "edited" if it was, and the Variant bought when the Product
+has several. Beside them, a Customer who isn't signed in is offered to log in; a signed-in one
+sees, from `GET /products/{sku}/eligibility`, the form to write a review, their own review with
+Edit and Delete, or why they can't review: "Only Customers who have bought this product can review
+it." Deleting asks first.
+
+The form checks itself before sending: a rating from 1 to 5 stars, a title of at most 120
+characters and a body of at most 2,000, both counted trimmed, with a counter under each. Each
+problem shows under its field once the Customer has pressed the button, and clears as they fix it.
+[`src/domain/reviews.ts`](./src/domain/reviews.ts) holds those rules, the stars' fill and the
+per-star shares. Posting, editing or deleting reloads the Product's summary, reviews and
+eligibility, and the listing's summaries.
 
 ## Orders
 
@@ -186,7 +209,7 @@ to the page they asked for.
 ## Calling the services
 
 The browser reaches each service at `/api/<service>/…` on the Storefront's own origin: `catalog`,
-`inventory`, `cart`, `checkout-pricing`, `order-management` and `search-discovery`. Everything under `/api/` goes to the
+`inventory`, `cart`, `checkout-pricing`, `order-management`, `search-discovery` and `reviews-ratings`. Everything under `/api/` goes to the
 [API gateway](../../platform/api-gateway/README.md), which checks the token and routes it; it sends
 no CORS headers. In development the Vite dev proxy forwards `/api` to the gateway's compose host
 port, 8000 ([`vite.config.ts`](./vite.config.ts)); in compose, nginx does
@@ -325,7 +348,7 @@ Sign in as `demo@ecomm.local` / `demo`, or register a new Customer.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: failed responses as messages and support references, Money formatting by Catalog's Minor units, Cart pricing, checkout problems, the session countdown and price breakdown, Coupon rejections, test cards and payment failures, quantities, Stock levels, toasts, the search's URL and its Facets as chips and filters, Product specs by their Category's definitions, Customer initials, Orders and their timeline from the Order Status history, the Orders list's paging, Order Status colours, seed Product images, the Keycloak theme's and the Admin Console's copies of the tokens
+npm test          # Vitest: failed responses as messages and support references, Money formatting by Catalog's Minor units, Cart pricing, checkout problems, the session countdown and price breakdown, Coupon rejections, test cards and payment failures, quantities, Stock levels, toasts, the search's URL and its Facets as chips and filters, rating stars and summaries and the review form's validation, Product specs by their Category's definitions, Customer initials, Orders and their timeline from the Order Status history, the Orders list's paging, Order Status colours, seed Product images, the Keycloak theme's and the Admin Console's copies of the tokens
 npm run test:e2e  # Playwright smoke, search and error-states tests against the running compose stack (`make up`)
 ```
 

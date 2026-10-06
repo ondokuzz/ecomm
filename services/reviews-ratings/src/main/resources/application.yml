@@ -1,0 +1,20 @@
+spring:
+  application:
+    name: reviews-ratings
+  mongodb:
+    # MONGO_PORT matches the compose override, for when something else holds 27017.
+    uri: mongodb://localhost:${MONGO_PORT:27017}/reviews
+  kafka:
+    bootstrap-servers: localhost:${KAFKA_PORT:9092}
+
+ecomm:
+  security:
+    # Anyone may read a Product's reviews and ratings; writing one, or asking whether you may, needs
+    # a Customer's token.
+    public-read-paths: [/products/*/reviews, /products/*/rating-summary, /rating-summaries]
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

@@ -4,8 +4,9 @@ COMPOSE := docker compose
 KAFKA := $(COMPOSE) exec -T kafka /opt/kafka/bin
 TOPICS := $(basename $(notdir $(wildcard platform/event-schemas/schemas/*.json)))
 SEARCH_GROUPS := search-discovery.products search-discovery.categories search-discovery.stock
+REVIEWS_GROUPS := reviews-ratings.orders reviews-ratings.products
 
-.PHONY: up down seed-reset search-rebuild
+.PHONY: up down seed-reset search-rebuild reviews-rebuild
 
 ## Build and start the default stack, and wait until every service is healthy.
 up:
@@ -16,13 +17,13 @@ down:
 	$(COMPOSE) down
 
 ## Put the seed Categories, Products, Stock and Coupons back and drop every Cart, Checkout Session,
-## Reservation, Order and Payment. Keycloak is left alone, so registered Customers stay. The
+## Reservation, Order, Payment and review. Keycloak is left alone, so registered Customers stay. The
 ## reset stores count their events' versions from the start again, so every topic is emptied and
-## Search's projection dropped, or their consumers would take the new events for stale ones. Kafka
-## deletes topics in the background, and one can't be created again until it has gone.
+## Search's and Reviews' databases dropped, or their consumers would take the new events for stale
+## ones. Kafka deletes topics in the background, and one can't be created again until it has gone.
 seed-reset:
 	$(COMPOSE) up -d --wait couchbase postgres redis kafka mongo
-	$(COMPOSE) stop storefront checkout-pricing catalog inventory cart payment order-management promotions search-discovery
+	$(COMPOSE) stop storefront checkout-pricing catalog inventory cart payment order-management promotions search-discovery reviews-ratings
 	$(COMPOSE) exec -T couchbase couchbase-cli bucket-delete -c localhost:8091 -u admin -p password --bucket catalog
 	$(COMPOSE) run --rm --no-deps couchbase-init
 	for db in inventory payment orders promotions; do \
@@ -34,7 +35,9 @@ seed-reset:
 	  $(KAFKA)/kafka-topics.sh --bootstrap-server localhost:19092 --delete --if-exists --topic $$topic || exit 1; \
 	done
 	until [ -z "$$($(KAFKA)/kafka-topics.sh --bootstrap-server localhost:19092 --list | grep -xF $(TOPICS:%=-e %))" ]; do sleep 1; done
-	$(COMPOSE) exec -T mongo mongosh --quiet search --eval 'db.dropDatabase()'
+	for db in search reviews; do \
+	  $(COMPOSE) exec -T mongo mongosh --quiet $$db --eval 'db.dropDatabase()' || exit 1; \
+	done
 	$(COMPOSE) run --rm --no-deps kafka-topics
 	$(COMPOSE) up -d --wait
 
@@ -48,3 +51,14 @@ search-rebuild:
 	    --reset-offsets --to-earliest --all-topics --execute || exit 1; \
 	done
 	$(COMPOSE) up -d --wait search-discovery
+
+## Rebuild Reviews' projection of Orders and Products from the topics; the reviews themselves stay
+## (services/reviews-ratings/README.md).
+reviews-rebuild:
+	$(COMPOSE) stop reviews-ratings
+	$(COMPOSE) exec -T mongo mongosh --quiet reviews --eval 'db.orders.drop(); db.products.drop()'
+	for group in $(REVIEWS_GROUPS); do \
+	  $(KAFKA)/kafka-consumer-groups.sh --bootstrap-server localhost:19092 --group $$group \
+	    --reset-offsets --to-earliest --all-topics --execute || exit 1; \
+	done
+	$(COMPOSE) up -d --wait reviews-ratings

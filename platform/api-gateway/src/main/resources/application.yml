@@ -30,6 +30,9 @@ ecomm:
       search-discovery:
         uri: http://localhost:8089
         public-reads: [/search]
+      reviews-ratings:
+        uri: http://localhost:8097
+        public-reads: [/products/*/reviews, /products/*/rating-summary, /rating-summaries]
 
 # Plain-text logs name the Correlation ID too, so the access log reads the same outside Docker.
 logging:

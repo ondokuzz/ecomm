@@ -25,7 +25,10 @@ class EdgeAuthenticationApiTest extends GatewayApiTest {
         "/api/catalog/categories",
         "/api/inventory/stock/PHN-PIXEL-9",
         "/api/search-discovery/search",
-        "/api/search-discovery/search?q=pixel&attr.storage=128"
+        "/api/search-discovery/search?q=pixel&attr.storage=128",
+        "/api/reviews-ratings/products/PHN-PIXEL-9/reviews?page=1",
+        "/api/reviews-ratings/products/PHN-PIXEL-9/rating-summary",
+        "/api/reviews-ratings/rating-summaries?sku=PHN-PIXEL-9&sku=LPT-MBA-13-M3"
       })
   void publicReadsNeedNoToken(String path) {
     http.get().uri(path).exchange().expectStatus().isOk();
@@ -53,7 +56,11 @@ class EdgeAuthenticationApiTest extends GatewayApiTest {
     "PUT, /api/promotions/campaigns/7f1c",
     "DELETE, /api/promotions/campaigns/7f1c",
     "POST, /api/search-discovery/search",
-    "GET, /api/search-discovery/search/anything"
+    "GET, /api/search-discovery/search/anything",
+    "GET, /api/reviews-ratings/products/PHN-PIXEL-9/eligibility",
+    "POST, /api/reviews-ratings/products/PHN-PIXEL-9/reviews",
+    "PUT, /api/reviews-ratings/reviews/7f1c",
+    "DELETE, /api/reviews-ratings/reviews/7f1c"
   })
   void everythingElseIsUnauthorizedWithoutAToken(String method, String path) {
     http.method(HttpMethod.valueOf(method))

@@ -1361,6 +1361,273 @@ main {
   font-weight: 600;
 }
 
+/* Ratings and reviews: stars, the summary with its split by star, the Customer's form, and the list. */
+
+.stars {
+  display: inline-flex;
+  gap: 2px;
+  vertical-align: middle;
+}
+.star {
+  position: relative;
+  display: inline-block;
+  flex: none;
+}
+.star svg {
+  position: absolute;
+  inset: 0;
+  fill: var(--color-line-strong);
+}
+.star .star-fill {
+  fill: var(--color-sun);
+}
+.star-half .star-fill {
+  clip-path: inset(0 50% 0 0);
+}
+.summary-stars {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+.summary-stars strong {
+  color: var(--color-fg);
+}
+.summary-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-decoration: none;
+}
+.summary-link:hover span {
+  text-decoration: underline;
+}
+
+.reviews {
+  margin-top: var(--space-7);
+  scroll-margin-top: calc(var(--header-height) + var(--space-5));
+}
+.reviews h2 {
+  margin-bottom: var(--space-4);
+}
+.reviews h3 {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+.reviews-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-5);
+  align-items: start;
+}
+@media (min-width: 860px) {
+  .reviews-layout {
+    grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
+    gap: var(--space-7);
+  }
+}
+.reviews-aside {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.rating-summary-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.rating-summary-head > div {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.rating-average {
+  font-family: var(--font-display);
+  font-size: var(--text-4xl);
+  font-weight: 800;
+  line-height: 1;
+}
+.star-bars {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-sm);
+}
+.star-bars li {
+  display: grid;
+  grid-template-columns: 2.5rem 1fr 2.5rem;
+  align-items: center;
+  gap: var(--space-2);
+}
+.star-bar-label {
+  color: var(--color-muted);
+  font-weight: 600;
+}
+.star-bar {
+  height: 0.5rem;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+  overflow: hidden;
+}
+.star-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-sun);
+}
+.star-bar-count {
+  text-align: right;
+  color: var(--color-muted);
+}
+
+.review-form-card,
+.own-review {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.own-review-actions,
+.review-form-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+.review-form-actions {
+  justify-content: flex-end;
+}
+.review-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.review-field {
+  display: flex;
+}
+.textarea {
+  min-height: 8rem;
+  padding: var(--space-2) var(--space-3);
+  font-weight: 400;
+  resize: vertical;
+}
+.review-form .input[aria-invalid] {
+  border-color: var(--color-danger);
+}
+.char-count {
+  align-self: flex-end;
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+.char-count.over,
+.field-error {
+  color: var(--color-danger);
+}
+.field-error {
+  margin-top: calc(-1 * var(--space-2));
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.star-input {
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+.star-input legend {
+  margin-bottom: var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.star-input-stars {
+  display: inline-flex;
+  gap: var(--space-1);
+}
+.star-input label {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: transform var(--duration) var(--ease);
+}
+.star-input label:hover {
+  transform: scale(1.12);
+}
+.star-input label:has(input:focus-visible) {
+  outline: var(--focus-width) solid var(--color-primary);
+  outline-offset: var(--focus-offset);
+}
+/* Hovering previews the rating: the hovered star and those before it light up. */
+.star-input-stars:hover label .star svg {
+  fill: var(--color-sun);
+}
+.star-input-stars label:hover ~ label .star svg {
+  fill: var(--color-line-strong);
+}
+.review-refusal {
+  margin: 0;
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+}
+
+.review-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.review-list ul {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.review-list li + li {
+  border-top: 1px solid var(--color-line);
+}
+.review {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4) 0;
+}
+.review-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+.review-title {
+  font-size: var(--text-base);
+}
+.review-body {
+  margin: 0;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.review-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  font-size: var(--text-sm);
+}
+.review-meta > span:first-child {
+  color: var(--color-fg);
+  font-weight: 600;
+}
+.review-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
 /* An icon in a soft circle, heading an empty state such as "Product not found". */
 .empty-icon {
   display: inline-grid;

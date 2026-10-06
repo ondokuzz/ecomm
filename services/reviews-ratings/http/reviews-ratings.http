@@ -1,0 +1,59 @@
+# Exercises every Reviews & Ratings endpoint against the compose stack (`make up`). The reads need
+# no token. Writing a review needs a Customer who has paid for the Product: check out a Google
+# Pixel 9 as demo@ecomm.local on the Storefront first, or the post below is a 403 `notPurchased`.
+# Run the requests top to bottom in the IntelliJ HTTP client; the token request stores a token for
+# the ones after it, and the post stores the review's ID.
+
+@reviews = http://localhost:8097
+@keycloak = http://localhost:8180/realms/ecomm/protocol/openid-connect/token
+
+### A Product's reviews, newest first: page from 0, 10 to a page unless `size` says (up to 50)
+GET {{reviews}}/products/PHN-PIXEL-9/reviews?page=0&size=10
+
+### A Product's rating summary: the average to one decimal (null without reviews), the count, and the count per star
+GET {{reviews}}/products/PHN-PIXEL-9/rating-summary
+
+### Many Products' summaries at once, in the order asked: up to 50 SKUs
+GET {{reviews}}/rating-summaries?sku=PHN-PIXEL-9&sku=PHN-IPHONE-16&sku=LPT-MBA-13-M3
+
+### More than 50 SKUs, or none: 400
+GET {{reviews}}/rating-summaries
+
+### Customer token. The scope brings the given and family names a review's display name is made from.
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=dev-cli&username=demo@ecomm.local&password=demo&scope=openid profile
+
+> {% client.global.set("customerToken", response.body.access_token); %}
+
+### May I review it? `eligible`, or a `reason`: notPurchased or alreadyReviewed, with my review
+GET {{reviews}}/products/PHN-PIXEL-9/eligibility
+Authorization: Bearer {{customerToken}}
+
+### Post a review: 201, or 403 notPurchased, or 409 alreadyReviewed. The title is optional.
+POST {{reviews}}/products/PHN-PIXEL-9/reviews
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"rating": 4, "title": "Great camera", "body": "Sharp photos, and the battery lasts a day."}
+
+> {% client.global.set("reviewId", response.body.id); %}
+
+### An invalid review: a rating outside 1 to 5, a title over 120 characters or a blank body is a 400
+POST {{reviews}}/products/PHN-PIXEL-9/reviews
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"rating": 6, "body": " "}
+
+### Edit my review: 200 with editedAt set; another Customer's is a 404
+PUT {{reviews}}/reviews/{{reviewId}}
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"rating": 5, "body": "Even better after the update."}
+
+### Delete my review: 204; then I may write another
+DELETE {{reviews}}/reviews/{{reviewId}}
+Authorization: Bearer {{customerToken}}

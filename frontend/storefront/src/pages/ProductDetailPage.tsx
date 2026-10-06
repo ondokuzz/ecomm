@@ -3,10 +3,13 @@ import { Link, useParams, useSearchParams } from 'react-router'
 import { useAuth } from 'react-oidc-context'
 import { useCart, useSetQuantity } from '../api/cart'
 import { useCategory, useProduct, useStock, useStocks } from '../api/catalog'
+import { useRatingSummary } from '../api/reviews'
 import { useFormatMoney } from '../api/currencies'
 import { lookupFailure } from '../api/failure'
 import { useAuthPending, useSignin } from '../auth/session'
 import { ProductImage } from '../components/ProductImage'
+import { ProductReviews } from '../components/ProductReviews'
+import { SummaryStars } from '../components/StarRating'
 import { NotFound } from '../components/NotFound'
 import { ErrorMessage, ErrorState, LookupError } from '../components/Status'
 import { VariantPicker } from '../components/VariantPicker'
@@ -64,44 +67,61 @@ function ProductDetail({ product }: { product: Product }) {
   const axes = variantAxes(product, variant, definitions, stocks)
 
   return (
-    <article className="product-page">
-      <div className="product-media">
-        <ProductImage product={product} variant={variant} />
-      </div>
-      <div className="product-info">
-        <Card className="purchase-panel">
-          <Breadcrumb product={product} />
-          {product.attributes.brand && <span className="brand-name">{product.attributes.brand}</span>}
-          <h1>{product.name}</h1>
-          <p className="price large">{formatMoney(variant.price)}</p>
-          {axes.length > 0 && (
-            <VariantPicker
-              axes={axes}
-              onChoose={(chosen) => setParams({ variant: chosen.id }, { replace: true, preventScrollReset: true })}
-            />
+    <>
+      <article className="product-page">
+        <div className="product-media">
+          <ProductImage product={product} variant={variant} />
+        </div>
+        <div className="product-info">
+          <Card className="purchase-panel">
+            <Breadcrumb product={product} />
+            {product.attributes.brand && <span className="brand-name">{product.attributes.brand}</span>}
+            <h1>{product.name}</h1>
+            <SummaryLink sku={product.sku} />
+            <p className="price large">{formatMoney(variant.price)}</p>
+            {axes.length > 0 && (
+              <VariantPicker
+                axes={axes}
+                onChoose={(chosen) => setParams({ variant: chosen.id }, { replace: true, preventScrollReset: true })}
+              />
+            )}
+            {stock.isPending ? <Badge>Checking stock…</Badge> : <StockIndicator quantity={available} />}
+            <LookupError failure={stockFailure} title="We couldn't check the stock" />
+            {/* A fresh quantity for each Variant. */}
+            <AddToCart key={variant.id} productName={product.name} variantId={variant.id} available={available} />
+          </Card>
+          {rows.length > 0 && (
+            <section className="specs" aria-labelledby="specs-heading">
+              <h2 id="specs-heading">Specifications</h2>
+              <table className="spec-table">
+                <tbody>
+                  {rows.map(({ name, value }) => (
+                    <tr key={name}>
+                      <th scope="row">{name}</th>
+                      <td>{value}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
           )}
-          {stock.isPending ? <Badge>Checking stock…</Badge> : <StockIndicator quantity={available} />}
-          <LookupError failure={stockFailure} title="We couldn't check the stock" />
-          {/* A fresh quantity for each Variant. */}
-          <AddToCart key={variant.id} productName={product.name} variantId={variant.id} available={available} />
-        </Card>
-        {rows.length > 0 && (
-          <section className="specs" aria-labelledby="specs-heading">
-            <h2 id="specs-heading">Specifications</h2>
-            <table className="spec-table">
-              <tbody>
-                {rows.map(({ name, value }) => (
-                  <tr key={name}>
-                    <th scope="row">{name}</th>
-                    <td>{value}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
-        )}
-      </div>
-    </article>
+        </div>
+      </article>
+      {/* Outside the article's grid, so the image, sticky within it, never slides over the reviews. A
+          new Product starts on its first page of reviews. */}
+      <ProductReviews key={product.sku} sku={product.sku} variants={product.variants} />
+    </>
+  )
+}
+
+/** The Product's Rating summary under its name, leading down to the reviews; nothing until it has one. */
+function SummaryLink({ sku }: { sku: string }) {
+  const summary = useRatingSummary(sku).data
+  if (!summary || summary.average === null) return null
+  return (
+    <a href="#reviews-heading" className="summary-link">
+      <SummaryStars summary={summary} size={16} />
+    </a>
   )
 }
 

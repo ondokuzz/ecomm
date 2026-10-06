@@ -48,6 +48,14 @@ _Avoid_: Option selector, Configurator
 One way a Customer can narrow a search, with how many Products each choice would leave: the Categories, a Category's attributes by their values (or a `NUMBER`'s lowest and highest), the Price range in each Currency, and whether in Stock. Each is counted as if its own choice weren't made, so choosing one value still shows what its siblings would add; a choice that would leave nothing can't be made. Search & Discovery works them out with every search, and the Storefront's filter panel is built from them. Attribute Facets come only once a Category is chosen, since its Attribute definitions decide them.
 _Avoid_: Filter (a Facet is what a filter is chosen from), Refinement, Aggregation
 
+**Review**:
+A Customer's rating of a Product from 1 to 5 stars, with an optional title of up to 120 characters and a body of up to 2,000. A Customer may write one once they have an Order for any of the Product's Variants that is `Paid` or later and not `Cancelled` or `Returned`, and at most one per Product; that is checked when they post it, so it stays if the Order is later cancelled. It names the Variant they bought, and its author by their given name and family name's initial, as they were when they posted it, never by Customer ID. Only its author may edit or delete it. Reviews & Ratings owns Reviews.
+_Avoid_: Testimonial, Feedback, Comment
+
+**Rating summary**:
+A Product's Reviews in numbers: how many it has, their average rating to one decimal (a half rounded up; none without Reviews), and how many gave each star. Product cards and pages show it.
+_Avoid_: Score, Rating (one Review's stars)
+
 **Stock**:
 How many units of a Variant are available to sell, counted per Variant ID and never negative: its On-hand units less what active Reservations hold of them. Inventory owns Stock. Checkout takes it only through Reservations, which hold several Variants as one batch that applies whole or not at all. Staff remove a Variant's Stock when its Product leaves the Catalog, but not while Reservations hold some of it; Inventory then doesn't stock the Variant, and nothing can reserve it, until Staff set its On-hand count again. Its past Reservations stay.
 _Avoid_: Inventory (that's the context, not the count)

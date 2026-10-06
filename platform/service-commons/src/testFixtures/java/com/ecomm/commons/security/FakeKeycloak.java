@@ -51,23 +51,38 @@ public final class FakeKeycloak {
 
   /** A valid access token for {@code subject}, carrying the given realm roles. */
   public static String token(String subject, String... roles) {
-    return mint(REALM_SIGNER, ISSUER, subject, roles);
+    return mint(REALM_SIGNER, ISSUER, subject, Map.of(), roles);
+  }
+
+  /**
+   * A valid access token for {@code subject} that also carries {@code claims}, such as the {@code
+   * given_name} and {@code family_name} the realm's {@code profile} scope adds.
+   */
+  public static String tokenWithClaims(
+      String subject, Map<String, Object> claims, String... roles) {
+    return mint(REALM_SIGNER, ISSUER, subject, claims, roles);
   }
 
   /** A token signed by the realm's key but naming a different issuer. */
   public static String tokenFromIssuer(String issuer, String subject) {
-    return mint(REALM_SIGNER, issuer, subject, "CUSTOMER");
+    return mint(REALM_SIGNER, issuer, subject, Map.of(), "CUSTOMER");
   }
 
   /** A token with the right issuer, signed by a key the realm never published. */
   public static String tokenSignedByUnknownKey(String subject) {
-    return mint(signerFor(generateKey()), ISSUER, subject, "CUSTOMER");
+    return mint(signerFor(generateKey()), ISSUER, subject, Map.of(), "CUSTOMER");
   }
 
-  private static String mint(JwtEncoder signer, String issuer, String subject, String... roles) {
+  private static String mint(
+      JwtEncoder signer,
+      String issuer,
+      String subject,
+      Map<String, Object> extraClaims,
+      String... roles) {
     var now = Instant.now();
     var claims =
         JwtClaimsSet.builder()
+            .claims(c -> c.putAll(extraClaims))
             .issuer(issuer)
             .subject(subject)
             .issuedAt(now)

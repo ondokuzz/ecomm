@@ -243,6 +243,21 @@ services:
       mongo: { condition: service_healthy }
       keycloak: { condition: service_healthy }
 
+  # Verified-purchase reviews, in Mongo's reviews database, checked against a projection of Order
+  # Management's and Catalog's events. It only consumes, so it waits for the topics but not for
+  # their schemas.
+  reviews-ratings:
+    <<: *spring-service
+    build:
+      context: ../..
+      dockerfile: services/reviews-ratings/Dockerfile
+    image: ${IMAGE_PREFIX:-ecomm}/reviews-ratings:${IMAGE_TAG:-latest}
+    ports: ["${REVIEWS_RATINGS_PORT:-8097}:8080"]
+    depends_on:
+      kafka-topics: { condition: service_completed_successfully }
+      mongo: { condition: service_healthy }
+      keycloak: { condition: service_healthy }
+
   checkout-pricing:
     <<: *spring-service
     build:
@@ -282,6 +297,7 @@ services:
       checkout-pricing: { condition: service_healthy }
       promotions: { condition: service_healthy }
       search-discovery: { condition: service_healthy }
+      reviews-ratings: { condition: service_healthy }
 
   storefront:
     build:
