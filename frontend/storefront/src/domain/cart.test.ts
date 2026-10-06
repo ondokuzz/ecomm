@@ -10,7 +10,12 @@ function variant(id: string, price = eur(1000), axisValues: Record<string, strin
 
 describe('priceCart', () => {
   it('prices each line from its Variant and totals them', () => {
-    const cart = { items: [{ variantId: 'A', quantity: 2 }, { variantId: 'B', quantity: 1 }] }
+    const cart = {
+      items: [
+        { variantId: 'A', quantity: 2 },
+        { variantId: 'B', quantity: 1 },
+      ],
+    }
     const a = variant('A', eur(1000))
     const b = variant('B', eur(250))
     const priced = priceCart(cart, { A: a, B: b })
@@ -29,7 +34,12 @@ describe('priceCart', () => {
   })
 
   it('has no total while a line is not priced yet', () => {
-    const cart = { items: [{ variantId: 'A', quantity: 1 }, { variantId: 'GONE', quantity: 1 }] }
+    const cart = {
+      items: [
+        { variantId: 'A', quantity: 1 },
+        { variantId: 'GONE', quantity: 1 },
+      ],
+    }
     const priced = priceCart(cart, { A: variant('A') })
 
     expect(priced.lines[1]).toEqual({ variantId: 'GONE', quantity: 1 })
@@ -37,7 +47,12 @@ describe('priceCart', () => {
   })
 
   it('has no total across currencies', () => {
-    const cart = { items: [{ variantId: 'A', quantity: 1 }, { variantId: 'B', quantity: 1 }] }
+    const cart = {
+      items: [
+        { variantId: 'A', quantity: 1 },
+        { variantId: 'B', quantity: 1 },
+      ],
+    }
     const priced = priceCart(cart, { A: variant('A'), B: variant('B', { amountMinor: 1000, currency: 'USD' }) })
 
     expect(priced.total).toBeUndefined()
@@ -50,13 +65,27 @@ describe('priceCart', () => {
 
 describe('itemCount', () => {
   it('adds up the quantities', () => {
-    expect(itemCount({ items: [{ variantId: 'A', quantity: 2 }, { variantId: 'B', quantity: 3 }] })).toBe(5)
+    expect(
+      itemCount({
+        items: [
+          { variantId: 'A', quantity: 2 },
+          { variantId: 'B', quantity: 3 },
+        ],
+      }),
+    ).toBe(5)
   })
 })
 
 describe('itemCountLabel', () => {
   it('counts the units, not the lines', () => {
-    expect(itemCountLabel({ items: [{ variantId: 'A', quantity: 2 }, { variantId: 'B', quantity: 3 }] })).toBe('5 items')
+    expect(
+      itemCountLabel({
+        items: [
+          { variantId: 'A', quantity: 2 },
+          { variantId: 'B', quantity: 3 },
+        ],
+      }),
+    ).toBe('5 items')
   })
 
   it('is singular for one unit', () => {

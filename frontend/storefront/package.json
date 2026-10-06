@@ -9,11 +9,12 @@
     "typecheck": "tsc -b",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "lint": "oxlint",
+    "lint": "oxlint && prettier --check \"**/*.{ts,tsx,css}\"",
     "preview": "vite preview",
     "images": "node scripts/generate-product-images.ts",
     "keycloak-theme": "node scripts/keycloak-theme.ts",
-    "admin-console-brand": "node scripts/admin-console-brand.ts"
+    "admin-console-brand": "node scripts/admin-console-brand.ts",
+    "format": "prettier --write \"**/*.{ts,tsx,css}\""
   },
   "dependencies": {
     "@fontsource-variable/bricolage-grotesque": "^5.3.0",
@@ -32,6 +33,7 @@
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
     "oxlint": "^1.81.0",
+    "prettier": "3.9.9",
     "typescript": "~6.0.2",
     "vite": "^8.3.0",
     "vitest": "^5.0.2"

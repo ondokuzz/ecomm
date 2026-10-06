@@ -135,7 +135,10 @@ export interface NamedOrderLine extends OrderLine {
   name?: string
 }
 
-export function nameOrderLines(order: Order, variantsById: Record<string, VariantDetail | undefined>): NamedOrderLine[] {
+export function nameOrderLines(
+  order: Order,
+  variantsById: Record<string, VariantDetail | undefined>,
+): NamedOrderLine[] {
   return order.lines.map((line) => {
     const named: NamedOrderLine = { ...line, lineTotal: timesMoney(line.unitPrice, line.quantity) }
     const variant = variantsById[line.variantId]

@@ -121,11 +121,16 @@ const refusals: Record<RefusalReason, string> = {
 
 /** Why the Customer can't review, from Reviews & Ratings' `reason`. */
 export function refusalMessage(reason: string | null): string {
-  return reason && Object.hasOwn(refusals, reason) ? refusals[reason as RefusalReason] : "You can't review this product."
+  return reason && Object.hasOwn(refusals, reason)
+    ? refusals[reason as RefusalReason]
+    : "You can't review this product."
 }
 
 /** Which Variant the reviewer bought, by its axis values; nothing when the Product has none, or the Variant is gone. */
-export function variantBoughtLabel(variants: Pick<Variant, 'id' | 'axisValues'>[], variantId: string): string | undefined {
+export function variantBoughtLabel(
+  variants: Pick<Variant, 'id' | 'axisValues'>[],
+  variantId: string,
+): string | undefined {
   const values = Object.values(variants.find((v) => v.id === variantId)?.axisValues ?? {})
   return values.length > 0 ? `Bought: ${values.join(' · ')}` : undefined
 }

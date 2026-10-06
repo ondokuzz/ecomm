@@ -92,10 +92,16 @@ export function termsRequest(form: TermsForm, currencies: Currencies, errors: Fi
     }
     discount = { type: 'PERCENT_OFF', percentOff: percent ?? null, amountOff: null }
   } else {
-    discount = { type: 'AMOUNT_OFF', percentOff: null, amountOff: money(form.amountOff, 'discount.amountOff', currencies, errors) }
+    discount = {
+      type: 'AMOUNT_OFF',
+      percentOff: null,
+      amountOff: money(form.amountOff, 'discount.amountOff', currencies, errors),
+    }
   }
   const minimumSubtotal =
-    form.minimumSubtotal.amount.trim() === '' ? null : money(form.minimumSubtotal, 'minimumSubtotal', currencies, errors)
+    form.minimumSubtotal.amount.trim() === ''
+      ? null
+      : money(form.minimumSubtotal, 'minimumSubtotal', currencies, errors)
   return {
     discount,
     minimumSubtotal,

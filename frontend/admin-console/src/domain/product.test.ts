@@ -177,9 +177,7 @@ describe('productRequest', () => {
 
   it('trims a description, and sends none when it is blank', () => {
     const form = formOf(pixel, phones, stock, currencies)
-    expect(productRequest({ ...form, description: '  Fast.\n' }, phones, currencies).request?.description).toBe(
-      'Fast.',
-    )
+    expect(productRequest({ ...form, description: '  Fast.\n' }, phones, currencies).request?.description).toBe('Fast.')
     expect(productRequest({ ...form, description: '   ' }, phones, currencies).request).not.toHaveProperty(
       'description',
     )

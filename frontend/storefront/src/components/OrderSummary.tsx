@@ -7,15 +7,7 @@ import { useFormatMoney } from '../api/currencies'
  * What the Cart comes to: its item count, subtotal and total, with the page's next step as
  * `children`. Beside the lines on wide screens, where it stays in view; below them on phones.
  */
-export function OrderSummary({
-  cart,
-  priced,
-  children,
-}: {
-  cart: Cart
-  priced: PricedCart
-  children?: ReactNode
-}) {
+export function OrderSummary({ cart, priced, children }: { cart: Cart; priced: PricedCart; children?: ReactNode }) {
   const formatMoney = useFormatMoney()
   const headingId = useId()
   // Checkout adds no tax or shipping yet, so the total is the subtotal.

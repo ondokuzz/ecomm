@@ -52,7 +52,10 @@ interface ProductInStock {
 const keycloakUrl = process.env.KEYCLOAK_URL ?? 'http://localhost:8180'
 const demoCustomer: Credentials = { email: 'demo@ecomm.local', password: 'demo' }
 
-test('the demo Customer checks out a picked Variant and another Product, and on-hand Stock goes down', async ({ page, request }) => {
+test('the demo Customer checks out a picked Variant and another Product, and on-hand Stock goes down', async ({
+  page,
+  request,
+}) => {
   const token = await tokenFor(request, demoCustomer)
   await emptyCart(request, token)
   const picked = await aNonDefaultVariantInStock(request)
@@ -128,7 +131,9 @@ test('the demo Customer checks out a picked Variant and another Product, and on-
   await expect(confetti).toBeHidden()
   // The badge is how the page renders Order Status PAID; the Order itself must say PAID too.
   await expect(page.locator('.status-paid')).toHaveText('Paid')
-  await expect(page.getByRole('list', { name: 'Order progress' }).locator('[aria-current=step] .timeline-status')).toHaveText('Paid')
+  await expect(
+    page.getByRole('list', { name: 'Order progress' }).locator('[aria-current=step] .timeline-status'),
+  ).toHaveText('Paid')
   const orderId = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!)
   const order = await orderOf(request, token, orderId)
   expect(order.status).toBe('PAID')
@@ -172,7 +177,10 @@ test('the demo Customer checks out a picked Variant and another Product, and on-
   }
 })
 
-test('a declined card shows why, and the held session can then be paid with one that approves', async ({ page, request }) => {
+test('a declined card shows why, and the held session can then be paid with one that approves', async ({
+  page,
+  request,
+}) => {
   const token = await tokenFor(request, demoCustomer)
   await emptyCart(request, token)
   const { variantId, stock } = await aProductInStock(request)
@@ -241,7 +249,9 @@ test('WELCOME10 takes 10% off at checkout, and the PAID Order shows the discount
   await summary.getByRole('button', { name: 'Apply' }).click()
   await expect(summary).toContainText('WELCOME10 applied')
   await expect(summary.getByText('Coupon: WELCOME10')).toBeVisible()
-  await expect(summary).toContainText(formatMoney({ ...discount, amountMinor: -discount.amountMinor }, currencies, 'en-US'))
+  await expect(summary).toContainText(
+    formatMoney({ ...discount, amountMinor: -discount.amountMinor }, currencies, 'en-US'),
+  )
   await expect(page.getByRole('button', { name: `Pay ${formatMoney(discounted, currencies, 'en-US')}` })).toBeVisible()
 
   // Removing it puts the total back; applying it again takes it off again.
@@ -388,7 +398,10 @@ test.describe('Sprint 3', () => {
     return customer
   }
 
-  test('a Customer finds an audio Product, checks out with Audio week and WELCOME10, and reviews it', async ({ page, request }) => {
+  test('a Customer finds an audio Product, checks out with Audio week and WELCOME10, and reviews it', async ({
+    page,
+    request,
+  }) => {
     const customer = signedUp()
     const { product, variant } = await aProductInStockIn(request, 'audio')
     const brand = product.attributes.brand
@@ -401,10 +414,16 @@ test.describe('Sprint 3', () => {
     await expectSignedIn(page, customer.email)
 
     // Into Audio, then its type and what's in stock: each count is Search's for the view it would give.
-    await page.getByRole('navigation', { name: 'Categories' }).getByRole('link', { name: /^Audio/ }).click()
+    await page
+      .getByRole('navigation', { name: 'Categories' })
+      .getByRole('link', { name: /^Audio/ })
+      .click()
     await expect(page).toHaveURL(/\/\?category=audio$/)
     await expectCounts(page, await searchOf(request, { category: 'audio' }), type)
-    await page.getByRole('group', { name: 'type' }).getByRole('checkbox', { name: new RegExp(`^${escape(type)}`) }).click()
+    await page
+      .getByRole('group', { name: 'type' })
+      .getByRole('checkbox', { name: new RegExp(`^${escape(type)}`) })
+      .click()
     await expect(page).toHaveURL(new RegExp(`attr\\.type=${escape(encodeURIComponent(type).replace(/%20/g, '+'))}`))
     await expectCounts(page, await searchOf(request, { category: 'audio', 'attr.type': type }), type)
     await page.getByRole('checkbox', { name: /^In stock only/ }).click()
@@ -602,11 +621,14 @@ async function aNonDefaultVariantInStock(request: APIRequestContext): Promise<Pr
   for (const product of await products(request)) {
     const first = defaultVariant(product)
     for (const variant of product.variants.slice(1)) {
-      const differing = Object.keys(variant.axisValues).filter((axis) => variant.axisValues[axis] !== first.axisValues[axis])
+      const differing = Object.keys(variant.axisValues).filter(
+        (axis) => variant.axisValues[axis] !== first.axisValues[axis],
+      )
       if (differing.length !== 1 || variant.price.amountMinor === first.price.amountMinor) continue
       const stock = await stockOf(request, variant.id)
       const [axis] = differing
-      if (stock.quantity > 0) return { product, variant, variantId: variant.id, stock, pick: { axis, value: variant.axisValues[axis] } }
+      if (stock.quantity > 0)
+        return { product, variant, variantId: variant.id, stock, pick: { axis, value: variant.axisValues[axis] } }
     }
   }
   throw new Error('No seeded non-default Variant has Stock left; run `make seed-reset`')
@@ -641,10 +663,14 @@ function lineName({ product, variant }: ProductInStock): string {
 
 /** The listing's counts: how many Products match, how many are in stock, and how many have each type. */
 async function expectCounts(page: Page, results: SearchResults, type: string) {
-  await expect(page.locator('.listing-toolbar > p')).toHaveText(results.total === 1 ? '1 product' : `${results.total} products`)
+  await expect(page.locator('.listing-toolbar > p')).toHaveText(
+    results.total === 1 ? '1 product' : `${results.total} products`,
+  )
   await expect(page.locator('.stock-toggle .filter-count')).toHaveText(String(results.facets.inStock))
   const count = results.facets.attributes.find((a) => a.name === 'type')!.values.find((v) => v.value === type)!.count
-  await expect(page.getByRole('group', { name: 'type' }).locator('label').filter({ hasText: type })).toContainText(String(count))
+  await expect(page.getByRole('group', { name: 'type' }).locator('label').filter({ hasText: type })).toContainText(
+    String(count),
+  )
 }
 
 function cards(page: Page) {

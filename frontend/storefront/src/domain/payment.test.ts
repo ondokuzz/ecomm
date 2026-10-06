@@ -46,7 +46,8 @@ describe('paymentFailure', () => {
     expect(paymentFailure(502, {})).toEqual({
       kind: 'gatewayError',
       title: "The payment didn't go through",
-      message: 'Something went wrong on the way to the payment provider. Your items are still held, so please try again.',
+      message:
+        'Something went wrong on the way to the payment provider. Your items are still held, so please try again.',
     })
   })
 

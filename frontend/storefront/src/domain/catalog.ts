@@ -96,17 +96,29 @@ export function variantAxes(
   if (product.variants.length < 2) return []
   const axes =
     definitions?.filter((d) => d.variantAxis) ??
-    Object.keys(chosen.axisValues).map((name): AttributeDefinition => ({ name, type: 'TEXT', values: [], required: true, variantAxis: true }))
+    Object.keys(chosen.axisValues).map((name): AttributeDefinition => ({
+      name,
+      type: 'TEXT',
+      values: [],
+      required: true,
+      variantAxis: true,
+    }))
   return axes.map(({ name, type, values }) => {
     const used = [...new Set(product.variants.map((v) => v.axisValues[name]).filter((v) => v !== undefined))]
-    const ordered = type === 'ENUM' ? [...values.filter((v) => used.includes(v)), ...used.filter((v) => !values.includes(v))] : used
+    const ordered =
+      type === 'ENUM' ? [...values.filter((v) => used.includes(v)), ...used.filter((v) => !values.includes(v))] : used
     return {
       name,
       options: ordered.map((value): VariantOption => {
         const wanted = { ...chosen.axisValues, [name]: value }
         const variant = product.variants.find((v) => sameAxisValues(v.axisValues, wanted))
         const quantity = variant && stock[variant.id]
-        return { value, variant, selected: chosen.axisValues[name] === value, outOfStock: quantity !== undefined && quantity <= 0 }
+        return {
+          value,
+          variant,
+          selected: chosen.axisValues[name] === value,
+          outOfStock: quantity !== undefined && quantity <= 0,
+        }
       }),
     }
   })

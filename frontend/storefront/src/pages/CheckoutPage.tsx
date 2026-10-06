@@ -67,7 +67,8 @@ export function CheckoutPage() {
   if (session.error) return <StartError error={session.error} retrying={session.isFetching} onRetry={startAgain} />
 
   const countdown = sessionCountdown(session.data.expiresAt, now)
-  if (countdown.expired || isSessionOver(pay.error) || isSessionOver(coupon.error)) return <SessionExpired onStartAgain={startAgain} />
+  if (countdown.expired || isSessionOver(pay.error) || isSessionOver(coupon.error))
+    return <SessionExpired onStartAgain={startAgain} />
 
   const payNow = () =>
     pay.mutate(
@@ -307,7 +308,8 @@ function StartError({ error, retrying, onRetry }: { error: unknown; retrying: bo
     return variant ? { ...item, variant, name: variantName(variant) } : item
   })
   const problem = error instanceof ApiError ? checkoutProblem(error.problem, lines) : undefined
-  if (!problem) return <ErrorState title="Checkout couldn't start" error={error} retrying={retrying} onRetry={onRetry} />
+  if (!problem)
+    return <ErrorState title="Checkout couldn't start" error={error} retrying={retrying} onRetry={onRetry} />
   return (
     <section>
       <CheckoutSteps current="Payment" />

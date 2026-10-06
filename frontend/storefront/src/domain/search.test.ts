@@ -169,9 +169,7 @@ describe('attributeGroups', () => {
       { value: '128 GB', count: 2, selected: false },
       { value: '1 TB', count: 0, selected: true },
     ])
-    expect(query(options[0].search)).toBe(
-      'category=phones&attr.storage=1+TB&attr.storage=128+GB&range.screen=6.5..',
-    )
+    expect(query(options[0].search)).toBe('category=phones&attr.storage=1+TB&attr.storage=128+GB&range.screen=6.5..')
     expect(query(options[1].search)).toBe('category=phones&range.screen=6.5..')
   })
 
@@ -183,8 +181,6 @@ describe('attributeGroups', () => {
   })
 
   it('gives a NUMBER its bounds and the chosen range, and leaves out what has nothing to offer', () => {
-    expect(groups.slice(1)).toEqual([
-      { kind: 'range', name: 'screen', min: 6.1, max: 6.8, chosen: { min: '6.5' } },
-    ])
+    expect(groups.slice(1)).toEqual([{ kind: 'range', name: 'screen', min: 6.1, max: 6.8, chosen: { min: '6.5' } }])
   })
 })

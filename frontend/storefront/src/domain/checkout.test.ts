@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { CartLine } from './cart'
-import { type CheckoutSession, checkoutProblem, sessionCountdown, sessionHoldsCart, sessionSummaryRows } from './checkout'
+import {
+  type CheckoutSession,
+  checkoutProblem,
+  sessionCountdown,
+  sessionHoldsCart,
+  sessionSummaryRows,
+} from './checkout'
 
 const lines: CartLine[] = [
   { variantId: 'PIXEL-9', quantity: 1, name: 'Google Pixel 9' },
@@ -57,7 +63,10 @@ describe('sessionCountdown', () => {
   const expiresAt = Date.parse(session.expiresAt)
 
   it('shows the minutes and seconds left', () => {
-    expect(sessionCountdown(session.expiresAt, expiresAt - 14 * 60_000 - 5_000)).toEqual({ expired: false, label: '14:05' })
+    expect(sessionCountdown(session.expiresAt, expiresAt - 14 * 60_000 - 5_000)).toEqual({
+      expired: false,
+      label: '14:05',
+    })
   })
 
   it('shows a whole 15 minutes at the start', () => {
@@ -108,12 +117,22 @@ describe('sessionSummaryRows', () => {
 
 describe('sessionHoldsCart', () => {
   it('holds a Cart with the same Variants and quantities, in any order', () => {
-    const cart = { items: [{ variantId: 'FLIP-6', quantity: 1 }, { variantId: 'PIXEL-9', quantity: 2 }] }
+    const cart = {
+      items: [
+        { variantId: 'FLIP-6', quantity: 1 },
+        { variantId: 'PIXEL-9', quantity: 2 },
+      ],
+    }
     expect(sessionHoldsCart(session, cart)).toBe(true)
   })
 
   it('does not hold a Cart whose quantity changed', () => {
-    const cart = { items: [{ variantId: 'PIXEL-9', quantity: 3 }, { variantId: 'FLIP-6', quantity: 1 }] }
+    const cart = {
+      items: [
+        { variantId: 'PIXEL-9', quantity: 3 },
+        { variantId: 'FLIP-6', quantity: 1 },
+      ],
+    }
     expect(sessionHoldsCart(session, cart)).toBe(false)
   })
 

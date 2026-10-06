@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Runs the checks CI would fail on, for what is staged: each frontend app's lint (oxlint and the
+# Prettier check) and typecheck, and Spotless when Java or Gradle files are staged. Enable once
+# per clone with `git config core.hooksPath .githooks`; `git commit --no-verify` skips it.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+
+for app in storefront admin-console; do
+  if grep -q "^frontend/$app/\|^frontend/\.prettierrc" <<<"$staged"; then
+    echo "pre-commit: frontend/$app lint and typecheck"
+    (cd "frontend/$app" && npm run --silent lint && npm run --silent typecheck)
+  fi
+done
+
+if grep -qE '\.(java|kts)$' <<<"$staged"; then
+  echo "pre-commit: spotlessCheck"
+  ./gradlew --quiet spotlessCheck
+fi

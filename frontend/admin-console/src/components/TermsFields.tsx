@@ -66,7 +66,9 @@ export function TermsFields({
                 }}
                 {...field('discount.percentOff')}
               />
-              <span className="hint">A whole number from 1 to 100. It is rounded down to the currency's minor unit.</span>
+              <span className="hint">
+                A whole number from 1 to 100. It is rounded down to the currency's minor unit.
+              </span>
               <FieldError id={errorId('discount.percentOff')} message={errors['discount.percentOff']} />
             </label>
           ) : (

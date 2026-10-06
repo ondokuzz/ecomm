@@ -34,7 +34,13 @@ const welcome10 = (amount = eur(202)): Discount => ({
 })
 
 function variant(id: string): VariantDetail {
-  return { id, axisValues: { color: 'Black' }, price: eur(1000), images: [], product: { sku: id, name: `Product ${id}`, images: [] } }
+  return {
+    id,
+    axisValues: { color: 'Black' },
+    price: eur(1000),
+    images: [],
+    product: { sku: id, name: `Product ${id}`, images: [] },
+  }
 }
 
 function order(overrides: Partial<Order> = {}): Order {
@@ -70,7 +76,9 @@ describe('orderItemCountLabel', () => {
   })
 
   it('is singular for one unit', () => {
-    expect(orderItemCountLabel(order({ lines: [{ variantId: 'A', quantity: 1, unitPrice: eur(1000) }] }))).toBe('1 item')
+    expect(orderItemCountLabel(order({ lines: [{ variantId: 'A', quantity: 1, unitPrice: eur(1000) }] }))).toBe(
+      '1 item',
+    )
   })
 })
 
@@ -79,7 +87,14 @@ describe('nameOrderLines', () => {
     const a = variant('A')
     const lines = nameOrderLines(order(), { A: a })
 
-    expect(lines[0]).toEqual({ variantId: 'A', quantity: 2, unitPrice: eur(1000), lineTotal: eur(2000), variant: a, name: 'Product A · Black' })
+    expect(lines[0]).toEqual({
+      variantId: 'A',
+      quantity: 2,
+      unitPrice: eur(1000),
+      lineTotal: eur(2000),
+      variant: a,
+      name: 'Product A · Black',
+    })
   })
 
   it('leaves a line bare of Variant and name when Catalog has none', () => {
@@ -194,7 +209,14 @@ describe('orderTimeline', () => {
   })
 
   it('ends a returned Order at Returned, after Delivered', () => {
-    const returned = [placed, paid, entry('FULFILLED', 'f'), entry('SHIPPED', 's'), entry('DELIVERED', 'd'), entry('RETURNED', 'r')]
+    const returned = [
+      placed,
+      paid,
+      entry('FULFILLED', 'f'),
+      entry('SHIPPED', 's'),
+      entry('DELIVERED', 'd'),
+      entry('RETURNED', 'r'),
+    ]
     expect(steps(...returned).map((step) => step.split('@')[0])).toEqual([
       'PLACED:done',
       'PAID:done',

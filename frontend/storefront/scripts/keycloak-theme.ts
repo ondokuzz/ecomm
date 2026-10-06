@@ -41,7 +41,7 @@ export function brandTokensCss(storefrontCss: string): string {
   if (media < 0) throw new Error('No dark-mode tokens found in the Storefront stylesheet')
   const dark = ruleBody(storefrontCss, storefrontCss.indexOf(':root', media))
   return (
-    '/* Generated from the Storefront\'s src/index.css by scripts/keycloak-theme.ts; do not edit. */\n' +
+    "/* Generated from the Storefront's src/index.css by scripts/keycloak-theme.ts; do not edit. */\n" +
     `:root ${dedent(light)}\n\n` +
     `:root.${darkModeClass} ${dedent(dark)}\n`
   )
@@ -72,7 +72,7 @@ export function themeFiles(): ThemeFile[] {
     inTheme(
       'css/fonts.css',
       Buffer.from(
-        '/* Generated from the Storefront\'s fontsource packages by scripts/keycloak-theme.ts; do not edit. */\n' +
+        "/* Generated from the Storefront's fontsource packages by scripts/keycloak-theme.ts; do not edit. */\n" +
           fonts.map(({ pkg, face }) => fontFaceCss(fontsource(pkg, 'wght.css').toString(), face)).join('\n\n') +
           '\n',
       ),

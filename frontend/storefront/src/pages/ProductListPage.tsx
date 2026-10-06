@@ -186,9 +186,19 @@ const sortLabels: Record<SortKey, string> = {
 }
 
 /** How many Products matched, the in-stock toggle with its count, and the sort. */
-function Toolbar({ results, search, go }: { results: SearchResults | undefined; search: Search; go: (s: Search) => void }) {
+function Toolbar({
+  results,
+  search,
+  go,
+}: {
+  results: SearchResults | undefined
+  search: Search
+  go: (s: Search) => void
+}) {
   // Without text there is nothing to match, so relevance is the same as newest.
-  const sorts: SortKey[] = search.text ? ['relevance', 'newest', 'price-asc', 'price-desc'] : ['newest', 'price-asc', 'price-desc']
+  const sorts: SortKey[] = search.text
+    ? ['relevance', 'newest', 'price-asc', 'price-desc']
+    : ['newest', 'price-asc', 'price-desc']
   const sort = search.sort && sorts.includes(search.sort) ? search.sort : sorts[0]
   return (
     <div className="listing-toolbar">
@@ -196,13 +206,21 @@ function Toolbar({ results, search, go }: { results: SearchResults | undefined; 
         {results && productCountLabel(results.total)}
       </p>
       <label className="filter-option stock-toggle">
-        <input type="checkbox" checked={search.inStock} onChange={(event) => go(withInStock(search, event.target.checked))} />
+        <input
+          type="checkbox"
+          checked={search.inStock}
+          onChange={(event) => go(withInStock(search, event.target.checked))}
+        />
         <span>In stock only</span>
         {results && <span className="filter-count">{results.facets.inStock}</span>}
       </label>
       <label className="sort">
         <span>Sort by</span>
-        <select className="input" value={sort} onChange={(event) => go(withSort(search, event.target.value as SortKey))}>
+        <select
+          className="input"
+          value={sort}
+          onChange={(event) => go(withSort(search, event.target.value as SortKey))}
+        >
           {sorts.map((key) => (
             <option key={key} value={key}>
               {sortLabels[key]}
@@ -218,7 +236,10 @@ function Results({ results, search, busy }: { results: SearchResults | undefined
   if (results && results.items.length === 0) {
     if (results.total > 0) {
       return (
-        <EmptyState title="There's nothing on this page" action={<ButtonLink to={listingHref(withPage(search, 0))}>Go to the first page</ButtonLink>}>
+        <EmptyState
+          title="There's nothing on this page"
+          action={<ButtonLink to={listingHref(withPage(search, 0))}>Go to the first page</ButtonLink>}
+        >
           The results have fewer pages than this.
         </EmptyState>
       )

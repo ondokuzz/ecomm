@@ -15,14 +15,16 @@ describe('seed Product images', () => {
   })
 
   const variantImages = seed.flatMap((product) =>
-    product.variants.flatMap((variant) => (variant.images ?? []).map((image) => ({ sku: product.sku, id: variant.id, image }))),
+    product.variants.flatMap((variant) =>
+      (variant.images ?? []).map((image) => ({ sku: product.sku, id: variant.id, image })),
+    ),
   )
 
   it('includes Variants with images of their own', () => {
     expect(variantImages).not.toHaveLength(0)
   })
 
-  it.each(variantImages)('Variant $id has a small image beside its Product\'s', ({ sku, image }) => {
+  it.each(variantImages)("Variant $id has a small image beside its Product's", ({ sku, image }) => {
     expect(image).toMatch(new RegExp(`^/images/products/${sku.toLowerCase()}/[a-z0-9-]+\\.svg$`))
     expectSmallImage(image)
   })

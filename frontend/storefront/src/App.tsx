@@ -31,10 +31,38 @@ export function App() {
               <Route element={<Layout />}>
                 <Route index element={<ProductListPage />} />
                 <Route path="products/:sku" element={<ProductDetailPage />} />
-                <Route path="cart" element={<RequireAuth><CartPage /></RequireAuth>} />
-                <Route path="checkout" element={<RequireAuth><CheckoutPage /></RequireAuth>} />
-                <Route path="orders" element={<RequireAuth><OrdersPage /></RequireAuth>} />
-                <Route path="orders/:id" element={<RequireAuth><OrderPage /></RequireAuth>} />
+                <Route
+                  path="cart"
+                  element={
+                    <RequireAuth>
+                      <CartPage />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="checkout"
+                  element={
+                    <RequireAuth>
+                      <CheckoutPage />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="orders"
+                  element={
+                    <RequireAuth>
+                      <OrdersPage />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="orders/:id"
+                  element={
+                    <RequireAuth>
+                      <OrderPage />
+                    </RequireAuth>
+                  }
+                />
                 <Route path="*" element={<NotFound />} />
               </Route>
             </Routes>

@@ -65,10 +65,12 @@ export function checkoutProblem(problem: Record<string, unknown>, lines: CartLin
     if (!Array.isArray(variantIds)) continue
     return {
       reason,
-      products: variantIds.filter((id): id is string => typeof id === 'string').map((variantId) => ({
-        variantId,
-        name: lines.find((line) => line.variantId === variantId)?.name ?? variantId,
-      })),
+      products: variantIds
+        .filter((id): id is string => typeof id === 'string')
+        .map((variantId) => ({
+          variantId,
+          name: lines.find((line) => line.variantId === variantId)?.name ?? variantId,
+        })),
     }
   }
   return undefined

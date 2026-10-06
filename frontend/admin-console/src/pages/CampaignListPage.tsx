@@ -72,8 +72,8 @@ export function CampaignListPage() {
       </div>
       <PromotionsNav />
       <p className="muted page-intro">
-        A Campaign is a Discount that applies itself to every qualifying Checkout Session, with no code. Campaigns apply in
-        order of priority, lowest first.
+        A Campaign is a Discount that applies itself to every qualifying Checkout Session, with no code. Campaigns apply
+        in order of priority, lowest first.
       </p>
 
       <div role="status">

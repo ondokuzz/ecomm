@@ -72,8 +72,10 @@ test("a 401 on a page's data sends the Customer to sign in and back to the same 
   await expect(page.getByRole('heading', { name: 'My orders' })).toBeVisible()
 
   // The token is refused once, as when the Keycloak session behind it has ended.
-  await page.route('**/api/order-management/orders?*', (route) =>
-    route.fulfill({ status: 401, contentType: 'application/problem+json', body: '{"title":"Unauthorized"}' }),
+  await page.route(
+    '**/api/order-management/orders?*',
+    (route) =>
+      route.fulfill({ status: 401, contentType: 'application/problem+json', body: '{"title":"Unauthorized"}' }),
     { times: 1 },
   )
   // A reload drops the tokens, and the silent restore (prompt=none) gets new ones in an iframe first.

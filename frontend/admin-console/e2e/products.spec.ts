@@ -51,7 +51,10 @@ test.afterEach(async ({ request }) => {
   }
 })
 
-test('Staff create a Product with two Variants and their Stock, and Customers can pick either on the Storefront', async ({ page, request }) => {
+test('Staff create a Product with two Variants and their Stock, and Customers can pick either on the Storefront', async ({
+  page,
+  request,
+}) => {
   const { sku, name, variants } = phone
   const currencies = await currenciesOfCatalog(request)
   await createInConsole(page)
@@ -66,11 +69,23 @@ test('Staff create a Product with two Variants and their Stock, and Customers ca
   // Catalog has the Product as typed, its Prices as Money, and Inventory their On-hand counts.
   const product = await productOf(request, sku)
   expect(product.variants.map(({ id, axisValues, price }) => ({ id, axisValues, price }))).toEqual([
-    { id: variants[0]!.id, axisValues: { color: 'Graphite', storage: '128 GB' }, price: { amountMinor: 79900, currency: 'EUR' } },
-    { id: variants[1]!.id, axisValues: { color: 'Cobalt', storage: '128 GB' }, price: { amountMinor: 89950, currency: 'EUR' } },
+    {
+      id: variants[0]!.id,
+      axisValues: { color: 'Graphite', storage: '128 GB' },
+      price: { amountMinor: 79900, currency: 'EUR' },
+    },
+    {
+      id: variants[1]!.id,
+      axisValues: { color: 'Cobalt', storage: '128 GB' },
+      price: { amountMinor: 89950, currency: 'EUR' },
+    },
   ])
   for (const variant of variants) {
-    expect(await stockOf(request, variant.id)).toMatchObject({ onHand: variant.onHand, reserved: 0, quantity: variant.onHand })
+    expect(await stockOf(request, variant.id)).toMatchObject({
+      onHand: variant.onHand,
+      reserved: 0,
+      quantity: variant.onHand,
+    })
   }
 
   // Reopened, the editor shows the saved Variant IDs read-only, with their Stock.
@@ -84,13 +99,17 @@ test('Staff create a Product with two Variants and their Stock, and Customers ca
   const storefront = await page.context().newPage()
   await storefront.goto(`${storefrontUrl}/products/${encodeURIComponent(sku)}`)
   await expect(storefront.getByRole('heading', { name, exact: true })).toBeVisible()
-  await expect(storefront.locator('.purchase-panel .price')).toHaveText(formatMoney({ amountMinor: 79900, currency: 'EUR' }, currencies, 'en-US'))
+  await expect(storefront.locator('.purchase-panel .price')).toHaveText(
+    formatMoney({ amountMinor: 79900, currency: 'EUR' }, currencies, 'en-US'),
+  )
   const cobalt = storefront.getByRole('group', { name: 'color' }).getByRole('radio', { name: 'Cobalt' })
   await cobalt.click()
   await expect(cobalt).toBeChecked()
   await expect(storefront).toHaveURL(new RegExp(`[?&]variant=${encodeURIComponent(variants[1]!.id)}$`))
   await expect(storefront.getByRole('group', { name: 'storage' }).getByRole('radio', { name: '128 GB' })).toBeChecked()
-  await expect(storefront.locator('.purchase-panel .price')).toHaveText(formatMoney({ amountMinor: 89950, currency: 'EUR' }, currencies, 'en-US'))
+  await expect(storefront.locator('.purchase-panel .price')).toHaveText(
+    formatMoney({ amountMinor: 89950, currency: 'EUR' }, currencies, 'en-US'),
+  )
   await expect(storefront.getByText('Only 3 left')).toBeVisible()
   await storefront.close()
 
@@ -109,7 +128,10 @@ test('Staff create a Product with two Variants and their Stock, and Customers ca
   }
 })
 
-test('a new Product whose Stock Inventory refuses is saved, opens as itself, and saving again sets the Stock', async ({ page, request }) => {
+test('a new Product whose Stock Inventory refuses is saved, opens as itself, and saving again sets the Stock', async ({
+  page,
+  request,
+}) => {
   const { sku, name, variants } = phone
   const refused = variants[1]!
   const refusedStock = `**/api/inventory/stock/${encodeURIComponent(refused.id)}`
@@ -119,7 +141,11 @@ test('a new Product whose Stock Inventory refuses is saved, opens as itself, and
       ? route.fulfill({
           status: 409,
           contentType: 'application/problem+json',
-          body: JSON.stringify({ status: 409, detail: 'Reservations hold 9 of it, more than that new on-hand count', reserved: 9 }),
+          body: JSON.stringify({
+            status: 409,
+            detail: 'Reservations hold 9 of it, more than that new on-hand count',
+            reserved: 9,
+          }),
         })
       : route.fallback(),
   )
@@ -157,7 +183,9 @@ test('a Price Staff change shows in search within seconds, on the Storefront too
   await createInConsole(page)
   await expect(page.getByRole('status')).toHaveText(`Saved ${name}.`)
   // Search is a projection of Catalog's events, so it catches up a moment after the save.
-  await expect.poll(() => searchedPriceFrom(request, word, sku), { timeout: 10_000 }).toEqual({ amountMinor: 79900, currency: 'EUR' })
+  await expect
+    .poll(() => searchedPriceFrom(request, word, sku), { timeout: 10_000 })
+    .toEqual({ amountMinor: 79900, currency: 'EUR' })
 
   await page.getByLabel('Search').fill(sku)
   await page.getByRole('row').filter({ hasText: sku }).getByRole('link', { name, exact: true }).click()
@@ -165,7 +193,9 @@ test('a Price Staff change shows in search within seconds, on the Storefront too
   await page.getByRole('button', { name: 'Save changes' }).click()
   await expect(page.getByRole('status')).toHaveText(`Saved ${name}.`)
 
-  await expect.poll(() => searchedPriceFrom(request, word, sku), { timeout: 10_000 }).toEqual({ amountMinor: 74900, currency: 'EUR' })
+  await expect
+    .poll(() => searchedPriceFrom(request, word, sku), { timeout: 10_000 })
+    .toEqual({ amountMinor: 74900, currency: 'EUR' })
   const storefront = await page.context().newPage()
   await storefront.goto(`${storefrontUrl}/?q=${word}`)
   const card = storefront.locator(`a[href="/products/${encodeURIComponent(sku)}"]`)
@@ -230,7 +260,9 @@ async function productOf(request: APIRequestContext, sku: string): Promise<Produ
 async function searchedPriceFrom(request: APIRequestContext, text: string, sku: string) {
   const response = await request.get(`/api/search-discovery/search?q=${encodeURIComponent(text)}`)
   expect(response.ok()).toBeTruthy()
-  const { items } = (await response.json()) as { items: { sku: string; priceFrom: { amountMinor: number; currency: string } }[] }
+  const { items } = (await response.json()) as {
+    items: { sku: string; priceFrom: { amountMinor: number; currency: string } }[]
+  }
   return items.find((item) => item.sku === sku)?.priceFrom
 }
 

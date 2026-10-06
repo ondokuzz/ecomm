@@ -86,12 +86,16 @@ function CategoryEditor({ category }: { category?: Category }) {
     })
   // Rows renumber when one is added, removed or moved, so their errors no longer name the right row.
   const clearAttributeErrors = () =>
-    setErrors((current) => Object.fromEntries(Object.entries(current).filter(([name]) => !name.startsWith('attributes'))))
+    setErrors((current) =>
+      Object.fromEntries(Object.entries(current).filter(([name]) => !name.startsWith('attributes'))),
+    )
 
   const setDefinition = <K extends keyof DefinitionForm>(index: number, key: K, value: DefinitionForm[K]) => {
     setForm((current) => ({
       ...current,
-      attributes: current.attributes.map((definition, i) => (i === index ? { ...definition, [key]: value } : definition)),
+      attributes: current.attributes.map((definition, i) =>
+        i === index ? { ...definition, [key]: value } : definition,
+      ),
     }))
     clearError(`attributes[${index}].${key}`)
     if (key === 'type') clearError(`attributes[${index}].values`)
@@ -169,7 +173,9 @@ function CategoryEditor({ category }: { category?: Category }) {
                 autoCapitalize="none"
                 {...field('slug')}
               />
-              <span className="hint">Lowercase letters, digits and hyphens, such as smart-watches. It can't change later.</span>
+              <span className="hint">
+                Lowercase letters, digits and hyphens, such as smart-watches. It can't change later.
+              </span>
               <FieldError id={errorId('slug')} message={errors.slug} />
             </label>
           )}

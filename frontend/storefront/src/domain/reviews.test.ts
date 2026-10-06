@@ -96,7 +96,9 @@ describe('validateReview', () => {
   it('allows a title of up to 120 characters, counting it trimmed', () => {
     expect(validateReview({ ...valid, title: 't'.repeat(120) }).title).toBeUndefined()
     expect(validateReview({ ...valid, title: ` ${'t'.repeat(120)} ` }).title).toBeUndefined()
-    expect(validateReview({ ...valid, title: 't'.repeat(121) }).title).toBe('Keep the title to 120 characters (it has 121).')
+    expect(validateReview({ ...valid, title: 't'.repeat(121) }).title).toBe(
+      'Keep the title to 120 characters (it has 121).',
+    )
   })
 
   it('needs a body of up to 2,000 characters', () => {
@@ -114,7 +116,11 @@ describe('validateReview', () => {
 
 describe('reviewPayload', () => {
   it('trims the text and sends a blank title as none', () => {
-    expect(reviewPayload({ rating: 5, title: '  ', body: ' Great \n' })).toEqual({ rating: 5, title: null, body: 'Great' })
+    expect(reviewPayload({ rating: 5, title: '  ', body: ' Great \n' })).toEqual({
+      rating: 5,
+      title: null,
+      body: 'Great',
+    })
     expect(reviewPayload({ rating: 3, title: ' Fine ', body: 'Ok' })).toEqual({ rating: 3, title: 'Fine', body: 'Ok' })
   })
 })

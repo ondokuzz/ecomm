@@ -21,8 +21,7 @@ export class ApiError extends Error {
     super(problem.detail ?? problem.title ?? `Request failed with status ${status}`)
     this.status = status
     this.problem = problem
-    this.correlationId =
-      typeof problem.correlationId === 'string' ? problem.correlationId : headerCorrelationId
+    this.correlationId = typeof problem.correlationId === 'string' ? problem.correlationId : headerCorrelationId
   }
 }
 

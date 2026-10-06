@@ -45,7 +45,9 @@ describe('productImage', () => {
   })
 
   it("falls back to the Product's image for a Variant without its own", () => {
-    expect(productImage(product(['/images/a/front.svg']), variant('O', 'Obsidian', '128 GB'))).toBe('/images/a/front.svg')
+    expect(productImage(product(['/images/a/front.svg']), variant('O', 'Obsidian', '128 GB'))).toBe(
+      '/images/a/front.svg',
+    )
   })
 })
 
@@ -79,7 +81,8 @@ describe('variantAxes', () => {
     axes.map((axis) => ({
       name: axis.name,
       options: axis.options.map(
-        (o) => `${o.value}${o.selected ? '*' : ''}${o.variant ? `->${o.variant.id}` : ' (none)'}${o.outOfStock ? ' (out)' : ''}`,
+        (o) =>
+          `${o.value}${o.selected ? '*' : ''}${o.variant ? `->${o.variant.id}` : ' (none)'}${o.outOfStock ? ' (out)' : ''}`,
       ),
     }))
 
@@ -105,7 +108,10 @@ describe('variantAxes', () => {
   })
 
   it("doesn't mark a Variant whose Stock is unknown", () => {
-    expect(summary(variantAxes(pixel, obsidian128, definitions, {}))[1].options).toEqual(['128 GB*->O-128', '256 GB->O-256'])
+    expect(summary(variantAxes(pixel, obsidian128, definitions, {}))[1].options).toEqual([
+      '128 GB*->O-128',
+      '256 GB->O-256',
+    ])
   })
 
   it("takes the axes from the Variants while the Category's definitions are unknown", () => {
@@ -161,7 +167,12 @@ describe('specs', () => {
     required: false,
     variantAxis: false,
   })
-  const definitions = [definition('brand'), definition('wireless', 'BOOLEAN'), definition('type'), definition('waterproof')]
+  const definitions = [
+    definition('brand'),
+    definition('wireless', 'BOOLEAN'),
+    definition('type'),
+    definition('waterproof'),
+  ]
 
   it("lists a Product's attributes in the order its Category defines them", () => {
     expect(specs({ type: 'In-ear', brand: 'Sony', wireless: 'true' }, definitions)).toEqual([

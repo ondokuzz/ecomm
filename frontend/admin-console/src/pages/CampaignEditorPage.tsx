@@ -192,7 +192,10 @@ function CampaignEditor({
 
       <section className="panel" aria-labelledby={`${id}-categories`}>
         <h2 id={`${id}-categories`}>Categories</h2>
-        <fieldset className="check-list" aria-describedby={categoryErrors.length > 0 ? errorId('categories') : undefined}>
+        <fieldset
+          className="check-list"
+          aria-describedby={categoryErrors.length > 0 ? errorId('categories') : undefined}
+        >
           <legend className="visually-hidden">Categories the Campaign is limited to</legend>
           {choices.map((choice) => (
             <label key={choice.slug} className="check">

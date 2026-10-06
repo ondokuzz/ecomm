@@ -3,7 +3,6 @@ import { createContext, useContext } from 'react'
 /** At most this many toasts show at once; a new one pushes out the oldest. */
 export const maxToasts = 3
 
-
 /** The toasts with `toast` added last, dropping the oldest beyond `maxToasts`. */
 export function addToast(toasts: Toast[], toast: Toast): Toast[] {
   return [...toasts, toast].slice(-maxToasts)

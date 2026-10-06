@@ -24,7 +24,15 @@ import { Input } from './ui/Input'
  * The chosen Category's attributes and the price range, built from the facets. On a phone it folds
  * away behind a "Filters" button.
  */
-export function FilterPanel({ facets, search, go }: { facets: Facets | undefined; search: Search; go: (s: Search) => void }) {
+export function FilterPanel({
+  facets,
+  search,
+  go,
+}: {
+  facets: Facets | undefined
+  search: Search
+  go: (s: Search) => void
+}) {
   const [open, setOpen] = useState(false)
   const panel = useId()
   const currencies = useCurrencies()
@@ -44,7 +52,13 @@ export function FilterPanel({ facets, search, go }: { facets: Facets | undefined
           ),
         )}
         {currencies.data && (
-          <PriceGroup key={urlOf(search).toString()} facets={facets} currencies={currencies.data} search={search} go={go} />
+          <PriceGroup
+            key={urlOf(search).toString()}
+            facets={facets}
+            currencies={currencies.data}
+            search={search}
+            go={go}
+          />
         )}
         {/* The price is typed and shown by Catalog's Currencies, so without them it can't be offered. */}
         <LookupError failure={lookupFailure([currencies])} title="We couldn't load the price filter" />

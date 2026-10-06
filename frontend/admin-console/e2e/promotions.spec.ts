@@ -234,11 +234,16 @@ test.describe('Campaigns', () => {
       await signInOnKeycloak(storefront, shopper)
       const summary = storefront.getByRole('region', { name: 'Order summary' })
       await expect(summary.getByText(`Campaign: ${name}`)).toBeVisible()
-      await expect(summary).toContainText(formatMoney({ ...discount, amountMinor: -discount.amountMinor }, currencies, 'en-US'))
+      await expect(summary).toContainText(
+        formatMoney({ ...discount, amountMinor: -discount.amountMinor }, currencies, 'en-US'),
+      )
       const total = { ...price, amountMinor: price.amountMinor - discount.amountMinor }
 
       // Paying ends the Checkout Session rather than leaving its Stock held, and the Order keeps the Discount.
-      await storefront.getByRole('group', { name: 'Test card' }).getByRole('radio', { name: 'Approve', exact: true }).check()
+      await storefront
+        .getByRole('group', { name: 'Test card' })
+        .getByRole('radio', { name: 'Approve', exact: true })
+        .check()
       await storefront.getByRole('button', { name: `Pay ${formatMoney(total, currencies, 'en-US')}` }).click()
       await expect(storefront).toHaveURL(/\/orders\/[^/?]+\?placed$/)
       await expect(storefront.getByText(`Campaign: ${name}`)).toBeVisible()

@@ -7,7 +7,10 @@ import type { ProductSummary, SearchResults } from '../src/domain/search'
  * shared link restores the same view. Run against the seed's Products.
  */
 
-test('a Customer searches, filters and sorts, and a reload or a shared URL restores the view', async ({ page, request }) => {
+test('a Customer searches, filters and sorts, and a reload or a shared URL restores the view', async ({
+  page,
+  request,
+}) => {
   await page.goto('/')
   await page.getByRole('searchbox', { name: 'Search products' }).fill('pixel')
   await page.getByRole('button', { name: 'Search' }).click()
@@ -18,7 +21,10 @@ test('a Customer searches, filters and sorts, and a reload or a shared URL resto
   // Clearing the text and choosing a Category offers that Category's attributes.
   await page.getByRole('searchbox', { name: 'Search products' }).fill('')
   await page.getByRole('button', { name: 'Search' }).click()
-  await page.getByRole('navigation', { name: 'Categories' }).getByRole('link', { name: /^Phones/ }).click()
+  await page
+    .getByRole('navigation', { name: 'Categories' })
+    .getByRole('link', { name: /^Phones/ })
+    .click()
   await expect(page).toHaveURL(/\/\?category=phones$/)
   const storage = page.getByRole('group', { name: 'storage' })
   // Ticking searches; the box shows ticked once the URL, which holds the choice, has changed.
@@ -30,7 +36,9 @@ test('a Customer searches, filters and sorts, and a reload or a shared URL resto
 
   // Counts are disjunctive: 128 GB is still offered beside the chosen 256 GB, with its own count.
   const all = await searchOf(request, 'category=phones')
-  const count128 = all.facets.attributes.find((a) => a.name === 'storage')!.values.find((v) => v.value === '128 GB')!.count
+  const count128 = all.facets.attributes
+    .find((a) => a.name === 'storage')!
+    .values.find((v) => v.value === '128 GB')!.count
   await expect(storage.getByRole('checkbox', { name: /^128 GB/ })).toBeEnabled()
   await expect(storage.locator('label').filter({ hasText: '128 GB' })).toContainText(String(count128))
 

@@ -21,8 +21,7 @@ export class ApiError extends Error {
     super(problem.detail ?? problem.title ?? `Request failed with status ${status}`)
     this.status = status
     this.problem = problem
-    this.correlationId =
-      typeof problem.correlationId === 'string' ? problem.correlationId : headerCorrelationId
+    this.correlationId = typeof problem.correlationId === 'string' ? problem.correlationId : headerCorrelationId
   }
 }
 
@@ -35,13 +34,7 @@ export class NetworkError extends Error {
 
 /** The services, each reached through the dev proxy or nginx at `/api/<service>`. */
 export type Service =
-  | 'catalog'
-  | 'inventory'
-  | 'cart'
-  | 'checkout-pricing'
-  | 'order-management'
-  | 'search-discovery'
-  | 'reviews-ratings'
+  'catalog' | 'inventory' | 'cart' | 'checkout-pricing' | 'order-management' | 'search-discovery' | 'reviews-ratings'
 
 interface RequestOptions {
   method?: string

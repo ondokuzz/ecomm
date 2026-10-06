@@ -162,8 +162,7 @@ function ProductEditor({
   )
   const [unsaved, setUnsaved] = useState<Unsaved | undefined>(refused.length > 0 ? 'stock' : undefined)
   const stocks = useStocks(form.variants.filter((variant) => variant.saved).map((variant) => variant.id))
-  const stockOf = (variantId: string) =>
-    stocks.find((stock) => stock.data?.variantId === variantId)?.data ?? undefined
+  const stockOf = (variantId: string) => stocks.find((stock) => stock.data?.variantId === variantId)?.data ?? undefined
   const category = categories.find((c) => c.slug === form.category)
   const axes = axesOf(category)
   const id = useId()
@@ -436,7 +435,9 @@ function ProductEditor({
                 placeholder="e.g. /images/products/phn-pixel-9/front.svg"
                 {...field('images')}
               />
-              <span className="hint">One path or URL per line, the first shown first. A Variant's own images replace these.</span>
+              <span className="hint">
+                One path or URL per line, the first shown first. A Variant's own images replace these.
+              </span>
               <FieldError id={errorId('images')} message={errors.images} />
             </label>
           </section>
@@ -469,7 +470,9 @@ function ProductEditor({
                     <option key={code} value={code} />
                   ))}
                 </datalist>
-                <span className="hint">Every Variant of a Product is priced in one of the currencies Catalog prices in.</span>
+                <span className="hint">
+                  Every Variant of a Product is priced in one of the currencies Catalog prices in.
+                </span>
                 <FieldError id={errorId('currency')} message={errors.currency} />
               </label>
             </div>
@@ -504,9 +507,7 @@ function ProductEditor({
                     const label = `Variant ${index + 1}`
                     const stock: Stock | undefined = variant.saved ? stockOf(variant.id) : undefined
                     // A repeated combination is named on the row's axis values as a whole.
-                    const combination = (
-                      <FieldError id={errorId(at('axisValues'))} message={errors[at('axisValues')]} />
-                    )
+                    const combination = <FieldError id={errorId(at('axisValues'))} message={errors[at('axisValues')]} />
                     return (
                       <tr key={index}>
                         <td>

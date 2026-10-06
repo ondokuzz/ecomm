@@ -48,8 +48,8 @@ export function CategoryListPage() {
         </ButtonLink>
       </div>
       <p className="muted page-intro">
-        A Category defines the attributes its Products carry. Variant axes, such as colour or storage, tell a
-        Product's Variants apart.
+        A Category defines the attributes its Products carry. Variant axes, such as colour or storage, tell a Product's
+        Variants apart.
       </p>
 
       <div role="status">

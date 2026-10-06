@@ -13,5 +13,7 @@ export function Skeleton({
   radius?: CSSProperties['borderRadius']
   className?: string
 }) {
-  return <span className={cx('skeleton', className)} style={{ width, height, borderRadius: radius }} aria-hidden="true" />
+  return (
+    <span className={cx('skeleton', className)} style={{ width, height, borderRadius: radius }} aria-hidden="true" />
+  )
 }

@@ -83,7 +83,11 @@ export function usePostReview(sku: string) {
 
 export function useEditReview(sku: string) {
   return useReviewMutation(sku, (token, { id, draft }: { id: string; draft: ReviewDraft }) =>
-    api<Review>('reviews-ratings', `/reviews/${encodeURIComponent(id)}`, { method: 'PUT', body: reviewPayload(draft), token }),
+    api<Review>('reviews-ratings', `/reviews/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: reviewPayload(draft),
+      token,
+    }),
   )
 }
 

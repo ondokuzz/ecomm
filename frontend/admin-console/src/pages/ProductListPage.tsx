@@ -61,14 +61,15 @@ export function ProductListPage() {
     <>
       <div className="page-heading">
         <h1>Products</h1>
-        <ButtonLink to={category ? `/products/new?category=${encodeURIComponent(category)}` : '/products/new'} variant="primary">
+        <ButtonLink
+          to={category ? `/products/new?category=${encodeURIComponent(category)}` : '/products/new'}
+          variant="primary"
+        >
           <Icon name="plus" size={16} />
           New Product
         </ButtonLink>
       </div>
-      <p className="muted page-intro">
-        A Product is sold as one or more Variants, each with its own Price and Stock.
-      </p>
+      <p className="muted page-intro">A Product is sold as one or more Variants, each with its own Price and Stock.</p>
 
       <div className="toolbar" role="search">
         <label className="field">
