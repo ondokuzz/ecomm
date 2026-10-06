@@ -121,6 +121,6 @@ No context is event-sourced: contexts keep append-only histories and ledgers whe
 | B | Search & Discovery on Elasticsearch: the projection indexes Products into it from the same topics, with search, filters and disjunctive Facets moved onto its query and aggregations, rebuilt from the topics; revises [Search ADR 0001](../services/search-discovery/docs/adr/0001-search-on-mongodb.md) |
 | C | — |
 | D | — |
-| E | — |
+| E | A fancier Storefront and Admin Console: a richer visual design, and a new logo and brand colour in place of the purple (`--color-primary` and its shades in `index.css`, the logo in `Layout.tsx`, and the Keycloak theme and Admin Console brand generated from them) |
 
 **Definition of done**: Search runs on Elasticsearch with the same results and Facets as v1, and every integration event's producers and consumers are held to its schema in CI.
