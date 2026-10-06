@@ -202,6 +202,11 @@ to `main`, with five jobs:
 | `images` | `docker compose build` of every service and frontend image. On a push to `main` it also pushes them to GHCR as `ghcr.io/ondokuzz/ecomm/<service>`, tagged with the commit SHA and `main` |
 | `e2e` | `make up`, then the Storefront's and the Admin Console's Playwright suites in Chromium. When it fails, the `e2e-failure` artifact keeps the Playwright reports, traces and `docker compose logs` |
 
+Before a commit, [`.githooks/pre-commit`](./.githooks/pre-commit) runs the same checks on what is
+staged: each frontend app's `lint` (oxlint and Prettier's check) and `typecheck`, and Spotless when
+Java or Gradle files are staged. Enable it once per clone with `git config core.hooksPath .githooks`;
+`npm run format` in an app fixes what Prettier finds.
+
 A new frontend app joins the `frontend` job by adding its directory name to `matrix.app`, and its
 `frontend (<app>)` check to the required checks below.
 
