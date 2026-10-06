@@ -110,10 +110,11 @@ services:
       KC_HEALTH_ENABLED: "true"
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
-      # The same heap share as the Spring services. Keycloak starts in their 384 MB but sits at the
-      # limit, so it gets a little more.
-      JAVA_OPTS_KC_HEAP: -XX:MaxRAMPercentage=60 -XX:InitialRAMPercentage=30
-    mem_limit: 512m
+      # Keycloak's heap stays near the 300 MB it had in 512 MB, and the rest of the cap is room for
+      # what isn't heap. At 512 MB it sat at the limit from start, and was killed after a day of
+      # e2e runs (2026-10-06).
+      JAVA_OPTS_KC_HEAP: -XX:MaxRAMPercentage=40 -XX:InitialRAMPercentage=20
+    mem_limit: 768m
     ports: ["${KEYCLOAK_PORT:-8180}:8080"]
     volumes:
       - ../../services/identity-access/realm:/opt/keycloak/data/import:ro

@@ -1,8 +1,8 @@
 # Ecomm Platform
 
-A from-scratch e-commerce platform, architected as fifteen bounded contexts across five parallel team tracks, planned over nine two-week sprints for a small (4-5 person) engineering team. Sprint 2 has hardened Sprint 1's walking skeleton, and it all runs locally: browse Products and pick their Variants, keep a Cart, check out with a Checkout Session that reserves its Stock, a Coupon and a mock payment that can decline, and follow the Order. Staff manage the Catalog in an Admin Console.
+A from-scratch e-commerce platform, architected as fifteen bounded contexts across five parallel team tracks, planned over nine two-week sprints for a small (4-5 person) engineering team. Sprint 3 has added the event backbone and the first features on it, and it all runs locally: search the Catalog with Facets, pick a Variant, keep a Cart, check out with a Checkout Session that reserves its Stock, gets the running Campaigns by itself and a Coupon on top, and pays through a mock payment that can decline, then follow the Order's Status history and review what you bought. Staff manage the Catalog, Coupons and Campaigns, and look up Orders, in an Admin Console.
 
-## Run Sprint 2
+## Run Sprint 3
 
 You need Docker with about 8 GB of memory, `make`, and Node 24 for the smoke tests.
 
@@ -21,8 +21,9 @@ The first build takes several minutes. Then open the Storefront on http://localh
 3. add Products to the Cart and go to checkout, which holds them and their Prices for 15 minutes
    and shows the time left. An `audio` Product gets the "Audio week" Campaign's 15% off by itself.
    Enter the Coupon `WELCOME10` for 10% off what is left, then pick a test card and press **Pay**. Paying again with another card works while the Checkout Session lasts;
-4. see the Order confirmation with its Order Status, **Paid**, and each of its Discounts, and find
-   the Order under **My Orders**;
+4. see the Order confirmation with its Order Status, **Paid**, its timeline drawn from the Order
+   Status history (Placed, then Paid, each with its time) and each of its Discounts, and find the
+   Order under **My Orders**;
 5. go back to a Product you paid for and review it: rate it, and give it a title and a few words.
    Its stars show on its card and its page, and you can edit or delete your review there. On a
    Product you haven't bought, the page says why you can't review it.
@@ -41,19 +42,32 @@ Reservation stops holding the Stock 2 minutes later, and Inventory's sweeper mar
 within 30 seconds of that ([Checkout ADR 0001](./services/checkout-pricing/docs/adr/0001-checkout-sessions-hold-stock-through-reservations.md)).
 `GET http://localhost:8000/api/inventory/stock/{variantId}` shows the Stock held and given back.
 
-Staff work in the [Admin Console](./frontend/admin-console/README.md) on http://localhost:8090:
-sign in as `staff@ecomm.local` / `staff` to create and edit Products with their Variants, Prices
-and Stock, and Categories with their attribute definitions. A new Product, or a changed Price, shows in the
-Storefront's listing within a second or two, once [Search & Discovery](./services/search-discovery/README.md)
-has the event, and on its own page at once. The demo Customer is refused there.
+Staff work in the [Admin Console](./frontend/admin-console/README.md) on http://localhost:8090,
+signed in as `staff@ecomm.local` / `staff`; the demo Customer is refused there. Staff can:
+
+1. find a Customer's Order under **Orders**, by its Order reference (`#3F2A9C1B`), Customer ID,
+   Status or when it was placed, and open it to see its lines, Discounts, tax and total, and its
+   Status history with each change's time and caller. Nothing there changes an Order;
+2. under **Promotions**, manage Coupons, and Campaigns with their state (running, scheduled, over
+   or off). A Campaign created there, say 20% off `laptops`, applies to the next Checkout Session
+   with a laptop in it;
+3. create and edit Products with their Variants, Prices and Stock, and Categories with their
+   attribute definitions. A new Product, or a changed Price, shows in the Storefront's listing within
+   a second or two, once [Search & Discovery](./services/search-discovery/README.md) has the event,
+   and on its own page at once.
 
 Every failed request on a Storefront page shows a support reference: the request's
-[Correlation ID](./CONTEXT.md). The services log JSON lines carrying it, so one request can be
-followed across them:
+[Correlation ID](./CONTEXT.md). The services log JSON lines carrying it, and the events a request
+causes carry it to their consumers, so one request can be followed across them, through Kafka too:
 
 ```sh
-docker compose logs --no-log-prefix | grep '<Correlation ID>'
+docker compose logs | grep '<Correlation ID>'
 ```
+
+Paying on the Storefront, for instance, logs it in the Storefront's nginx, the gateway and
+Checkout, then in Order Management, Payment, Inventory and Cart as Checkout calls them, and last in
+Reviews & Ratings' consumer as it applies the `order-management.order` events (`Applied Order …
+version 2`) and in Search & Discovery's as it applies the `inventory.stock` one.
 
 ### Ports
 
@@ -110,7 +124,11 @@ adds two Products, checks out with the approving test card, expects `PAID` on th
 Inventory API that the Checkout Session reserved their Stock and paying took it off on-hand. It
 also pays with a declining card, sees the decline, then pays the same session with the approving
 one, applies `WELCOME10` and sees its discount on the `PAID` Order, gets Audio week and `WELCOME10`
-together on an audio Product, and registers a new Customer:
+together on an audio Product, and registers a new Customer. Then, as a Customer it makes for the
+test, it walks Sprint 3's definition of done: it filters Audio by type and to what is in stock,
+searches, checks out with Audio week and `WELCOME10`, pays, sees Placed then Paid on the Order's
+timeline, reviews the Product and sees its Rating summary on its card and page. Another Customer of its own
+is told they can't review a Product they never bought:
 
 ```sh
 cd frontend/storefront
@@ -118,8 +136,13 @@ npm ci && npx playwright install chromium   # once
 npm run test:e2e
 ```
 
-The Admin Console has its own, in which Staff create a Product with two Variants and their Stock
-and a Customer picks either on the Storefront: `npm run test:e2e` in `frontend/admin-console`.
+The Admin Console has its own: Staff create a Product with two Variants and their Stock, and a
+Customer picks either on the Storefront; Staff find a Customer's Order and see its history; Staff
+manage Coupons and Campaigns, and a Campaign they create applies to a Customer's next checkout,
+whose Order Staff then find. Run it with `npm run test:e2e` in `frontend/admin-console`, after the
+Storefront's rather than beside it, since both check out. Both suites make their own Customers
+through Keycloak's admin API and delete them again; the Orders they place, and the Stock those
+take, stay.
 
 ### Commands
 
@@ -134,27 +157,34 @@ and a Customer picks either on the Storefront: `npm run test:e2e` in `frontend/a
 Every checkout takes Stock, so after many smoke-test runs `make seed-reset` refills it. To wipe
 everything, Keycloak's users included, run `docker compose down -v`.
 
-### A stack from Sprint 1
+### A stack from Sprint 2
 
-`make up` on a stack first started under Sprint 1 rebuilds every service and adds the gateway,
-Promotions and the Admin Console. Two things don't update themselves:
+`make up` on a stack from Sprint 2 brings it into Sprint 3 with nothing done by hand; the first
+build takes about ten minutes. It adds Kafka, Mongo, the schema registry, Search & Discovery and
+Reviews & Ratings, and creates their databases (`search` and `reviews` in Mongo, `apicurio` in
+Postgres) ([The event backbone](#the-event-backbone)). Then:
 
-- **The seed.** Catalog loads its seed only into an empty bucket, so the multi-Variant Products
-  arrive only after `make seed-reset`, once ([Catalog README](./services/catalog/README.md#seed-data)).
-  `make up` creates any service's Postgres database that is missing, so Promotions gains its
-  `promotions` database, and `WELCOME10`, without a reset.
-- **The Keycloak realm.** Keycloak imports the realm only on its first start, so an existing realm
-  lacks the `admin-console` client's redirect URIs, and the Admin Console's sign-in fails with
-  "Invalid parameter: redirect_uri". Delete the realm and restart Keycloak, or apply the client to
-  the running realm with `kcadm`, as the [Identity & Access README](./services/identity-access/README.md#the-admin-console-client)
-  shows.
+- **Orders get a history.** A migration gives each Order its placement, and its current Order
+  Status if it has moved on, marked `backfilled` and timed at its placement, since Sprint 2 never
+  recorded when it changed. An Order's single Discount becomes its first `COUPON` Discount.
+- **Stock gets a ledger.** A migration opens each Variant's Stock movements with an adjustment equal
+  to its On-hand, and a reservation for each line of every Reservation still active, so
+  `GET /stock/{variantId}/movements` balances from the start.
+- **Search and Reviews start complete.** On their first start, Order Management, Inventory and
+  Catalog each publish everything they hold once (`change: BACKFILLED`), so Search lists every
+  Product with its Stock, and a Customer who paid for something under Sprint 2 may review it.
+
+The Keycloak realm is unchanged since Sprint 2. A stack from Sprint 1 needs Sprint 2's steps
+first: `make seed-reset` once for the multi-Variant Products, and the realm's `admin-console`
+client, or the Admin Console's sign-in fails with "Invalid parameter: redirect_uri" ([Identity &
+Access README](./services/identity-access/README.md#the-admin-console-client)).
 
 ### Memory
 
-Each Spring service is capped at 384 MB, with 60% of it for the heap, Keycloak at 512 MB and each
-nginx at 64 MB. Kafka and Mongo are capped at 512 MB each, with a 256 MB heap for Kafka and a
+Each Spring service is capped at 384 MB, with 60% of it for the heap, Keycloak at 768 MB with 40%
+for the heap, and each nginx at 64 MB. Kafka and Mongo are capped at 512 MB each, with a 256 MB heap for Kafka and a
 256 MB cache for Mongo, and Apicurio and pgAdmin at 384 MB each. The default stack fits in about 8 GB of Docker
-memory; `docker stats` shows what it uses ([Sprint 2's reading](./docs/roadmap.md#sprint-2-weeks-34--harden-the-skeleton)).
+memory; `docker stats` shows what it uses ([Sprint 3's reading](./docs/roadmap.md#sprint-3-weeks-56--events--order-history)).
 Couchbase, Postgres and Redis are uncapped.
 
 ## CI

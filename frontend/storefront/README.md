@@ -356,14 +356,24 @@ npm test          # Vitest: failed responses as messages and support references,
 npm run test:e2e  # Playwright smoke, search and error-states tests against the running compose stack (`make up`)
 ```
 
-The smoke test ([`e2e/sprint1.spec.ts`](./e2e/sprint1.spec.ts)) signs in on Keycloak for real,
+The smoke test ([`e2e/smoke.spec.ts`](./e2e/smoke.spec.ts)) walks the definitions of done of
+Sprints 1 to 3. Its tests run one after another, since the first compares Stock before and after
+checkout and nothing else may check out meanwhile, so every test of this suite that checks out is
+in it; the Admin Console's suite checks out too, so run the two one after the other. It signs in on Keycloak for real,
 checks out two Products as the demo Customer with the Approve test card (the "held until" notice and its countdown, their Stock reserved but
 still on hand, then the confirmation, the confetti gone under reduced motion, the Order's lines by
 Product name, its timeline with Placed then Paid at the times Order Management recorded, its card on
 My Orders and, once the demo Customer has more than a page of Orders, the next page, and on-hand Stock down by one), pays with the
 Decline card and sees the decline inline with the session kept, then pays the same session with
-Approve and sees `PAID`, empties a Cart
-through the confirmation, and registers a new Customer. The error-states test
+Approve and sees `PAID`, applies `WELCOME10`, gets Audio week and `WELCOME10` together on an audio
+Product, empties a Cart through the confirmation, and registers a new Customer. Its Sprint 3 tests
+each sign in as a Customer made for the test through Keycloak's admin API (as `admin`), deleted
+again afterwards with their review. One goes into Audio, filters by the Product's type and to what
+is in stock, checking each count against Search's, searches its brand and opens it, checks out with
+Audio week applied by itself and `WELCOME10` on top, pays, and sees the timeline's Placed then Paid
+at their recorded times; once Reviews has the paid Order's event it posts a review and sees the
+Rating summary on the Product's page and its card. The other opens a Product it never bought and is told it
+can't review it, and Reviews refuses a post with `notPurchased`. The error-states test
 ([`e2e/error-states.spec.ts`](./e2e/error-states.spec.ts)) opens unknown route, Product and Order
 addresses and sees the Not Found page, answers the Product list with a 500 and sees the panel's
 reference and "Try again" recover, fails the Product page's Stock lookup and sees it say so with its

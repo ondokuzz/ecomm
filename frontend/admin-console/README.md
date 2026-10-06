@@ -233,7 +233,12 @@ npm run test:e2e  # Playwright against the running compose stack (`make up`)
 The Playwright tests sign in on Keycloak as `staff@ecomm.local`.
 [`e2e/promotions.spec.ts`](./e2e/promotions.spec.ts) creates, edits, switches off and deletes a
 Coupon and a Campaign, checking each through Promotions' API, and sees Promotions refuse a window
-that ends before it starts and the seeded Audio week's priority beside the field.
+that ends before it starts and the seeded Audio week's priority beside the field. It also creates a
+Campaign of 25% off `laptops`, then, as a Customer it makes in Keycloak for the test (through
+Keycloak's admin API, as `admin`), puts a laptop in the Cart, opens checkout on the Storefront in a
+browser of the Customer's own, and sees the Campaign's Discount there without entering anything. It
+pays, so no Stock stays held, finds the Discount on the Order, and then, as Staff, finds that Order
+by its reference and reads its history, Placed then Paid.
 [`e2e/products.spec.ts`](./e2e/products.spec.ts) creates a Product in `phones` with two Variants and
 their Stock.
 
@@ -254,7 +259,8 @@ then finds it in the console by its Order reference and by its Customer and Stat
 reads its history, each change with its time and caller. Orders are never deleted, so the test's
 Order stays, Cancelled.
 
-Each test removes its Product and Stock, Coupon or Campaign through the services' APIs if it failed
-before doing so itself, so the stack is left as it was. It runs against the console on 8090; set `ADMIN_CONSOLE_URL` to use Vite's
+Each test removes its Product and Stock, Coupon, Campaign or Customer through the services' and
+Keycloak's APIs if it failed before doing so itself, so the stack is left as it was, but for the
+Orders the Order and Campaign tests place. It runs against the console on 8090; set `ADMIN_CONSOLE_URL` to use Vite's
 5174, and `STOREFRONT_URL` or `KEYCLOAK_URL` for other hosts. Install Chromium once with
 `npx playwright install chromium`.

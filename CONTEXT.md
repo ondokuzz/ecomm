@@ -9,7 +9,7 @@ A person who browses, buys, and manages Orders on the platform. Keycloak holds a
 _Avoid_: User, Account, Buyer
 
 **Staff**:
-A back-office person with the `STAFF` role. Staff manage the Catalog in the Admin Console, which turns away anyone without the role.
+A back-office person with the `STAFF` role. In the Admin Console, which turns away anyone without the role, Staff manage the Catalog, Coupons and Campaigns, and look up every Customer's Orders without changing them.
 _Avoid_: Admin, Operator
 
 **Storefront**:
@@ -17,7 +17,7 @@ The web app where Customers browse the Catalog, keep a Cart, check out and follo
 _Avoid_: Shop, Site, Frontend (there are two)
 
 **Admin Console**:
-The web app where Staff manage the Catalog: Products with their Variants, Prices and Stock, and Categories with their Attribute definitions. Only Staff get in; a Customer who signs in is told it is for Staff. Like the Storefront it is a UI over the contexts, and each service still checks the Staff role on every change.
+The web app where Staff manage the Catalog (Products with their Variants, Prices and Stock, and Categories with their Attribute definitions) and Promotions' Coupons and Campaigns, and read every Customer's Orders with their Order Status history. Only Staff get in; a Customer who signs in is told it is for Staff. Like the Storefront it is a UI over the contexts, and each service still checks the Staff role on every change.
 _Avoid_: Admin panel, Back office, Dashboard
 
 **Product**:
@@ -93,7 +93,7 @@ How a Customer turns their Cart into an Order, in two steps. Starting it opens a
 _Avoid_: Purchase, Order placement
 
 **Checkout Session**:
-A Customer's Cart held for checkout for 15 minutes: its lines at the Prices captured when it started, the Discount of the one Coupon applied to it, if any, their tax, and a Reservation of their Stock. Paying it honours those Prices even if Catalog has changed them since; paying one that has expired does nothing. A Customer has at most one: starting checkout again replaces it and releases its Reservation. Checkout owns it.
+A Customer's Cart held for checkout for 15 minutes: its lines at the Prices captured when it started, with each line's Category; its Discounts, from the running Campaigns and the one Coupon applied to it, if any; their tax; and a Reservation of their Stock. Paying it honours those Prices even if Catalog has changed them since; paying one that has expired does nothing. A Customer has at most one: starting checkout again replaces it and releases its Reservation. Checkout owns it.
 _Avoid_: Checkout (the whole two-step process), Hold, Basket
 
 **Reservation**:
@@ -101,7 +101,7 @@ A temporary, all-or-nothing hold on the Stock of several Variants for one Custom
 _Avoid_: Lock, Hold
 
 **Order**:
-A Customer's confirmed intent to purchase one or more Variants, tracked through a lifecycle from placement to delivery or return. It holds one Order Line per Variant, its Discounts in the order they applied, and its tax, all in one currency. Its total is the sum of its lines, less every Discount, plus the tax; never negative. That total is what its Payment is authorized for. It belongs to the Customer who placed it, and only they can see it.
+A Customer's confirmed intent to purchase one or more Variants, tracked through a lifecycle from placement to delivery or return. It holds one Order Line per Variant, its Discounts in the order they applied, and its tax, all in one currency. Its total is the sum of its lines, less every Discount, plus the tax; never negative. That total is what its Payment is authorized for. It belongs to the Customer who placed it: only they and Staff can see it, and Staff can't change it.
 _Avoid_: Purchase, Transaction
 
 **Coupon**:

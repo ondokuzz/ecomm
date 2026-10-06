@@ -1,17 +1,27 @@
 import { type APIRequestContext, type Page, expect, test } from '@playwright/test'
 import { type Product, type Variant, defaultVariant } from '../src/domain/catalog'
-import { type Currencies, type Currency, currenciesOf, formatMoney } from '../src/domain/money'
+import { type Currencies, type Currency, type Money, currenciesOf, formatMoney } from '../src/domain/money'
 import { type Order, ordersPageSize } from '../src/domain/order'
 import type { Page as ListPage } from '../src/domain/paging'
+import type { Eligibility, RatingSummary } from '../src/domain/reviews'
+import type { SearchResults } from '../src/domain/search'
 
 /**
- * The Sprint 1 definition of done, end to end: browse seeded Products, pick a Variant, add them to
- * the Cart, check out with the mock payment, and see the Order confirmation and its Order Status.
- * Checkout holds the Cart in a Checkout Session first, and paying takes the held Stock off on-hand.
- * A declined test card says so, and the held session can then be paid with one that approves.
+ * The smoke test: the definitions of done of Sprints 1 to 3, end to end.
+ *
+ * - Browse seeded Products, pick a Variant, add them to the Cart, check out with the mock payment,
+ *   and see the Order confirmation and its Order Status. Checkout holds the Cart in a Checkout
+ *   Session first, and paying takes the held Stock off on-hand. A declined test card says so, and
+ *   the held session can then be paid with one that approves.
+ * - Find an audio Product by searching and filtering, check out with the seeded Audio week Campaign
+ *   applied by itself and WELCOME10 on top, pay, follow the Order's Status history, and review the
+ *   Product, whose rating then shows on its card and its page. A Customer who never bought a
+ *   Product is told they can't review it.
  */
 
-// The demo checkout compares Stock before and after, so nothing else may check out meanwhile.
+// The demo checkout compares Stock before and after, so nothing else may check out meanwhile:
+// every test in this suite that checks out is in this file. The Admin Console's suite checks out
+// too, so the two run one after the other, as in CI.
 test.describe.configure({ mode: 'serial' })
 
 /** A Variant's Stock as Inventory reports it: what's left to sell, and the units on hand. */
@@ -23,6 +33,11 @@ interface Stock {
 interface Credentials {
   email: string
   password: string
+}
+
+/** A Customer made in Keycloak for one test. */
+interface Customer extends Credentials {
+  id: string
 }
 
 interface ProductInStock {
@@ -350,6 +365,155 @@ test('a new Customer registers on Keycloak and comes back signed in', async ({ p
   await expectSignedIn(page, email)
 })
 
+/**
+ * Sprint 3's tests each sign in as a Customer of their own, made in Keycloak for the test, so a
+ * review is the test's alone. The review and the Customer are deleted again afterwards; the Order
+ * stays, as Orders are never deleted.
+ */
+test.describe('Sprint 3', () => {
+  let customer: Customer | undefined
+
+  test.beforeEach(async ({ request }) => {
+    customer = await createCustomer(request)
+  })
+
+  test.afterEach(async ({ request }) => {
+    if (customer) await deleteCustomer(request, customer)
+    customer = undefined
+  })
+
+  /** The test's Customer, which `beforeEach` made. */
+  function signedUp(): Customer {
+    if (!customer) throw new Error('No Customer was made for this test')
+    return customer
+  }
+
+  test('a Customer finds an audio Product, checks out with Audio week and WELCOME10, and reviews it', async ({ page, request }) => {
+    const customer = signedUp()
+    const { product, variant } = await aProductInStockIn(request, 'audio')
+    const brand = product.attributes.brand
+    const type = product.attributes.type
+    const currencies = await currenciesOfCatalog(request)
+
+    await page.goto('/')
+    await page.getByRole('button', { name: 'Log in' }).click()
+    await signInOnKeycloak(page, customer)
+    await expectSignedIn(page, customer.email)
+
+    // Into Audio, then its type and what's in stock: each count is Search's for the view it would give.
+    await page.getByRole('navigation', { name: 'Categories' }).getByRole('link', { name: /^Audio/ }).click()
+    await expect(page).toHaveURL(/\/\?category=audio$/)
+    await expectCounts(page, await searchOf(request, { category: 'audio' }), type)
+    await page.getByRole('group', { name: 'type' }).getByRole('checkbox', { name: new RegExp(`^${escape(type)}`) }).click()
+    await expect(page).toHaveURL(new RegExp(`attr\\.type=${escape(encodeURIComponent(type).replace(/%20/g, '+'))}`))
+    await expectCounts(page, await searchOf(request, { category: 'audio', 'attr.type': type }), type)
+    await page.getByRole('checkbox', { name: /^In stock only/ }).click()
+    await expect(page.getByRole('checkbox', { name: /^In stock only/ })).toBeChecked()
+    const filtered = { category: 'audio', 'attr.type': type, inStock: 'true' }
+    await expectCounts(page, await searchOf(request, filtered), type)
+
+    // Searching keeps the filters, and finds the Product by its brand.
+    await page.getByRole('searchbox', { name: 'Search products' }).fill(brand)
+    await page.getByRole('button', { name: 'Search' }).click()
+    await expect(page).toHaveURL(/[?&]q=/)
+    await expect(page.getByRole('checkbox', { name: /^In stock only/ })).toBeChecked()
+    const found = await searchOf(request, { ...filtered, q: brand })
+    expect(found.items.map((item) => item.sku)).toContain(product.sku)
+    await expect(cards(page).locator('.product-name')).toHaveText(found.items.map((item) => item.name))
+    await card(page, product.name).click()
+
+    await expect(page.getByRole('heading', { name: product.name })).toBeVisible()
+    await page.getByRole('button', { name: 'Add to cart' }).click()
+    await expect(page.getByRole('link', { name: 'Cart (1)' })).toBeVisible()
+    await page.getByRole('link', { name: 'Cart (1)' }).click()
+    await page.getByRole('link', { name: 'Go to checkout' }).click()
+
+    // Audio week comes off by itself; WELCOME10 then takes 10% off what is left. Each rounds down.
+    const subtotal = variant.price
+    const audioWeek = { ...subtotal, amountMinor: Math.floor((subtotal.amountMinor * 15) / 100) }
+    const welcome10 = { ...subtotal, amountMinor: Math.floor((subtotal.amountMinor - audioWeek.amountMinor) / 10) }
+    const summary = page.getByRole('region', { name: 'Order summary' })
+    await expect(summary.getByText('Campaign: Audio week')).toBeVisible()
+    await expect(summary).toContainText(money(negative(audioWeek), currencies))
+    await summary.getByLabel('Coupon code').fill('WELCOME10')
+    await summary.getByRole('button', { name: 'Apply' }).click()
+    await expect(summary.getByText('Coupon: WELCOME10')).toBeVisible()
+    await expect(summary.getByText('Campaign: Audio week')).toBeVisible()
+    await expect(summary).toContainText(money(negative(welcome10), currencies))
+    const total = { ...subtotal, amountMinor: subtotal.amountMinor - audioWeek.amountMinor - welcome10.amountMinor }
+
+    await testCard(page, 'Approve').check()
+    await page.getByRole('button', { name: `Pay ${money(total, currencies)}` }).click()
+
+    // The Order page draws its timeline from the Status history: Placed, then Paid, each with its time.
+    await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/)
+    await expect(page.locator('.status-paid')).toHaveText('Paid')
+    const orderId = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!)
+    const token = await tokenFor(request, customer)
+    const order = await orderOf(request, token, orderId)
+    expect(order.statusHistory.map((entry) => entry.status)).toEqual(['PLACED', 'PAID'])
+    expect(order.discounts.map((d) => d.campaignName ?? d.couponCode)).toEqual(['Audio week', 'WELCOME10'])
+    const progress = page.getByRole('list', { name: 'Order progress' })
+    await expect(progress.locator('.timeline-done .timeline-status')).toHaveText([/^Placed/])
+    await expect(progress.locator('[aria-current=step] .timeline-status')).toHaveText('Paid')
+    for (const entry of order.statusHistory) {
+      await expect(progress.locator(`time[datetime="${entry.at}"]`)).toBeVisible()
+    }
+
+    // Reviews learns of the paid Order from its event, within seconds.
+    await expect
+      .poll(async () => (await eligibilityOf(request, token, product.sku)).eligible, { timeout: 15_000 })
+      .toBe(true)
+    await page.goto(`/products/${encodeURIComponent(product.sku)}`)
+    const form = page.locator('.review-form-card')
+    await expect(form.getByRole('heading', { name: 'Write a review' })).toBeVisible()
+    await form.locator('.star-input label').filter({ hasText: '4 stars' }).click()
+    await expect(form.getByRole('radio', { name: '4 stars' })).toBeChecked()
+    await form.getByLabel(/^Title/).fill('Does what it says')
+    await form.getByLabel('Review').fill('Bought it in Audio week. Sounds great, and the battery lasts.')
+    await form.getByRole('button', { name: 'Post review' }).click()
+    await expect(page.locator('.own-review')).toContainText('Does what it says')
+    // Shown under the Customer's given name and family name's initial.
+    await expect(page.getByRole('list', { name: 'Reviews', exact: true })).toContainText('E2E C.')
+
+    // Its Rating summary, with this review in it, is on its page and on its card.
+    const ratingSummary = await ratingSummaryOf(request, product.sku)
+    expect(ratingSummary.count).toBeGreaterThan(0)
+    const average = ratingSummary.average!.toFixed(1)
+    const reviews = ratingSummary.count === 1 ? '1 review' : `${ratingSummary.count} reviews`
+    const stars = `Rated ${average} out of 5`
+    await expect(page.locator('.summary-link').getByRole('img', { name: stars })).toBeVisible()
+    await expect(page.locator('.rating-summary')).toContainText(reviews)
+    await page.goto(`/?${new URLSearchParams({ category: 'audio' })}`)
+    await expect(card(page, product.name).getByRole('img', { name: stars })).toBeVisible()
+    await expect(card(page, product.name)).toContainText(`${average} · ${reviews}`)
+  })
+
+  test('a Customer who never bought a Product is told they can’t review it', async ({ page, request }) => {
+    const customer = signedUp()
+    const product = (await products(request))[0]
+
+    await page.goto(`/products/${encodeURIComponent(product.sku)}`)
+    await expect(page.getByRole('heading', { name: product.name })).toBeVisible()
+    // Signed out, they are asked to log in first, and come back to the same Product.
+    await page.getByRole('button', { name: 'Log in to review' }).click()
+    await signInOnKeycloak(page, customer)
+    await expect(page).toHaveURL(new RegExp(`/products/${escape(encodeURIComponent(product.sku))}`))
+
+    await expect(
+      page.getByRole('status').filter({ hasText: 'Only Customers who have bought this product can review it.' }),
+    ).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Write a review' })).toHaveCount(0)
+    // Reviews refuses a post anyway, with the same reason.
+    const posted = await request.post(`/api/reviews-ratings/products/${encodeURIComponent(product.sku)}/reviews`, {
+      headers: { Authorization: `Bearer ${await tokenFor(request, customer)}` },
+      data: { rating: 5, body: 'Never bought it.' },
+    })
+    expect(posted.status()).toBe(403)
+    expect(((await posted.json()) as { reason: string }).reason).toBe('notPurchased')
+  })
+})
+
 /** The checkout page's test card radio, named by its card. */
 function testCard(page: Page, label: string) {
   return page.getByRole('group', { name: 'Test card' }).getByRole('radio', { name: label, exact: true })
@@ -473,4 +637,98 @@ async function aProductInStockIn(request: APIRequestContext, category: string): 
 /** How a Cart or Order line names a Variant: its Product, then its axis values. */
 function lineName({ product, variant }: ProductInStock): string {
   return [product.name, ...Object.values(variant.axisValues)].join(' · ')
+}
+
+/** The listing's counts: how many Products match, how many are in stock, and how many have each type. */
+async function expectCounts(page: Page, results: SearchResults, type: string) {
+  await expect(page.locator('.listing-toolbar > p')).toHaveText(results.total === 1 ? '1 product' : `${results.total} products`)
+  await expect(page.locator('.stock-toggle .filter-count')).toHaveText(String(results.facets.inStock))
+  const count = results.facets.attributes.find((a) => a.name === 'type')!.values.find((v) => v.value === type)!.count
+  await expect(page.getByRole('group', { name: 'type' }).locator('label').filter({ hasText: type })).toContainText(String(count))
+}
+
+function cards(page: Page) {
+  return page.getByRole('list', { name: 'Products' }).getByRole('listitem')
+}
+
+/** The card of the Product named exactly `name`. */
+function card(page: Page, name: string) {
+  return cards(page).filter({ has: page.locator('.product-name').getByText(name, { exact: true }) })
+}
+
+function money(amount: Money, currencies: Currencies) {
+  return formatMoney(amount, currencies, 'en-US')
+}
+
+function negative(amount: Money): Money {
+  return { ...amount, amountMinor: -amount.amountMinor }
+}
+
+function escape(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/** A token for Keycloak's own admin API, from the master realm's bootstrap admin. */
+async function keycloakAdminHeaders(request: APIRequestContext) {
+  const response = await request.post(`${keycloakUrl}/realms/master/protocol/openid-connect/token`, {
+    form: { grant_type: 'password', client_id: 'admin-cli', username: 'admin', password: 'admin' },
+  })
+  expect(response.ok()).toBeTruthy()
+  return { Authorization: `Bearer ${((await response.json()) as { access_token: string }).access_token}` }
+}
+
+/** A new Customer, E2E Customer, ready to sign in. */
+async function createCustomer(request: APIRequestContext): Promise<Customer> {
+  const email = `e2e-${Date.now().toString(36)}${test.info().workerIndex}@ecomm.local`
+  const password = 'e2e-password'
+  const response = await request.post(`${keycloakUrl}/admin/realms/ecomm/users`, {
+    headers: await keycloakAdminHeaders(request),
+    data: {
+      username: email,
+      email,
+      firstName: 'E2E',
+      lastName: 'Customer',
+      enabled: true,
+      emailVerified: true,
+      credentials: [{ type: 'password', value: password, temporary: false }],
+    },
+  })
+  expect(response.status()).toBe(201)
+  return { id: response.headers().location.split('/').pop()!, email, password }
+}
+
+/** Deletes the Customer's reviews of the seeded Products, then the Customer. */
+async function deleteCustomer(request: APIRequestContext, user: Customer) {
+  const token = await tokenFor(request, user)
+  const headers = { Authorization: `Bearer ${token}` }
+  for (const { sku } of await products(request)) {
+    const { review } = await eligibilityOf(request, token, sku)
+    if (!review) continue
+    const deleted = await request.delete(`/api/reviews-ratings/reviews/${review.id}`, { headers })
+    expect(deleted.status()).toBe(204)
+  }
+  const response = await request.delete(`${keycloakUrl}/admin/realms/ecomm/users/${user.id}`, {
+    headers: await keycloakAdminHeaders(request),
+  })
+  expect(response.status()).toBe(204)
+}
+
+async function eligibilityOf(request: APIRequestContext, token: string, sku: string): Promise<Eligibility> {
+  const response = await request.get(`/api/reviews-ratings/products/${encodeURIComponent(sku)}/eligibility`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  expect(response.ok()).toBeTruthy()
+  return (await response.json()) as Eligibility
+}
+
+async function ratingSummaryOf(request: APIRequestContext, sku: string): Promise<RatingSummary> {
+  const response = await request.get(`/api/reviews-ratings/products/${encodeURIComponent(sku)}/rating-summary`)
+  expect(response.ok()).toBeTruthy()
+  return (await response.json()) as RatingSummary
+}
+
+async function searchOf(request: APIRequestContext, query: Record<string, string>): Promise<SearchResults> {
+  const response = await request.get(`/api/search-discovery/search?${new URLSearchParams(query)}`)
+  expect(response.ok()).toBeTruthy()
+  return (await response.json()) as SearchResults
 }
