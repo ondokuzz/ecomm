@@ -12,7 +12,9 @@ make up           # build and start the stack; returns once every service is hea
 
 The first build takes several minutes. Then open the Storefront on http://localhost:8080, where you can:
 
-1. browse the 20 seeded Products by category. The Google Pixel 9, the Apple iPhone 16 and the Apple
+1. search the 20 seeded Products, and narrow them by category, by attribute (storage, brand,
+   …), by Price and to what is in stock, with each choice's count beside it; the listing's URL keeps
+   the view. The Google Pixel 9, the Apple iPhone 16 and the Apple
    MacBook Air 13 (M3) come in several Variants: pick one by its color and storage, each with its
    own Price and Stock. One iPhone Variant starts sold out;
 2. sign in as `demo@ecomm.local` / `demo`, or register a new Customer on Keycloak's page;
@@ -38,8 +40,9 @@ within 30 seconds of that ([Checkout ADR 0001](./services/checkout-pricing/docs/
 
 Staff work in the [Admin Console](./frontend/admin-console/README.md) on http://localhost:8090:
 sign in as `staff@ecomm.local` / `staff` to create and edit Products with their Variants, Prices
-and Stock, and Categories with their attribute definitions. A new Product shows on the Storefront
-at once. The demo Customer is refused there.
+and Stock, and Categories with their attribute definitions. A new Product, or a changed Price, shows in the
+Storefront's listing within a second or two, once [Search & Discovery](./services/search-discovery/README.md)
+has the event, and on its own page at once. The demo Customer is refused there.
 
 Every failed request on a Storefront page shows a support reference: the request's
 [Correlation ID](./CONTEXT.md). The services log JSON lines carrying it, so one request can be
@@ -63,6 +66,7 @@ a host port, which bypasses the gateway, for development only (see each service'
 | 8180 | Keycloak (`admin` / `admin`) |
 | 8081–8086 | Catalog, Inventory, Cart, Payment, Order Management and Checkout & Pricing |
 | 8087 | Promotions |
+| 8089 | Search & Discovery |
 | 8088 | Apicurio schema registry: the event schemas, under `/apis/registry/v3` |
 | 9092 | Kafka |
 | 27017 | Mongo |
@@ -118,7 +122,8 @@ and a Customer picks either on the Storefront: `npm run test:e2e` in `frontend/a
 |---|---|
 | `make up` | Build and start the stack, and wait until it is healthy |
 | `make down` | Stop the stack, keeping its data |
-| `make seed-reset` | Put the seed Categories, Products, Stock, Coupons and Campaigns back and drop every Cart, Checkout Session, Reservation, Order and Payment; registered Customers stay |
+| `make seed-reset` | Put the seed Categories, Products, Stock, Coupons and Campaigns back and drop every Cart, Checkout Session, Reservation, Order and Payment; registered Customers stay. It also empties the event topics and Search's projection, since the reset stores count their events' versions from 1 again |
+| `make search-rebuild` | Rebuild Search's projection from the topics ([Search & Discovery](./services/search-discovery/README.md#rebuilding)) |
 
 Every checkout takes Stock, so after many smoke-test runs `make seed-reset` refills it. To wipe
 everything, Keycloak's users included, run `docker compose down -v`.

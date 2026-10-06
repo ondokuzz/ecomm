@@ -1,6 +1,6 @@
 # Storefront
 
-The Customer-facing React app: browse Products by category, pick a Variant and see its Price and
+The Customer-facing React app: search and filter the Products, pick a Variant and see its Price and
 Stock, keep a Cart, check out with a mock payment's test cards, and follow Orders and their Order Status. Built with Vite,
 React, TypeScript, React Router and TanStack Query.
 
@@ -8,7 +8,7 @@ React, TypeScript, React Router and TanStack Query.
 
 | Path | | Login |
 |---|---|---|
-| `/?category=` | Products, filtered by category | no |
+| `/?q=&category=&…` | Products, searched and filtered, as Search & Discovery finds them: see [Search](#search) | no |
 | `/products/{sku}?variant=` | A Product with a Variant picker, and the chosen Variant's image, Price, Stock and specs, laid out by its Category's attribute definitions; add it to the Cart | no (adding needs it) |
 | `/cart` | The Cart, priced from Catalog's current Prices; change quantities, remove lines or empty it | yes |
 | `/checkout` | Starts or resumes a Checkout Session: its lines, price breakdown, a Coupon field and a countdown to when it expires, a test-card picker and a "Pay" button | yes |
@@ -52,11 +52,45 @@ image (the Variant's own, when it has one) and the axis rows of the specs all fo
 Variant. The choice lives in `?variant=`, so a reload or a shared link keeps it; without one, or
 with one the Product doesn't have, the page shows the first Variant.
 
-Product cards show Catalog's `priceFrom`, prefixed "From" when the Variants' Prices differ.
+Product cards show Search's `priceFrom`, prefixed "From" when the Variants' Prices differ.
 
 Cart and Order lines hold Variant IDs, so each is looked up through Catalog's
 `GET /variants/{id}` and named by its Product and axis values, such as "Google Pixel 9 · Obsidian ·
 256 GB"; it links to the Product page with that Variant chosen.
+
+## Search
+
+The Product list is [Search & Discovery](../../services/search-discovery/README.md)'s answer to
+`GET /search`: a page of Product summaries, how many matched, and the Facets to narrow them by,
+each counted as if its own choice weren't made.
+
+- **Search box.** Words to find in the names, descriptions and attribute values. A search shows
+  "Results for “…”" with the count, and the sort offers "Best match" first.
+- **Category chips.** "All" and each Category with how many Products it would leave. One that would
+  leave none is shown disabled. Choosing another Category drops the attribute filters, which were the
+  old one's.
+- **Filter panel.** Once a Category is chosen, each of its attributes: values to tick, with their
+  counts, any of which will do, or a `NUMBER`'s range between its lowest and highest value. A value
+  that would leave nothing is disabled, unless it is ticked, so it can always be cleared. Then the
+  price range, typed as decimals in a Currency and sent in its Minor unit by Catalog's Currencies,
+  with the lowest and highest Price as placeholders. On a phone the panel folds away behind
+  "Filters".
+- **Toolbar.** The count, "In stock only" with how many are, and the sort: newest, or by Price either way.
+- **Cards.** A Product none of whose Variants is in Stock is marked "Out of stock".
+- **Paging.** 24 to a page, with "Previous page" and "Next page".
+- **Nothing found.** "No products match", with "Clear filters" when filters are set, which keeps the
+  text and the sort. A page past the last says so and links to the first.
+
+Everything is held in the URL, in the same terms `GET /search` takes, so a reload, Back or a shared
+link shows the same view: `q`, `category`, `attr.<name>` (repeated for each value), `range.<name>=<min>..<max>`,
+`currency` and `price=<min>..<max>` in its Minor unit, `inStock=true`, `sort` and `page`, which
+counts from 1 here. Every change but paging goes back to the first page. Whatever Search would refuse
+in a mangled link, such as an unknown sort or a range upside down, is left out rather than failing
+the page. [`src/domain/search.ts`](./src/domain/search.ts) maps between the URL, the search and the
+Facets. While a changed search loads, the last results stay in place.
+
+A Product reaches the list a moment after Catalog publishes it, once Search has the event; its own
+page reads Catalog directly, so it is there at once.
 
 ## Orders
 
@@ -152,7 +186,7 @@ to the page they asked for.
 ## Calling the services
 
 The browser reaches each service at `/api/<service>/…` on the Storefront's own origin: `catalog`,
-`inventory`, `cart`, `checkout-pricing` and `order-management`. Everything under `/api/` goes to the
+`inventory`, `cart`, `checkout-pricing`, `order-management` and `search-discovery`. Everything under `/api/` goes to the
 [API gateway](../../platform/api-gateway/README.md), which checks the token and routes it; it sends
 no CORS headers. In development the Vite dev proxy forwards `/api` to the gateway's compose host
 port, 8000 ([`vite.config.ts`](./vite.config.ts)); in compose, nginx does
@@ -236,7 +270,7 @@ No page is ever left blank, and every error a service answers carries a support 
   the earlier ones failed the same way just before it.
 - **Lookups beside the content.** Some pages look things up beside their main content: Variant
   names, images and Prices on the Cart, Checkout, My Orders and Order pages, Stock on the Product
-  page, the category chips. When one fails the page still shows what it has, falling back as
+  page. When one fails the page still shows what it has, falling back as
   before (a Variant ID for its name, "Stock unknown"), and says what didn't load, with its
   reference and "Try again" (`LookupError` in [`Status`](./src/components/Status.tsx), from
   `lookupFailure`). A Category's attribute definitions only order the specs, so when they don't
@@ -291,8 +325,8 @@ Sign in as `demo@ecomm.local` / `demo`, or register a new Customer.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: failed responses as messages and support references, Money formatting by Catalog's Minor units, Cart pricing, checkout problems, the session countdown and price breakdown, Coupon rejections, test cards and payment failures, quantities, Stock levels, toasts, category chips, Product specs by their Category's definitions, Customer initials, Orders and their timeline from the Order Status history, the Orders list's paging, Order Status colours, seed Product images, the Keycloak theme's and the Admin Console's copies of the tokens
-npm run test:e2e  # Playwright smoke and error-states tests against the running compose stack (`make up`)
+npm test          # Vitest: failed responses as messages and support references, Money formatting by Catalog's Minor units, Cart pricing, checkout problems, the session countdown and price breakdown, Coupon rejections, test cards and payment failures, quantities, Stock levels, toasts, the search's URL and its Facets as chips and filters, Product specs by their Category's definitions, Customer initials, Orders and their timeline from the Order Status history, the Orders list's paging, Order Status colours, seed Product images, the Keycloak theme's and the Admin Console's copies of the tokens
+npm run test:e2e  # Playwright smoke, search and error-states tests against the running compose stack (`make up`)
 ```
 
 The smoke test ([`e2e/sprint1.spec.ts`](./e2e/sprint1.spec.ts)) signs in on Keycloak for real,
@@ -307,5 +341,10 @@ through the confirmation, and registers a new Customer. The error-states test
 addresses and sees the Not Found page, answers the Product list with a 500 and sees the panel's
 reference and "Try again" recover, fails the Product page's Stock lookup and sees it say so with its
 reference, and refuses a token, once on My Orders' data and once on "Add to cart", and sees the
-Customer go to Keycloak and come back to the same page. They need Chromium once:
+Customer go to Keycloak and come back to the same page. The search test
+([`e2e/search.spec.ts`](./e2e/search.spec.ts)) searches the seed by text, chooses a Category and a
+storage value and sees the other values still counted, keeps to what is in stock and sorts by
+Price, then reloads and opens the URL afresh and sees the same Products in the same order; it
+clears filters that match nothing, and pages through, and sees "Out of stock" on, results it stands
+in for, since the seed fills less than a page. They need Chromium once:
 `npx playwright install chromium`. Set `STOREFRONT_URL` or `KEYCLOAK_URL` to aim it elsewhere.

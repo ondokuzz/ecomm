@@ -44,6 +44,10 @@ _Avoid_: Option, Configuration
 How a Customer chooses a Variant on a Product's page in the Storefront: one group of choices per Variant axis, such as color and storage. Choosing a value leads to the Variant with that value and the chosen Variant's other values; a value no such Variant has can't be chosen. The chosen Variant's ID is in the page's URL, so it can be shared.
 _Avoid_: Option selector, Configurator
 
+**Facet**:
+One way a Customer can narrow a search, with how many Products each choice would leave: the Categories, a Category's attributes by their values (or a `NUMBER`'s lowest and highest), the Price range in each Currency, and whether in Stock. Each is counted as if its own choice weren't made, so choosing one value still shows what its siblings would add; a choice that would leave nothing can't be made. Search & Discovery works them out with every search, and the Storefront's filter panel is built from them. Attribute Facets come only once a Category is chosen, since its Attribute definitions decide them.
+_Avoid_: Filter (a Facet is what a filter is chosen from), Refinement, Aggregation
+
 **Stock**:
 How many units of a Variant are available to sell, counted per Variant ID and never negative: its On-hand units less what active Reservations hold of them. Inventory owns Stock. Checkout takes it only through Reservations, which hold several Variants as one batch that applies whole or not at all. Staff remove a Variant's Stock when its Product leaves the Catalog, but not while Reservations hold some of it; Inventory then doesn't stock the Variant, and nothing can reserve it, until Staff set its On-hand count again. Its past Reservations stay.
 _Avoid_: Inventory (that's the context, not the count)

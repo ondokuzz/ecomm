@@ -27,7 +27,8 @@ class RoutingApiTest extends GatewayApiTest {
     "/api/order-management/staff/orders?status=PAID&idPrefix=3f2a, /staff/orders?status=PAID&idPrefix=3f2a",
     "/api/order-management/staff/orders/7f1c, /staff/orders/7f1c",
     "/api/promotions/coupons/WELCOME10, /coupons/WELCOME10",
-    "/api/promotions/campaigns/7f1c, /campaigns/7f1c"
+    "/api/promotions/campaigns/7f1c, /campaigns/7f1c",
+    "/api/search-discovery/search?category=phones&sort=newest, /search?category=phones&sort=newest"
   })
   void eachServiceIsReachedWithThePrefixStripped(String path, String downstreamPath) {
     http.get()

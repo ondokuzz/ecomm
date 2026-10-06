@@ -27,6 +27,9 @@ ecomm:
         uri: http://localhost:8087
         # Only Checkout evaluates Coupons, so nobody can probe codes from outside a checkout.
         internal: [/discounts/**]
+      search-discovery:
+        uri: http://localhost:8089
+        public-reads: [/search]
 
 # Plain-text logs name the Correlation ID too, so the access log reads the same outside Docker.
 logging:

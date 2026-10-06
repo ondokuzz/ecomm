@@ -243,6 +243,9 @@ their Stock.
 - **A refused count** has Inventory refuse one Variant's count. The test stands in for Inventory
   there, since a new Variant has no Reservations. It checks that the new Product opens on its own
   page with the refusal beside that count, then sets the count by saving again.
+- **A Price in search** waits for the new Product to reach Search & Discovery, changes its first
+  Variant's Price in the editor, and sees search give the new "from" Price within 10 seconds, on its
+  API and on the Storefront's listing.
 
 [`e2e/orders.spec.ts`](./e2e/orders.spec.ts) places an Order for a Customer of its own as Checkout
 does, straight at Order Management on its host port (`ORDER_MANAGEMENT_URL`, default

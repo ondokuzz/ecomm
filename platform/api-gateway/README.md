@@ -23,6 +23,7 @@ stay with the services, which still check every token themselves.
 | `checkout-pricing` | | |
 | `order-management` | | `POST /orders`, `PATCH /orders/*/status` |
 | `promotions` | | `/discounts/**`: Coupon evaluation, which only Checkout calls |
+| `search-discovery` | `/search` | |
 
 The table lives in [`application.yml`](./src/main/resources/application.yml) under
 `ecomm.gateway.services`, and routing and edge security are both built from it (`EdgeRoutes`), so

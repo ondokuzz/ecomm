@@ -26,7 +26,8 @@ test('unknown routes, Products and Orders show the Not Found page', async ({ pag
 })
 
 test('a failed request shows the error panel with its reference, and "Try again" reloads it', async ({ page }) => {
-  await page.route('**/api/catalog/products', (route) =>
+  const search = /\/api\/search-discovery\/search\?/
+  await page.route(search, (route) =>
     route.fulfill({
       status: 500,
       contentType: 'application/problem+json',
@@ -39,7 +40,7 @@ test('a failed request shows the error panel with its reference, and "Try again"
   await expect(panel).toContainText('Something went wrong on our side')
   await expect(panel).toContainText('Reference: e2e-reference-1')
 
-  await page.unroute('**/api/catalog/products')
+  await page.unroute(search)
   await panel.getByRole('button', { name: 'Try again' }).click()
   await expect(page.getByRole('list', { name: 'Products' }).getByRole('listitem').first()).toBeVisible()
   await expect(panel).toBeHidden()

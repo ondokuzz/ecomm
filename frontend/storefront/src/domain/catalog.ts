@@ -61,12 +61,6 @@ export function productImage(product: Pick<Product, 'images'>, variant?: Pick<Va
   return variant?.images[0] ?? product.images[0]
 }
 
-/** What a Product card shows: the lowest Price, "from" it when the Variants' Prices differ. */
-export function cardPrice(product: Product): { price: Money; from: boolean } {
-  const amounts = new Set(product.variants.map((v) => v.price.amountMinor))
-  return { price: product.priceFrom, from: amounts.size > 1 }
-}
-
 /** A Variant by its Product's name and its axis values, e.g. "Google Pixel 9 · Obsidian · 256 GB". */
 export function variantName(variant: VariantDetail): string {
   return [variant.product.name, ...Object.values(variant.axisValues)].join(' · ')
@@ -123,14 +117,6 @@ function sameAxisValues(a: Record<string, string>, b: Record<string, string>): b
   return keys.length === Object.keys(b).length && keys.every((key) => a[key] === b[key])
 }
 
-/** A chip on the Product list that filters it by category; `category` is undefined for "All". */
-export interface CategoryChip {
-  category: string | undefined
-  label: string
-  productCount: number
-  selected: boolean
-}
-
 /** One row of a Product's specifications. */
 export interface Spec {
   name: string
@@ -156,20 +142,6 @@ export function specs(attributes: Record<string, string>, definitions: Attribute
 function display(value: string, definition: AttributeDefinition): string {
   if (definition.type !== 'BOOLEAN') return value
   return value === 'true' ? 'Yes' : value === 'false' ? 'No' : value
-}
-
-/** "All", counting every Product, then each category, with the chosen one (none means "All") selected. */
-export function categoryChips(categories: Category[], chosen: string | undefined): CategoryChip[] {
-  const total = categories.reduce((sum, c) => sum + c.productCount, 0)
-  return [
-    { category: undefined, label: 'All', productCount: total, selected: chosen === undefined },
-    ...categories.map((c) => ({
-      category: c.slug,
-      label: c.name,
-      productCount: c.productCount,
-      selected: c.slug === chosen,
-    })),
-  ]
 }
 
 /** How many Products a list holds, in words. */

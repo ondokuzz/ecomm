@@ -3,23 +3,11 @@ import type { Category, Product, VariantDetail } from '../domain/catalog'
 import { type LookupFailure, isNotFound, lookupFailure } from './failure'
 import { api } from './http'
 
-export function useCategories() {
-  return useQuery({ queryKey: ['categories'], queryFn: () => api<Category[]>('catalog', '/categories') })
-}
-
 /** One Category; null data once loaded means Catalog doesn't have it. */
 export function useCategory(slug: string) {
   return useQuery({
     queryKey: ['category', slug],
     queryFn: () => api<Category>('catalog', `/categories/${encodeURIComponent(slug)}`).catch(orNullOn404),
-  })
-}
-
-export function useProducts(category?: string) {
-  return useQuery({
-    queryKey: ['products', { category }],
-    queryFn: () =>
-      api<Product[]>('catalog', category ? `/products?category=${encodeURIComponent(category)}` : '/products'),
   })
 }
 

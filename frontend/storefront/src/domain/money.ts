@@ -48,3 +48,31 @@ export function sumMoney(amounts: Money[]): Money | undefined {
   if (amounts.some((m) => m.currency !== currency)) return undefined
   return { amountMinor: amounts.reduce((total, m) => total + m.amountMinor, 0), currency }
 }
+/**
+ * The decimal a Customer or Staff type, such as `799.00`, as Money in `currency`: undefined unless it is a plain
+ * non-negative decimal with no more fraction digits than the currency has, and Catalog prices in
+ * `currency`. It is read digit by digit, so `1.13` is 113 cents and never 112.
+ */
+export function moneyOf(decimal: string, currency: string, currencies: Currencies): Money | undefined {
+  const found = currencies.get(currency.trim().toUpperCase())
+  const match = /^(\d+)(?:\.(\d+))?$/.exec(decimal.trim())
+  if (!found || !match) return undefined
+  const [, whole, fraction = ''] = match
+  if (fraction.length > found.minorDigits) return undefined
+  const amountMinor = Number(whole + fraction.padEnd(found.minorDigits, '0'))
+  return Number.isSafeInteger(amountMinor) ? { amountMinor, currency: found.code } : undefined
+}
+
+/** Money as a decimal to edit, with all of its currency's fraction digits, such as `799.00`. */
+export function decimalOf(money: Money, currencies: Currencies): string {
+  const digits = minorDigitsOf(money, currencies)
+  const padded = String(money.amountMinor).padStart(digits + 1, '0')
+  return digits === 0 ? padded : `${padded.slice(0, -digits)}.${padded.slice(-digits)}`
+}
+
+// Catalog keeps Prices only in currencies it lists, so any other is a mistake to show, not to guess at.
+function minorDigitsOf(money: Money, currencies: Currencies): number {
+  const currency = currencies.get(money.currency)
+  if (!currency) throw new Error(`Catalog lists no currency ${money.currency}`)
+  return currency.minorDigits
+}

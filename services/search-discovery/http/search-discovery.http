@@ -1,0 +1,61 @@
+# Exercises Search against the compose stack (`make up`), over the seed's Products. Search needs no
+# token. Run the requests top to bottom in the IntelliJ HTTP client; the Staff token request stores
+# a token for the Price change at the end, made through Catalog.
+
+@search = http://localhost:8089
+@catalog = http://localhost:8081
+@keycloak = http://localhost:8180/realms/ecomm/protocol/openid-connect/token
+
+### Everything, newest first, with every Category's count
+GET {{search}}/search
+
+### Text: any of the words, in the name, the description or the attribute values
+GET {{search}}/search?q=pixel
+
+### Best match first, or by Price
+GET {{search}}/search?q=apple&sort=price-desc
+
+### A Category, which brings its attributes' facets
+GET {{search}}/search?category=phones
+
+### An axis value: Products with any Variant in 256 GB. The storage facet still counts 128 GB.
+GET {{search}}/search?category=phones&attr.storage=256 GB
+
+### Several values of one attribute match any of them; different attributes must all match
+GET {{search}}/search?category=phones&attr.storage=128 GB&attr.storage=256 GB&attr.brand=Apple
+
+### A NUMBER attribute's range, both ends included; leave one out to open it (no seed Category has one)
+GET {{search}}/search?category=phones&range.weight=..200
+
+### Any Variant's Price between €500.00 and €900.00, in Stock
+GET {{search}}/search?currency=EUR&price=50000..90000&inStock=true
+
+### The second page of five
+GET {{search}}/search?sort=price-asc&page=1&size=5
+
+### 400: a price needs its currency
+GET {{search}}/search?price=50000..90000
+
+### 400: an unknown sort
+GET {{search}}/search?sort=cheapest
+
+### Staff token: for changing a Price through Catalog
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=dev-cli&username=staff@ecomm.local&password=staff
+
+> {% client.global.set("staffToken", response.body.access_token); %}
+
+### Change the JBL Flip 6's Price through Catalog, from €129.00 to €119.00
+PUT {{catalog}}/products/AUD-JBL-FLIP-6
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{"sku": "AUD-JBL-FLIP-6", "name": "JBL Flip 6", "category": "audio",
+ "attributes": {"brand": "JBL", "type": "Portable speaker", "wireless": "true", "waterproof": "IP67"},
+ "images": ["/images/products/aud-jbl-flip-6/front.svg"],
+ "variants": [{"id": "AUD-JBL-FLIP-6", "axisValues": {}, "price": {"amountMinor": 11900, "currency": "EUR"}}]}
+
+### Within a second or two, Search shows the new Price
+GET {{search}}/search?q=flip

@@ -23,7 +23,9 @@ class EdgeAuthenticationApiTest extends GatewayApiTest {
         "/api/catalog/products/PHN-PIXEL-9",
         "/api/catalog/variants",
         "/api/catalog/categories",
-        "/api/inventory/stock/PHN-PIXEL-9"
+        "/api/inventory/stock/PHN-PIXEL-9",
+        "/api/search-discovery/search",
+        "/api/search-discovery/search?q=pixel&attr.storage=128"
       })
   void publicReadsNeedNoToken(String path) {
     http.get().uri(path).exchange().expectStatus().isOk();
@@ -49,7 +51,9 @@ class EdgeAuthenticationApiTest extends GatewayApiTest {
     "GET, /api/promotions/campaigns",
     "POST, /api/promotions/campaigns",
     "PUT, /api/promotions/campaigns/7f1c",
-    "DELETE, /api/promotions/campaigns/7f1c"
+    "DELETE, /api/promotions/campaigns/7f1c",
+    "POST, /api/search-discovery/search",
+    "GET, /api/search-discovery/search/anything"
   })
   void everythingElseIsUnauthorizedWithoutAToken(String method, String path) {
     http.method(HttpMethod.valueOf(method))

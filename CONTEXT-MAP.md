@@ -6,7 +6,7 @@
 |---|---|---|
 | Identity & Access | Keycloak realm `ecomm` (config in `services/identity-access`) | Customer and Staff authentication, roles and permissions |
 | Catalog | `services/catalog` | Products, Variants, categories, specs, pricing |
-| Search & Discovery | `services/search-discovery` | Faceted browse/filter — a read projection over Catalog |
+| Search & Discovery | `services/search-discovery` | Search and faceted filtering of the Catalog: a read projection over Catalog's and Inventory's events, in MongoDB |
 | Reviews & Ratings | `services/reviews-ratings` | Verified-purchase reviews and ratings |
 | Recommendations | `services/recommendations` | "Customers also bought," sourced from Order + Catalog events |
 | Cart | `services/cart` | The ephemeral per-Customer Cart |
@@ -28,7 +28,7 @@ Not bounded contexts — UI layers over the above:
 | Storefront | `frontend/storefront` |
 | Admin Console | `frontend/admin-console` |
 
-Browsers reach the services only through the API gateway ([`platform/api-gateway`](./platform/api-gateway/README.md)), which the Storefront's and the Admin Console's nginx send everything under `/api/` to. The gateway routes `/api/<service>/` to Catalog, Inventory, Cart, Checkout & Pricing, Order Management and Promotions, rejects a missing or invalid token at the edge, and never routes internal endpoints; each service still authorizes every request itself ([ADR 0010](./docs/adr/0010-api-gateway-authenticates-at-the-edge.md)).
+Browsers reach the services only through the API gateway ([`platform/api-gateway`](./platform/api-gateway/README.md)), which the Storefront's and the Admin Console's nginx send everything under `/api/` to. The gateway routes `/api/<service>/` to Catalog, Inventory, Cart, Checkout & Pricing, Order Management, Promotions and Search & Discovery, rejects a missing or invalid token at the edge, and never routes internal endpoints; each service still authorizes every request itself ([ADR 0010](./docs/adr/0010-api-gateway-authenticates-at-the-edge.md)).
 
 A request keeps one Correlation ID across every context. It gets one where it enters, unless the caller sent a well-formed one: in the Storefront's or the Admin Console's nginx for a browser, or at the gateway for any other caller. Every service logs it and returns it in problem details, and Checkout passes it on every call it makes to another context, so one request can be followed through the logs.
 
@@ -38,6 +38,8 @@ A request keeps one Correlation ID across every context. It gets one where it en
 
 - **Cart → Checkout & Pricing**: Checkout reads the Cart's contents to start a Checkout Session.
 - **Catalog → Checkout & Pricing**: a Checkout Session prices every line from Catalog's Price when it starts, never from the Cart, and keeps that Price for its lifetime.
+- **Catalog → Search & Discovery**: Search projects Catalog's `catalog.product` and `catalog.category` events, so a Product is searchable, and a Price or a removal shows, a moment after Catalog publishes it. Search keeps the newest version of each and never calls Catalog. The Storefront's listing is Search's ([Search ADR 0001](./services/search-discovery/docs/adr/0001-search-on-mongodb.md)).
+- **Inventory → Search & Discovery**: Search projects Inventory's `inventory.stock` events to tell which Products are in Stock; a Variant with no Stock event yet counts as out of Stock.
 - **Catalog → Promotions**: a Campaign's Categories must be Catalog's, and its amounts in currencies Catalog prices in. Promotions reads Catalog's public Categories and currencies when Staff save a Campaign.
 - **Checkout & Pricing → Promotions**: applying a Coupon to a Checkout Session asks Promotions what Discount it gives on the session's subtotal, or why it doesn't apply. Only Checkout may ask, with its own identity, and the gateway never routes it.
 - **Checkout & Pricing → Orchestration**: paying a Checkout Session starts the checkout Saga through the Temporal client, with the session's ID as the workflow's.

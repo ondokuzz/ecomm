@@ -39,7 +39,13 @@ abstract class GatewayApiTest {
     FakeKeycloak.registerWith(registry);
     for (var service :
         List.of(
-            "catalog", "inventory", "cart", "checkout-pricing", "order-management", "promotions")) {
+            "catalog",
+            "inventory",
+            "cart",
+            "checkout-pricing",
+            "order-management",
+            "promotions",
+            "search-discovery")) {
       registry.add("ecomm.gateway.services." + service + ".uri", DOWNSTREAM::baseUrl);
     }
   }

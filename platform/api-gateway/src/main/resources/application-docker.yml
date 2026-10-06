@@ -19,6 +19,8 @@ ecomm:
         uri: http://order-management:8080
       promotions:
         uri: http://promotions:8080
+      search-discovery:
+        uri: http://search-discovery:8080
 
 # One JSON (ECS) object per line, with the service name and the MDC, including correlationId.
 logging:

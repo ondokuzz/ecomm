@@ -229,6 +229,20 @@ services:
       postgres-databases: { condition: service_completed_successfully }
       keycloak: { condition: service_healthy }
 
+  # A read projection over Catalog's and Inventory's events, in Mongo's search database. It only
+  # consumes, so it waits for the topics but not for their schemas.
+  search-discovery:
+    <<: *spring-service
+    build:
+      context: ../..
+      dockerfile: services/search-discovery/Dockerfile
+    image: ${IMAGE_PREFIX:-ecomm}/search-discovery:${IMAGE_TAG:-latest}
+    ports: ["${SEARCH_DISCOVERY_PORT:-8089}:8080"]
+    depends_on:
+      kafka-topics: { condition: service_completed_successfully }
+      mongo: { condition: service_healthy }
+      keycloak: { condition: service_healthy }
+
   checkout-pricing:
     <<: *spring-service
     build:
@@ -267,6 +281,7 @@ services:
       order-management: { condition: service_healthy }
       checkout-pricing: { condition: service_healthy }
       promotions: { condition: service_healthy }
+      search-discovery: { condition: service_healthy }
 
   storefront:
     build:

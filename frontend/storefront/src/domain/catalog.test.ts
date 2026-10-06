@@ -1,11 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   type AttributeDefinition,
-  type Category,
   type Product,
   type Variant,
-  cardPrice,
-  categoryChips,
   chosenVariant,
   productCountLabel,
   productImage,
@@ -49,21 +46,6 @@ describe('productImage', () => {
 
   it("falls back to the Product's image for a Variant without its own", () => {
     expect(productImage(product(['/images/a/front.svg']), variant('O', 'Obsidian', '128 GB'))).toBe('/images/a/front.svg')
-  })
-})
-
-describe('cardPrice', () => {
-  it('is the one Price, not "from", when every Variant costs the same', () => {
-    const p = product([], [variant('A', 'Obsidian', '128 GB', 79900), variant('B', 'Porcelain', '128 GB', 79900)])
-    expect(cardPrice(p)).toEqual({ price: eur(79900), from: false })
-  })
-
-  it('is "from" the lowest Price when Variant Prices differ', () => {
-    const p = {
-      ...product([], [variant('A', 'Obsidian', '256 GB', 89900), variant('B', 'Obsidian', '128 GB', 79900)]),
-      priceFrom: eur(79900),
-    }
-    expect(cardPrice(p)).toEqual({ price: eur(79900), from: true })
   })
 })
 
@@ -158,33 +140,6 @@ describe('variantName', () => {
         product: { sku: 'AUD-JBL-FLIP-6', name: 'JBL Flip 6', images: [] },
       }),
     ).toBe('JBL Flip 6')
-  })
-})
-
-describe('categoryChips', () => {
-  const category = (slug: string, name: string, productCount: number): Category => ({
-    slug,
-    name,
-    productCount,
-    attributes: [],
-  })
-  const categories: Category[] = [category('phones', 'Phones', 7), category('laptops', 'Laptops', 7), category('audio', 'Audio', 6)]
-
-  it('leads with All, counting every Product, then each category in order by its name', () => {
-    expect(categoryChips(categories, undefined)).toEqual([
-      { category: undefined, label: 'All', productCount: 20, selected: true },
-      { category: 'phones', label: 'Phones', productCount: 7, selected: false },
-      { category: 'laptops', label: 'Laptops', productCount: 7, selected: false },
-      { category: 'audio', label: 'Audio', productCount: 6, selected: false },
-    ])
-  })
-
-  it('selects only the chosen category', () => {
-    expect(categoryChips(categories, 'laptops').filter((c) => c.selected).map((c) => c.category)).toEqual(['laptops'])
-  })
-
-  it('selects nothing for a category Catalog does not have', () => {
-    expect(categoryChips(categories, 'tablets').some((c) => c.selected)).toBe(false)
   })
 })
 

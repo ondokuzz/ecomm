@@ -1,0 +1,19 @@
+spring:
+  application:
+    name: search-discovery
+  mongodb:
+    # MONGO_PORT matches the compose override, for when something else holds 27017.
+    uri: mongodb://localhost:${MONGO_PORT:27017}/search
+  kafka:
+    bootstrap-servers: localhost:${KAFKA_PORT:9092}
+
+ecomm:
+  security:
+    # Anyone may search the Catalog.
+    public-read-paths: [/search]
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

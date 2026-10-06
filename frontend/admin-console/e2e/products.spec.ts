@@ -149,6 +149,30 @@ test('a new Product whose Stock Inventory refuses is saved, opens as itself, and
   expect(await stockOf(request, refused.id)).toMatchObject({ onHand: refused.onHand })
 })
 
+test('a Price Staff change shows in search within seconds, on the Storefront too', async ({ page, request }) => {
+  const { sku, name } = phone
+  const currencies = await currenciesOfCatalog(request)
+  // The run's own word in the name, which no other Product has.
+  const word = name.split(' ').at(-1)!
+  await createInConsole(page)
+  await expect(page.getByRole('status')).toHaveText(`Saved ${name}.`)
+  // Search is a projection of Catalog's events, so it catches up a moment after the save.
+  await expect.poll(() => searchedPriceFrom(request, word, sku), { timeout: 10_000 }).toEqual({ amountMinor: 79900, currency: 'EUR' })
+
+  await page.getByLabel('Search').fill(sku)
+  await page.getByRole('row').filter({ hasText: sku }).getByRole('link', { name, exact: true }).click()
+  await page.getByLabel('Variant 1 price in EUR').fill('749.00')
+  await page.getByRole('button', { name: 'Save changes' }).click()
+  await expect(page.getByRole('status')).toHaveText(`Saved ${name}.`)
+
+  await expect.poll(() => searchedPriceFrom(request, word, sku), { timeout: 10_000 }).toEqual({ amountMinor: 74900, currency: 'EUR' })
+  const storefront = await page.context().newPage()
+  await storefront.goto(`${storefrontUrl}/?q=${word}`)
+  const card = storefront.locator(`a[href="/products/${encodeURIComponent(sku)}"]`)
+  await expect(card).toContainText(`From ${formatMoney({ amountMinor: 74900, currency: 'EUR' }, currencies, 'en-US')}`)
+  await storefront.close()
+})
+
 /** Signs in as Staff on a new Product's page and creates `phone` with its Variants and Stock. */
 async function createInConsole(page: Page) {
   await page.goto('/products/new')
@@ -200,6 +224,14 @@ async function productOf(request: APIRequestContext, sku: string): Promise<Produ
   const response = await request.get(`/api/catalog/products/${encodeURIComponent(sku)}`)
   expect(response.ok()).toBeTruthy()
   return (await response.json()) as Product
+}
+
+/** The "from" Price search shows for the Product `text` finds by `sku`, or undefined while it finds none. */
+async function searchedPriceFrom(request: APIRequestContext, text: string, sku: string) {
+  const response = await request.get(`/api/search-discovery/search?q=${encodeURIComponent(text)}`)
+  expect(response.ok()).toBeTruthy()
+  const { items } = (await response.json()) as { items: { sku: string; priceFrom: { amountMinor: number; currency: string } }[] }
+  return items.find((item) => item.sku === sku)?.priceFrom
 }
 
 async function stockOf(request: APIRequestContext, variantId: string): Promise<Stock> {
