@@ -137,6 +137,12 @@ export function urlOf(search: Search): URLSearchParams {
   return params
 }
 
+/** The listing's address for a search. */
+export function listingHref(search: Search): string {
+  const query = urlOf(search).toString()
+  return query ? `/?${query}` : '/'
+}
+
 /** The query `GET /search` takes for a page of `size` Products, its page counting from 0. */
 export function apiQueryOf(search: Search, size: number): string {
   const params = filterParams(search)

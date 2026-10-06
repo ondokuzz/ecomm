@@ -1,7 +1,7 @@
 package com.ecomm.searchdiscovery.application;
 
 import com.ecomm.commons.events.Versions;
-import com.ecomm.searchdiscovery.application.port.in.ProjectCatalogUseCase;
+import com.ecomm.searchdiscovery.application.port.in.ProjectionUseCase;
 import com.ecomm.searchdiscovery.application.port.out.CategoryStore;
 import com.ecomm.searchdiscovery.application.port.out.ProductStore;
 import com.ecomm.searchdiscovery.application.port.out.StockStore;
@@ -14,7 +14,7 @@ import com.ecomm.searchdiscovery.domain.VariantStock;
  * partition, which one consumer reads in order, so reading then writing its one document needs no
  * transaction.
  */
-public class ProjectionService implements ProjectCatalogUseCase {
+public class ProjectionService implements ProjectionUseCase {
 
   private final ProductStore products;
   private final CategoryStore categories;

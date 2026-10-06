@@ -48,6 +48,7 @@ export function sumMoney(amounts: Money[]): Money | undefined {
   if (amounts.some((m) => m.currency !== currency)) return undefined
   return { amountMinor: amounts.reduce((total, m) => total + m.amountMinor, 0), currency }
 }
+
 /**
  * The decimal a Customer or Staff type, such as `799.00`, as Money in `currency`: undefined unless it is a plain
  * non-negative decimal with no more fraction digits than the currency has, and Catalog prices in

@@ -7,6 +7,7 @@ import {
   categoryOptions,
   emptySearch,
   hasFilters,
+  listingHref,
   searchFromUrl,
   toggleValue,
   urlOf,
@@ -88,6 +89,13 @@ describe('urlOf', () => {
   it('leaves out what is unset, and the first page', () => {
     expect(query(emptySearch)).toBe('')
     expect(query(withPage(emptySearch, 0))).toBe('')
+  })
+})
+
+describe('listingHref', () => {
+  it('is the listing with the search in its query, or the bare listing for everything', () => {
+    expect(listingHref(withCategory(emptySearch, 'phones'))).toBe('/?category=phones')
+    expect(listingHref(emptySearch)).toBe('/')
   })
 })
 

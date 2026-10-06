@@ -130,7 +130,9 @@ void on(ProductChanged event) {
 - **Apply an event only if it is newer.** In the use case, `Versions.applyIfNewer(event.version(),
   stored, Stored::version, () -> save(...))` runs the change only when nothing is stored yet or
   the event's version is higher. A duplicate or stale event is ignored. Read and write in one
-  transaction.
+  transaction. A store that has none to offer, such as Search & Discovery's single-node Mongo, may
+  read and write one document per aggregate without: one aggregate's events arrive on one
+  partition, which one consumer reads in order ([Search ADR 0001](../../services/search-discovery/docs/adr/0001-search-on-mongodb.md)).
 - **The event's Correlation ID is in the MDC** while the listener runs, so its log lines carry it,
   as do any calls or events it makes. An event without one gets a new one.
 - **A failure is retried** 3 times, after 0.5, 1 and 2 seconds (`ecomm.events.consumer.retries`,

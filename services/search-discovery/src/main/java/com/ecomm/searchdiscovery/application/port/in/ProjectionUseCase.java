@@ -11,7 +11,7 @@ import java.util.Map;
  * change is applied only if its version is newer than the one held, so a duplicate or stale event
  * changes nothing.
  */
-public interface ProjectCatalogUseCase {
+public interface ProjectionUseCase {
 
   /**
    * A {@code catalog.product} event: the Product's whole state, published at {@code occurredAt}.

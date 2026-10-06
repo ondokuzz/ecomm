@@ -2,6 +2,7 @@ package com.ecomm.searchdiscovery.domain;
 
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
@@ -52,40 +53,73 @@ public record SearchRequest(
     }
   }
 
+  /** Whether it matches every filter, as a result must. */
   boolean matches(Candidate candidate) {
     return matchesCategory(candidate)
-        && matchesAttributes(candidate, null)
+        && matchesAttributesBut(candidate, null)
         && matchesPrice(candidate)
         && matchesStock(candidate);
   }
 
-  boolean matchesCategory(Candidate candidate) {
+  // Each facet is counted over the candidates matching every filter but its own (disjunctive
+  // counting).
+
+  /**
+   * Whether it counts toward the Category facet: every filter but the Category, and, once one is
+   * chosen, its attribute filters, which choosing another Category drops.
+   */
+  boolean countsForCategories(Candidate candidate) {
+    return (category != null || matchesAttributesBut(candidate, null))
+        && matchesPrice(candidate)
+        && matchesStock(candidate);
+  }
+
+  /** Whether it counts toward {@code attribute}'s facet: every filter but that attribute's. */
+  boolean countsForAttribute(Candidate candidate, String attribute) {
+    return matchesCategory(candidate)
+        && matchesAttributesBut(candidate, attribute)
+        && matchesPrice(candidate)
+        && matchesStock(candidate);
+  }
+
+  /** Whether it counts toward the price facet: every filter but the price. */
+  boolean countsForPrices(Candidate candidate) {
+    return matchesCategory(candidate)
+        && matchesAttributesBut(candidate, null)
+        && matchesStock(candidate);
+  }
+
+  /** Whether it counts toward the in-stock facet: every filter but in-stock. */
+  boolean countsForInStock(Candidate candidate) {
+    return matchesCategory(candidate)
+        && matchesAttributesBut(candidate, null)
+        && matchesPrice(candidate);
+  }
+
+  private boolean matchesCategory(Candidate candidate) {
     return category == null || category.equals(candidate.product().category());
   }
 
-  /** Whether it matches every attribute filter but {@code except}'s, which may be null. */
-  boolean matchesAttributes(Candidate candidate, String except) {
+  /**
+   * Whether it has a chosen value, or a value in range, for every attribute filtered on, leaving
+   * out {@code skipped}'s filter when it names one.
+   */
+  private boolean matchesAttributesBut(Candidate candidate, String skipped) {
     var product = candidate.product();
-    for (var filter : values.entrySet()) {
-      if (!filter.getKey().equals(except)
-          && product.valuesOf(filter.getKey()).stream().noneMatch(filter.getValue()::contains)) {
-        return false;
-      }
-    }
-    for (var filter : ranges.entrySet()) {
-      if (!filter.getKey().equals(except)
-          && product.valuesOf(filter.getKey()).stream().noneMatch(filter.getValue()::contains)) {
-        return false;
-      }
-    }
-    return true;
+    Predicate<String> filtered = name -> !name.equals(skipped);
+    return values.entrySet().stream()
+            .filter(f -> filtered.test(f.getKey()))
+            .allMatch(f -> product.valuesOf(f.getKey()).stream().anyMatch(f.getValue()::contains))
+        && ranges.entrySet().stream()
+            .filter(f -> filtered.test(f.getKey()))
+            .allMatch(f -> product.valuesOf(f.getKey()).stream().anyMatch(f.getValue()::contains));
   }
 
-  boolean matchesPrice(Candidate candidate) {
+  private boolean matchesPrice(Candidate candidate) {
     return price == null || price.contains(candidate.product());
   }
 
-  boolean matchesStock(Candidate candidate) {
+  private boolean matchesStock(Candidate candidate) {
     return !inStockOnly || candidate.inStock();
   }
 }

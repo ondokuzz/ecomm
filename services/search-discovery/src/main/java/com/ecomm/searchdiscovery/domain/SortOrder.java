@@ -6,8 +6,8 @@ public enum SortOrder {
   RELEVANCE,
   /** Most recently listed first. */
   NEWEST,
-  /** Lowest "from" Price first. */
+  /** Lowest "from" Price first, within each Currency. */
   PRICE_ASC,
-  /** Highest "from" Price first. */
+  /** Highest "from" Price first, within each Currency. */
   PRICE_DESC
 }

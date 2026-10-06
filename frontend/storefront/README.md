@@ -270,7 +270,7 @@ No page is ever left blank, and every error a service answers carries a support 
   the earlier ones failed the same way just before it.
 - **Lookups beside the content.** Some pages look things up beside their main content: Variant
   names, images and Prices on the Cart, Checkout, My Orders and Order pages, Stock on the Product
-  page. When one fails the page still shows what it has, falling back as
+  page, Catalog's Currencies beside the listing's price filter. When one fails the page still shows what it has, falling back as
   before (a Variant ID for its name, "Stock unknown"), and says what didn't load, with its
   reference and "Try again" (`LookupError` in [`Status`](./src/components/Status.tsx), from
   `lookupFailure`). A Category's attribute definitions only order the specs, so when they don't

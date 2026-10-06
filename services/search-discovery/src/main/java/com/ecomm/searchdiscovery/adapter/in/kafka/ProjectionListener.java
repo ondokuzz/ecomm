@@ -1,10 +1,10 @@
 package com.ecomm.searchdiscovery.adapter.in.kafka;
 
 import com.ecomm.commons.money.Money;
-import com.ecomm.searchdiscovery.application.port.in.ProjectCatalogUseCase;
-import com.ecomm.searchdiscovery.application.port.in.ProjectCatalogUseCase.CategoryPublished;
-import com.ecomm.searchdiscovery.application.port.in.ProjectCatalogUseCase.ProductPublished;
-import com.ecomm.searchdiscovery.application.port.in.ProjectCatalogUseCase.StockPublished;
+import com.ecomm.searchdiscovery.application.port.in.ProjectionUseCase;
+import com.ecomm.searchdiscovery.application.port.in.ProjectionUseCase.CategoryPublished;
+import com.ecomm.searchdiscovery.application.port.in.ProjectionUseCase.ProductPublished;
+import com.ecomm.searchdiscovery.application.port.in.ProjectionUseCase.StockPublished;
 import com.ecomm.searchdiscovery.domain.AttributeDefinition;
 import com.ecomm.searchdiscovery.domain.AttributeType;
 import com.ecomm.searchdiscovery.domain.SearchableVariant;
@@ -21,9 +21,9 @@ import org.springframework.stereotype.Component;
  * per topic. Rebuilding the projection resets these groups to the earliest offset (README).
  */
 @Component
-class CatalogListener {
+class ProjectionListener {
 
-  private static final Logger log = LoggerFactory.getLogger(CatalogListener.class);
+  private static final Logger log = LoggerFactory.getLogger(ProjectionListener.class);
 
   /** The fields of a {@code catalog.product} event Search needs; the others are ignored. */
   record ProductEvent(String sku, long version, Instant occurredAt, Product product) {
@@ -52,9 +52,9 @@ class CatalogListener {
     record Stock(long available, boolean stocked) {}
   }
 
-  private final ProjectCatalogUseCase projection;
+  private final ProjectionUseCase projection;
 
-  CatalogListener(ProjectCatalogUseCase projection) {
+  ProjectionListener(ProjectionUseCase projection) {
     this.projection = projection;
   }
 

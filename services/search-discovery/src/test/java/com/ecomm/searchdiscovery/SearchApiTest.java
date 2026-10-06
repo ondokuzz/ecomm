@@ -230,6 +230,21 @@ class SearchApiTest {
   }
 
   @Test
+  void aPriceSortKeepsEachCurrencysProductsTogether() {
+    var category = newCategory();
+    product("CU-EUR-1").category(category).price(100, "EUR").publish();
+    product("CU-USD-1").category(category).price(50, "USD").publish();
+    product("CU-EUR-2").category(category).price(300, "EUR").publish();
+    product("CU-USD-2").category(category).price(200, "USD").publish();
+    search.awaitSearch("category=" + category, r -> r.total() == 4);
+
+    assertThat(search.search("category=" + category + "&sort=price-asc").skus())
+        .containsExactly("CU-EUR-1", "CU-EUR-2", "CU-USD-1", "CU-USD-2");
+    assertThat(search.search("category=" + category + "&sort=price-desc").skus())
+        .containsExactly("CU-EUR-2", "CU-EUR-1", "CU-USD-2", "CU-USD-1");
+  }
+
+  @Test
   void resultsComeAPageAtATimeWithTheTotal() {
     var category = newCategory();
     for (var i = 1; i <= 5; i++) {

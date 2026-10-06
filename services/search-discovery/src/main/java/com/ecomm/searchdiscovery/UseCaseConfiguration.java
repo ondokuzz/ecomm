@@ -2,7 +2,7 @@ package com.ecomm.searchdiscovery;
 
 import com.ecomm.searchdiscovery.application.ProjectionService;
 import com.ecomm.searchdiscovery.application.SearchService;
-import com.ecomm.searchdiscovery.application.port.in.ProjectCatalogUseCase;
+import com.ecomm.searchdiscovery.application.port.in.ProjectionUseCase;
 import com.ecomm.searchdiscovery.application.port.in.SearchUseCase;
 import com.ecomm.searchdiscovery.application.port.out.CategoryStore;
 import com.ecomm.searchdiscovery.application.port.out.ProductStore;
@@ -20,7 +20,7 @@ class UseCaseConfiguration {
   }
 
   @Bean
-  ProjectCatalogUseCase projectCatalogUseCase(
+  ProjectionUseCase projectionUseCase(
       ProductStore products, CategoryStore categories, StockStore stock) {
     return new ProjectionService(products, categories, stock);
   }

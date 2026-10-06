@@ -52,16 +52,28 @@ class FacetCountingTest {
 
   @Test
   void categoriesAreCountedWithoutTheCategoryFilter() {
-    var facets = facets(request().category("phones").value("brand", "Google"));
+    var facets = facets(request().category("phones").inStockOnly());
 
     assertThat(facets.categories())
         .containsExactly(
             new CategoryCount("gadgets", "gadgets", 0),
-            new CategoryCount("laptops", "Laptops", 0),
+            new CategoryCount("laptops", "Laptops", 1),
             new CategoryCount("phones", "Phones", 2));
-    assertThat(facets(request()).categories())
-        .extracting(CategoryCount::count)
-        .containsExactly(1L, 1L, 3L);
+  }
+
+  @Test
+  void aChosenCategorysAttributeFiltersLeaveTheOtherCategoriesCountsAlone() {
+    // Choosing Laptops drops the phones' brand filter, so Laptops' count mustn't depend on it.
+    var facets = facets(request().category("phones").value("brand", "Google"));
+
+    assertThat(facets.categories()).extracting(CategoryCount::count).containsExactly(1L, 1L, 3L);
+  }
+
+  @Test
+  void withoutACategoryAttributeFiltersNarrowEveryCategorysCount() {
+    var facets = facets(request().value("brand", "Google"));
+
+    assertThat(facets.categories()).extracting(CategoryCount::count).containsExactly(0L, 0L, 2L);
   }
 
   @Test
