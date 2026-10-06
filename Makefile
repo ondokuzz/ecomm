@@ -6,7 +6,7 @@ TOPICS := $(basename $(notdir $(wildcard platform/event-schemas/schemas/*.json))
 SEARCH_GROUPS := search-discovery.products search-discovery.categories search-discovery.stock
 REVIEWS_GROUPS := reviews-ratings.orders reviews-ratings.products
 
-.PHONY: up down status seed-reset search-rebuild reviews-rebuild
+.PHONY: up down status seed-reset search-rebuild reviews-rebuild upgrade-from upgrade-to upgrade-clean
 
 ## Build and start the default stack, and wait until every service is healthy.
 up:
@@ -67,3 +67,28 @@ reviews-rebuild:
 	    --reset-offsets --to-earliest --all-topics --execute || exit 1; \
 	done
 	$(COMPOSE) up -d --wait reviews-ratings
+
+# The upgrade check (docs/agents/upgrade-check.md): a stack from an earlier commit, under a Compose
+# project and image tag of its own, brought up to this tree's. Ports are shared, so the default
+# stack is stopped first, and comes back with `make up` after `make upgrade-clean`.
+UPGRADE := COMPOSE_PROJECT_NAME=ecomm-upgrade
+UPGRADE_DIR := .scratch/upgrade-from
+
+## Start the stack as it was at FROM (a commit, tag or branch), e.g. `make upgrade-from FROM=f979745`.
+upgrade-from:
+	@test -n "$(FROM)" || { echo "Set FROM to the commit to upgrade from, e.g. make upgrade-from FROM=f979745"; exit 1; }
+	$(COMPOSE) down
+	git worktree add --force --detach $(UPGRADE_DIR) $(FROM)
+	if [ -f .env ]; then cp .env $(UPGRADE_DIR)/.env; fi
+	cd $(UPGRADE_DIR) && $(UPGRADE) IMAGE_TAG=upgrade-from $(COMPOSE) up -d --build --wait
+
+## Bring the upgrade-from stack up to this tree, keeping its data, and check it is healthy.
+upgrade-to:
+	$(UPGRADE) $(COMPOSE) up -d --build --wait --remove-orphans
+	@$(UPGRADE) infra/docker/stack-status.sh
+
+## Remove the upgrade stack, its data, its worktree and its images.
+upgrade-clean:
+	$(UPGRADE) $(COMPOSE) down -v --remove-orphans
+	if [ -d $(UPGRADE_DIR) ]; then git worktree remove --force $(UPGRADE_DIR); fi
+	docker image ls --format '{{.Repository}}:{{.Tag}}' | grep ':upgrade-from$$' | xargs -r docker image rm

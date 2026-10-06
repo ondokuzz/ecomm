@@ -2,6 +2,8 @@
 
 Start with `README.md`, `GLOSSARY-MAP.md`, `GLOSSARY.md`, and `docs/roadmap.md`.
 
+A sprint's definition-of-done pass proves a stack from the sprint before upgrades: `docs/agents/upgrade-check.md`.
+
 ## Agent skills
 
 ### Issue tracker
