@@ -57,7 +57,7 @@ signed in as `staff@ecomm.local` / `staff`; the demo Customer is refused there. 
    and on its own page at once.
 
 Every failed request on a Storefront page shows a support reference: the request's
-[Correlation ID](./CONTEXT.md). The services log JSON lines carrying it, and the events a request
+[Correlation ID](./GLOSSARY.md). The services log JSON lines carrying it, and the events a request
 causes carry it to their consumers, so one request can be followed across them, through Kafka too:
 
 ```sh
@@ -211,15 +211,15 @@ once. On a private repository, branch protection needs a paid GitHub plan.
 
 ## Layout
 
-- `services/` — one directory per bounded context (see `CONTEXT.md` for the domain terms, `docs/adr/` for why each is shaped the way it is)
+- `services/` — one directory per bounded context (see `GLOSSARY.md` for the domain terms, `docs/adr/` for why each is shaped the way it is)
 - `frontend/storefront`, `frontend/admin-console` — the two customer/staff-facing React apps
 - `platform/` — shared, cross-service concerns: `service-commons`, the hexagonal-architecture service starter template, the API gateway, and `event-schemas`, the integration events' JSON Schemas
 - `infra/terraform` — infrastructure-as-code for the eventual AWS deployment
 
 ## Docs
 
-- [`CONTEXT-MAP.md`](./CONTEXT-MAP.md) — the fifteen bounded contexts, how they relate, and where their docs live
-- [`CONTEXT.md`](./CONTEXT.md) — the shared domain glossary
+- [`GLOSSARY-MAP.md`](./GLOSSARY-MAP.md) — the fifteen bounded contexts, how they relate, and where their docs live
+- [`GLOSSARY.md`](./GLOSSARY.md) — the shared domain glossary
 - [`docs/roadmap.md`](./docs/roadmap.md) — the sprint-by-sprint delivery plan
 - [`docs/adr/`](./docs/adr/) — system-wide architecture decision records
 - Context-specific ADRs live inside the service they belong to, e.g. [`services/catalog/docs/adr/`](./services/catalog/docs/adr/)

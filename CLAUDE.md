@@ -1,6 +1,6 @@
 # Ecomm Platform
 
-Start with `README.md`, `CONTEXT-MAP.md`, `CONTEXT.md`, and `docs/roadmap.md`.
+Start with `README.md`, `GLOSSARY-MAP.md`, `GLOSSARY.md`, and `docs/roadmap.md`.
 
 ## Agent skills
 
@@ -14,4 +14,4 @@ The five default labels: `needs-triage`, `needs-info`, `ready-for-agent`, `ready
 
 ### Domain docs
 
-Multi-context: a root `CONTEXT-MAP.md` plus a shared root `CONTEXT.md`. System ADRs live in `docs/adr/` and context ADRs in `services/<context>/docs/adr/`. See `docs/agents/domain.md`.
+Multi-context: a root `GLOSSARY-MAP.md` plus a shared root `GLOSSARY.md`. System ADRs live in `docs/adr/` and context ADRs in `services/<context>/docs/adr/`. See `docs/agents/domain.md`.

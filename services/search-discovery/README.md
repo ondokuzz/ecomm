@@ -62,7 +62,7 @@ card shows it as "from"; whether any Variant is in Stock; and the Product's own 
 
 ### Facets
 
-Each [Facet](../../CONTEXT.md) is counted in Products, as if its own filter weren't applied
+Each [Facet](../../GLOSSARY.md) is counted in Products, as if its own filter weren't applied
 (disjunctive counting): with `attr.storage=128 GB` chosen, `256 GB`'s count is how many Products
 choosing it as well would add. Every other filter applies.
 

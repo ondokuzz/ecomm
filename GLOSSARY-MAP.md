@@ -55,7 +55,7 @@ A request keeps one Correlation ID across every context. It gets one where it en
 
 ## Shared vocabulary
 
-Term definitions currently live in one shared [`CONTEXT.md`](./CONTEXT.md) at the root rather than per-context files — the vocabulary hasn't diverged per context yet. A context earns its own `CONTEXT.md` (and this map gets updated to point to it) once its terms need a local definition that differs from the shared one.
+Term definitions currently live in one shared [`GLOSSARY.md`](./GLOSSARY.md) at the root rather than per-context files — the vocabulary hasn't diverged per context yet. A context earns its own `GLOSSARY.md` (and this map gets updated to point to it) once its terms need a local definition that differs from the shared one.
 
 ## ADRs
 

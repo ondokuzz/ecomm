@@ -128,7 +128,7 @@
     "Money": {
       "type": "object",
       "additionalProperties": false,
-      "description": "An amount in a Currency's Minor unit (CONTEXT.md, Money).",
+      "description": "An amount in a Currency's Minor unit (GLOSSARY.md, Money).",
       "required": [
         "amountMinor",
         "currency"
