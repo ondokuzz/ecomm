@@ -3,6 +3,7 @@ package com.ecomm.checkoutpricing;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.delete;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
+import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.patch;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
@@ -227,8 +228,11 @@ abstract class CheckoutApiTest {
 
   // --- Catalog ---
 
-  /** A Variant of the Product {@code sku}, as Catalog's {@code /variants/{id}} serves it. */
-  static void stubVariant(String variantId, String sku, long amountMinor) {
+  /**
+   * A Variant of the Product {@code sku} in {@code category}, as Catalog's {@code /variants/{id}}
+   * serves it.
+   */
+  static void stubVariant(String variantId, String sku, String category, long amountMinor) {
     DOWNSTREAM.stubFor(
         get("/variants/" + variantId)
             .willReturn(
@@ -236,12 +240,17 @@ abstract class CheckoutApiTest {
                     """
                     {"id": "%s", "axisValues": {"color": "Obsidian"},
                      "price": {"amountMinor": %d, "currency": "EUR"}, "images": [],
-                     "product": {"sku": "%s", "name": "%3$s", "images": []}}
+                     "product": {"sku": "%s", "name": "%3$s", "category": "%s", "images": []}}
                     """
-                        .formatted(variantId, amountMinor, sku))));
+                        .formatted(variantId, amountMinor, sku, category))));
   }
 
-  /** A Product's first Variant, whose ID is its SKU. */
+  /** A phone Variant of the Product {@code sku}. */
+  static void stubVariant(String variantId, String sku, long amountMinor) {
+    stubVariant(variantId, sku, "phones", amountMinor);
+  }
+
+  /** A phone Product's first Variant, whose ID is its SKU. */
   static void stubVariant(String variantId, long amountMinor) {
     stubVariant(variantId, variantId, amountMinor);
   }
@@ -366,19 +375,53 @@ abstract class CheckoutApiTest {
 
   static final String EVALUATE_PATH = "/discounts/evaluate";
 
-  /** Promotions finds that the Coupon {@code couponCode} takes {@code discountMinor} EUR off. */
+  /** A running Campaign's Discount of {@code amountMinor} EUR, as Promotions answers it. */
+  static String campaignDiscount(String campaignId, String name, long amountMinor) {
+    return """
+        {"source": "CAMPAIGN", "campaignId": "%s", "campaignName": "%s",
+         "amount": {"amountMinor": %d, "currency": "EUR"}}
+        """
+        .formatted(campaignId, name, amountMinor);
+  }
+
+  /** A Coupon's Discount of {@code amountMinor} EUR, as Promotions answers it. */
+  static String couponDiscount(String couponCode, long amountMinor) {
+    return """
+        {"source": "COUPON", "couponCode": "%s", "amount": {"amountMinor": %d, "currency": "EUR"}}
+        """
+        .formatted(couponCode, amountMinor);
+  }
+
+  private static ResponseDefinitionBuilder discounts(String... discounts) {
+    return okJson("{\"discounts\": [" + String.join(",", discounts) + "]}");
+  }
+
+  /** Asked without a Coupon, Promotions answers these Discounts: the running Campaigns'. */
+  static void stubCampaigns(String... discounts) {
+    DOWNSTREAM.stubFor(post(EVALUATE_PATH).atPriority(5).willReturn(discounts(discounts)));
+  }
+
+  /** Asked with a Coupon, Promotions answers these Discounts: the Campaigns', then the Coupon's. */
+  static void stubCouponEvaluation(String... discounts) {
+    stubCouponEvaluation(discounts(discounts));
+  }
+
+  static void stubCouponEvaluation(ResponseDefinitionBuilder response) {
+    DOWNSTREAM.stubFor(
+        post(EVALUATE_PATH)
+            .withRequestBody(matchingJsonPath("$.couponCode"))
+            .atPriority(1)
+            .willReturn(response));
+  }
+
+  /** No Campaign runs, and the Coupon {@code couponCode} takes {@code discountMinor} EUR off. */
   static void stubDiscount(String couponCode, long discountMinor) {
-    stubEvaluation(
-        okJson(
-            """
-            {"couponCode": "%s", "discount": {"amountMinor": %d, "currency": "EUR"}}
-            """
-                .formatted(couponCode, discountMinor)));
+    stubCouponEvaluation(couponDiscount(couponCode, discountMinor));
   }
 
   /** Promotions finds the Coupon doesn't apply, for {@code reason}. */
   static void stubRejectedCoupon(String reason) {
-    stubEvaluation(
+    stubCouponEvaluation(
         aResponse()
             .withStatus(422)
             .withHeader("Content-Type", "application/problem+json")
@@ -390,15 +433,20 @@ abstract class CheckoutApiTest {
                     .formatted(reason)));
   }
 
+  /** Promotions answers every evaluation, with a Coupon or without, so. */
   static void stubEvaluation(ResponseDefinitionBuilder response) {
-    DOWNSTREAM.stubFor(post(EVALUATE_PATH).willReturn(response));
+    DOWNSTREAM.stubFor(post(EVALUATE_PATH).atPriority(0).willReturn(response));
   }
 
-  /** Every downstream answers as a successful checkout of two Pixel 9s needs. */
+  /**
+   * Every downstream answers as a successful checkout of two Pixel 9s needs, with no Campaign
+   * running.
+   */
   static void stubSuccessfulCheckout() {
     stubServiceToken("checkout-token-1");
     stubCart("{\"variantId\": \"PHN-PIXEL-9\", \"quantity\": 2}");
     stubVariant("PHN-PIXEL-9", 79900);
+    stubCampaigns();
     stubReserve();
     stubRelease();
     stubPlaceOrder();

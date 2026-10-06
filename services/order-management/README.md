@@ -30,28 +30,39 @@ nothing there changes an Order. Any other token gets 403, and no token gets 401.
 | `GET /staff/orders?status=&customerId=&placedFrom=&placedTo=&idPrefix=&page=0&size=20` | Staff | A page of every Customer's Orders that match, newest first, with their total |
 | `GET /staff/orders/{id}` | Staff | Any Customer's Order; 404 for an unknown ID |
 
-An Order is placed for a Customer from the lines Checkout priced, an optional Discount and the tax:
+An Order is placed for a Customer from the lines Checkout priced, every Discount in the order they
+applied, and the tax. A Campaign's Discount names the Campaign by ID and name, a Coupon's the code
+the Customer entered:
 
 ```json
 {"customerId": "…",
  "lines": [{"variantId": "PHN-PIXEL-9", "quantity": 2,
             "unitPrice": {"amountMinor": 79900, "currency": "EUR"}}],
- "discount": {"couponCode": "WELCOME10", "amount": {"amountMinor": 15980, "currency": "EUR"}},
- "tax": {"amountMinor": 28764, "currency": "EUR"}}
+ "discounts": [
+   {"source": "CAMPAIGN", "campaignId": "b4a50413-…", "campaignName": "Phone week",
+    "amount": {"amountMinor": 7990, "currency": "EUR"}},
+   {"source": "COUPON", "couponCode": "WELCOME10",
+    "amount": {"amountMinor": 15181, "currency": "EUR"}}],
+ "tax": {"amountMinor": 0, "currency": "EUR"}}
 ```
 
 and comes back with what it comes to. The `subtotal` is the sum of each line's unit price times its
-quantity, and the `total` is the subtotal, less the discount, plus the tax: what Checkout authorizes
-the Payment for.
+quantity, and the `total` is the subtotal, less the sum of the Discounts, plus the tax: what Checkout
+authorizes the Payment for. **This changed in Sprint 3**: an Order held one Coupon's `discount`; it
+now holds the list, and a body that still sends `discount` is a 400.
 
 ```json
 {"id": "…", "customerId": "…", "status": "PLACED",
  "lines": [{"variantId": "PHN-PIXEL-9", "quantity": 2,
             "unitPrice": {"amountMinor": 79900, "currency": "EUR"}}],
  "subtotal": {"amountMinor": 159800, "currency": "EUR"},
- "discount": {"couponCode": "WELCOME10", "amount": {"amountMinor": 15980, "currency": "EUR"}},
- "tax": {"amountMinor": 28764, "currency": "EUR"},
- "total": {"amountMinor": 172584, "currency": "EUR"}, "placedAt": "2026-09-27T14:00:00.123456Z",
+ "discounts": [
+   {"source": "CAMPAIGN", "couponCode": null, "campaignId": "b4a50413-…",
+    "campaignName": "Phone week", "amount": {"amountMinor": 7990, "currency": "EUR"}},
+   {"source": "COUPON", "couponCode": "WELCOME10", "campaignId": null, "campaignName": null,
+    "amount": {"amountMinor": 15181, "currency": "EUR"}}],
+ "tax": {"amountMinor": 0, "currency": "EUR"},
+ "total": {"amountMinor": 136629, "currency": "EUR"}, "placedAt": "2026-09-27T14:00:00.123456Z",
  "statusHistory": [{"status": "PLACED", "at": "2026-09-27T14:00:00.123456Z",
                     "changedBy": "CHECKOUT", "backfilled": false}]}
 ```
@@ -91,15 +102,20 @@ empty, longer than an ID or has anything else in it, is a 400.
 `GET /staff/orders/{id}` is the Order whoever it belongs to, with its `customerId` and its Order
 Status history. Staff can't place or change an Order: those endpoints answer them with a 403.
 
-An Order without a Discount has `"discount": null`. Orders placed before Orders recorded their
-Discount and tax read back with none and a zero tax, which is what they were charged.
+An Order without a Discount has `"discounts": []`, and leaving `discounts` out when placing one
+means none. Orders placed before Orders recorded their Discount and tax read back with none and a
+zero tax, which is what they were charged. One placed with a Coupon before Orders held several
+Discounts keeps it as its one `COUPON` Discount: migration `V6__order_discounts.sql` moved each into
+`order_discount`, where every Order's Discounts now live, one row each in order.
 
 An Order needs a `customerId` of at most 255 characters and at least one line. Each line needs a
 `variantId` of at most 64 characters, a positive integer `quantity` and a `unitPrice` as `Money`
 that isn't negative. Every line must be in the same currency, and a Variant may appear on only one
-line. The `tax` is required, even when zero, and can't be negative. A `discount` needs a
-`couponCode` of at most 64 characters and an `amount` that isn't negative. Both are in the lines'
-currency, and the discount can bring the total to zero but not below. Anything else, including a
+line. The `tax` is required, even when zero, and can't be negative. Each Discount needs a `source`,
+`CAMPAIGN` or `COUPON`, and exactly what names it: a `campaignId` of at most 64 characters and a
+`campaignName` of at most 100, or a `couponCode` of at most 64. Its `amount` can't be negative. The
+Discounts and the tax are in the lines' currency, and the Discounts together can bring the total to
+zero but not below. Anything else, including a
 total too large to hold, is a 400. Every error is a problem detail.
 
 ## Order Status
@@ -142,7 +158,8 @@ is the definition:
 - `change` is `PLACED`, `STATUS_CHANGED` or `BACKFILLED`.
 - `version` is 1 when the Order is placed and goes up by one with every change. Consumers apply an
   event only when it is newer than what they hold.
-- `discounts` is empty for an Order without a Discount. A history entry carries `"backfilled": true`
+- `discounts` lists every Discount in order, as the API does, without the fields a Discount lacks,
+  and is empty for an Order without one. A history entry carries `"backfilled": true`
   only when it was reconstructed.
 
 Watch the topic on the compose stack with:

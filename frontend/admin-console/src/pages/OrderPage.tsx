@@ -7,7 +7,7 @@ import { OrderStatusBadge } from '../components/OrderStatusBadge'
 import { ErrorMessage } from '../components/Status'
 import { Icon } from '../components/ui/Icon'
 import { type Currencies, formatMoney } from '../domain/money'
-import { type Order, formatTime, historyRowsOf, orderReference } from '../domain/order'
+import { type Order, discountLabel, formatTime, historyRowsOf, orderReference } from '../domain/order'
 import type { FromListState } from './OrderListPage'
 
 /** `/orders/:id`: one Order, whoever it belongs to, and how it got to its Status. Read only. */
@@ -135,14 +135,14 @@ function OrderDetail({ order, currencies }: { order: Order; currencies: Currenci
                 </th>
                 <td className="num">{money(order.subtotal)}</td>
               </tr>
-              {order.discount && (
-                <tr>
+              {order.discounts.map((discount, i) => (
+                <tr key={i}>
                   <th scope="row" colSpan={3}>
-                    Discount (<code>{order.discount.couponCode}</code>)
+                    {discountLabel(discount)}
                   </th>
-                  <td className="num">−{money(order.discount.amount)}</td>
+                  <td className="num">−{money(discount.amount)}</td>
                 </tr>
-              )}
+              ))}
               <tr>
                 <th scope="row" colSpan={3}>
                   Tax

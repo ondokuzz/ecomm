@@ -1,5 +1,6 @@
 # Checks out the demo Customer's Cart against the compose stack (`docker compose up -d --build`), in
-# two steps: a Checkout Session holds the Cart, and may take a Coupon, then paying it buys it. Run the requests top to
+# two steps: a Checkout Session holds the Cart with every running Campaign's Discount, and may take a
+# Coupon, then paying it buys it. Run the requests top to
 # bottom in the IntelliJ HTTP client; the token request stores a token for the ones after it.
 
 @checkout = http://localhost:8086
@@ -41,7 +42,8 @@ Content-Type: application/json
 ### Stock before checkout
 GET {{inventory}}/stock/PHN-PIXEL-9-OBSIDIAN-256
 
-### Start checkout: 201 with the Checkout Session, priced from Catalog, held for 15 minutes
+### Start checkout: 201 with the Checkout Session, priced from Catalog, held for 15 minutes. The
+### seeded Audio week Campaign already takes 15% off the JBL speaker, the one audio line
 POST {{checkout}}/checkout/sessions
 Authorization: Bearer {{customerToken}}
 
@@ -60,21 +62,21 @@ Authorization: Bearer {{customerToken}}
 
 > {% client.global.set("sessionId", response.body.id); %}
 
-### Apply the demo Coupon, in any case: the session with 10% off its subtotal, and its total less that
+### Apply the demo Coupon, in any case: Audio week's Discount, then WELCOME10's 10% off what is left
 PUT {{checkout}}/checkout/sessions/{{sessionId}}/coupon
 Authorization: Bearer {{customerToken}}
 Content-Type: application/json
 
 {"code": "welcome10"}
 
-### A Coupon that doesn't apply: 422 with Promotions' reason (unknown); the session keeps WELCOME10
+### A Coupon that doesn't apply: 422 with Promotions' reason (unknown); the session keeps both Discounts
 PUT {{checkout}}/checkout/sessions/{{sessionId}}/coupon
 Authorization: Bearer {{customerToken}}
 Content-Type: application/json
 
 {"code": "NO-SUCH-CODE"}
 
-### Take the Coupon off: the session at its full total again
+### Take the Coupon off: only Audio week's Discount is left
 DELETE {{checkout}}/checkout/sessions/{{sessionId}}/coupon
 Authorization: Bearer {{customerToken}}
 
@@ -119,7 +121,8 @@ Content-Type: application/json
 
 > {% client.global.set("orderId", response.body.orderId); %}
 
-### The Order, at the session's Prices, with the WELCOME10 discount, its tax (zero for now) and the
+### The Order, at the session's Prices, with Audio week's and WELCOME10's Discounts, its tax (zero for
+### now) and the
 ### total its Payment was for
 GET {{orders}}/orders/{{orderId}}
 Authorization: Bearer {{customerToken}}

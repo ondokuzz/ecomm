@@ -42,7 +42,7 @@ Content-Type: application/json
 
 > {% client.global.set("orderId", response.body.id); %}
 
-### With a Discount: the total is the lines, less the discount, plus the tax
+### With a Campaign's and a Coupon's Discounts: the total is the lines, less both, plus the tax
 POST {{orders}}/orders
 Authorization: Bearer {{checkoutToken}}
 Content-Type: application/json
@@ -50,8 +50,11 @@ Content-Type: application/json
 {"customerId": "{{customerId}}", "lines": [
   {"variantId": "PHN-PIXEL-9", "quantity": 1, "unitPrice": {"amountMinor": 79900, "currency": "EUR"}}
 ],
- "discount": {"couponCode": "WELCOME10", "amount": {"amountMinor": 7990, "currency": "EUR"}},
- "tax": {"amountMinor": 14382, "currency": "EUR"}}
+ "discounts": [
+   {"source": "CAMPAIGN", "campaignId": "b4a50413-0000-4000-8000-000000000001",
+    "campaignName": "Phone week", "amount": {"amountMinor": 3995, "currency": "EUR"}},
+   {"source": "COUPON", "couponCode": "WELCOME10", "amount": {"amountMinor": 7590, "currency": "EUR"}}],
+ "tax": {"amountMinor": 13663, "currency": "EUR"}}
 
 > {% client.global.set("discountedOrderId", response.body.id); %}
 
@@ -122,7 +125,7 @@ Content-Type: application/json
 ],
  "tax": {"amountMinor": 0, "currency": "EUR"}}
 
-### A discount larger than the lines plus the tax: 400
+### Discounts larger than the lines plus the tax: 400
 POST {{orders}}/orders
 Authorization: Bearer {{checkoutToken}}
 Content-Type: application/json
@@ -130,7 +133,19 @@ Content-Type: application/json
 {"customerId": "{{customerId}}", "lines": [
   {"variantId": "PHN-PIXEL-9", "quantity": 1, "unitPrice": {"amountMinor": 79900, "currency": "EUR"}}
 ],
- "discount": {"couponCode": "TOOMUCH", "amount": {"amountMinor": 99999, "currency": "EUR"}},
+ "discounts": [{"source": "COUPON", "couponCode": "TOOMUCH",
+                "amount": {"amountMinor": 99999, "currency": "EUR"}}],
+ "tax": {"amountMinor": 0, "currency": "EUR"}}
+
+### The single "discount" of before Sprint 3 is gone: 400
+POST {{orders}}/orders
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}", "lines": [
+  {"variantId": "PHN-PIXEL-9", "quantity": 1, "unitPrice": {"amountMinor": 79900, "currency": "EUR"}}
+],
+ "discount": {"couponCode": "WELCOME10", "amount": {"amountMinor": 7990, "currency": "EUR"}},
  "tax": {"amountMinor": 0, "currency": "EUR"}}
 
 ### No tax: 400; Checkout always sends it, even when zero

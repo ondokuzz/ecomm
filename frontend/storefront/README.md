@@ -136,7 +136,8 @@ Order Management worked it out: the subtotal, a Discount line naming its Coupon 
 the tax and the total.
 
 My Orders lists them as cards: reference, date, the first three Products' thumbnails (and how many
-more), item count, total and Order Status badge. Each Order Status badge has a colour of its own
+more), item count, total and Order Status badge, and "Saved with Audio week, WELCOME10" naming each
+Discount it got (`discountNames`); the Order page lists them in its summary as checkout did. Each Order Status badge has a colour of its own
 ([`orderStatusTones`](./src/components/orderStatusTones.ts)), always with its name, so colour is
 never the only cue.
 
@@ -249,20 +250,23 @@ Arriving there
 resumes the Customer's Checkout Session when it still holds exactly their Cart
 (`sessionHoldsCart`), and starts a new one otherwise, which replaces the old and releases its
 Reservation.
-The page shows the session's lines at their held Prices, its price breakdown (subtotal, a Discount
-line naming its Coupon when there is one, tax, total: `sessionSummaryRows`), and "held until" the session's expiry with a live `m:ss` countdown
+The page shows the session's lines at their held Prices, its price breakdown (subtotal, a line
+for each Discount in the order it applied, "Campaign: Audio week" or "Coupon: WELCOME10", tax,
+total: `sessionSummaryRows`), and "held until" the session's expiry with a live `m:ss` countdown
 (`sessionCountdown`), all in [`src/domain/checkout.ts`](./src/domain/checkout.ts). The countdown is a
 `timer`, so screen readers aren't told every second; the clock time says it once. When the session
 expires, or paying finds it over (410 or 404), the page becomes "Your hold expired" with a "Start
 again" button, which always starts a new session. Pay is disabled while a payment is in flight.
 
 The price breakdown has a Coupon field. Applying a code, in any case, sends it to Checkout, and the
-session it answers with replaces the one shown, so the Discount line, the total and the Pay button
-follow at once. A code that doesn't apply (422) says why next to the field, one message per
+session it answers with replaces the one shown, so the Discount lines, the total and the Pay button
+follow at once. A running Campaign's Discount is there from the start, with no code; applying or
+removing a Coupon brings the Campaigns' up to date too. A code that doesn't apply (422) says why next to the field, one message per
 Promotions `reason` (`couponRejection` in [`src/domain/coupon.ts`](./src/domain/coupon.ts)):
 `unknown`, `inactive`, `notYetValid`, `expired`, `belowMinimum` and `currencyMismatch`, with a
 general one for a reason it doesn't know. The session keeps whatever Coupon it had. Once one is
-applied, the field shows its code with "Remove", which takes it off. Typing clears the message;
+applied, the field shows its code with "Remove", which takes it off, leaving the Campaigns'
+Discounts. Typing clears the message;
 Pay waits while a Coupon is being applied, and the Coupon field while a payment is in flight. The
 demo Coupon is `WELCOME10`, 10% off.
 
@@ -348,7 +352,7 @@ Sign in as `demo@ecomm.local` / `demo`, or register a new Customer.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: failed responses as messages and support references, Money formatting by Catalog's Minor units, Cart pricing, checkout problems, the session countdown and price breakdown, Coupon rejections, test cards and payment failures, quantities, Stock levels, toasts, the search's URL and its Facets as chips and filters, rating stars and summaries and the review form's validation, Product specs by their Category's definitions, Customer initials, Orders and their timeline from the Order Status history, the Orders list's paging, Order Status colours, seed Product images, the Keycloak theme's and the Admin Console's copies of the tokens
+npm test          # Vitest: failed responses as messages and support references, Money formatting by Catalog's Minor units, Cart pricing, checkout problems, the session countdown and the price breakdown with each Discount, Coupon rejections, test cards and payment failures, quantities, Stock levels, toasts, the search's URL and its Facets as chips and filters, rating stars and summaries and the review form's validation, Product specs by their Category's definitions, Customer initials, Orders and their timeline from the Order Status history, the Orders list's paging, Order Status colours, seed Product images, the Keycloak theme's and the Admin Console's copies of the tokens
 npm run test:e2e  # Playwright smoke, search and error-states tests against the running compose stack (`make up`)
 ```
 

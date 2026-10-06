@@ -55,10 +55,10 @@ public class OrderService
       Caller caller,
       String customerId,
       List<OrderLine> lines,
-      Optional<Discount> discount,
+      List<Discount> discounts,
       Money tax) {
     var order =
-        Order.place(UUID.randomUUID(), customerId, lines, discount, tax, caller, time.now());
+        Order.place(UUID.randomUUID(), customerId, lines, discounts, tax, caller, time.now());
     return transactions.inTransaction(
         () -> {
           orders.add(order);

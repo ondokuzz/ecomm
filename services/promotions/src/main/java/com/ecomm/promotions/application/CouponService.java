@@ -1,20 +1,15 @@
 package com.ecomm.promotions.application;
 
-import com.ecomm.commons.money.Money;
-import com.ecomm.promotions.application.port.in.EvaluateDiscountUseCase;
 import com.ecomm.promotions.application.port.in.ManageCouponsUseCase;
 import com.ecomm.promotions.application.port.out.CouponRepository;
 import com.ecomm.promotions.application.port.out.TimeSource;
 import com.ecomm.promotions.domain.Coupon;
 import com.ecomm.promotions.domain.CouponAlreadyExistsException;
-import com.ecomm.promotions.domain.CouponNotApplicableException;
 import com.ecomm.promotions.domain.CouponNotFoundException;
-import com.ecomm.promotions.domain.CouponRejection;
-import com.ecomm.promotions.domain.Discount;
 import java.util.List;
 import java.util.Optional;
 
-public class CouponService implements ManageCouponsUseCase, EvaluateDiscountUseCase {
+public class CouponService implements ManageCouponsUseCase {
 
   private final CouponRepository coupons;
   private final TimeSource time;
@@ -55,14 +50,5 @@ public class CouponService implements ManageCouponsUseCase, EvaluateDiscountUseC
   @Override
   public List<Coupon> coupons() {
     return coupons.all();
-  }
-
-  @Override
-  public Discount evaluate(String couponCode, Money subtotal) {
-    var coupon =
-        coupon(couponCode)
-            .orElseThrow(
-                () -> new CouponNotApplicableException(couponCode, CouponRejection.UNKNOWN));
-    return new Discount(coupon.code(), coupon.discountOn(subtotal, time.now()));
   }
 }

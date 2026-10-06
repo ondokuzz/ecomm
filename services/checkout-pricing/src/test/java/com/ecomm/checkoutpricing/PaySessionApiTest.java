@@ -116,12 +116,13 @@ class PaySessionApiTest extends CheckoutApiTest {
                       {"variantId": "PHN-PIXEL-9", "quantity": 2,
                        "unitPrice": {"amountMinor": 79900, "currency": "EUR"}}
                     ],
+                     "discounts": [],
                      "tax": {"amountMinor": 0, "currency": "EUR"}}
                     """)));
   }
 
   @Test
-  void theOrderIsPlacedWithTheSessionsDiscount() {
+  void theOrderIsPlacedWithTheSessionsDiscounts() {
     stubSuccessfulCheckout();
     stubDiscount("WELCOME10", 15980);
     var sessionId = startedSessionId();
@@ -138,8 +139,8 @@ class PaySessionApiTest extends CheckoutApiTest {
                       {"variantId": "PHN-PIXEL-9", "quantity": 2,
                        "unitPrice": {"amountMinor": 79900, "currency": "EUR"}}
                     ],
-                     "discount": {"couponCode": "WELCOME10",
-                                  "amount": {"amountMinor": 15980, "currency": "EUR"}},
+                     "discounts": [{"source": "COUPON", "couponCode": "WELCOME10",
+                                    "amount": {"amountMinor": 15980, "currency": "EUR"}}],
                      "tax": {"amountMinor": 0, "currency": "EUR"}}
                     """)));
   }
@@ -185,6 +186,7 @@ class PaySessionApiTest extends CheckoutApiTest {
                       {"variantId": "PHN-PIXEL-9", "quantity": 2,
                        "unitPrice": {"amountMinor": 79900, "currency": "EUR"}}
                     ],
+                     "discounts": [],
                      "tax": {"amountMinor": 0, "currency": "EUR"}}
                     """)));
   }

@@ -19,10 +19,10 @@ The first build takes several minutes. Then open the Storefront on http://localh
    own Price and Stock. One iPhone Variant starts sold out;
 2. sign in as `demo@ecomm.local` / `demo`, or register a new Customer on Keycloak's page;
 3. add Products to the Cart and go to checkout, which holds them and their Prices for 15 minutes
-   and shows the time left. Enter the Coupon `WELCOME10` for 10% off, then pick a test card and press
-   **Pay**. Paying again with another card works while the Checkout Session lasts;
-4. see the Order confirmation with its Order Status, **Paid**, and its discount, and find the Order
-   under **My Orders**;
+   and shows the time left. An `audio` Product gets the "Audio week" Campaign's 15% off by itself.
+   Enter the Coupon `WELCOME10` for 10% off what is left, then pick a test card and press **Pay**. Paying again with another card works while the Checkout Session lasts;
+4. see the Order confirmation with its Order Status, **Paid**, and each of its Discounts, and find
+   the Order under **My Orders**;
 5. go back to a Product you paid for and review it: rate it, and give it a title and a few words.
    Its stars show on its card and its page, and you can edit or delete your review there. On a
    Product you haven't bought, the page says why you can't review it.
@@ -109,7 +109,8 @@ The Storefront's smoke test walks the Customer's path in Chromium against the ru
 adds two Products, checks out with the approving test card, expects `PAID` on the confirmation page and checks through the
 Inventory API that the Checkout Session reserved their Stock and paying took it off on-hand. It
 also pays with a declining card, sees the decline, then pays the same session with the approving
-one, applies `WELCOME10` and sees its discount on the `PAID` Order, and registers a new Customer:
+one, applies `WELCOME10` and sees its discount on the `PAID` Order, gets Audio week and `WELCOME10`
+together on an audio Product, and registers a new Customer:
 
 ```sh
 cd frontend/storefront

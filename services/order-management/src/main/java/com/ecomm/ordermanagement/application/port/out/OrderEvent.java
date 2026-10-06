@@ -36,8 +36,9 @@ public record OrderEvent(String orderId, long version, Change change, Snapshot o
 
   public record Line(String variantId, int quantity, Amount unitPrice) {}
 
-  /** One Discount; until Orders hold several, the one a Coupon gave. */
-  public record Discount(String source, String couponCode, Amount amount) {}
+  /** One Discount: a Campaign's names it by ID and name, a Coupon's by its code. */
+  public record Discount(
+      String source, String couponCode, String campaignId, String campaignName, Amount amount) {}
 
   /** {@code backfilled} is null, so left out, unless the entry was reconstructed. */
   public record HistoryEntry(String status, String at, String changedBy, Boolean backfilled) {}
@@ -61,8 +62,15 @@ public record OrderEvent(String orderId, long version, Change change, Snapshot o
             order.lines().stream()
                 .map(l -> new Line(l.variantId(), l.quantity(), Amount.of(l.unitPrice())))
                 .toList(),
-            order.discount().stream()
-                .map(d -> new Discount("COUPON", d.couponCode(), Amount.of(d.amount())))
+            order.discounts().stream()
+                .map(
+                    d ->
+                        new Discount(
+                            d.source().name(),
+                            d.couponCode(),
+                            d.campaignId(),
+                            d.campaignName(),
+                            Amount.of(d.amount())))
                 .toList(),
             Amount.of(order.tax()),
             Amount.of(order.subtotal()),

@@ -47,7 +47,7 @@ const session: CheckoutSession = {
     { variantId: 'FLIP-6', quantity: 1, unitPrice: eur(12900), lineTotal: eur(12900) },
   ],
   subtotal: eur(172700),
-  discount: null,
+  discounts: [],
   tax: eur(0),
   total: eur(172700),
   expiresAt: '2026-09-30T10:15:00Z',
@@ -83,17 +83,21 @@ describe('sessionSummaryRows', () => {
     ])
   })
 
-  it('takes a Coupon off, naming its code', () => {
-    const discounted = {
+  it('takes a Campaign off, then a Coupon, each by name', () => {
+    const discounted: CheckoutSession = {
       ...session,
-      discount: { couponCode: 'WELCOME10', amount: eur(17270) },
-      total: eur(155430),
+      discounts: [
+        { source: 'CAMPAIGN', campaignId: 'c-1', campaignName: 'Audio week', couponCode: null, amount: eur(3735) },
+        { source: 'COUPON', couponCode: 'WELCOME10', campaignId: null, campaignName: null, amount: eur(16896) },
+      ],
+      total: eur(152069),
     }
     expect(sessionSummaryRows(discounted)).toEqual([
       { label: 'Subtotal', amount: eur(172700) },
-      { label: 'Discount (WELCOME10)', amount: eur(-17270) },
+      { label: 'Campaign: Audio week', amount: eur(-3735) },
+      { label: 'Coupon: WELCOME10', amount: eur(-16896) },
       { label: 'Tax', amount: eur(0) },
-      { label: 'Total', amount: eur(155430), isTotal: true },
+      { label: 'Total', amount: eur(152069), isTotal: true },
     ])
   })
 

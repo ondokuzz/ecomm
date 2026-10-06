@@ -37,6 +37,7 @@ class RepricingApiTest extends CheckoutApiTest {
                       {"variantId": "AUD-SONY-XM5", "quantity": 1,
                        "unitPrice": {"amountMinor": 34900, "currency": "EUR"}}
                     ],
+                     "discounts": [],
                      "tax": {"amountMinor": 0, "currency": "EUR"}}
                     """)));
   }
@@ -59,6 +60,7 @@ class RepricingApiTest extends CheckoutApiTest {
                       {"variantId": "PHN-PIXEL-9-OBSIDIAN-256", "quantity": 1,
                        "unitPrice": {"amountMinor": 89900, "currency": "EUR"}}
                     ],
+                     "discounts": [],
                      "tax": {"amountMinor": 0, "currency": "EUR"}}
                     """)));
   }

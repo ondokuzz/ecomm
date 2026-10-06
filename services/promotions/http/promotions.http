@@ -1,5 +1,5 @@
 # Exercises Promotions against the compose stack (`make up`): Staff manage Coupons and Campaigns,
-# and Checkout evaluates a Coupon. Run the requests top to bottom in the IntelliJ HTTP client; the token requests
+# and Checkout evaluates what a Checkout Session's lines are due. Run the requests top to bottom in the IntelliJ HTTP client; the token requests
 # store tokens for the ones after them.
 
 @promotions = http://localhost:8087
@@ -63,26 +63,32 @@ Content-Type: application/json
 GET {{promotions}}/coupons/Spring25
 Authorization: Bearer {{staffToken}}
 
-### Evaluate it as Checkout: 25.00 EUR off
+### Evaluate it as Checkout on a phone line: 25.00 EUR off, after any Campaign running on phones
 POST {{promotions}}/discounts/evaluate
 Authorization: Bearer {{checkoutToken}}
 Content-Type: application/json
 
-{"couponCode": "spring25", "subtotal": {"amountMinor": 15980, "currency": "EUR"}}
+{"lines": [{"variantId": "PHN-PIXEL-9-OBSIDIAN-128", "sku": "PHN-PIXEL-9", "category": "phones",
+            "quantity": 1, "unitPrice": {"amountMinor": 15980, "currency": "EUR"}}],
+ "couponCode": "spring25"}
 
 ### Below its minimum: 422, reason belowMinimum
 POST {{promotions}}/discounts/evaluate
 Authorization: Bearer {{checkoutToken}}
 Content-Type: application/json
 
-{"couponCode": "SPRING25", "subtotal": {"amountMinor": 9999, "currency": "EUR"}}
+{"lines": [{"variantId": "PHN-PIXEL-9-OBSIDIAN-128", "sku": "PHN-PIXEL-9", "category": "phones",
+            "quantity": 1, "unitPrice": {"amountMinor": 9999, "currency": "EUR"}}],
+ "couponCode": "SPRING25"}
 
 ### In another currency: 422, reason currencyMismatch
 POST {{promotions}}/discounts/evaluate
 Authorization: Bearer {{checkoutToken}}
 Content-Type: application/json
 
-{"couponCode": "SPRING25", "subtotal": {"amountMinor": 15980, "currency": "USD"}}
+{"lines": [{"variantId": "PHN-PIXEL-9-OBSIDIAN-128", "sku": "PHN-PIXEL-9", "category": "phones",
+            "quantity": 1, "unitPrice": {"amountMinor": 15980, "currency": "USD"}}],
+ "couponCode": "SPRING25"}
 
 ### Switch it off: replace every field but the code
 PUT {{promotions}}/coupons/SPRING25
@@ -98,28 +104,36 @@ POST {{promotions}}/discounts/evaluate
 Authorization: Bearer {{checkoutToken}}
 Content-Type: application/json
 
-{"couponCode": "SPRING25", "subtotal": {"amountMinor": 15980, "currency": "EUR"}}
+{"lines": [{"variantId": "PHN-PIXEL-9-OBSIDIAN-128", "sku": "PHN-PIXEL-9", "category": "phones",
+            "quantity": 1, "unitPrice": {"amountMinor": 15980, "currency": "EUR"}}],
+ "couponCode": "SPRING25"}
 
 ### The seeded WELCOME10: 10% off, rounded down
 POST {{promotions}}/discounts/evaluate
 Authorization: Bearer {{checkoutToken}}
 Content-Type: application/json
 
-{"couponCode": "WELCOME10", "subtotal": {"amountMinor": 1001, "currency": "EUR"}}
+{"lines": [{"variantId": "PHN-PIXEL-9-OBSIDIAN-128", "sku": "PHN-PIXEL-9", "category": "phones",
+            "quantity": 1, "unitPrice": {"amountMinor": 1001, "currency": "EUR"}}],
+ "couponCode": "WELCOME10"}
 
 ### An unknown code: 422, reason unknown
 POST {{promotions}}/discounts/evaluate
 Authorization: Bearer {{checkoutToken}}
 Content-Type: application/json
 
-{"couponCode": "NO-SUCH-CODE", "subtotal": {"amountMinor": 15980, "currency": "EUR"}}
+{"lines": [{"variantId": "PHN-PIXEL-9-OBSIDIAN-128", "sku": "PHN-PIXEL-9", "category": "phones",
+            "quantity": 1, "unitPrice": {"amountMinor": 15980, "currency": "EUR"}}],
+ "couponCode": "NO-SUCH-CODE"}
 
 ### A Customer can't evaluate: 403
 POST {{promotions}}/discounts/evaluate
 Authorization: Bearer {{customerToken}}
 Content-Type: application/json
 
-{"couponCode": "WELCOME10", "subtotal": {"amountMinor": 15980, "currency": "EUR"}}
+{"lines": [{"variantId": "PHN-PIXEL-9-OBSIDIAN-128", "sku": "PHN-PIXEL-9", "category": "phones",
+            "quantity": 1, "unitPrice": {"amountMinor": 15980, "currency": "EUR"}}],
+ "couponCode": "WELCOME10"}
 
 ### Nor manage Coupons: 403
 GET {{promotions}}/coupons
@@ -134,7 +148,9 @@ POST {{gateway}}/api/promotions/discounts/evaluate
 Authorization: Bearer {{checkoutToken}}
 Content-Type: application/json
 
-{"couponCode": "WELCOME10", "subtotal": {"amountMinor": 15980, "currency": "EUR"}}
+{"lines": [{"variantId": "PHN-PIXEL-9-OBSIDIAN-128", "sku": "PHN-PIXEL-9", "category": "phones",
+            "quantity": 1, "unitPrice": {"amountMinor": 15980, "currency": "EUR"}}],
+ "couponCode": "WELCOME10"}
 
 ### Delete it: 204, then 404
 DELETE {{promotions}}/coupons/SPRING25
@@ -212,3 +228,20 @@ Authorization: Bearer {{staffToken}}
 ###
 GET {{promotions}}/campaigns/{{campaignId}}
 Authorization: Bearer {{staffToken}}
+
+### Every Discount an audio line is due, with no Coupon: the seeded Audio week, 15% off
+POST {{promotions}}/discounts/evaluate
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"lines": [{"variantId": "AUD-AIRPODS-PRO-2", "sku": "AUD-AIRPODS-PRO-2", "category": "audio",
+            "quantity": 1, "unitPrice": {"amountMinor": 27900, "currency": "EUR"}}]}
+
+### Audio week, then WELCOME10 on what is left: 41.85, then 23.71
+POST {{promotions}}/discounts/evaluate
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"lines": [{"variantId": "AUD-AIRPODS-PRO-2", "sku": "AUD-AIRPODS-PRO-2", "category": "audio",
+            "quantity": 1, "unitPrice": {"amountMinor": 27900, "currency": "EUR"}}],
+ "couponCode": "WELCOME10"}

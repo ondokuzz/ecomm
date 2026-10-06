@@ -64,7 +64,7 @@ class RedisCheckoutSessionRepository implements CheckoutSessionRepository {
       String id,
       String customerId,
       List<StoredLine> lines,
-      StoredDiscount discount,
+      List<StoredDiscount> discounts,
       StoredMoney tax,
       String reservationId,
       Instant expiresAt) {
@@ -74,39 +74,75 @@ class RedisCheckoutSessionRepository implements CheckoutSessionRepository {
           session.id(),
           session.customerId(),
           session.cart().lines().stream()
-              .map(l -> new StoredLine(l.variantId(), l.quantity(), StoredMoney.of(l.unitPrice())))
+              .map(
+                  l ->
+                      new StoredLine(
+                          l.variantId(),
+                          l.sku(),
+                          l.category(),
+                          l.quantity(),
+                          StoredMoney.of(l.unitPrice())))
               .toList(),
-          session.discount() == null ? null : StoredDiscount.of(session.discount()),
+          session.discounts().stream().map(StoredDiscount::of).toList(),
           StoredMoney.of(session.tax()),
           session.reservationId(),
           session.expiresAt());
     }
 
-    CheckoutSession toSession() {
-      return new CheckoutSession(
-          id,
-          customerId,
-          new PricedCart(
-              lines.stream()
-                  .map(l -> new PricedLine(l.variantId(), l.quantity(), l.unitPrice().toMoney()))
-                  .toList()),
-          discount == null ? null : discount.toDiscount(),
-          tax.toMoney(),
-          reservationId,
-          expiresAt);
+    /**
+     * The session, unless it was saved before sessions held their lines' Products and every
+     * Discount: without them it can't be evaluated again, so it reads as none, and the Customer
+     * starts checkout afresh. Its Reservation lapses by itself.
+     */
+    Optional<CheckoutSession> toSession() {
+      if (discounts == null
+          || lines.stream().anyMatch(l -> l.sku() == null || l.category() == null)) {
+        return Optional.empty();
+      }
+      return Optional.of(
+          new CheckoutSession(
+              id,
+              customerId,
+              new PricedCart(
+                  lines.stream()
+                      .map(
+                          l ->
+                              new PricedLine(
+                                  l.variantId(),
+                                  l.sku(),
+                                  l.category(),
+                                  l.quantity(),
+                                  l.unitPrice().toMoney()))
+                      .toList()),
+              discounts.stream().map(StoredDiscount::toDiscount).toList(),
+              tax.toMoney(),
+              reservationId,
+              expiresAt));
     }
   }
 
-  private record StoredLine(String variantId, int quantity, StoredMoney unitPrice) {}
+  private record StoredLine(
+      String variantId, String sku, String category, int quantity, StoredMoney unitPrice) {}
 
-  private record StoredDiscount(String couponCode, StoredMoney amount) {
+  private record StoredDiscount(
+      String source,
+      String couponCode,
+      String campaignId,
+      String campaignName,
+      StoredMoney amount) {
 
     static StoredDiscount of(Discount discount) {
-      return new StoredDiscount(discount.couponCode(), StoredMoney.of(discount.amount()));
+      return new StoredDiscount(
+          discount.source().name(),
+          discount.couponCode(),
+          discount.campaignId(),
+          discount.campaignName(),
+          StoredMoney.of(discount.amount()));
     }
 
     Discount toDiscount() {
-      return new Discount(couponCode, amount.toMoney());
+      return new Discount(
+          Discount.Source.valueOf(source), couponCode, campaignId, campaignName, amount.toMoney());
     }
   }
 
@@ -142,7 +178,7 @@ class RedisCheckoutSessionRepository implements CheckoutSessionRepository {
   @Override
   public Optional<CheckoutSession> find(String sessionId) {
     return Optional.ofNullable(redis.opsForValue().get(key(sessionId)))
-        .map(value -> json.readValue(value, Stored.class).toSession());
+        .flatMap(value -> json.readValue(value, Stored.class).toSession());
   }
 
   @Override

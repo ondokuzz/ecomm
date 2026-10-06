@@ -29,8 +29,11 @@ class OrderEventsApiTest extends OrderApiTest {
                   {"variantId": "PHN-PIXEL-9", "quantity": 2,
                    "unitPrice": {"amountMinor": 79900, "currency": "EUR"}}
                 ],
-                 "discount": {"couponCode": "WELCOME10",
-                              "amount": {"amountMinor": 15980, "currency": "EUR"}},
+                 "discounts": [
+                   {"source": "CAMPAIGN", "campaignId": "7f1c2b9e-0000-4000-8000-000000000001",
+                    "campaignName": "Phone week", "amount": {"amountMinor": 7990, "currency": "EUR"}},
+                   {"source": "COUPON", "couponCode": "WELCOME10",
+                    "amount": {"amountMinor": 7990, "currency": "EUR"}}],
                  "tax": {"amountMinor": 28764, "currency": "EUR"}}
                 """)
             .exchange()
@@ -60,9 +63,16 @@ class OrderEventsApiTest extends OrderApiTest {
     assertThat(snapshot.at("/lines/0/variantId").asText()).isEqualTo("PHN-PIXEL-9");
     assertThat(snapshot.at("/lines/0/quantity").asInt()).isEqualTo(2);
     assertThat(snapshot.at("/lines/0/unitPrice/amountMinor").asLong()).isEqualTo(79900);
-    assertThat(snapshot.at("/discounts/0/source").asText()).isEqualTo("COUPON");
-    assertThat(snapshot.at("/discounts/0/couponCode").asText()).isEqualTo("WELCOME10");
-    assertThat(snapshot.at("/discounts/0/amount/amountMinor").asLong()).isEqualTo(15980);
+    assertThat(snapshot.at("/discounts/0/source").asText()).isEqualTo("CAMPAIGN");
+    assertThat(snapshot.at("/discounts/0/campaignId").asText())
+        .isEqualTo("7f1c2b9e-0000-4000-8000-000000000001");
+    assertThat(snapshot.at("/discounts/0/campaignName").asText()).isEqualTo("Phone week");
+    assertThat(snapshot.at("/discounts/0/amount/amountMinor").asLong()).isEqualTo(7990);
+    assertThat(snapshot.at("/discounts/0/couponCode").isMissingNode()).isTrue();
+    assertThat(snapshot.at("/discounts/1/source").asText()).isEqualTo("COUPON");
+    assertThat(snapshot.at("/discounts/1/couponCode").asText()).isEqualTo("WELCOME10");
+    assertThat(snapshot.at("/discounts/1/amount/amountMinor").asLong()).isEqualTo(7990);
+    assertThat(snapshot.at("/discounts/1/campaignId").isMissingNode()).isTrue();
     assertThat(snapshot.at("/tax/amountMinor").asLong()).isEqualTo(28764);
     assertThat(snapshot.at("/subtotal/amountMinor").asLong()).isEqualTo(159800);
     assertThat(snapshot.at("/total/amountMinor").asLong()).isEqualTo(172584);

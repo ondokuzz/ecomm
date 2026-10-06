@@ -21,7 +21,6 @@ import com.ecomm.checkoutpricing.domain.OrderStatus;
 import com.ecomm.checkoutpricing.domain.PricedCart;
 import com.ecomm.checkoutpricing.domain.PricedLine;
 import com.ecomm.checkoutpricing.domain.UnknownVariantsException;
-import com.ecomm.commons.money.Money;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -75,7 +74,9 @@ public class CheckoutService implements CheckoutUseCase {
       throw new EmptyCartException();
     }
     var priced = price(lines);
-    var tax = taxes.tax(priced, new Money(0, priced.subtotal().currency()));
+    // Before any Stock is held, so a Promotions failure holds none.
+    var discounts = promotions.evaluate(priced.lines(), Optional.empty());
+    var tax = taxes.tax(priced, Discount.total(discounts, priced.subtotal().currency()));
 
     // The old session's hold would otherwise count against the new one's.
     sessions.findByCustomer(customerId).ifPresent(this::discard);
@@ -86,7 +87,13 @@ public class CheckoutService implements CheckoutUseCase {
     var reservationId = inventory.reserve(customerId, lines, reservationExpiresAt);
     var session =
         new CheckoutSession(
-            UUID.randomUUID().toString(), customerId, priced, null, tax, reservationId, expiresAt);
+            UUID.randomUUID().toString(),
+            customerId,
+            priced,
+            discounts,
+            tax,
+            reservationId,
+            expiresAt);
     // Kept past its expiry, until its Reservation's, so paying it late is told apart from paying
     // one that never existed.
     sessions.save(session, Duration.between(now, reservationExpiresAt));
@@ -101,13 +108,12 @@ public class CheckoutService implements CheckoutUseCase {
   @Override
   public CheckoutSession applyCoupon(String customerId, String sessionId, String couponCode) {
     var session = live(customerId, sessionId);
-    var discount = promotions.evaluate(couponCode, session.subtotal());
-    return discounted(session, discount);
+    return discounted(session, Optional.of(couponCode));
   }
 
   @Override
   public CheckoutSession removeCoupon(String customerId, String sessionId) {
-    return discounted(live(customerId, sessionId), null);
+    return discounted(live(customerId, sessionId), Optional.empty());
   }
 
   @Override
@@ -116,7 +122,8 @@ public class CheckoutService implements CheckoutUseCase {
 
     // The Payment is for the Order's total, as Order Management records it, so the two always
     // match.
-    var order = orders.place(customerId, session.cart().lines(), session.discount(), session.tax());
+    var order =
+        orders.place(customerId, session.cart().lines(), session.discounts(), session.tax());
     var orderId = order.id();
     try {
       payments.authorize(customerId, orderId, order.total(), paymentMethod);
@@ -151,29 +158,40 @@ public class CheckoutService implements CheckoutUseCase {
   }
 
   /**
-   * Keeps {@code session} with {@code discount}, or with none when it is null, taxed again for it.
+   * Keeps {@code session} with every Discount it is due now, with the Coupon {@code couponCode} or
+   * without one, taxed again for them. The Campaigns are asked about again too, since one may have
+   * started or ended since.
    */
-  private CheckoutSession discounted(CheckoutSession session, Discount discount) {
-    var currency = session.subtotal().currency();
-    var tax =
-        taxes.tax(session.cart(), discount == null ? new Money(0, currency) : discount.amount());
-    var updated = session.withDiscount(discount, tax);
-    // Replaced or lapsed while the Coupon was being evaluated.
+  private CheckoutSession discounted(CheckoutSession session, Optional<String> couponCode) {
+    var discounts = promotions.evaluate(session.cart().lines(), couponCode);
+    var tax = taxes.tax(session.cart(), Discount.total(discounts, session.subtotal().currency()));
+    var updated = session.withDiscounts(discounts, tax);
+    // Replaced or lapsed while the Discounts were being evaluated.
     if (!sessions.replace(updated)) {
       throw new CheckoutSessionNotFoundException(session.id());
     }
     return updated;
   }
 
-  /** Every line at Catalog's current Price; whatever price the Cart shows is ignored. */
+  /**
+   * Every line at Catalog's current Price, with its Product's SKU and Category; whatever price the
+   * Cart shows is ignored.
+   */
   private PricedCart price(List<CartLine> lines) {
     var priced = new ArrayList<PricedLine>();
     var unknown = new ArrayList<String>();
     for (var line : lines) {
       catalog
-          .price(line.variantId())
+          .variant(line.variantId())
           .ifPresentOrElse(
-              price -> priced.add(new PricedLine(line.variantId(), line.quantity(), price)),
+              variant ->
+                  priced.add(
+                      new PricedLine(
+                          line.variantId(),
+                          variant.sku(),
+                          variant.category(),
+                          line.quantity(),
+                          variant.price())),
               () -> unknown.add(line.variantId()));
     }
     if (!unknown.isEmpty()) {

@@ -6,18 +6,13 @@ import com.ecomm.ordermanagement.domain.Discount;
 import com.ecomm.ordermanagement.domain.Order;
 import com.ecomm.ordermanagement.domain.OrderLine;
 import java.util.List;
-import java.util.Optional;
 
 public interface PlaceOrderUseCase {
 
   /**
-   * Records a new Order for the Customer in {@code PLACED}, with its discount and tax, and its
+   * Records a new Order for the Customer in {@code PLACED}, with its Discounts and tax, and its
    * placement by {@code caller} as the first entry in its Order Status history.
    */
   Order place(
-      Caller caller,
-      String customerId,
-      List<OrderLine> lines,
-      Optional<Discount> discount,
-      Money tax);
+      Caller caller, String customerId, List<OrderLine> lines, List<Discount> discounts, Money tax);
 }

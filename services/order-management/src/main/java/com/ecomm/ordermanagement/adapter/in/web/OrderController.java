@@ -62,7 +62,7 @@ class OrderController {
             Caller.CHECKOUT,
             request.toCustomerId(),
             request.toOrderLines(),
-            request.toDiscount(),
+            request.toDiscounts(),
             request.toTax());
     log.info("Placed Order {}", order.id());
     return ResponseEntity.created(URI.create("/orders/" + order.id()))

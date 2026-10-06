@@ -89,6 +89,7 @@ class TaxApiTest extends CheckoutApiTest {
                       {"variantId": "PHN-PIXEL-9", "quantity": 2,
                        "unitPrice": {"amountMinor": 79900, "currency": "EUR"}}
                     ],
+                     "discounts": [],
                      "tax": {"amountMinor": 31960, "currency": "EUR"}}
                     """)));
   }

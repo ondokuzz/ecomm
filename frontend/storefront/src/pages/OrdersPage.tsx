@@ -9,7 +9,7 @@ import { EmptyState, ErrorState, LookupError } from '../components/Status'
 import { ButtonLink } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import type { VariantDetail } from '../domain/catalog'
-import { type Order, orderItemCountLabel, orderReference } from '../domain/order'
+import { type Order, discountNames, orderItemCountLabel, orderReference } from '../domain/order'
 import { type Page, pageCount, pageIndexFromUrl } from '../domain/paging'
 
 /** How many of an Order's lines its card shows a thumbnail for; the rest are counted. */
@@ -128,6 +128,9 @@ function OrderCard({ order, variants }: { order: Order; variants: Record<string,
               </li>
             )}
           </ul>
+          {order.discounts.length > 0 && (
+            <span className="order-card-discounts">Saved with {discountNames(order.discounts).join(', ')}</span>
+          )}
           <div className="order-card-bottom">
             <span className="muted">{orderItemCountLabel(order)}</span>
             <span className="price">{formatMoney(order.total)}</span>

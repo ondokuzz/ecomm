@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { VariantDetail } from './catalog'
 import {
+  type Discount,
   type Order,
   type StatusHistoryEntry,
+  appliedCoupon,
+  discountLabel,
+  discountNames,
   nameOrderLines,
   orderItemCountLabel,
   orderReference,
@@ -12,6 +16,22 @@ import {
 } from './order'
 
 const eur = (amountMinor: number) => ({ amountMinor, currency: 'EUR' })
+
+const audioWeek = (amount = eur(225)): Discount => ({
+  source: 'CAMPAIGN',
+  campaignId: '0c5e0a1d-0000-4000-8000-000000000001',
+  campaignName: 'Audio week',
+  couponCode: null,
+  amount,
+})
+
+const welcome10 = (amount = eur(202)): Discount => ({
+  source: 'COUPON',
+  couponCode: 'WELCOME10',
+  campaignId: null,
+  campaignName: null,
+  amount,
+})
 
 function variant(id: string): VariantDetail {
   return { id, axisValues: { color: 'Black' }, price: eur(1000), images: [], product: { sku: id, name: `Product ${id}`, images: [] } }
@@ -26,7 +46,7 @@ function order(overrides: Partial<Order> = {}): Order {
       { variantId: 'B', quantity: 1, unitPrice: eur(250) },
     ],
     subtotal: eur(2250),
-    discount: null,
+    discounts: [],
     tax: eur(0),
     total: eur(2250),
     placedAt: '2026-09-29T10:00:00Z',
@@ -80,14 +100,45 @@ describe('orderSummaryRows', () => {
     expect(rows(order())).toEqual(['Subtotal:2250', 'Tax:0', 'Total:2250'])
   })
 
-  it('takes the discount off after the subtotal, naming its coupon', () => {
-    const discounted = order({ discount: { couponCode: 'WELCOME10', amount: eur(225) }, tax: eur(405), total: eur(2430) })
+  it('takes each Discount off after the subtotal, in order, by Campaign name or Coupon code', () => {
+    const discounted = order({
+      discounts: [audioWeek(eur(225)), welcome10(eur(202))],
+      tax: eur(365),
+      total: eur(2188),
+    })
 
-    expect(rows(discounted)).toEqual(['Subtotal:2250', 'Discount (WELCOME10):-225', 'Tax:405', 'Total:2430'])
+    expect(rows(discounted)).toEqual([
+      'Subtotal:2250',
+      'Campaign: Audio week:-225',
+      'Coupon: WELCOME10:-202',
+      'Tax:365',
+      'Total:2188',
+    ])
   })
 
   it('marks only the total as the total', () => {
     expect(orderSummaryRows(order()).map((row) => row.isTotal ?? false)).toEqual([false, false, true])
+  })
+})
+
+describe('discountLabel', () => {
+  it("names a Campaign's Discount by the Campaign and a Coupon's by its code", () => {
+    expect(discountLabel(audioWeek())).toBe('Campaign: Audio week')
+    expect(discountLabel(welcome10())).toBe('Coupon: WELCOME10')
+  })
+})
+
+describe('discountNames', () => {
+  it('names every Discount, in order, for an Order card', () => {
+    expect(discountNames([audioWeek(), welcome10()])).toEqual(['Audio week', 'WELCOME10'])
+    expect(discountNames([])).toEqual([])
+  })
+})
+
+describe('appliedCoupon', () => {
+  it("is the Coupon's Discount among them, if any", () => {
+    expect(appliedCoupon([audioWeek(), welcome10()])).toEqual(welcome10())
+    expect(appliedCoupon([audioWeek()])).toBeUndefined()
   })
 })
 

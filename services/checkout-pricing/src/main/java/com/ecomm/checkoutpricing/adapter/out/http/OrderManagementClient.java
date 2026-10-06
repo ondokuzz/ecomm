@@ -26,14 +26,15 @@ class OrderManagementClient implements OrderPort {
     this.http = http;
   }
 
-  /** {@code discount} is left out when the Order has none. */
   private record PlaceOrderBody(
-      String customerId,
-      List<Line> lines,
-      @JsonInclude(JsonInclude.Include.NON_NULL) DiscountBody discount,
-      Amount tax) {}
+      String customerId, List<Line> lines, List<DiscountBody> discounts, Amount tax) {}
 
-  private record DiscountBody(String couponCode, Amount amount) {}
+  /**
+   * A Campaign's names it by ID and name, a Coupon's by its code; the fields it lacks are left out.
+   */
+  @JsonInclude(JsonInclude.Include.NON_NULL)
+  private record DiscountBody(
+      String source, String couponCode, String campaignId, String campaignName, Amount amount) {}
 
   private record Line(String variantId, int quantity, Amount unitPrice) {}
 
@@ -54,16 +55,23 @@ class OrderManagementClient implements OrderPort {
 
   @Override
   public PlacedOrder place(
-      String customerId, List<PricedLine> lines, Discount discount, Money tax) {
+      String customerId, List<PricedLine> lines, List<Discount> discounts, Money tax) {
     var body =
         new PlaceOrderBody(
             customerId,
             lines.stream()
                 .map(l -> new Line(l.variantId(), l.quantity(), Amount.of(l.unitPrice())))
                 .toList(),
-            discount == null
-                ? null
-                : new DiscountBody(discount.couponCode(), Amount.of(discount.amount())),
+            discounts.stream()
+                .map(
+                    d ->
+                        new DiscountBody(
+                            d.source().name(),
+                            d.couponCode(),
+                            d.campaignId(),
+                            d.campaignName(),
+                            Amount.of(d.amount())))
+                .toList(),
             Amount.of(tax));
     var order =
         Downstream.call(

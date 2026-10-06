@@ -196,7 +196,8 @@ test('a declined card shows why, and the held session can then be paid with one 
 test('WELCOME10 takes 10% off at checkout, and the PAID Order shows the discount', async ({ page, request }) => {
   const token = await tokenFor(request, demoCustomer)
   await emptyCart(request, token)
-  const { variantId, variant } = await aProductInStock(request)
+  // A phone, so the seeded Audio week Campaign takes nothing off.
+  const { variantId, variant } = await aProductInStockIn(request, 'phones')
   const put = await request.put(`/api/cart/cart/items/${encodeURIComponent(variantId)}`, {
     headers: { Authorization: `Bearer ${token}` },
     data: { quantity: 1 },
@@ -224,29 +225,84 @@ test('WELCOME10 takes 10% off at checkout, and the PAID Order shows the discount
   await couponField.fill('welcome10')
   await summary.getByRole('button', { name: 'Apply' }).click()
   await expect(summary).toContainText('WELCOME10 applied')
-  await expect(summary.getByText('Discount (WELCOME10)')).toBeVisible()
+  await expect(summary.getByText('Coupon: WELCOME10')).toBeVisible()
   await expect(summary).toContainText(formatMoney({ ...discount, amountMinor: -discount.amountMinor }, currencies, 'en-US'))
   await expect(page.getByRole('button', { name: `Pay ${formatMoney(discounted, currencies, 'en-US')}` })).toBeVisible()
 
   // Removing it puts the total back; applying it again takes it off again.
   await summary.getByRole('button', { name: 'Remove coupon WELCOME10' }).click()
-  await expect(summary.getByText('Discount (WELCOME10)')).toBeHidden()
+  await expect(summary.getByText('Coupon: WELCOME10')).toBeHidden()
   await expect(page.getByRole('button', { name: `Pay ${formatMoney(subtotal, currencies, 'en-US')}` })).toBeVisible()
   await couponField.fill('WELCOME10')
   await summary.getByRole('button', { name: 'Apply' }).click()
-  await expect(summary.getByText('Discount (WELCOME10)')).toBeVisible()
+  await expect(summary.getByText('Coupon: WELCOME10')).toBeVisible()
 
   await testCard(page, 'Approve').check()
   await page.getByRole('button', { name: `Pay ${formatMoney(discounted, currencies, 'en-US')}` }).click()
 
   await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/)
   await expect(page.locator('.status-paid')).toHaveText('Paid')
-  await expect(page.getByText('Discount (WELCOME10)')).toBeVisible()
+  await expect(page.getByText('Coupon: WELCOME10')).toBeVisible()
   const orderId = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!)
   const order = await orderOf(request, token, orderId)
   expect(order.status).toBe('PAID')
-  expect(order.discount).toEqual({ couponCode: 'WELCOME10', amount: discount })
+  expect(order.discounts).toEqual([
+    { source: 'COUPON', couponCode: 'WELCOME10', campaignId: null, campaignName: null, amount: discount },
+  ])
   expect(order.total).toEqual({ ...discounted, amountMinor: discounted.amountMinor + order.tax.amountMinor })
+})
+
+test('Audio week comes off an audio Product by itself, WELCOME10 on top, and the PAID Order lists both', async ({
+  page,
+  request,
+}) => {
+  const token = await tokenFor(request, demoCustomer)
+  await emptyCart(request, token)
+  const { variantId, variant } = await aProductInStockIn(request, 'audio')
+  const put = await request.put(`/api/cart/cart/items/${encodeURIComponent(variantId)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { quantity: 1 },
+  })
+  expect(put.ok()).toBeTruthy()
+  const subtotal = variant.price
+  const currencies = await currenciesOfCatalog(request)
+  // 15% off the audio line, then 10% off what is left, each rounded down to the minor unit.
+  const audioWeek = { ...subtotal, amountMinor: Math.floor((subtotal.amountMinor * 15) / 100) }
+  const welcome10 = { ...subtotal, amountMinor: Math.floor((subtotal.amountMinor - audioWeek.amountMinor) / 10) }
+  const negative = (money: typeof subtotal) => ({ ...money, amountMinor: -money.amountMinor })
+  const pay = (amountMinor: number) => `Pay ${formatMoney({ ...subtotal, amountMinor }, currencies, 'en-US')}`
+
+  await page.goto('/checkout')
+  await signInOnKeycloak(page, demoCustomer)
+  const summary = page.getByRole('region', { name: 'Order summary' })
+  await expect(summary.getByText('Campaign: Audio week')).toBeVisible()
+  await expect(summary).toContainText(formatMoney(negative(audioWeek), currencies, 'en-US'))
+  await expect(page.getByRole('button', { name: pay(subtotal.amountMinor - audioWeek.amountMinor) })).toBeVisible()
+
+  await summary.getByLabel('Coupon code').fill('WELCOME10')
+  await summary.getByRole('button', { name: 'Apply' }).click()
+  await expect(summary.getByText('Coupon: WELCOME10')).toBeVisible()
+  await expect(summary.getByText('Campaign: Audio week')).toBeVisible()
+  await expect(summary).toContainText(formatMoney(negative(welcome10), currencies, 'en-US'))
+  const total = subtotal.amountMinor - audioWeek.amountMinor - welcome10.amountMinor
+
+  await testCard(page, 'Approve').check()
+  await page.getByRole('button', { name: pay(total) }).click()
+
+  await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/)
+  await expect(page.getByText('Campaign: Audio week')).toBeVisible()
+  await expect(page.getByText('Coupon: WELCOME10')).toBeVisible()
+  const orderId = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!)
+  const order = await orderOf(request, token, orderId)
+  expect(order.status).toBe('PAID')
+  expect(order.discounts.map((d) => [d.source, d.campaignName ?? d.couponCode, d.amount])).toEqual([
+    ['CAMPAIGN', 'Audio week', audioWeek],
+    ['COUPON', 'WELCOME10', welcome10],
+  ])
+  expect(order.total).toEqual({ ...subtotal, amountMinor: total + order.tax.amountMinor })
+
+  await page.goto('/orders')
+  await expect(page.getByText('Saved with Audio week, WELCOME10').first()).toBeVisible()
 })
 
 test('the demo Customer empties their Cart after confirming', async ({ page, request }) => {
@@ -401,6 +457,17 @@ async function aProductInStock(request: APIRequestContext, exceptSku?: string): 
     if (stock.quantity > 0) return { product, variant, variantId: variant.id, stock }
   }
   throw new Error('No seeded Product has Stock left; run `make seed-reset`')
+}
+
+/** A Product in `category` with its default Variant in Stock. */
+async function aProductInStockIn(request: APIRequestContext, category: string): Promise<ProductInStock> {
+  for (const product of await products(request)) {
+    if (product.category !== category) continue
+    const variant = defaultVariant(product)
+    const stock = await stockOf(request, variant.id)
+    if (stock.quantity > 0) return { product, variant, variantId: variant.id, stock }
+  }
+  throw new Error(`No seeded ${category} Product has Stock left; run \`make seed-reset\``)
 }
 
 /** How a Cart or Order line names a Variant: its Product, then its axis values. */

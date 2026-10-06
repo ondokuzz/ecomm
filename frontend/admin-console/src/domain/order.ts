@@ -34,9 +34,15 @@ export interface OrderLine {
   unitPrice: Money
 }
 
-/** What a Coupon took off an Order, and its code. */
+/**
+ * What a running Campaign or a Coupon took off an Order: a Campaign's names it by ID and name, a
+ * Coupon's by its code; the fields it lacks are null.
+ */
 export interface Discount {
-  couponCode: string
+  source: 'CAMPAIGN' | 'COUPON'
+  couponCode: string | null
+  campaignId: string | null
+  campaignName: string | null
   amount: Money
 }
 
@@ -48,9 +54,10 @@ export interface Order {
   status: OrderStatus
   lines: OrderLine[]
   subtotal: Money
-  discount: Discount | null
+  /** Every Discount it got, in the order they applied; empty when none. */
+  discounts: Discount[]
   tax: Money
-  /** The subtotal, less the discount, plus the tax: what the Customer paid. */
+  /** The subtotal, less every Discount, plus the tax: what the Customer paid. */
   total: Money
   placedAt: string
   /** Every Order Status the Order has been in, oldest first. */
@@ -61,6 +68,11 @@ export interface Order {
 export const ordersPageSize = 20
 
 /** An Order Status as Staff read it: "Placed", "Paid", … */
+/** A Discount's row in an Order's summary, as the Storefront shows it: "Campaign: Audio week" or "Coupon: WELCOME10". */
+export function discountLabel(discount: Discount): string {
+  return discount.source === 'CAMPAIGN' ? `Campaign: ${discount.campaignName}` : `Coupon: ${discount.couponCode}`
+}
+
 export function orderStatusLabel(status: OrderStatus): string {
   return status.charAt(0) + status.slice(1).toLowerCase()
 }

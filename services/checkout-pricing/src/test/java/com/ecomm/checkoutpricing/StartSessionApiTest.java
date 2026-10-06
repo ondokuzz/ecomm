@@ -182,7 +182,8 @@ class StartSessionApiTest extends CheckoutApiTest {
             .willReturn(
                 okJson(
                     """
-                    {"id": "AUD-US", "price": {"amountMinor": 100, "currency": "USD"}}
+                    {"id": "AUD-US", "price": {"amountMinor": 100, "currency": "USD"},
+                     "product": {"sku": "AUD-US", "category": "audio"}}
                     """)));
 
     startSession()

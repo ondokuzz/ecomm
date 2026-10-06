@@ -3,10 +3,12 @@ package com.ecomm.checkoutpricing.domain;
 import com.ecomm.commons.money.Money;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
 
 /**
- * A Customer's Cart held for checkout: its lines at the Prices captured when it started, the
- * Discount of the Coupon applied to it, if any ({@code discount} is null otherwise), their tax, and
+ * A Customer's Cart held for checkout: its lines at the Prices captured when it started, every
+ * Discount it is due (the running Campaigns', then the applied Coupon's, if any), their tax, and
  * the Reservation holding their Stock, until {@code expiresAt}. Paying it honours those Prices
  * whatever Catalog says by then.
  */
@@ -14,10 +16,14 @@ public record CheckoutSession(
     String id,
     String customerId,
     PricedCart cart,
-    Discount discount,
+    List<Discount> discounts,
     Money tax,
     String reservationId,
     Instant expiresAt) {
+
+  public CheckoutSession {
+    discounts = List.copyOf(discounts);
+  }
 
   /** How long a Checkout Session holds the Cart. */
   public static final Duration LIFETIME = Duration.ofMinutes(15);
@@ -37,13 +43,21 @@ public record CheckoutSession(
     return cart.subtotal();
   }
 
-  /** What the Discount takes off the subtotal: nothing without one. */
+  /** What every Discount together takes off the subtotal: nothing without one. */
   public Money discountAmount() {
-    return discount == null ? new Money(0, subtotal().currency()) : discount.amount();
+    return Discount.total(discounts, subtotal().currency());
+  }
+
+  /** The code of the Coupon applied, as Promotions upper-cased it; empty without one. */
+  public Optional<String> couponCode() {
+    return discounts.stream()
+        .filter(d -> d.source() == Discount.Source.COUPON)
+        .map(Discount::couponCode)
+        .findFirst();
   }
 
   /**
-   * The subtotal less the Discount, plus the tax, as the Customer is shown it; the Order's own
+   * The subtotal less every Discount, plus the tax, as the Customer is shown it; the Order's own
    * total is what's paid.
    */
   public Money total() {
@@ -55,11 +69,9 @@ public record CheckoutSession(
         subtotal.currency());
   }
 
-  /**
-   * This session with {@code discount}, or none when it is null, and the tax that comes with it.
-   */
-  public CheckoutSession withDiscount(Discount discount, Money tax) {
-    return new CheckoutSession(id, customerId, cart, discount, tax, reservationId, expiresAt);
+  /** This session with {@code discounts} in place of its own, and the tax that comes with them. */
+  public CheckoutSession withDiscounts(List<Discount> discounts, Money tax) {
+    return new CheckoutSession(id, customerId, cart, discounts, tax, reservationId, expiresAt);
   }
 
   public boolean isExpiredAt(Instant now) {

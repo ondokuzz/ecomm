@@ -1,8 +1,12 @@
 package com.ecomm.promotions.adapter.in.web;
 
+import com.ecomm.commons.money.Money;
 import com.ecomm.promotions.application.port.in.EvaluateDiscountUseCase;
 import com.ecomm.promotions.domain.CouponNotApplicableException;
+import com.ecomm.promotions.domain.Discount;
 import com.ecomm.promotions.domain.InvalidPromotionException;
+import java.util.Currency;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -15,9 +19,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Checkout evaluates a Coupon against a Checkout Session's subtotal with its own {@code CHECKOUT}
- * token. It is internal: the gateway never routes it, so nobody can probe Coupon codes outside a
- * checkout.
+ * Checkout evaluates every Discount a Checkout Session is due, the Coupon's included, with its own
+ * {@code CHECKOUT} token. It is internal: the gateway never routes it, so nobody can probe Coupon
+ * codes outside a checkout.
  */
 @RestController
 @RequestMapping("/discounts")
@@ -32,12 +36,23 @@ class DiscountController {
     this.discounts = discounts;
   }
 
-  /** 200 with the Discount; 422 with a {@code reason} when the Coupon doesn't apply. */
+  /**
+   * 200 with every Discount the lines are due, in order; 422 with a {@code reason} when the Coupon
+   * doesn't apply.
+   */
   @PostMapping("/evaluate")
   DiscountResponse evaluate(@RequestBody EvaluateRequest request) {
-    var discount = discounts.evaluate(request.toCouponCode(), request.toSubtotal());
-    log.info("Coupon {} takes {} off", discount.couponCode(), discount.amount());
-    return DiscountResponse.of(discount);
+    var lines = request.toLines();
+    var discounts = this.discounts.evaluate(lines, request.toCouponCode());
+    log.info(
+        "{} Discounts take {} off",
+        discounts.size(),
+        total(discounts, lines.getFirst().unitPrice().currency()));
+    return DiscountResponse.of(discounts);
+  }
+
+  private static Money total(List<Discount> discounts, Currency currency) {
+    return new Money(discounts.stream().mapToLong(d -> d.amount().amountMinor()).sum(), currency);
   }
 
   @ExceptionHandler(CouponNotApplicableException.class)

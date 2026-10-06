@@ -132,7 +132,7 @@ abstract class OrderApiTest {
       String status,
       List<LineView> lines,
       AmountView subtotal,
-      DiscountView discount,
+      List<DiscountView> discounts,
       AmountView tax,
       AmountView total,
       String placedAt,
@@ -142,7 +142,18 @@ abstract class OrderApiTest {
 
   record LineView(String variantId, int quantity, AmountView unitPrice) {}
 
-  record DiscountView(String couponCode, AmountView amount) {}
+  /** A Campaign's Discount names it by ID and name, a Coupon's by its code; the others are null. */
+  record DiscountView(
+      String source, String couponCode, String campaignId, String campaignName, AmountView amount) {
+
+    static DiscountView coupon(String code, long amountMinor) {
+      return new DiscountView("COUPON", code, null, null, new AmountView(amountMinor, "EUR"));
+    }
+
+    static DiscountView campaign(String id, String name, long amountMinor) {
+      return new DiscountView("CAMPAIGN", null, id, name, new AmountView(amountMinor, "EUR"));
+    }
+  }
 
   record AmountView(long amountMinor, String currency) {}
 }

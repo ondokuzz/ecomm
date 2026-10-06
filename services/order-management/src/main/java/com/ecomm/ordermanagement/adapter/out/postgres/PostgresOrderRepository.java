@@ -15,6 +15,7 @@ import com.ecomm.ordermanagement.domain.OrderStatus;
 import com.ecomm.ordermanagement.domain.StatusHistoryEntry;
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.Currency;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,39 +27,54 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Orders as rows of {@code customer_order}, with their lines in {@code order_line} and their Order
- * Status history in {@code order_status_history} (see {@code db/migration}). The row's {@code
- * status} is the current one, kept beside the history.
+ * Orders as rows of {@code customer_order}, with their lines in {@code order_line}, their Discounts
+ * in {@code order_discount} and their Order Status history in {@code order_status_history} (see
+ * {@code db/migration}). The row's {@code status} is the current one, kept beside the history.
  */
 @Component
 class PostgresOrderRepository implements OrderRepository {
 
-  private static final String ORDER_COLUMNS =
-      "id, customer_id, coupon_code, discount_minor, tax_minor, version";
+  private static final String ORDER_COLUMNS = "id, customer_id, tax_minor, version";
 
   /**
-   * An Order's own row, before its lines and history are attached. Its discount and tax take their
-   * currency from the lines.
+   * An Order's own row, before its lines, Discounts and history are attached. Its Discounts and tax
+   * take their currency from the lines.
    */
-  private record OrderRow(
-      UUID id,
-      String customerId,
-      String couponCode,
-      Long discountMinor,
-      long taxMinor,
-      long version) {
+  private record OrderRow(UUID id, String customerId, long taxMinor, long version) {
 
-    Order with(List<OrderLine> lines, List<StatusHistoryEntry> history) {
+    Order with(
+        List<OrderLine> lines, List<DiscountRow> discounts, List<StatusHistoryEntry> history) {
       var currency = lines.get(0).unitPrice().currency();
-      var discount =
-          Optional.ofNullable(couponCode)
-              .map(code -> new Discount(code, new Money(discountMinor, currency)));
       return new Order(
-          id, customerId, lines, discount, new Money(taxMinor, currency), history, version);
+          id,
+          customerId,
+          lines,
+          discounts.stream().map(d -> d.toDiscount(currency)).toList(),
+          new Money(taxMinor, currency),
+          history,
+          version);
     }
   }
 
   private record LineRow(UUID orderId, OrderLine line) {}
+
+  private record DiscountRow(
+      UUID orderId,
+      String source,
+      String couponCode,
+      String campaignId,
+      String campaignName,
+      long amountMinor) {
+
+    Discount toDiscount(Currency currency) {
+      return new Discount(
+          Discount.Source.valueOf(source),
+          couponCode,
+          campaignId,
+          campaignName,
+          new Money(amountMinor, currency));
+    }
+  }
 
   private record HistoryRow(UUID orderId, StatusHistoryEntry entry) {}
 
@@ -67,8 +83,6 @@ class PostgresOrderRepository implements OrderRepository {
           new OrderRow(
               rs.getObject("id", UUID.class),
               rs.getString("customer_id"),
-              rs.getString("coupon_code"),
-              rs.getObject("discount_minor", Long.class),
               rs.getLong("tax_minor"),
               rs.getLong("version"));
 
@@ -80,6 +94,16 @@ class PostgresOrderRepository implements OrderRepository {
                   rs.getString("variant_id"),
                   rs.getInt("quantity"),
                   Money.of(rs.getLong("unit_price_minor"), rs.getString("currency"))));
+
+  private static final RowMapper<DiscountRow> DISCOUNT =
+      (rs, row) ->
+          new DiscountRow(
+              rs.getObject("order_id", UUID.class),
+              rs.getString("source"),
+              rs.getString("coupon_code"),
+              rs.getString("campaign_id"),
+              rs.getString("campaign_name"),
+              rs.getLong("amount_minor"));
 
   private static final RowMapper<HistoryRow> HISTORY =
       (rs, row) ->
@@ -103,15 +127,12 @@ class PostgresOrderRepository implements OrderRepository {
     jdbc.sql(
             """
             INSERT INTO customer_order
-              (id, customer_id, coupon_code, discount_minor, tax_minor, status, placed_at, version)
+              (id, customer_id, tax_minor, status, placed_at, version)
             VALUES
-              (:id, :customerId, :couponCode, :discountMinor, :taxMinor, :status, :placedAt,
-               :version)
+              (:id, :customerId, :taxMinor, :status, :placedAt, :version)
             """)
         .param("id", order.id())
         .param("customerId", order.customerId())
-        .param("couponCode", order.discount().map(Discount::couponCode).orElse(null))
-        .param("discountMinor", order.discount().map(d -> d.amount().amountMinor()).orElse(null))
         .param("taxMinor", order.tax().amountMinor())
         .param("status", order.status().name())
         .param("placedAt", Timestamp.from(order.placedAt()))
@@ -133,6 +154,26 @@ class PostgresOrderRepository implements OrderRepository {
           .param("quantity", line.quantity())
           .param("unitPriceMinor", line.unitPrice().amountMinor())
           .param("currency", line.unitPrice().currency().getCurrencyCode())
+          .update();
+    }
+    var discounts = order.discounts();
+    for (var position = 0; position < discounts.size(); position++) {
+      var discount = discounts.get(position);
+      jdbc.sql(
+              """
+              INSERT INTO order_discount
+                (order_id, position, source, coupon_code, campaign_id, campaign_name, amount_minor)
+              VALUES
+                (:orderId, :position, :source, :couponCode, :campaignId, :campaignName,
+                 :amountMinor)
+              """)
+          .param("orderId", order.id())
+          .param("position", position)
+          .param("source", discount.source().name())
+          .param("couponCode", discount.couponCode())
+          .param("campaignId", discount.campaignId())
+          .param("campaignName", discount.campaignName())
+          .param("amountMinor", discount.amount().amountMinor())
           .update();
     }
     for (var position = 0; position < order.statusHistory().size(); position++) {
@@ -306,7 +347,10 @@ class PostgresOrderRepository implements OrderRepository {
         .update();
   }
 
-  /** The Orders with their lines and history, fetched in one query each and kept in order. */
+  /**
+   * The Orders with their lines, Discounts and history, fetched in one query each and kept in
+   * order.
+   */
   private List<Order> attach(List<OrderRow> orders) {
     if (orders.isEmpty()) {
       return List.of();
@@ -324,6 +368,18 @@ class PostgresOrderRepository implements OrderRepository {
             .list()
             .stream()
             .collect(groupingBy(LineRow::orderId, mapping(LineRow::line, toList())));
+    Map<UUID, List<DiscountRow>> discountsByOrder =
+        jdbc
+            .sql(
+                """
+                SELECT order_id, source, coupon_code, campaign_id, campaign_name, amount_minor
+                FROM order_discount WHERE order_id IN (:orderIds) ORDER BY order_id, position
+                """)
+            .param("orderIds", orderIds)
+            .query(DISCOUNT)
+            .list()
+            .stream()
+            .collect(groupingBy(DiscountRow::orderId));
     Map<UUID, List<StatusHistoryEntry>> historyByOrder =
         jdbc
             .sql(
@@ -338,7 +394,12 @@ class PostgresOrderRepository implements OrderRepository {
             .stream()
             .collect(groupingBy(HistoryRow::orderId, mapping(HistoryRow::entry, toList())));
     return orders.stream()
-        .map(order -> order.with(linesByOrder.get(order.id()), historyByOrder.get(order.id())))
+        .map(
+            order ->
+                order.with(
+                    linesByOrder.get(order.id()),
+                    discountsByOrder.getOrDefault(order.id(), List.of()),
+                    historyByOrder.get(order.id())))
         .toList();
   }
 }

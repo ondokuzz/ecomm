@@ -5,15 +5,20 @@ import com.ecomm.ordermanagement.domain.Discount;
 import com.ecomm.ordermanagement.domain.InvalidOrderException;
 import com.ecomm.ordermanagement.domain.OrderLine;
 import java.util.List;
-import java.util.Optional;
 
 /**
- * The Customer, the Order Lines priced at checkout, an optional discount and the tax: {@code
- * {"customerId", "lines": [{"variantId", "quantity", "unitPrice": {"amountMinor", "currency"}}],
- * "discount": {"couponCode", "amount"}, "tax": {"amountMinor", "currency"}}}. The values are taken
- * raw so that {@code 1.5} or {@code "2"} are rejected rather than coerced.
+ * The Customer, the Order Lines priced at checkout, every Discount in the order they applied, and
+ * the tax: {@code {"customerId", "lines": [{"variantId", "quantity", "unitPrice": {"amountMinor",
+ * "currency"}}], "discounts": [{"source", "couponCode" | "campaignId" and "campaignName",
+ * "amount"}], "tax": {"amountMinor", "currency"}}}. Leaving out {@code discounts} means none. The
+ * values are taken raw so that {@code 1.5} or {@code "2"} are rejected rather than coerced.
  */
-record PlaceOrderRequest(Object customerId, List<Line> lines, DiscountBody discount, Amount tax) {
+record PlaceOrderRequest(
+    Object customerId,
+    List<Line> lines,
+    Object discount,
+    List<DiscountBody> discounts,
+    Amount tax) {
 
   record Line(Object variantId, Object quantity, Amount unitPrice) {
 
@@ -29,13 +34,29 @@ record PlaceOrderRequest(Object customerId, List<Line> lines, DiscountBody disco
     }
   }
 
-  record DiscountBody(Object couponCode, Amount amount) {
+  record DiscountBody(
+      Object source, Object couponCode, Object campaignId, Object campaignName, Amount amount) {
 
     Discount toDiscount() {
-      if (couponCode != null && !(couponCode instanceof String)) {
-        throw new InvalidOrderException("couponCode must be a string");
+      Discount.Source parsed;
+      try {
+        parsed = Discount.Source.valueOf(text(source, "source"));
+      } catch (IllegalArgumentException | NullPointerException e) {
+        throw new InvalidOrderException("a discount's source is CAMPAIGN or COUPON");
       }
-      return new Discount((String) couponCode, amount == null ? null : amount.toMoney());
+      return new Discount(
+          parsed,
+          text(couponCode, "couponCode"),
+          text(campaignId, "campaignId"),
+          text(campaignName, "campaignName"),
+          amount == null ? null : amount.toMoney());
+    }
+
+    private static String text(Object value, String field) {
+      if (value != null && !(value instanceof String)) {
+        throw new InvalidOrderException(field + " must be a string");
+      }
+      return (String) value;
     }
   }
 
@@ -60,8 +81,27 @@ record PlaceOrderRequest(Object customerId, List<Line> lines, DiscountBody disco
     return CustomerIds.from(customerId);
   }
 
-  Optional<Discount> toDiscount() {
-    return Optional.ofNullable(discount).map(DiscountBody::toDiscount);
+  /**
+   * Every Discount, in order; none when {@code discounts} is left out. A body that still sends the
+   * single {@code discount} of before Sprint 3 is refused rather than read as having none, which
+   * would charge the Customer for a Discount they were given.
+   */
+  List<Discount> toDiscounts() {
+    if (discount != null) {
+      throw new InvalidOrderException("an order takes a list of discounts, not one discount");
+    }
+    if (discounts == null) {
+      return List.of();
+    }
+    return discounts.stream()
+        .map(
+            body -> {
+              if (body == null) {
+                throw new InvalidOrderException("a discount can't be null");
+              }
+              return body.toDiscount();
+            })
+        .toList();
   }
 
   /**

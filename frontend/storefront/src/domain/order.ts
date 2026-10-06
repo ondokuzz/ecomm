@@ -9,10 +9,36 @@ export interface OrderLine {
   unitPrice: Money
 }
 
-/** What a Coupon took off an Order, and the code the Customer entered for it. */
+/**
+ * What a running Campaign or a Coupon took off an Order or a Checkout Session: a Campaign's names it
+ * by ID and name, a Coupon's by the code the Customer entered; the fields it lacks are null.
+ */
 export interface Discount {
-  couponCode: string
+  source: 'CAMPAIGN' | 'COUPON'
+  couponCode: string | null
+  campaignId: string | null
+  campaignName: string | null
   amount: Money
+}
+
+/** What gave a Discount, as the Customer reads it: its Campaign's name, or its Coupon's code. */
+function discountName(discount: Discount): string {
+  return (discount.source === 'CAMPAIGN' ? discount.campaignName : discount.couponCode) ?? ''
+}
+
+/** A Discount's row in a price breakdown: "Campaign: Audio week" or "Coupon: WELCOME10". */
+export function discountLabel(discount: Discount): string {
+  return `${discount.source === 'CAMPAIGN' ? 'Campaign' : 'Coupon'}: ${discountName(discount)}`
+}
+
+/** What gave each Discount, in order, as an Order card lists them. */
+export function discountNames(discounts: Discount[]): string[] {
+  return discounts.map(discountName)
+}
+
+/** The Coupon's Discount among them, if a Coupon is applied. */
+export function appliedCoupon(discounts: Discount[]): Discount | undefined {
+  return discounts.find((d) => d.source === 'COUPON')
 }
 
 /**
@@ -33,9 +59,10 @@ export interface Order {
   lines: OrderLine[]
   /** The sum of the lines. */
   subtotal: Money
-  discount: Discount | null
+  /** Every Discount it got, in the order they applied; empty when none. */
+  discounts: Discount[]
   tax: Money
-  /** The subtotal, less the discount, plus the tax: what the Customer paid. */
+  /** The subtotal, less every Discount, plus the tax: what the Customer paid. */
   total: Money
   placedAt: string
   /** Every Order Status the Order has been in, oldest first. */
@@ -67,7 +94,7 @@ export function orderItemCountLabel(order: Order): string {
   return count === 1 ? '1 item' : `${count} items`
 }
 
-/** One line of an Order's summary; a discount's amount is negative, as it comes off. */
+/** One line of an Order's summary; a Discount's amount is negative, as it comes off. */
 export interface OrderSummaryRow {
   label: string
   amount: Money
@@ -75,23 +102,19 @@ export interface OrderSummaryRow {
 }
 
 /**
- * What an Order, or a Checkout Session, comes to: subtotal, any discount with its Coupon code, tax
- * and total.
+ * What an Order, or a Checkout Session, comes to: subtotal, each Discount in the order it applied,
+ * by its Campaign's name or Coupon's code, tax and total.
  */
 export function summaryRows({
   subtotal,
-  discount,
+  discounts,
   tax,
   total,
-}: Pick<Order, 'subtotal' | 'discount' | 'tax' | 'total'>): OrderSummaryRow[] {
-  const discountRows: OrderSummaryRow[] = discount
-    ? [
-        {
-          label: `Discount (${discount.couponCode})`,
-          amount: { ...discount.amount, amountMinor: -discount.amount.amountMinor },
-        },
-      ]
-    : []
+}: Pick<Order, 'subtotal' | 'discounts' | 'tax' | 'total'>): OrderSummaryRow[] {
+  const discountRows: OrderSummaryRow[] = discounts.map((discount) => ({
+    label: discountLabel(discount),
+    amount: { ...discount.amount, amountMinor: -discount.amount.amountMinor },
+  }))
   return [
     { label: 'Subtotal', amount: subtotal },
     ...discountRows,
@@ -100,7 +123,7 @@ export function summaryRows({
   ]
 }
 
-/** What an Order comes to, as Order Management worked it out: subtotal, any discount, tax and total. */
+/** What an Order comes to, as Order Management worked it out: subtotal, each Discount, tax and total. */
 export function orderSummaryRows(order: Order): OrderSummaryRow[] {
   return summaryRows(order)
 }

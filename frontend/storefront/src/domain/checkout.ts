@@ -12,16 +12,17 @@ export interface CheckoutSessionLine {
 
 /**
  * The Customer's Cart held for checkout: its lines at the Prices captured when it started, and its
- * Stock reserved, until `expiresAt`. Paying it buys it at those Prices, less the Discount of the
- * Coupon applied to it, if any.
+ * Stock reserved, until `expiresAt`. Paying it buys it at those Prices, less every Discount it is
+ * due: the running Campaigns', then the applied Coupon's, if any.
  */
 export interface CheckoutSession {
   id: string
   lines: CheckoutSessionLine[]
   subtotal: Money
-  discount: Discount | null
+  /** Every Discount, in the order they apply; empty when none. */
+  discounts: Discount[]
   tax: Money
-  /** The subtotal, less the discount, plus the tax. */
+  /** The subtotal, less every Discount, plus the tax. */
   total: Money
   /** An ISO 8601 instant. */
   expiresAt: string
@@ -35,7 +36,7 @@ export function sessionCountdown(expiresAt: string, now: number): { expired: boo
   return { expired: secondsLeft === 0, label: `${minutes}:${String(seconds).padStart(2, '0')}` }
 }
 
-/** What a Checkout Session comes to: subtotal, any discount, tax (even when zero) and total. */
+/** What a Checkout Session comes to: subtotal, each Discount, tax (even when zero) and total. */
 export function sessionSummaryRows(session: CheckoutSession): OrderSummaryRow[] {
   return summaryRows(session)
 }

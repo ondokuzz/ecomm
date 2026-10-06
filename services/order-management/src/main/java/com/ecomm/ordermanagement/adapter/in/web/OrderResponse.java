@@ -8,7 +8,7 @@ import java.util.UUID;
 
 /**
  * An Order with the Customer it belongs to, its lines, what it comes to, and its Order Status
- * history, oldest first: {@code discount} is null when it has none.
+ * history, oldest first. {@code discounts} is empty when it has none.
  */
 record OrderResponse(
     UUID id,
@@ -16,7 +16,7 @@ record OrderResponse(
     String status,
     List<Line> lines,
     Amount subtotal,
-    Discount discount,
+    List<Discount> discounts,
     Amount tax,
     Amount total,
     Instant placedAt,
@@ -26,7 +26,9 @@ record OrderResponse(
 
   record Line(String variantId, int quantity, Amount unitPrice) {}
 
-  record Discount(String couponCode, Amount amount) {}
+  /** A Campaign's Discount names it by ID and name, a Coupon's by its code; the others are null. */
+  record Discount(
+      String source, String couponCode, String campaignId, String campaignName, Amount amount) {}
 
   record Amount(long amountMinor, String currency) {
 
@@ -44,7 +46,16 @@ record OrderResponse(
             .map(l -> new Line(l.variantId(), l.quantity(), Amount.of(l.unitPrice())))
             .toList(),
         Amount.of(order.subtotal()),
-        order.discount().map(d -> new Discount(d.couponCode(), Amount.of(d.amount()))).orElse(null),
+        order.discounts().stream()
+            .map(
+                d ->
+                    new Discount(
+                        d.source().name(),
+                        d.couponCode(),
+                        d.campaignId(),
+                        d.campaignName(),
+                        Amount.of(d.amount())))
+            .toList(),
         Amount.of(order.tax()),
         Amount.of(order.total()),
         order.placedAt(),

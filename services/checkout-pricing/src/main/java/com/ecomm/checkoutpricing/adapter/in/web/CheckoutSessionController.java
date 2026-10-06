@@ -76,10 +76,10 @@ class CheckoutSessionController {
       @RequestBody(required = false) CouponRequest request) {
     var session = checkout.applyCoupon(customer.id(), id, CouponRequest.codeOf(request));
     log.info(
-        "Applied Coupon {} to Checkout Session {}, taking {} off",
-        session.discount().couponCode(),
+        "Applied Coupon {} to Checkout Session {}, its Discounts taking {} off",
+        session.couponCode().orElse(null),
         id,
-        session.discount().amount());
+        session.discountAmount());
     return SessionResponse.of(session);
   }
 

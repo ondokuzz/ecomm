@@ -6,13 +6,13 @@ import java.util.ArrayList;
 import java.util.Currency;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 /**
  * A Customer's confirmed intent to purchase one or more Variants. It belongs to the Customer who
- * placed it, and only they may see it. Its total is the sum of its lines, less its {@code discount}
- * if it has one, plus its {@code tax}, all in one currency.
+ * placed it, and only they may see it. Its total is the sum of its lines, less each of its {@code
+ * discounts} (a Campaign's or a Coupon's, in the order they applied), plus its {@code tax}, all in
+ * one currency, and never below zero.
  *
  * <p>Its {@code statusHistory} holds every Order Status it has been in, oldest first, starting with
  * its placement; entries are only ever appended. Its {@code version} starts at 1 and goes up by one
@@ -22,13 +22,14 @@ public record Order(
     UUID id,
     String customerId,
     List<OrderLine> lines,
-    Optional<Discount> discount,
+    List<Discount> discounts,
     Money tax,
     List<StatusHistoryEntry> statusHistory,
     long version) {
 
   public Order {
     lines = List.copyOf(lines);
+    discounts = List.copyOf(discounts);
     statusHistory = List.copyOf(statusHistory);
     if (statusHistory.isEmpty() || statusHistory.getFirst().status() != OrderStatus.PLACED) {
       throw new IllegalArgumentException("an order's history starts with its placement");
@@ -40,15 +41,15 @@ public record Order(
 
   /**
    * A new Order in {@link OrderStatus#PLACED}. Throws {@link InvalidOrderException} unless it names
-   * a valid Customer, has at least one line, each Variant appears once, every line, the discount
-   * and the tax are in the same currency, the tax isn't negative, and the discount is no larger
-   * than the lines plus the tax.
+   * a valid Customer, has at least one line, each Variant appears once, every line, Discount and
+   * the tax are in the same currency, the tax isn't negative, and the Discounts together are no
+   * larger than the lines plus the tax.
    */
   public static Order place(
       UUID id,
       String customerId,
       List<OrderLine> lines,
-      Optional<Discount> discount,
+      List<Discount> discounts,
       Money tax,
       Caller placedBy,
       Instant placedAt) {
@@ -66,8 +67,16 @@ public record Order(
       }
     }
     var currency = lines.get(0).unitPrice().currency();
-    if (discount.isPresent() && !discount.get().amount().currency().equals(currency)) {
-      throw new InvalidOrderException("the discount must be in the order's currency");
+    if (discounts == null) {
+      throw new InvalidOrderException("discounts must be a list, even an empty one");
+    }
+    for (var discount : discounts) {
+      if (discount == null) {
+        throw new InvalidOrderException("a discount can't be null");
+      }
+      if (!discount.amount().currency().equals(currency)) {
+        throw new InvalidOrderException("every discount must be in the order's currency");
+      }
     }
     if (tax == null) {
       throw new InvalidOrderException("an order needs a tax, even a zero one");
@@ -79,10 +88,10 @@ public record Order(
       throw new InvalidOrderException("the tax must be in the order's currency");
     }
     var placement = StatusHistoryEntry.of(OrderStatus.PLACED, placedAt, placedBy);
-    var order = new Order(id, customerId, lines, discount, tax, List.of(placement), 1);
+    var order = new Order(id, customerId, lines, discounts, tax, List.of(placement), 1);
     // Rejects a total too large to hold, or below zero, before the Order is recorded.
     if (order.total().amountMinor() < 0) {
-      throw new InvalidOrderException("the discount is larger than the lines plus the tax");
+      throw new InvalidOrderException("the discounts are larger than the lines plus the tax");
     }
     return order;
   }
@@ -98,7 +107,7 @@ public record Order(
     }
     var history = new ArrayList<>(statusHistory);
     history.add(StatusHistoryEntry.of(next, at, changedBy));
-    return new Order(id, customerId, lines, discount, tax, history, version + 1);
+    return new Order(id, customerId, lines, discounts, tax, history, version + 1);
   }
 
   /** The Order Status it is in now: the last one in its history. */
@@ -120,15 +129,18 @@ public record Order(
     return new Money(subtotalMinor, currency());
   }
 
-  /** The currency every line, the discount and the tax are in. */
+  /** The currency every line, Discount and the tax are in. */
   public Currency currency() {
     return lines.get(0).unitPrice().currency();
   }
 
-  /** What the Customer pays: the {@link #subtotal()}, less the discount, plus the tax. */
+  /** What the Customer pays: the {@link #subtotal()}, less every Discount, plus the tax. */
   public Money total() {
-    var discountMinor = discount.map(d -> d.amount().amountMinor()).orElse(0L);
-    var totalMinor = addExact(subtotal().amountMinor() - discountMinor, tax.amountMinor());
+    var discountedMinor = subtotal().amountMinor();
+    for (var discount : discounts) {
+      discountedMinor = addExact(discountedMinor, -discount.amount().amountMinor());
+    }
+    var totalMinor = addExact(discountedMinor, tax.amountMinor());
     return new Money(totalMinor, currency());
   }
 

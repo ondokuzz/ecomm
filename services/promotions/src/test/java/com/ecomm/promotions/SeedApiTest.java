@@ -39,16 +39,22 @@ class SeedApiTest extends PromotionsApiTest {
         .isBetween(Duration.ofDays(365), Duration.ofDays(366));
   }
 
+  /**
+   * Other tests leave Campaigns running, so the amounts here depend on them; what the seed promises
+   * is that Audio week applies to an audio line, and WELCOME10 on top, last.
+   */
   @Test
-  void welcome10TakesTenPercentOff() {
-    evaluate("welcome10", 159800, "EUR")
+  void audioWeekAndWelcome10BothApplyToAnAudioLine() {
+    evaluate("welcome10", "audio", 159800, "EUR")
         .expectStatus()
         .isOk()
         .expectBody()
-        .json(
-            """
-            {"couponCode": "WELCOME10", "discount": {"amountMinor": 15980, "currency": "EUR"}}
-            """);
+        .jsonPath("$.discounts[?(@.campaignName == 'Audio week')].source")
+        .isEqualTo(List.of("CAMPAIGN"))
+        .jsonPath("$.discounts[-1].source")
+        .isEqualTo("COUPON")
+        .jsonPath("$.discounts[-1].couponCode")
+        .isEqualTo("WELCOME10");
   }
 
   @Test

@@ -1,13 +1,12 @@
 # Promotions
 
-Coupons and Campaigns, and what a Coupon takes off at checkout. Built from
+Coupons and Campaigns, and every Discount they give a Checkout Session. Built from
 [`platform/service-template`](../../platform/service-template/README.md), so its layout, security
 and testing conventions apply here. Data lives in the `promotions` database on the shared Postgres,
 with the schema under Flyway ([`db/migration`](./src/main/resources/db/migration)).
 
-A Checkout Session takes one Coupon. Staff manage Campaigns, but Checkout doesn't apply them yet;
-evaluating every Discount a Checkout Session gets, Campaigns and Coupon together, is a later Sprint 3
-ticket. Usage limits and redemption tracking arrive in Sprint 6 (see the
+A Checkout Session gets every running Campaign it qualifies for by itself, and takes one Coupon on
+top ([Evaluation](#api)). Usage limits and redemption tracking arrive in Sprint 6 (see the
 [roadmap](../../docs/roadmap.md)).
 
 ## Coupons
@@ -120,7 +119,7 @@ and so gives both a fresh year.
 | `GET /campaigns/{id}` | Staff | The Campaign; 404 for an unknown ID, or one that isn't a UUID |
 | `PUT /campaigns/{id}` | Staff | Replaces every field but the ID; 404 for an unknown ID |
 | `DELETE /campaigns/{id}` | Staff | 204; 404 for an unknown ID |
-| `POST /discounts/evaluate` | Checkout | What a Coupon takes off a subtotal |
+| `POST /discounts/evaluate` | Checkout | Every Discount a Checkout Session's lines are due: the running Campaigns', then a Coupon's |
 
 Coupons and Campaigns are Staff-only: a `CUSTOMER` or `CHECKOUT` token gets 403, no token 401. Staff
 manage both in the [Admin Console](../../frontend/admin-console/README.md#promotions).
@@ -140,28 +139,56 @@ A field is named by its path in the JSON: `name`, `code`, `discount`, `discount.
 `discount.percentOff`, `discount.amountOff`, `discount.amountOff.amountMinor`,
 `discount.amountOff.currency`, `categories`, `categories[1]`, `minimumSubtotal`,
 `minimumSubtotal.amountMinor`, `minimumSubtotal.currency`, `validFrom`, `validUntil`, `active`,
-`priority`, `couponCode` or `subtotal`. A Campaign's Category Catalog doesn't have, or the same
+`priority`, `couponCode`, `lines`, or a line's field such as `lines[1].quantity`. A Campaign's Category Catalog doesn't have, or the same
 Category twice, is `categories[i]`, by its place in the list sent. A priority another Campaign has is
 `priority`. The first field at fault is named.
 
 Evaluation is internal: only Checkout calls it, with its own token and the `CHECKOUT` role
 ([ADR 0002](../identity-access/docs/adr/0002-service-identity-by-client-credentials.md)), and the
 [API gateway](../../platform/api-gateway/README.md) never routes it, so nobody can probe Coupon codes
-outside a checkout. It takes
+outside a checkout. It takes a Checkout Session's lines, each with its Product's SKU and Category and
+the unit Price captured when the session started, and the Coupon code applied, if any:
 
 ```json
-{"couponCode": "welcome10", "subtotal": {"amountMinor": 159800, "currency": "EUR"}}
+{"lines": [{"variantId": "PHN-PIXEL-9-OBSIDIAN-128", "sku": "PHN-PIXEL-9", "category": "phones",
+            "quantity": 2, "unitPrice": {"amountMinor": 79900, "currency": "EUR"}},
+           {"variantId": "AUD-AIRPODS-PRO-2", "sku": "AUD-AIRPODS-PRO-2", "category": "audio",
+            "quantity": 1, "unitPrice": {"amountMinor": 27900, "currency": "EUR"}}],
+ "couponCode": "welcome10"}
 ```
 
-and answers with the Coupon's upper-case code and its Discount:
+and answers with every Discount they are due, in the order they apply. A `CAMPAIGN` one names the
+Campaign's ID and name, a `COUPON` one the Coupon's upper-case code:
 
 ```json
-{"couponCode": "WELCOME10", "discount": {"amountMinor": 15980, "currency": "EUR"}}
+{"discounts": [
+  {"source": "CAMPAIGN", "campaignId": "b4a50413-a849-4b74-82ee-aad41f355bc6",
+   "campaignName": "Audio week", "amount": {"amountMinor": 4185, "currency": "EUR"}},
+  {"source": "COUPON", "couponCode": "WELCOME10",
+   "amount": {"amountMinor": 18351, "currency": "EUR"}}]}
 ```
 
-A Coupon that doesn't apply is a 422 problem detail whose `reason` says why (see the table above).
-A missing or blank `couponCode`, or a subtotal that isn't a non-negative integer with a known
-currency, is a 400 naming `couponCode` or `subtotal`.
+The Discounts stack (`DiscountStacking`):
+
+- **Campaigns first, by priority.** Every Campaign running at Promotions' clock applies, lowest
+  priority first, each worked out on what its lines still come to after the Discounts before it.
+- **Lines and minimums.** A Campaign limited to Categories discounts only the lines in them, and
+  measures its minimum on them; one without Categories takes all the lines. A minimum is measured on
+  what the lines came to before any Discount, so an earlier Campaign never takes one away: the
+  Customer who reaches it is given it. A Campaign is left out when none of its lines are in the session, its minimum isn't reached,
+  its fixed amount or minimum is in another currency, or it would take nothing off.
+- **Spread over its lines.** What a Campaign takes off is shared over its lines in proportion to
+  what each still comes to, rounded down with the minor units left over going to the lines that lost
+  the most, so a later Campaign sees exactly what is left of each.
+- **The Coupon last.** It applies on what all the lines still come to, its minimum measured on the
+  subtotal before any Discount, and is rejected just as it would be on its own: a Coupon that doesn't apply is a 422 problem detail whose
+  `reason` says why (see the table above), whatever the Campaigns gave.
+- **Rounding and the cap.** Percentages round down to the minor unit, and each Discount is at most
+  what its lines still come to, so together they never exceed the subtotal.
+
+Every line must be in one currency, with at least one line; a missing or malformed field is a 400
+naming it, such as `lines[1].quantity`. Without a `couponCode`, the answer holds only the Campaigns'
+Discounts, possibly none.
 
 [`http/promotions.http`](./http/promotions.http) exercises every endpoint against the compose stack.
 

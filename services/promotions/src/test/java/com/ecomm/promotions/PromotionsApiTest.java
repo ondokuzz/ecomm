@@ -161,15 +161,19 @@ abstract class PromotionsApiTest {
   }
 
   /**
-   * Evaluates {@code couponCode} against {@code subtotalMinor} of {@code currency}, as Checkout.
+   * Evaluates {@code couponCode} as Checkout, on one line of {@code category} that comes to {@code
+   * subtotalMinor} of {@code currency}.
    */
-  RestTestClient.ResponseSpec evaluate(String couponCode, long subtotalMinor, String currency) {
+  RestTestClient.ResponseSpec evaluate(
+      String couponCode, String category, long subtotalMinor, String currency) {
     return evaluate(
         checkoutToken(),
         """
-        {"couponCode": "%s", "subtotal": {"amountMinor": %d, "currency": "%s"}}
+        {"lines": [{"variantId": "V-1", "sku": "P-1", "category": "%s", "quantity": 1,
+                    "unitPrice": {"amountMinor": %d, "currency": "%s"}}],
+         "couponCode": "%s"}
         """
-            .formatted(couponCode, subtotalMinor, currency));
+            .formatted(category, subtotalMinor, currency, couponCode));
   }
 
   RestTestClient.ResponseSpec evaluate(String token, String body) {

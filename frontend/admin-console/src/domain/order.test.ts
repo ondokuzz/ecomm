@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { type Order, filtersOf, historyRowsOf, orderReference, ordersQueryOf, pageCount, searchOf } from './order'
+import {
+  type Order,
+  discountLabel,
+  filtersOf,
+  historyRowsOf,
+  orderReference,
+  ordersQueryOf,
+  pageCount,
+  searchOf,
+} from './order'
 
 const order: Order = {
   id: '3f2a9c1b-5d4e-4f00-8a00-0123456789ab',
@@ -7,7 +16,7 @@ const order: Order = {
   status: 'CANCELLED',
   lines: [{ variantId: 'PHN-PIXEL-9', quantity: 2, unitPrice: { amountMinor: 79900, currency: 'EUR' } }],
   subtotal: { amountMinor: 159800, currency: 'EUR' },
-  discount: null,
+  discounts: [],
   tax: { amountMinor: 0, currency: 'EUR' },
   total: { amountMinor: 159800, currency: 'EUR' },
   placedAt: '2026-10-03T12:00:00Z',
@@ -17,6 +26,18 @@ const order: Order = {
     { status: 'CANCELLED', at: '2026-10-03T12:00:00Z', changedBy: 'CHECKOUT', backfilled: true },
   ],
 }
+
+describe('discountLabel', () => {
+  it("names a Campaign's Discount by the Campaign and a Coupon's by its code", () => {
+    const amount = { amountMinor: 100, currency: 'EUR' }
+    expect(
+      discountLabel({ source: 'CAMPAIGN', campaignId: 'c-1', campaignName: 'Audio week', couponCode: null, amount }),
+    ).toBe('Campaign: Audio week')
+    expect(
+      discountLabel({ source: 'COUPON', couponCode: 'WELCOME10', campaignId: null, campaignName: null, amount }),
+    ).toBe('Coupon: WELCOME10')
+  })
+})
 
 describe('orderReference', () => {
   it('is the first eight hex digits of the ID, in capitals, as the Storefront shows it', () => {

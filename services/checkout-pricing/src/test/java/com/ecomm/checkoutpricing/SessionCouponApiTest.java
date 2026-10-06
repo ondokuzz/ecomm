@@ -17,7 +17,8 @@ import org.springframework.http.MediaType;
 
 /**
  * A Customer applies a Coupon to their Checkout Session, and removes it. Promotions says what it
- * takes off; a Coupon that doesn't apply is a 422 with Promotions' reason, and changes nothing.
+ * takes off, after any running Campaigns' Discounts (see {@link SessionDiscountsApiTest}); a Coupon
+ * that doesn't apply is a 422 with Promotions' reason, and changes nothing.
  */
 class SessionCouponApiTest extends CheckoutApiTest {
 
@@ -36,11 +37,13 @@ class SessionCouponApiTest extends CheckoutApiTest {
         .isEqualTo(sessionId)
         .jsonPath("$.subtotal.amountMinor")
         .isEqualTo(159800)
-        .jsonPath("$.discount.couponCode")
+        .jsonPath("$.discounts[0].source")
+        .isEqualTo("COUPON")
+        .jsonPath("$.discounts[0].couponCode")
         .isEqualTo("WELCOME10")
-        .jsonPath("$.discount.amount.amountMinor")
+        .jsonPath("$.discounts[0].amount.amountMinor")
         .isEqualTo(15980)
-        .jsonPath("$.discount.amount.currency")
+        .jsonPath("$.discounts[0].amount.currency")
         .isEqualTo("EUR")
         .jsonPath("$.tax.amountMinor")
         .isEqualTo(0)
@@ -49,26 +52,26 @@ class SessionCouponApiTest extends CheckoutApiTest {
 
     currentSession()
         .expectBody()
-        .jsonPath("$.discount.couponCode")
+        .jsonPath("$.discounts[0].couponCode")
         .isEqualTo("WELCOME10")
         .jsonPath("$.total.amountMinor")
         .isEqualTo(143820);
   }
 
   @Test
-  void aNewSessionHasNoDiscount() {
+  void aNewSessionWithNoCampaignRunningHasNoDiscounts() {
     stubSuccessfulCheckout();
 
     startSession()
         .expectBody()
-        .jsonPath("$.discount")
+        .jsonPath("$.discounts")
         .isEmpty()
         .jsonPath("$.total.amountMinor")
         .isEqualTo(159800);
   }
 
   @Test
-  void promotionsEvaluatesTheCodeAgainstTheSubtotalWithCheckoutsToken() {
+  void promotionsEvaluatesTheCodeOnTheSessionsLinesWithCheckoutsToken() {
     stubSuccessfulCheckout();
     stubDiscount("WELCOME10", 15980);
 
@@ -80,7 +83,10 @@ class SessionCouponApiTest extends CheckoutApiTest {
             .withRequestBody(
                 equalToJson(
                     """
-                    {"couponCode": "welcome10", "subtotal": {"amountMinor": 159800, "currency": "EUR"}}
+                    {"lines": [{"variantId": "PHN-PIXEL-9", "sku": "PHN-PIXEL-9",
+                                "category": "phones", "quantity": 2,
+                                "unitPrice": {"amountMinor": 79900, "currency": "EUR"}}],
+                     "couponCode": "welcome10"}
                     """)));
   }
 
@@ -96,7 +102,7 @@ class SessionCouponApiTest extends CheckoutApiTest {
         .expectStatus()
         .isOk()
         .expectBody()
-        .jsonPath("$.discount.couponCode")
+        .jsonPath("$.discounts[0].couponCode")
         .isEqualTo("FIVER")
         .jsonPath("$.total.amountMinor")
         .isEqualTo(159300);
@@ -142,7 +148,7 @@ class SessionCouponApiTest extends CheckoutApiTest {
         .expectStatus()
         .isOk()
         .expectBody()
-        .jsonPath("$.discount.couponCode")
+        .jsonPath("$.discounts[0].couponCode")
         .isEqualTo("WELCOME10")
         .jsonPath("$.total.amountMinor")
         .isEqualTo(143820);
@@ -161,12 +167,12 @@ class SessionCouponApiTest extends CheckoutApiTest {
         .expectBody()
         .jsonPath("$.id")
         .isEqualTo(sessionId)
-        .jsonPath("$.discount")
+        .jsonPath("$.discounts")
         .isEmpty()
         .jsonPath("$.total.amountMinor")
         .isEqualTo(159800);
 
-    currentSession().expectBody().jsonPath("$.discount").isEmpty();
+    currentSession().expectBody().jsonPath("$.discounts").isEmpty();
   }
 
   @Test
@@ -261,7 +267,7 @@ class SessionCouponApiTest extends CheckoutApiTest {
   @Test
   void promotionsFailingIsABadGatewayAndChangesNothing() {
     stubSuccessfulCheckout();
-    stubEvaluation(aResponse().withStatus(500));
+    stubCouponEvaluation(aResponse().withStatus(500));
     var sessionId = startedSessionId();
 
     applyCoupon(sessionId, "WELCOME10")
@@ -270,7 +276,7 @@ class SessionCouponApiTest extends CheckoutApiTest {
         .expectHeader()
         .contentType(MediaType.APPLICATION_PROBLEM_JSON);
 
-    currentSession().expectBody().jsonPath("$.discount").isEmpty();
+    currentSession().expectBody().jsonPath("$.discounts").isEmpty();
   }
 
   @Test

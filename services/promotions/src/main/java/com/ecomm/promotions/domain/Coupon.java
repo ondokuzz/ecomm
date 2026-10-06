@@ -42,11 +42,13 @@ public record Coupon(
   }
 
   /**
-   * What this Coupon takes off {@code subtotal} at {@code now}.
+   * What this Coupon takes off at {@code now}: its rule applied to {@code remaining}, what the
+   * lines still come to after any Campaigns' Discounts, while its minimum is measured on {@code
+   * subtotal}, what they came to before any. Both are in the same currency.
    *
    * @throws CouponNotApplicableException when it doesn't apply, saying why
    */
-  public Money discountOn(Money subtotal, Instant now) {
+  public Money discountOn(Money remaining, Money subtotal, Instant now) {
     if (!active) {
       throw new CouponNotApplicableException(code, CouponRejection.INACTIVE);
     }
@@ -63,6 +65,6 @@ public record Coupon(
     if (minimumSubtotal != null && subtotal.amountMinor() < minimumSubtotal.amountMinor()) {
       throw new CouponNotApplicableException(code, CouponRejection.BELOW_MINIMUM);
     }
-    return discount.on(subtotal);
+    return discount.on(remaining);
   }
 }

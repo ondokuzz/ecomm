@@ -2430,6 +2430,11 @@ main {
   color: var(--color-muted);
   font-weight: 800;
 }
+.order-card-discounts {
+  color: var(--color-success);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
 .order-card-bottom {
   display: flex;
   justify-content: space-between;

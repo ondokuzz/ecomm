@@ -25,6 +25,7 @@ import { Input } from '../components/ui/Input'
 import { type CartLine, itemCountLabel } from '../domain/cart'
 import { variantName } from '../domain/catalog'
 import { type CheckoutSession, checkoutProblem, sessionCountdown, sessionSummaryRows } from '../domain/checkout'
+import { appliedCoupon } from '../domain/order'
 import { type TestCard, defaultTestCard, testCards } from '../domain/payment'
 
 /**
@@ -214,12 +215,13 @@ function CouponField({
   const rejection = couponRejectionOf(coupon.error)
   const otherError = coupon.error && !rejection && !isSessionOver(coupon.error) ? coupon.error : undefined
 
-  if (session.discount) {
+  const applied = appliedCoupon(session.discounts)
+  if (applied) {
     return (
       <div className="coupon coupon-applied">
         <Icon name="check" size={18} />
         <span>
-          <strong className="coupon-code">{session.discount.couponCode}</strong> applied
+          <strong className="coupon-code">{applied.couponCode}</strong> applied
         </span>
         <Button
           variant="ghost"
@@ -227,7 +229,7 @@ function CouponField({
           onClick={() => change(null)}
           loading={coupon.isPending}
           disabled={disabled}
-          aria-label={`Remove coupon ${session.discount.couponCode}`}
+          aria-label={`Remove coupon ${applied.couponCode}`}
         >
           Remove
         </Button>

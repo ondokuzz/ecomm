@@ -22,7 +22,7 @@ Vite, React, TypeScript, React Router and TanStack Query, with `oidc-client-ts`.
 | `/promotions/campaigns/new` | A new Campaign |
 | `/promotions/campaigns/{id}` | A Campaign |
 | `/orders` | Every Customer's Orders, newest first, 20 to a page: Order reference, when placed, Customer ID, items, total and Order Status. Filter by Status, Customer ID, the days placed and Order reference |
-| `/orders/{id}` | An Order: its ID, Customer ID, lines, Discount, tax and total, and its Order Status history |
+| `/orders/{id}` | An Order: its ID, Customer ID, lines, each Discount by its Campaign or Coupon, tax and total, and its Order Status history |
 
 `/` opens the Products. Every page needs a Staff sign-in.
 

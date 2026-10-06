@@ -16,7 +16,6 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -61,7 +60,7 @@ class OrderStatusTransitionTest {
             UUID.randomUUID(),
             "customer-42",
             List.of(new OrderLine("PHN-PIXEL-9", 1, Money.of(79900, "EUR"))),
-            Optional.empty(),
+            List.of(),
             Money.of(0, "EUR"),
             Caller.CHECKOUT,
             PLACED_AT);
@@ -138,7 +137,7 @@ class OrderStatusTransitionTest {
         UUID.randomUUID(),
         "customer-42",
         List.of(new OrderLine("PHN-PIXEL-9", 1, Money.of(79900, "EUR"))),
-        Optional.empty(),
+        List.of(),
         Money.of(0, "EUR"),
         history,
         history.size());
