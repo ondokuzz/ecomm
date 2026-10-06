@@ -7,7 +7,9 @@ import type { Eligibility, RatingSummary } from '../src/domain/reviews'
 import type { SearchResults } from '../src/domain/search'
 
 /**
- * The smoke test: the definitions of done of Sprints 1 to 3, end to end.
+ * The smoke test: the definitions of done of Sprints 1 to 3, end to end, each test as a Customer of
+ * its own, made in Keycloak for the test and deleted afterwards with their reviews. The Orders stay,
+ * as Orders are never deleted.
  *
  * - Browse seeded Products, pick a Variant, add them to the Cart, check out with the mock payment,
  *   and see the Order confirmation and its Order Status. Checkout holds the Cart in a Checkout
@@ -19,7 +21,7 @@ import type { SearchResults } from '../src/domain/search'
  *   Product is told they can't review it.
  */
 
-// The demo checkout compares Stock before and after, so nothing else may check out meanwhile:
+// The first checkout compares Stock before and after, so nothing else may check out meanwhile:
 // every test in this suite that checks out is in this file. The Admin Console's suite checks out
 // too, so the two run one after the other, as in CI.
 test.describe.configure({ mode: 'serial' })
@@ -50,22 +52,38 @@ interface ProductInStock {
 }
 
 const keycloakUrl = process.env.KEYCLOAK_URL ?? 'http://localhost:8180'
-const demoCustomer: Credentials = { email: 'demo@ecomm.local', password: 'demo' }
 
-test('the demo Customer checks out a picked Variant and another Product, and on-hand Stock goes down', async ({
+let customer: Customer | undefined
+
+test.beforeEach(async ({ request }) => {
+  customer = await createCustomer(request)
+})
+
+test.afterEach(async ({ request }) => {
+  if (customer) await deleteCustomer(request, customer)
+  customer = undefined
+})
+
+/** The test's Customer, which `beforeEach` made. */
+function signedUp(): Customer {
+  if (!customer) throw new Error('No Customer was made for this test')
+  return customer
+}
+
+test('a Customer checks out a picked Variant and another Product, and on-hand Stock goes down', async ({
   page,
   request,
 }) => {
-  const token = await tokenFor(request, demoCustomer)
-  await emptyCart(request, token)
+  const customer = signedUp()
+  const token = await tokenFor(request, customer)
   const picked = await aNonDefaultVariantInStock(request)
   const bought = [picked, await aProductInStock(request, picked.product.sku)]
   const currencies = await currenciesOfCatalog(request)
 
   await page.goto('/')
   await page.getByRole('button', { name: 'Log in' }).click()
-  await signInOnKeycloak(page, demoCustomer)
-  await expectSignedIn(page, demoCustomer.email)
+  await signInOnKeycloak(page, customer)
+  await expectSignedIn(page, customer.email)
 
   // Variant Prices differ, so the card shows the lowest, "from".
   await expect(page.locator(`a[href="/products/${encodeURIComponent(picked.product.sku)}"]`)).toContainText('From')
@@ -157,19 +175,8 @@ test('the demo Customer checks out a picked Variant and another Product, and on-
   for (const { product } of bought) {
     await expect(card.getByRole('img', { name: product.name, exact: true })).toBeVisible()
   }
-  // The list is paged, newest first: the new Order is on the first page, and older ones further on.
-  const { total } = await ordersPageOf(request, token)
-  const pager = page.getByRole('navigation', { name: 'Order pages' })
-  if (total > ordersPageSize) {
-    await expect(pager).toContainText(`Page 1 of ${Math.ceil(total / ordersPageSize)}`)
-    await pager.getByRole('link', { name: 'Older orders' }).click()
-    await expect(page).toHaveURL(/\/orders\?page=2$/)
-    await expect(pager).toContainText('Page 2 of')
-    await expect(card).toBeHidden()
-    await page.goBack()
-  } else {
-    await expect(pager).toBeHidden()
-  }
+  // One Order fits on a page, so there is no pager; paging has a test of its own.
+  await expect(page.getByRole('navigation', { name: 'Order pages' })).toBeHidden()
 
   // Paying committed the Reservation: the units are off on-hand for good.
   for (const { variantId, stock } of bought) {
@@ -181,8 +188,8 @@ test('a declined card shows why, and the held session can then be paid with one 
   page,
   request,
 }) => {
-  const token = await tokenFor(request, demoCustomer)
-  await emptyCart(request, token)
+  const customer = signedUp()
+  const token = await tokenFor(request, customer)
   const { variantId, stock } = await aProductInStock(request)
   const put = await request.put(`/api/cart/cart/items/${encodeURIComponent(variantId)}`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -191,7 +198,7 @@ test('a declined card shows why, and the held session can then be paid with one 
   expect(put.ok()).toBeTruthy()
 
   await page.goto('/checkout')
-  await signInOnKeycloak(page, demoCustomer)
+  await signInOnKeycloak(page, customer)
   await expect(page.getByRole('timer', { name: 'Time left' })).toBeVisible()
   const sessionId = await currentSessionId(request, token)
 
@@ -217,8 +224,8 @@ test('a declined card shows why, and the held session can then be paid with one 
 })
 
 test('WELCOME10 takes 10% off at checkout, and the PAID Order shows the discount', async ({ page, request }) => {
-  const token = await tokenFor(request, demoCustomer)
-  await emptyCart(request, token)
+  const customer = signedUp()
+  const token = await tokenFor(request, customer)
   // A phone, so the seeded Audio week Campaign takes nothing off.
   const { variantId, variant } = await aProductInStockIn(request, 'phones')
   const put = await request.put(`/api/cart/cart/items/${encodeURIComponent(variantId)}`, {
@@ -233,7 +240,7 @@ test('WELCOME10 takes 10% off at checkout, and the PAID Order shows the discount
   const discounted = { ...subtotal, amountMinor: subtotal.amountMinor - discount.amountMinor }
 
   await page.goto('/checkout')
-  await signInOnKeycloak(page, demoCustomer)
+  await signInOnKeycloak(page, customer)
   await expect(page.getByRole('timer', { name: 'Time left' })).toBeVisible()
   const summary = page.getByRole('region', { name: 'Order summary' })
   const couponField = summary.getByLabel('Coupon code')
@@ -281,8 +288,8 @@ test('Audio week comes off an audio Product by itself, WELCOME10 on top, and the
   page,
   request,
 }) => {
-  const token = await tokenFor(request, demoCustomer)
-  await emptyCart(request, token)
+  const customer = signedUp()
+  const token = await tokenFor(request, customer)
   const { variantId, variant } = await aProductInStockIn(request, 'audio')
   const put = await request.put(`/api/cart/cart/items/${encodeURIComponent(variantId)}`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -298,7 +305,7 @@ test('Audio week comes off an audio Product by itself, WELCOME10 on top, and the
   const pay = (amountMinor: number) => `Pay ${formatMoney({ ...subtotal, amountMinor }, currencies, 'en-US')}`
 
   await page.goto('/checkout')
-  await signInOnKeycloak(page, demoCustomer)
+  await signInOnKeycloak(page, customer)
   const summary = page.getByRole('region', { name: 'Order summary' })
   await expect(summary.getByText('Campaign: Audio week')).toBeVisible()
   await expect(summary).toContainText(formatMoney(negative(audioWeek), currencies, 'en-US'))
@@ -330,9 +337,9 @@ test('Audio week comes off an audio Product by itself, WELCOME10 on top, and the
   await expect(page.getByText('Saved with Audio week, WELCOME10').first()).toBeVisible()
 })
 
-test('the demo Customer empties their Cart after confirming', async ({ page, request }) => {
-  const token = await tokenFor(request, demoCustomer)
-  await emptyCart(request, token)
+test('a Customer empties their Cart after confirming', async ({ page, request }) => {
+  const customer = signedUp()
+  const token = await tokenFor(request, customer)
   const { variantId } = await aProductInStock(request)
   const put = await request.put(`/api/cart/cart/items/${encodeURIComponent(variantId)}`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -341,7 +348,7 @@ test('the demo Customer empties their Cart after confirming', async ({ page, req
   expect(put.ok()).toBeTruthy()
 
   await page.goto('/cart')
-  await signInOnKeycloak(page, demoCustomer)
+  await signInOnKeycloak(page, customer)
   await expect(page.getByRole('link', { name: 'Cart (2)' })).toBeVisible()
 
   await page.getByRole('button', { name: 'Empty cart' }).click()
@@ -359,7 +366,7 @@ test('the demo Customer empties their Cart after confirming', async ({ page, req
   expect(((await cart.json()) as { items: unknown[] }).items).toEqual([])
 })
 
-test('a new Customer registers on Keycloak and comes back signed in', async ({ page, baseURL }) => {
+test('a new Customer registers on Keycloak and comes back signed in', async ({ page, request, baseURL }) => {
   const email = `smoke-${Date.now()}@ecomm.local`
 
   await page.goto('/')
@@ -373,31 +380,39 @@ test('a new Customer registers on Keycloak and comes back signed in', async ({ p
 
   await expect(page).toHaveURL((url) => url.origin === new URL(baseURL!).origin)
   await expectSignedIn(page, email)
+
+  const found = await request.get(
+    `${keycloakUrl}/admin/realms/ecomm/users?${new URLSearchParams({ email, exact: 'true' })}`,
+    {
+      headers: await keycloakAdminHeaders(request),
+    },
+  )
+  const [{ id }] = (await found.json()) as { id: string }[]
+  await deleteCustomer(request, { id, email, password: 'smoke-password' })
 })
 
-/**
- * Sprint 3's tests each sign in as a Customer of their own, made in Keycloak for the test, so a
- * review is the test's alone. The review and the Customer are deleted again afterwards; the Order
- * stays, as Orders are never deleted.
- */
+test('a Customer’s Orders come a page at a time, newest first', async ({ page }) => {
+  // A new Customer has too few Orders for a second page, so Order Management's answer is stood in for.
+  const requested: string[] = []
+  await page.route(/\/api\/order-management\/orders\?/, (route) => {
+    requested.push(route.request().url())
+    return route.fulfill({ json: aPageOfOrders(Number(new URL(route.request().url()).searchParams.get('page'))) })
+  })
+
+  await page.goto('/orders')
+  await signInOnKeycloak(page, signedUp())
+  const pager = page.getByRole('navigation', { name: 'Order pages' })
+  await expect(pager).toContainText('Page 1 of 2')
+  await expect(page.getByText(`Order #${orderIdOf(0).slice(0, 8).toUpperCase()}`)).toBeVisible()
+
+  await pager.getByRole('link', { name: 'Older orders' }).click()
+  await expect(page).toHaveURL(/\/orders\?page=2$/)
+  await expect(pager).toContainText('Page 2 of 2')
+  await expect(page.getByText(`Order #${orderIdOf(ordersPageSize).slice(0, 8).toUpperCase()}`)).toBeVisible()
+  expect(new URL(requested.at(-1)!).searchParams.get('page')).toBe('1')
+})
+
 test.describe('Sprint 3', () => {
-  let customer: Customer | undefined
-
-  test.beforeEach(async ({ request }) => {
-    customer = await createCustomer(request)
-  })
-
-  test.afterEach(async ({ request }) => {
-    if (customer) await deleteCustomer(request, customer)
-    customer = undefined
-  })
-
-  /** The test's Customer, which `beforeEach` made. */
-  function signedUp(): Customer {
-    if (!customer) throw new Error('No Customer was made for this test')
-    return customer
-  }
-
   test('a Customer finds an audio Product, checks out with Audio week and WELCOME10, and reviews it', async ({
     page,
     request,
@@ -568,21 +583,6 @@ async function tokenFor(request: APIRequestContext, user: Credentials) {
   })
   expect(response.ok()).toBeTruthy()
   return ((await response.json()) as { access_token: string }).access_token
-}
-
-/** A leftover Cart would change what gets checked out, so start from an empty one. */
-async function emptyCart(request: APIRequestContext, token: string) {
-  const response = await request.delete('/api/cart/cart', { headers: { Authorization: `Bearer ${token}` } })
-  expect(response.status()).toBe(204)
-}
-
-/** The first page of the Customer's Orders, with how many they have in all. */
-async function ordersPageOf(request: APIRequestContext, token: string) {
-  const response = await request.get(`/api/order-management/orders?size=${ordersPageSize}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
-  expect(response.ok()).toBeTruthy()
-  return (await response.json()) as ListPage<Order>
 }
 
 async function orderOf(request: APIRequestContext, token: string, orderId: string) {
@@ -757,4 +757,37 @@ async function searchOf(request: APIRequestContext, query: Record<string, string
   const response = await request.get(`/api/search-discovery/search?${new URLSearchParams(query)}`)
   expect(response.ok()).toBeTruthy()
   return (await response.json()) as SearchResults
+}
+
+/** The ID of the `index`th made-up Order, newest first; its first eight characters, its reference, tell it apart. */
+function orderIdOf(index: number): string {
+  return `${index.toString(16).padStart(8, '0')}-0000-4000-8000-000000000000`
+}
+
+/** 20 made-up Orders of a seeded Variant, a page of `ordersPageSize` at a time. */
+function aPageOfOrders(page: number): ListPage<Order> {
+  const price = { amountMinor: 79900, currency: 'EUR' }
+  const all = Array.from({ length: 20 }, (_, i): Order => {
+    const placedAt = new Date(Date.UTC(2026, 9, 1) - i * 3_600_000).toISOString()
+    return {
+      id: orderIdOf(i),
+      status: 'PAID',
+      lines: [{ variantId: 'PHN-PIXEL-9', quantity: 1, unitPrice: price }],
+      subtotal: price,
+      discounts: [],
+      tax: { ...price, amountMinor: 0 },
+      total: price,
+      placedAt,
+      statusHistory: [
+        { status: 'PLACED', at: placedAt, changedBy: 'CHECKOUT', backfilled: false },
+        { status: 'PAID', at: placedAt, changedBy: 'CHECKOUT', backfilled: false },
+      ],
+    }
+  })
+  return {
+    items: all.slice(page * ordersPageSize, (page + 1) * ordersPageSize),
+    page,
+    size: ordersPageSize,
+    total: all.length,
+  }
 }

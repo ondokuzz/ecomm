@@ -119,16 +119,16 @@ How a service publishes and consumes events is in the [service template's README
 
 ### Smoke tests
 
-The Storefront's smoke test walks the Customer's path in Chromium against the running stack. As the demo Customer it
-adds two Products, checks out with the approving test card, expects `PAID` on the confirmation page and checks through the
+The Storefront's smoke test walks the Customer's path in Chromium against the running stack, each
+test as a Customer it makes in Keycloak and deletes afterwards. It adds two Products, checks out with the approving test card, expects `PAID` on the confirmation page and checks through the
 Inventory API that the Checkout Session reserved their Stock and paying took it off on-hand. It
 also pays with a declining card, sees the decline, then pays the same session with the approving
 one, applies `WELCOME10` and sees its discount on the `PAID` Order, gets Audio week and `WELCOME10`
-together on an audio Product, and registers a new Customer. Then, as a Customer it makes for the
-test, it walks Sprint 3's definition of done: it filters Audio by type and to what is in stock,
+together on an audio Product, pages through My Orders (stood in for), and registers a new Customer.
+Then it walks Sprint 3's definition of done: it filters Audio by type and to what is in stock,
 searches, checks out with Audio week and `WELCOME10`, pays, sees Placed then Paid on the Order's
-timeline, reviews the Product and sees its Rating summary on its card and page. Another Customer of its own
-is told they can't review a Product they never bought:
+timeline, reviews the Product and sees its Rating summary on its card and page. Another Customer is told they
+can't review a Product they never bought:
 
 ```sh
 cd frontend/storefront

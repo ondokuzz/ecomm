@@ -35,7 +35,10 @@ test('Staff find a Customer’s Order and see its Status history', async ({ page
   await expect(rows.nth(1)).toContainText('Cancelled')
 
   // By the Customer and a Status: the Order is Cancelled, so it is no longer among the Paid ones.
+  // The form is remade from the URL once Clear lands; typing before then would be lost.
   await page.getByRole('link', { name: 'Clear' }).click()
+  await expect(page).toHaveURL(/\/orders$/)
+  await expect(page.getByLabel('Order reference')).toHaveValue('')
   await page.getByLabel('Customer ID').fill(customerId)
   await page.getByLabel('Status').selectOption('PAID')
   await page.getByRole('button', { name: 'Filter' }).click()
