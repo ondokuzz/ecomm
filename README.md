@@ -1,6 +1,6 @@
 # Ecomm Platform
 
-A from-scratch e-commerce platform, architected as fifteen bounded contexts across five parallel team tracks, planned over eight two-week sprints for a small (4-5 person) engineering team. Sprint 2 has hardened Sprint 1's walking skeleton, and it all runs locally: browse Products and pick their Variants, keep a Cart, check out with a Checkout Session that reserves its Stock, a Coupon and a mock payment that can decline, and follow the Order. Staff manage the Catalog in an Admin Console.
+A from-scratch e-commerce platform, architected as fifteen bounded contexts across five parallel team tracks, planned over nine two-week sprints for a small (4-5 person) engineering team. Sprint 2 has hardened Sprint 1's walking skeleton, and it all runs locally: browse Products and pick their Variants, keep a Cart, check out with a Checkout Session that reserves its Stock, a Coupon and a mock payment that can decline, and follow the Order. Staff manage the Catalog in an Admin Console.
 
 ## Run Sprint 2
 

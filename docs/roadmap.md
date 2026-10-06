@@ -1,6 +1,6 @@
 # Sprint Roadmap
 
-Eight two-week sprints, five tracks running in parallel for a 4-5 person team. Sprint 1 is a deliberately thin **walking skeleton** through every layer — the fastest way to retire integration risk before any track goes deep.
+Nine two-week sprints, five tracks running in parallel for a 4-5 person team. Sprint 1 is a deliberately thin **walking skeleton** through every layer — the fastest way to retire integration risk before any track goes deep.
 
 ## Tracks
 
@@ -112,3 +112,15 @@ No context is event-sourced: contexts keep append-only histories and ledgers whe
 | E | End-to-end UX polish; accessibility pass; admin completeness review |
 
 **Definition of done**: deployed to a real environment, load-tested, soft-launch ready.
+
+## Sprint 9 (Weeks 17–18) — Search Engine & Event Contracts
+
+| Track | Delivers |
+|---|---|
+| A | Contract tests for every integration event: each producer's tests check the events it publishes against its topic's schema in `platform/event-schemas`, and each consumer's tests check that what it reads is what the schema promises, so a change that breaks a consumer fails in CI before it reaches a topic |
+| B | Search & Discovery on Elasticsearch: the projection indexes Products into it from the same topics, with search, filters and disjunctive Facets moved onto its query and aggregations, rebuilt from the topics; revises [Search ADR 0001](../services/search-discovery/docs/adr/0001-search-on-mongodb.md) |
+| C | — |
+| D | — |
+| E | — |
+
+**Definition of done**: Search runs on Elasticsearch with the same results and Facets as v1, and every integration event's producers and consumers are held to its schema in CI.
