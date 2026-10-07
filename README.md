@@ -73,7 +73,8 @@ version 2`) and in Search & Discovery's as it applies the `inventory.stock` one.
 
 The browser reaches the services only through the [API gateway](./platform/api-gateway/README.md),
 which the Storefront's and the Admin Console's nginx send `/api/` to. Each service also publishes
-a host port, which bypasses the gateway, for development only (see each service's README):
+a host port, which bypasses the gateway, for development only (see each service's README), except
+Orchestration, which serves nothing but its health:
 
 | Port | |
 |---|---|
@@ -87,6 +88,8 @@ a host port, which bypasses the gateway, for development only (see each service'
 | 8097 | Reviews & Ratings |
 | 8088 | Apicurio schema registry: the event schemas, under `/apis/registry/v3` |
 | 9092 | Kafka |
+| 7233 | Temporal, for workers and clients run from the host ([Orchestration](./services/orchestration/README.md#temporal)) |
+| 8233 | Temporal's web UI: every workflow, its history and its retries |
 | 27017 | Mongo |
 | 5050 | pgAdmin, once started (below) |
 
@@ -185,7 +188,8 @@ Access README](./services/identity-access/README.md#the-admin-console-client)).
 
 Each Spring service is capped at 384 MB, with 60% of it for the heap, Keycloak at 768 MB with 40%
 for the heap, and each nginx at 64 MB. Kafka and Mongo are capped at 512 MB each, with a 256 MB heap for Kafka and a
-256 MB cache for Mongo, and Apicurio and pgAdmin at 384 MB each. The default stack fits in about 8 GB of Docker
+256 MB cache for Mongo, Apicurio and pgAdmin at 384 MB each, the Temporal server at 384 MB, its UI at
+64 MB, and Temporal's and Keycloak's init steps at 128 MB or less. The default stack fits in about 8 GB of Docker
 memory; `docker stats` shows what it uses ([Sprint 3's reading](./docs/roadmap.md#sprint-3-weeks-56--events--order-history)).
 Couchbase, Postgres and Redis are uncapped.
 

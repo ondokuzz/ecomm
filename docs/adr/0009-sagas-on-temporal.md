@@ -19,7 +19,7 @@ Another service starts a workflow through the Temporal client, not over HTTP to 
 
 ## Consequences
 
-- Temporal is a runtime to operate. It runs in Compose from Sprint 4, when the checkout Saga arrives, persisting to the shared Postgres in its own database, with its web UI for inspecting workflows.
+- Temporal is a runtime to operate. It runs in Compose from Sprint 4, when the checkout Saga arrives, persisting to the shared Postgres in its own `temporal` and `temporal_visibility` databases, with its web UI for inspecting workflows.
 - Checkout's remaining gap closes: a Payment authorized before the Reservation fails to commit is voided, and the Order cancelled.
 - Every command a Saga calls takes an idempotency key, and only Orchestration's identity may call it ([Identity & Access ADR 0002](../../services/identity-access/docs/adr/0002-service-identity-by-client-credentials.md)).
 - Temporal orchestrates the steps; Kafka is not a second channel between them. Contexts still publish integration events to Kafka for everyone else ([ADR 0006](./0006-kafka-as-single-event-backbone.md)).
@@ -28,3 +28,7 @@ Another service starts a workflow through the Temporal client, not over HTTP to 
 ## Revised 2026-10-03
 
 This ADR said that Saga steps talk to other contexts through commands and events on Kafka, and that Axon would keep its role for event-sourced aggregates and the Postgres event store. Axon is gone, since no context is event-sourced ([ADR 0002](./0002-ledgers-and-outboxes-not-event-sourcing.md)). Over Kafka, every step would need a command topic, a consumer in the target context and a reply listener mapping replies back to workflows, and a stuck step could hide in consumer lag that Temporal can't see. Calling command APIs directly leaves every retry, timeout and compensation in the workflow, where Temporal's UI shows it. It also settles what this ADR left open: one service hosts every Saga, and the first Saga is checkout's, in Sprint 4 alongside Payment's ledger, instead of fulfillment's in Sprint 5.
+
+## Revised 2026-10-07
+
+As built (#55): Temporal's server 1.32 runs in Compose with its schema set up or migrated by an init step on every start, in the `default` namespace with a 7-day retention, so a closed workflow's history is kept for a week. Its UI is on port 8233. Orchestration is the worker, on the Temporal Java SDK 1.40 and its Spring Boot starter, which a spike proved under Spring Boot 4.1 and Jackson 3.

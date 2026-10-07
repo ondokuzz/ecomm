@@ -2,13 +2,32 @@
 
 Keycloak, not a Spring service. See [ADR 0001](./docs/adr/0001-keycloak-as-identity-provider.md) for why.
 
-The `ecomm` realm is defined in [`realm/realm-ecomm.json`](./realm/realm-ecomm.json). Compose mounts it into Keycloak, which imports it on first start (`start-dev --import-realm`) and keeps it in the Postgres database `keycloak`. The import skips a realm that already exists, so to pick up changes to the file, delete the realm in the admin console (http://localhost:8180, `admin` / `admin`) or drop the `postgres-data` volume, then restart Keycloak.
+The `ecomm` realm is defined in [`realm/realm-ecomm.json`](./realm/realm-ecomm.json). Compose mounts it into Keycloak, which imports it on first start (`start-dev --import-realm`) and keeps it in the Postgres database `keycloak`. The import skips a realm that already exists, so a realm from an earlier sprint is brought up to date by the step below.
+
+## Adding to a running realm
+
+On every `make up`, once Keycloak is healthy, the `keycloak-realm` step adds what the realm file
+has and the running realm lacks, through Keycloak's admin API
+([`infra/docker/keycloak-realm-sync.py`](../../infra/docker/keycloak-realm-sync.py)):
+
+- each realm role that is missing, with its composites;
+- each client that is missing, and, for one with a service account, that service account's realm
+  roles from the file's `service-account-<client>` user.
+
+It changes nothing that already exists, a role, a client or a role mapping, so it is safe to run
+every time, and the next role or client added to the file reaches every existing stack the same
+way. A change to something that already exists, such as a client's redirect URIs, still needs
+applying by hand (below), or deleting the realm in the admin console (http://localhost:8180,
+`admin` / `admin`) or dropping the `postgres-data` volume, then restarting Keycloak.
+
+This is how a Sprint 3 realm gains the `orchestration` client and the `ORCHESTRATION` role. To see
+what it did: `docker compose logs keycloak-realm`.
 
 ## What the realm holds
 
 | | |
 |---|---|
-| Realm roles | `CUSTOMER`, `STAFF`, `CHECKOUT` |
+| Realm roles | `CUSTOMER`, `STAFF`, `CHECKOUT`, `ORCHESTRATION` |
 | Self-registration | on; new users get `CUSTOMER` through `default-roles-ecomm` |
 | Access-token lifespan | 15 minutes |
 | SSL | not required (`sslRequired: none`), **for local development only**: Docker can present requests from the host with a public source IP, which the default (`external`) would refuse over plain HTTP |
@@ -16,6 +35,7 @@ The `ecomm` realm is defined in [`realm/realm-ecomm.json`](./realm/realm-ecomm.j
 | `admin-console` | public client for the [Admin Console](../../frontend/admin-console/README.md), Authorization Code + PKCE S256, redirects `http://localhost:8090/*` and `http://localhost:5174/*` (and their `127.0.0.1` equivalents) |
 | `dev-cli` | public client with the password grant, **for local development and tests only** |
 | `checkout` | confidential client with client credentials only; its service account holds `CHECKOUT`. Secret `checkout-dev-secret`, **for local development only** |
+| `orchestration` | confidential client with client credentials only, for the Sagas' calls; its service account holds `ORCHESTRATION`. Secret `orchestration-dev-secret`, **for local development only** |
 | Seeded users | `demo@ecomm.local` / `demo` (CUSTOMER), `staff@ecomm.local` / `staff` (STAFF) |
 
 ## The Admin Console client
@@ -96,3 +116,13 @@ curl -s http://localhost:8180/realms/ecomm/protocol/openid-connect/token \
 ```
 
 Its `sub` is the `checkout` service account, not a Customer, and `realm_access.roles` is `["CHECKOUT"]`.
+
+Orchestration's works the same way:
+
+```sh
+curl -s http://localhost:8180/realms/ecomm/protocol/openid-connect/token \
+  -d grant_type=client_credentials -d client_id=orchestration \
+  -d client_secret=orchestration-dev-secret | jq -r .access_token
+```
+
+Its `realm_access.roles` is `["ORCHESTRATION"]`.

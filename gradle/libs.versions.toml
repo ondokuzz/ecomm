@@ -11,6 +11,9 @@ spring-modulith = "2.1.1"
 apicurio-registry = "3.3.3"
 # The validator Apicurio's serializer uses, for checking example events against their schemas.
 json-schema-validator = "1.5.9"
+# Sagas' runtime (ADR 0009): the Java SDK and its Spring Boot starter, proven under Boot 4.1 and
+# Jackson 3 by a spike (#55).
+temporal = "1.40.0"
 
 [libraries]
 spring-boot-bom = { module = "org.springframework.boot:spring-boot-dependencies", version.ref = "spring-boot" }
@@ -19,6 +22,8 @@ spring-modulith-bom = { module = "org.springframework.modulith:spring-modulith-b
 json-schema-validator = { module = "com.networknt:json-schema-validator", version.ref = "json-schema-validator" }
 apicurio-jsonschema-serde-kafka = { module = "io.apicurio:apicurio-registry-jsonschema-serde-kafka", version.ref = "apicurio-registry" }
 archunit-junit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref = "archunit" }
+temporal-spring-boot-starter = { module = "io.temporal:temporal-spring-boot-starter", version.ref = "temporal" }
+temporal-testing = { module = "io.temporal:temporal-testing", version.ref = "temporal" }
 wiremock-standalone = { module = "org.wiremock:wiremock-standalone", version.ref = "wiremock" }
 
 # Gradle plugins, consumed as dependencies by build-logic

@@ -174,3 +174,11 @@ _Avoid_: Domain event (one that stays inside a context), Message, Command
 **Outbox**:
 Where a context records an Integration event, in the same transaction as the change it describes, until Kafka has it. The Postgres-backed contexts use Spring Modulith's event publication registry; Catalog writes an outbox document in the same Couchbase transaction, which a relay in Catalog sends. Either way, an event whose send failed stays there, visible, and is sent again.
 _Avoid_: Event store (no context is event-sourced)
+
+**Saga**:
+A business process that spans contexts, such as checkout, run as a Temporal workflow in Orchestration. Each step calls one context's command API; a step that fails is retried, and a business refusal is answered by compensating, undoing what the earlier steps did through those contexts' own commands. Its history in Temporal records the process, not the Order or Payment it touched, which their contexts keep.
+_Avoid_: Workflow (Temporal's mechanism, not the business process), Process manager
+
+**Orchestration**:
+The service that runs every Saga as Temporal's worker, owning no domain data. It calls other contexts with its own identity, the `orchestration` client whose service account holds the `ORCHESTRATION` role, never with a Customer's token.
+_Avoid_: Orchestrator, Saga service

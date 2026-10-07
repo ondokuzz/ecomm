@@ -1,0 +1,33 @@
+spring:
+  application:
+    name: orchestration
+  temporal:
+    namespace: default
+    connection:
+      # TEMPORAL_PORT matches the compose override, for when something else holds 7233.
+      target: localhost:${TEMPORAL_PORT:7233}
+    # Each Saga's task queue and the workflows Orchestration runs on it (ADR 0009).
+    workers:
+      - task-queue: checkout
+        workflow-classes:
+          - com.ecomm.orchestration.application.PlaceholderCheckoutWorkflow
+  security:
+    oauth2:
+      client:
+        # Orchestration's own identity for the Saga steps' calls (Identity & Access ADR 0002). The
+        # secret has no default: set ORCHESTRATION_CLIENT_SECRET, which compose does.
+        registration:
+          orchestration:
+            provider: keycloak
+            client-id: orchestration
+            client-secret: ${ORCHESTRATION_CLIENT_SECRET}
+            authorization-grant-type: client_credentials
+        provider:
+          keycloak:
+            token-uri: http://localhost:8180/realms/ecomm/protocol/openid-connect/token
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

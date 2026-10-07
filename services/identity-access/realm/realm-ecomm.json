@@ -19,6 +19,10 @@
         "description": "The Checkout service, calling other services' internal endpoints."
       },
       {
+        "name": "ORCHESTRATION",
+        "description": "The Orchestration service, calling the command APIs a Saga's steps need."
+      },
+      {
         "name": "default-roles-ecomm",
         "description": "Granted to every new user, including self-registered ones.",
         "composite": true,
@@ -84,6 +88,20 @@
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": true
+    },
+    {
+      "clientId": "orchestration",
+      "name": "Orchestration service",
+      "description": "Client credentials for the Sagas' calls. The secret is for local development only.",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "orchestration-dev-secret",
+      "protocol": "openid-connect",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true
     }
   ],
   "users": [
@@ -112,6 +130,12 @@
       "enabled": true,
       "serviceAccountClientId": "checkout",
       "realmRoles": ["CHECKOUT"]
+    },
+    {
+      "username": "service-account-orchestration",
+      "enabled": true,
+      "serviceAccountClientId": "orchestration",
+      "realmRoles": ["ORCHESTRATION"]
     }
   ]
 }

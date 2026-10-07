@@ -37,6 +37,9 @@ x-spring-service: &spring-service
 services:
   postgres:
     image: postgres:16
+    # Every Postgres service's pool and Temporal's share it; at the default 100, Temporal's arrival
+    # left too few to go round.
+    command: ["postgres", "-c", "max_connections=200"]
     environment:
       POSTGRES_USER: ecomm
       POSTGRES_PASSWORD: ecomm
@@ -134,6 +137,24 @@ services:
       timeout: 5s
       retries: 30
       start_period: 30s
+
+  # Adds the realm file's roles and clients that the running ecomm realm lacks, then exits; see the
+  # script. The import above only covers a realm's first start.
+  keycloak-realm:
+    image: python:3.13-alpine
+    entrypoint: ["python", "/init/keycloak-realm-sync.py"]
+    mem_limit: 64m
+    environment:
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_ADMIN_USERNAME: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      REALM_FILE: /realm/realm-ecomm.json
+    volumes:
+      - ./keycloak-realm-sync.py:/init/keycloak-realm-sync.py:ro
+      - ../../services/identity-access/realm:/realm:ro
+    depends_on:
+      keycloak: { condition: service_healthy }
+    restart: "no"
 
   couchbase:
     image: couchbase:community-7.6.2
@@ -280,6 +301,104 @@ services:
       order-management: { condition: service_healthy }
       promotions: { condition: service_healthy }
 
+  # Sets up or migrates Temporal's schema in its databases on the shared Postgres, then exits; see
+  # the script.
+  temporal-schema:
+    image: temporalio/admin-tools:1.32.0
+    entrypoint: ["/init/temporal-schema.sh"]
+    mem_limit: 128m
+    environment:
+      SQL_PLUGIN: postgres12
+      SQL_HOST: postgres
+      SQL_PORT: 5432
+      SQL_USER: ecomm
+      SQL_PASSWORD: ecomm
+    volumes:
+      - ./temporal-schema.sh:/init/temporal-schema.sh:ro
+    depends_on:
+      postgres-databases: { condition: service_completed_successfully }
+    restart: "no"
+
+  # The Sagas' runtime (ADR 0009), persisting to the shared Postgres in its temporal and
+  # temporal_visibility databases. Workers and clients reach it on temporal:7233, the host on
+  # localhost:7233.
+  temporal:
+    image: temporalio/server:1.32.0
+    environment:
+      DB: postgres12
+      POSTGRES_SEEDS: postgres
+      DB_PORT: 5432
+      POSTGRES_USER: ecomm
+      POSTGRES_PWD: ecomm
+      # Listen on every interface, so the health check can use localhost.
+      BIND_ON_IP: 0.0.0.0
+      DYNAMIC_CONFIG_FILE_PATH: /etc/temporal/dynamicconfig.yaml
+      # Each of its four services keeps pools of its own on the shared Postgres; at the defaults
+      # they took every connection the other services had left.
+      SQL_MAX_CONNS: 10
+      SQL_MAX_IDLE_CONNS: 5
+      SQL_VIS_MAX_CONNS: 5
+      SQL_VIS_MAX_IDLE_CONNS: 2
+      # The Go runtime collects harder as it nears this, staying under the cap.
+      GOMEMLIMIT: 300MiB
+    mem_limit: 384m
+    ports: ["${TEMPORAL_PORT:-7233}:7233"]
+    volumes:
+      - ./temporal-dynamicconfig.yaml:/etc/temporal/dynamicconfig.yaml:ro
+    depends_on:
+      temporal-schema: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:7243/api/v1/cluster-info"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+
+  # Creates the default namespace with a 7-day retention, or sets that retention, then exits; see
+  # the script.
+  temporal-namespace:
+    image: temporalio/admin-tools:1.32.0
+    entrypoint: ["/init/temporal-namespace.sh"]
+    mem_limit: 128m
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+    volumes:
+      - ./temporal-namespace.sh:/init/temporal-namespace.sh:ro
+    depends_on:
+      temporal: { condition: service_healthy }
+    restart: "no"
+
+  # Temporal's web UI on http://localhost:8233, for following workflows and their retries.
+  temporal-ui:
+    image: temporalio/ui:2.55.0
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+    mem_limit: 64m
+    ports: ["${TEMPORAL_UI_PORT:-8233}:8080"]
+    depends_on:
+      temporal-namespace: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  # The Temporal worker for every Saga (ADR 0009). It has no API of its own and isn't routed by the
+  # gateway, so it has no host port.
+  orchestration:
+    <<: *spring-service
+    build:
+      context: ../..
+      dockerfile: services/orchestration/Dockerfile
+    image: ${IMAGE_PREFIX:-ecomm}/orchestration:${IMAGE_TAG:-latest}
+    environment:
+      # Orchestration's own client in the ecomm realm (Identity & Access ADR 0002); dev-only, like
+      # the value in the realm file.
+      ORCHESTRATION_CLIENT_SECRET: orchestration-dev-secret
+    depends_on:
+      temporal-namespace: { condition: service_completed_successfully }
+      keycloak-realm: { condition: service_completed_successfully }
+
   # The one way in for browsers: authenticates at the edge and routes /api/<service>/** to the
   # services (platform/api-gateway). The services' own host ports above bypass it, for development.
   api-gateway:
@@ -398,6 +517,9 @@ services:
     ports: ["${APICURIO_PORT:-8088}:8080"]
     depends_on:
       postgres-databases: { condition: service_completed_successfully }
+      # Restarted with Postgres: its pooled connections die with it, and schema-registry-init,
+      # which runs straight after, would get errors from them.
+      postgres: { condition: service_healthy, restart: true }
     healthcheck:
       test: ["CMD", "curl", "-fs", "http://localhost:9000/health/ready"]
       interval: 10s

@@ -1,0 +1,7 @@
+# Temporal's dynamic config, which the server refuses to start without. Keys and values are
+# Temporal's: https://github.com/temporalio/temporal/blob/main/common/dynamicconfig/constants.go
+#
+# A single dev server: let a search attribute added at runtime show in the UI at once.
+system.forceSearchAttributesCacheRefreshOnRead:
+  - value: true
+    constraints: {}

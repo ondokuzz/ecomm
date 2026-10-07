@@ -90,6 +90,12 @@ No context is event-sourced: contexts keep append-only histories and ledgers whe
 | D | Saga-facing commands on Order Management and Inventory; Redis-backed hot stock cache for checkout |
 | E | Storefront/admin reflect real payment + stock states |
 
+> **Note (Sprint 4 implementation, in progress):** This note grows with the sprint's tickets.
+>
+> - **Temporal and Orchestration (#55).** Temporal's server 1.32 joins the default stack, persisting to the shared Postgres in its own `temporal` and `temporal_visibility` databases. An `admin-tools` step sets up or migrates their schema, and another creates the `default` namespace with a 7-day retention. Its UI is on port 8233. Orchestration is its worker on the `checkout` task queue, with a placeholder workflow for now. A spike proved the Temporal Java SDK 1.40 and its Spring Boot starter under Boot 4.1: workflow payloads go through the SDK's Jackson 2 beside Boot's Jackson 3, as Apicurio's serializer does. Each of Temporal's four services keeps its own pools on Postgres, which at their defaults used up the 100 connections it allowed. Their pools were cut, and Postgres now allows 200; idle, the stack holds about 80. Apicurio now restarts with Postgres, since recreating Postgres for that setting cut its pooled connections just as `schema-registry-init` used them.
+> - **Realms are brought up to date.** The `keycloak-realm` step adds the roles and clients a running realm lacks from the realm file, through Keycloak's admin API, and changes nothing that exists. A service account it creates holds only the file's roles, as an imported one does, not the realm's default `CUSTOMER`. On 2026-10-07 it gave this machine's Sprint 3 realm the `orchestration` client and the `ORCHESTRATION` role, and a second run changed nothing.
+> - **Memory:** On 2026-10-07, `docker stats` measured about 4.9 GB in use before Temporal and Orchestration, and about 5.0 GB after. Temporal took 95 MB of its 384 MB, its UI 34 MB of 64 MB, and Orchestration 300 MB of 384 MB. Couchbase, just restarted, used about 240 MB less than before, which hides most of the increase. The long-running capped containers add up to about 6.8 GB, so with Couchbase, Postgres and Redis uncapped the stack still fits in about 8 GB, and no cap was lowered.
+
 ## Sprint 5 (Weeks 9–10) — Fulfillment + Returns Foundations
 
 | Track | Delivers |

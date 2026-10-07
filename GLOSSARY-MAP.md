@@ -19,7 +19,7 @@
 | Returns & Warranty | `services/returns-warranty` | RMA workflow, Warranty Window validation, with each RMA's decision history |
 | Notifications | `services/notifications` | Email/SMS/push dispatch, triggered by domain events |
 | AI Support Assistant | `services/ai-support-assistant` | The Support Assistant, grounded in real order/payment/returns data |
-| Orchestration | `services/orchestration` | The Sagas — checkout, fulfillment and returns — as Temporal workflows; no domain data of its own |
+| Orchestration | `services/orchestration` | The Sagas — checkout, fulfillment and returns — as workflows on the Temporal server in Compose, which keeps their state in its own Postgres databases; no domain data and no public API of its own |
 
 Not bounded contexts — UI layers over the above:
 
@@ -50,7 +50,7 @@ A request keeps one Correlation ID across every context. It gets one where it en
 - **Orchestration → Returns & Warranty, Payment, Inventory**: the returns Saga drives an RMA to its resolution, refunding through Payment and restocking through Inventory, and closes it when its Warranty Window lapses.
 - **Order Management → Notifications**: order-lifecycle events trigger customer notifications.
 - **Order Management, Payment, Returns & Warranty → AI Support Assistant**: the assistant queries each context's read APIs to ground its answers in real Customer data.
-- **Identity & Access → all contexts**: every service trusts Keycloak-issued JWTs. A Customer's token names the Customer. Checkout and Orchestration each call other contexts with their own client-credentials identity, and each command names the one caller allowed to make it ([ADR 0002](./services/identity-access/docs/adr/0002-service-identity-by-client-credentials.md)).
+- **Identity & Access → all contexts**: every service trusts Keycloak-issued JWTs. A Customer's token names the Customer. Checkout and Orchestration each call other contexts with their own client-credentials identity, the `checkout` and `orchestration` clients holding the `CHECKOUT` and `ORCHESTRATION` roles, and each command names the one caller allowed to make it ([ADR 0002](./services/identity-access/docs/adr/0002-service-identity-by-client-credentials.md)).
 - **All contexts ↔ Kafka**: the shared backbone for integration events, published from each context's outbox and versioned so consumers keep the newest ([ADR 0002](./docs/adr/0002-ledgers-and-outboxes-not-event-sourcing.md), [ADR 0006](./docs/adr/0006-kafka-as-single-event-backbone.md)). Commands never travel over it.
 
 ## Shared vocabulary
