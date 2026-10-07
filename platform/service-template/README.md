@@ -153,6 +153,55 @@ test-only topics keep theirs in `src/test/resources/event-schemas`.
 `PublishingEventsTest` and `ConsumingEventsTest` show both sides against a test-only Greeting
 topic. Assert on what reaches the topic, read with a plain consumer, not on the publisher's calls.
 
+## Idempotent commands
+
+A command that a caller may send more than once, such as one a Saga step retries, takes an
+`Idempotency-Key` header. Declare it on the controller method, and `service-commons` does the rest
+in a Postgres service:
+
+```java
+@PostMapping("/orders")
+@PreAuthorize("hasRole('ORCHESTRATION')")
+@IdempotentCommand // or (required = false) to take a key only when the caller sends one
+ResponseEntity<OrderResponse> place(@RequestBody PlaceOrderRequest request) { ... }
+```
+
+- **A repeat** of the same request (method, path and body bytes; the query string isn't compared) with the same key from the same
+  caller gets the recorded status, body, `Content-Type` and `Location` back with
+  `Idempotent-Replayed: true`, and the command doesn't run.
+- **The same key with a different request** is a 422 problem detail with `reason`
+  `idempotencyKeyReused`.
+- **A concurrent repeat** waits for the first request to finish, then replays it. A second
+  response is never computed.
+- **Only a 2xx response is recorded.** Any other status records nothing, so a repeat is evaluated
+  afresh.
+- **Keys are scoped to the caller**: a client-credentials token's `client_id`, or else its `sub`,
+  such as a Customer's ID.
+- **A key is 1 to 255 printable ASCII characters.** Anything else is a 400 with `reason`
+  `idempotencyKeyInvalid`. A command that requires a key and gets none answers 400 with
+  `idempotencyKeyRequired`.
+- **Keys are kept for 7 days** (`ecomm.idempotency.keep-for`), matching Temporal's retention, and
+  pruned daily (`ecomm.idempotency.prune-every`).
+
+The key is recorded in the same transaction as the command's change. A filter opens that
+transaction around the controller, claims the key in it, and records the response before it
+commits. The use case's own transaction joins it, whether through a JDBC-backed `Transactions` port like
+Inventory's or a `TransactionTemplate` as in `GreetingCommands`, so the use case sees no
+idempotency type, and
+`HexagonalRules` fails the build if `application` or `domain` reaches into
+`com.ecomm.commons.idempotency`. The response is sent only after the commit. If the transaction
+was marked for rollback, as when the use case threw, it rolls back. Otherwise the change commits as
+it would without a key, and a non-2xx response gives the key up. A request for which another one
+holds the key waits on that key's row until the other commits or rolls back.
+
+Each service adds the key table in its own Flyway migration: copy `V2__idempotency_key.sql`, as
+`V1__event_publication.sql` is copied for the outbox. Only a service that declares an
+`@IdempotentCommand` prunes keys, so one without the table never touches it. Read a command's
+body as JSON: the filter reads the body before the handler does, so form parameters aren't seen.
+
+`IdempotencyApiTest` shows each behaviour through the test-only `GreetingCommands`, and
+`IdempotencyKeyPruningApiTest` shows pruning with the retention shortened to a second.
+
 ## Security
 
 `service-commons` makes every service an OAuth2 resource server that accepts only Keycloak-issued
@@ -204,8 +253,9 @@ a change publishes there, and on what a consumer makes of the events sent to it 
 ## Creating a new service
 
 1. Copy this directory to `services/<context>` and delete `build/` if present. A service that
-   neither publishes events nor keeps data in Postgres drops those dependencies, the migration
-   and the datasource and Kafka settings.
+   neither publishes events nor keeps data in Postgres drops those dependencies, the migrations
+   and the datasource and Kafka settings. One with no `@IdempotentCommand` drops
+   `V2__idempotency_key.sql`.
 2. Rename the base package `com.ecomm.template` to `com.ecomm.<context>` (no hyphens) and the
    application class, and update `@AnalyzeClasses` in `ArchitectureTest`.
 3. Set `spring.application.name` in `application.yml` and the expected name in `PingApiTest`

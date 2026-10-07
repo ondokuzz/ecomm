@@ -13,7 +13,7 @@ Every Saga runs in one `orchestration` service, the Temporal worker for all of t
 - **fulfillment**, from Sprint 5: pick, pack and ship;
 - **returns**, from Sprint 5: an RMA from request to resolution, with the Warranty Window as a durable timer.
 
-A Saga step is an activity that calls the owning context's command API directly over HTTP, with Orchestration's own client-credentials identity and an `Idempotency-Key` header of `<workflowId>:<activity>`. The context records the key in the same transaction as the change, so a repeated call returns the first result instead of acting twice; a command that is naturally idempotent, such as committing a Reservation that is already committed, needs no key. Temporal retries a step that fails or times out. A business refusal, such as a declined Payment, is not retried: the workflow compensates instead.
+A Saga step is an activity that calls the owning context's command API directly over HTTP, with Orchestration's own client-credentials identity and an `Idempotency-Key` header of `<workflowId>:<runId>:<activity>`. The context records the key in the same transaction as the change, so a repeated call returns the first result instead of acting twice; a command that is naturally idempotent, such as committing a Reservation that is already committed, needs no key. Temporal retries a step that fails or times out. A business refusal, such as a declined Payment, is not retried: the workflow compensates instead.
 
 Another service starts a workflow through the Temporal client, not over HTTP to Orchestration: Checkout starts the checkout workflow when a Customer pays a Checkout Session, with the session's ID as the workflow's, and waits about 10 seconds for its result before answering `202`.
 
@@ -32,3 +32,9 @@ This ADR said that Saga steps talk to other contexts through commands and events
 ## Revised 2026-10-07
 
 As built (#55): Temporal's server 1.32 runs in Compose with its schema set up or migrated by an init step on every start, in the `default` namespace with a 7-day retention, so a closed workflow's history is kept for a week. Its UI is on port 8233. Orchestration is the worker, on the Temporal Java SDK 1.40 and its Spring Boot starter, which a spike proved under Spring Boot 4.1 and Jackson 3.
+
+## Revised 2026-10-08
+
+Idempotency keys (#56): Orchestration's key is `<workflowId>:<runId>:<activity>`, where this ADR said `<workflowId>:<activity>`. The workflow ID is the Checkout Session's ID, so a Customer who pays a session again after a decline starts a new run of the same workflow ID. Without the run ID, that run's steps would send the first run's keys and collide with them: a step the first run completed would replay its response instead of acting for the new attempt. The run ID stays the same across a step's retries within one run, so a retry still replays. Keys are scoped to the calling client and kept for 7 days, as long as Temporal keeps a closed workflow's history.
+
+A context records the key without its use case seeing a port for it. `service-commons` opens the transaction around a command declared `@IdempotentCommand`, claims the key in it, and records the response before committing. The use case's own transaction joins it. That transaction carries both the key and the change only if the use case's transaction joins it on the same Postgres transaction manager. A use case that starts a new transaction, or writes elsewhere, falls outside it ([service template](../../platform/service-template/README.md#idempotent-commands)).

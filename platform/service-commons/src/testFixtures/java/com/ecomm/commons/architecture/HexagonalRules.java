@@ -14,7 +14,8 @@ import com.tngtech.archunit.lang.ArchRule;
  *   <li>{@code domain}: pure Java, depends on nothing else in the service or on any framework
  *   <li>{@code application}: use cases and ports, depends only on {@code domain}, no framework. It
  *       publishes integration events through the {@code com.ecomm.commons.events} port, never
- *       through Kafka or the outbox behind it
+ *       through Kafka or the outbox behind it. It never sees idempotency keys: a command's
+ *       transaction joins the one {@code com.ecomm.commons.idempotency} opens around it
  *   <li>{@code adapter.in.web}, {@code adapter.out.<tech>}: reach use cases only through ports,
  *       never depend on each other
  * </ul>
@@ -32,6 +33,7 @@ public final class HexagonalRules {
     "io.apicurio..",
     "com.ecomm.commons.web..",
     "com.ecomm.commons.security..",
+    "com.ecomm.commons.idempotency..",
     "com.ecomm.commons.events.outbox..",
     "com.ecomm.commons.events.kafka.."
   };

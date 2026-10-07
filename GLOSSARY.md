@@ -182,3 +182,7 @@ _Avoid_: Workflow (Temporal's mechanism, not the business process), Process mana
 **Orchestration**:
 The service that runs every Saga as Temporal's worker, owning no domain data. It calls other contexts with its own identity, the `orchestration` client whose service account holds the `ORCHESTRATION` role, never with a Customer's token.
 _Avoid_: Orchestrator, Saga service
+
+**Idempotency key**:
+The value a caller sends in the `Idempotency-Key` header so that sending a command again does nothing twice. A context records it, scoped to the caller, in the transaction of the change the command made, with the request and the response it got. A repeat of the same request from the same caller gets that response back, marked `Idempotent-Replayed: true`, and the same key with a different request is refused. Only a successful response is recorded, so a refused or failed command is evaluated afresh when sent again. Keys are kept for 7 days. Orchestration is to send `<workflowId>:<runId>:<activity>`.
+_Avoid_: Request ID, Correlation ID (which names a request for following it, and decides nothing)

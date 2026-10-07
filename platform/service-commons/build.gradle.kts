@@ -1,4 +1,4 @@
-// Shared library for every service. Only the web, security and events.{outbox,kafka} packages
+// Shared library for every service. Only the web, security, idempotency and events.{outbox,kafka} packages
 // depend on frameworks; money and events are pure Java so domain and application code can use them.
 plugins {
   id("ecomm.java-conventions")
@@ -10,6 +10,7 @@ dependencies {
   compileOnly(platform(libs.spring.modulith.bom))
   compileOnly("org.springframework.boot:spring-boot-autoconfigure")
   compileOnly("org.springframework:spring-webmvc")
+  compileOnly("org.springframework:spring-jdbc")
   compileOnly("org.springframework.boot:spring-boot-restclient")
   compileOnly("jakarta.servlet:jakarta.servlet-api")
   compileOnly("org.slf4j:slf4j-api")
