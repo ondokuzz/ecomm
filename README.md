@@ -90,6 +90,8 @@ Orchestration, which serves nothing but its health:
 | 9092 | Kafka |
 | 7233 | Temporal, for workers and clients run from the host ([Orchestration](./services/orchestration/README.md#temporal)) |
 | 8233 | Temporal's web UI: every workflow, its history and its retries |
+| 3000 | Grafana: the Services and Event consumers dashboards, open for viewing ([below](#metrics-and-dashboards)) |
+| 9090 | Prometheus: every service's metrics, for 2 days |
 | 27017 | Mongo |
 | 5050 | pgAdmin, once started (below) |
 
@@ -103,6 +105,22 @@ It opens without a login and is already connected to the shared Postgres as `eco
 service's database (`orders`, `inventory`, `payment`, `promotions`, …) is under **ecomm** in its
 tree. Its connection is in [`infra/docker/pgadmin`](./infra/docker/pgadmin). It keeps nothing
 between restarts, so saved queries and layout are lost when the container is recreated.
+
+### Metrics and dashboards
+
+Every Spring service, the gateway included, serves its metrics on `/actuator/prometheus`
+([service template](./platform/service-template/README.md#metrics)). Prometheus scrapes them every
+15 seconds and keeps 2 days of them, and Grafana shows them on http://localhost:3000, open to
+anyone for viewing (sign in as `admin` / `admin` to explore). Its data source and its two
+dashboards, under **ecomm**, are files in [`infra/docker/grafana`](./infra/docker/grafana):
+
+- **Services:** request rate, 5xx rate and p95 latency per service, request rate per route, and
+  each Postgres service's outbox events not yet sent to Kafka (Catalog's Couchbase outbox isn't
+  measured).
+- **Event consumers:** lag per consumer group, and per group, topic and partition; consumption
+  rate; retries.
+
+A dashboard changed in Grafana can't be saved there: export its JSON and replace the file.
 
 ### The event backbone
 
@@ -189,8 +207,9 @@ Access README](./services/identity-access/README.md#the-admin-console-client)).
 Each Spring service is capped at 384 MB, with 60% of it for the heap, Keycloak at 768 MB with 40%
 for the heap, and each nginx at 64 MB. Kafka and Mongo are capped at 512 MB each, with a 256 MB heap for Kafka and a
 256 MB cache for Mongo, Apicurio and pgAdmin at 384 MB each, the Temporal server at 384 MB, its UI at
-64 MB, and Temporal's and Keycloak's init steps at 128 MB or less. The default stack fits in about 8 GB of Docker
-memory; `docker stats` shows what it uses ([Sprint 3's reading](./docs/roadmap.md#sprint-3-weeks-56--events--order-history)).
+64 MB, Prometheus and Grafana at 256 MB each, and Temporal's and Keycloak's init steps at 128 MB or
+less. The default stack fits in about 8 GB of Docker memory; `docker stats` shows what it uses
+([Sprint 4's reading](./docs/roadmap.md#sprint-4-weeks-78--checkout-saga--payment-ledger)).
 Couchbase, Postgres and Redis are uncapped.
 
 ## CI

@@ -6,9 +6,3 @@ spring:
       host: localhost
       # REDIS_PORT matches the compose override, for when something else holds 6379.
       port: ${REDIS_PORT:6379}
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health

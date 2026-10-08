@@ -12,9 +12,3 @@ ecomm:
     # Anyone may read a Product's reviews and ratings; writing one, or asking whether you may, needs
     # a Customer's token.
     public-read-paths: [/products/*/reviews, /products/*/rating-summary, /rating-summaries]
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health

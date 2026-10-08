@@ -1,0 +1,23 @@
+# Scrapes every Spring service's /actuator/prometheus over the Compose network; service-commons
+# exposes it, tagged with the service's name (platform/service-template/README.md#metrics). A new
+# service is added to the targets here.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: spring-services
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - api-gateway:8080
+          - catalog:8080
+          - inventory:8080
+          - cart:8080
+          - payment:8080
+          - order-management:8080
+          - promotions:8080
+          - checkout-pricing:8080
+          - search-discovery:8080
+          - reviews-ratings:8080
+          - orchestration:8080

@@ -138,7 +138,8 @@ void on(ProductChanged event) {
 - **A failure is retried** 3 times, after 0.5, 1 and 2 seconds (`ecomm.events.consumer.retries`,
   `ecomm.events.consumer.initial-backoff`). The event is then logged at error level with its
   `eventId`, topic, partition and offset, and skipped, so the partition moves on. An event that
-  can't be read at all is skipped at once. Dead-letter topics arrive in Sprint 4.
+  can't be read at all is skipped at once. Dead-letter topics arrive in Sprint 4. Each retry is
+  counted ([Metrics](#metrics)).
 
 ### Testing
 
@@ -202,12 +203,43 @@ body as JSON: the filter reads the body before the handler does, so form paramet
 `IdempotencyApiTest` shows each behaviour through the test-only `GreetingCommands`, and
 `IdempotencyKeyPruningApiTest` shows pruning with the retention shortened to a second.
 
+## Metrics
+
+`service-commons` brings Micrometer's Prometheus registry, so every service, the gateway included,
+serves `/actuator/prometheus` with no code of its own. It needs no token, and the gateway doesn't
+route it: Prometheus scrapes each service over the Compose network. Every metric carries the
+service's `spring.application.name` as its `service` tag (`MetricsDefaults`). Every service
+exports:
+
+- **HTTP:** Spring's request metrics, `http_server_requests_seconds`, per `method`, `uri` (the
+  route's pattern), `status` and `outcome`, with histogram buckets for percentiles. A request
+  refused before it reaches a controller, such as a 401, has the `uri` `UNKNOWN`.
+- **Kafka consumers:** the consumer client's metrics, `kafka_consumer_*`, each tagged with its
+  consumer `group`, among them `kafka_consumer_fetch_manager_records_lag` per `topic` and
+  `partition`, and `kafka_consumer_fetch_manager_records_consumed_total` per `topic`. A
+  partition's metrics show up within a minute of it being assigned. The `group` tag comes from
+  Kafka's default client ID, so don't set `spring.kafka.client-id` or a listener's
+  `clientIdPrefix`.
+- **Retries:** `ecomm_events_retried_total`, each retry of an event a listener failed on, per
+  `group` and `topic`.
+- **Outbox:** in a Postgres service with the outbox (Spring Modulith's event publication
+  registry), `ecomm_outbox_incomplete_publications`, the events not yet sent to Kafka, per
+  `status`: `published` and `processing` are on their way, `failed` and
+  `resubmitted` wait for the next resubmission.
+- The JVM's, Hikari's, Tomcat's and the Kafka producer's own metrics, as Boot binds them.
+
+A new service is added to Prometheus's targets in
+[`infra/docker/prometheus/prometheus.yml`](../../infra/docker/prometheus/prometheus.yml). Grafana's
+**Services** and **Event consumers** dashboards show these
+([README](../../README.md#metrics-and-dashboards)). `MetricsApiTest` asserts the names.
+
 ## Security
 
 `service-commons` makes every service an OAuth2 resource server that accepts only Keycloak-issued
 JWTs (`JwtResourceServerAutoConfiguration`):
 
-- Every request needs a valid bearer token except `/actuator/health`. A missing or invalid token
+- Every request needs a valid bearer token except `/actuator/health` and `/actuator/prometheus`
+  ([Metrics](#metrics)). A missing or invalid token
   gets 401, a missing role gets 403, and both come back as problem details.
 - Guard role-restricted operations with `@PreAuthorize("hasRole('STAFF')")`. Realm roles from
   `realm_access.roles` become `ROLE_` authorities.

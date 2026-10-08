@@ -11,9 +11,3 @@ ecomm:
   security:
     # Anyone may search the Catalog.
     public-read-paths: [/search]
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health

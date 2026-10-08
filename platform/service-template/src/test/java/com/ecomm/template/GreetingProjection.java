@@ -12,7 +12,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Test-only: a consumer as a service writes one. It keeps the newest version of each Greeting it
- * has seen, reads only the fields it needs, and fails on the text {@code boom}.
+ * has seen, reads only the fields it needs, and fails on the text {@code boom}. A test that needs
+ * the Greetings to itself sets {@code greetings.group-id}.
  */
 class GreetingProjection {
 
@@ -34,7 +35,9 @@ class GreetingProjection {
     this.transactions = transactions;
   }
 
-  @KafkaListener(topics = TestInfrastructure.GREETINGS, groupId = "service-template.greetings")
+  @KafkaListener(
+      topics = TestInfrastructure.GREETINGS,
+      groupId = "${greetings.group-id:service-template.greetings}")
   void on(GreetingReceived event) {
     if ("boom".equals(event.greeting().text())) {
       failedAttempts.merge(event.greetingId(), 1, Integer::sum);

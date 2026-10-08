@@ -67,6 +67,9 @@ class RoutingApiTest extends GatewayApiTest {
     "POST, /api/promotions/discounts/evaluate",
     "POST, /api/promotions/discounts/evaluate/",
     "GET, /api/promotions/discounts/evaluate",
+    "GET, /api/catalog/actuator/prometheus",
+    "GET, /api/catalog/actuator/health",
+    "GET, /api/order-management/actuator",
     "GET, /api/no-such-service/things",
     "GET, /products"
   })

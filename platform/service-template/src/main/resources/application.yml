@@ -16,9 +16,3 @@ spring:
 ecomm:
   events:
     schema-registry-url: http://localhost:${APICURIO_PORT:8088}/apis/registry/v3
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health

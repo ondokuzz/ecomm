@@ -41,7 +41,9 @@ network; outside Docker they are the services' dev host ports.
 - **Internal endpoints**, those only other services call, are not routed and get a 404, token or
   not, as does any path outside the table. Payment has no routes at all, so `POST /payments` is
   among them. Hiding Promotions' `POST /discounts/evaluate` means nobody can probe Coupon codes
-  outside a checkout; Staff still reach `/coupons` through the gateway.
+  outside a checkout; Staff still reach `/coupons` through the gateway. Every service's
+  `/actuator/**` is internal too, so its health and metrics are reached only on the Compose
+  network or its own host port.
 
 The gateway sends no CORS headers: browsers reach it on the Storefront's or the Admin Console's own origin, through its nginx.
 

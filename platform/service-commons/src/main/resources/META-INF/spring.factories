@@ -1,2 +1,3 @@
 org.springframework.boot.EnvironmentPostProcessor=\
-com.ecomm.commons.events.kafka.EventBackboneDefaults
+com.ecomm.commons.events.kafka.EventBackboneDefaults,\
+com.ecomm.commons.metrics.MetricsDefaults

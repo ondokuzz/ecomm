@@ -26,9 +26,9 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  * <ul>
  *   <li>Keys come from the configured JWK set URI; the {@code iss} claim is checked explicitly
  *       against the configured issuer (see {@link JwtResourceServerProperties}).
- *   <li>{@code /actuator/health} and any {@code GET} on the paths in {@link PublicReadProperties}
- *       are open; every other request needs a valid token. Restrict by role with
- *       {@code @PreAuthorize("hasRole('STAFF')")}.
+ *   <li>{@code /actuator/health}, {@code /actuator/prometheus} and any {@code GET} on the paths in
+ *       {@link PublicReadProperties} are open; every other request needs a valid token. Restrict by
+ *       role with {@code @PreAuthorize("hasRole('STAFF')")}.
  *   <li>Realm roles become authorities via {@link KeycloakRealmRoleConverter}.
  *   <li>A {@link CurrentCustomer} controller parameter resolves to the token's {@code sub}.
  *   <li>401 and 403 come back as problem details.
@@ -71,7 +71,7 @@ public class JwtResourceServerAutoConfiguration {
     return ResourceServerSecurity.configure(http, exceptionResolver)
         .authorizeHttpRequests(
             requests -> {
-              requests.requestMatchers("/actuator/health/**").permitAll();
+              requests.requestMatchers("/actuator/health/**", "/actuator/prometheus").permitAll();
               if (publicReadPaths.length > 0) {
                 requests.requestMatchers(HttpMethod.GET, publicReadPaths).permitAll();
               }

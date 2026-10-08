@@ -38,9 +38,3 @@ ecomm:
 logging:
   pattern:
     correlation: "[%X{correlationId:-}] "
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health

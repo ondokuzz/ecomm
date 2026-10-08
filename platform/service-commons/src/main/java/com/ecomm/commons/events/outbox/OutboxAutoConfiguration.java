@@ -14,6 +14,7 @@ import org.springframework.kafka.core.KafkaOperations;
 import org.springframework.modulith.events.EventExternalizationConfiguration;
 import org.springframework.modulith.events.FailedEventPublications;
 import org.springframework.modulith.events.RoutingTarget;
+import org.springframework.modulith.events.core.EventPublicationRepository;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
@@ -21,12 +22,14 @@ import tools.jackson.databind.json.JsonMapper;
  * externalization, for a service that has both on its classpath (see {@link
  * OutboxIntegrationEventPublisher}). Each {@link OutboxedEvent} goes to its topic, keyed by its
  * aggregate's ID, with the Correlation ID as a header. Sends go out one at a time, each waiting for
- * Kafka to acknowledge the one before.
+ * Kafka to acknowledge the one before. The events not yet sent are a gauge (see {@link
+ * IncompletePublicationsGauge}).
  */
 @AutoConfiguration(
     afterName = {
       "org.springframework.boot.jackson.autoconfigure.JacksonAutoConfiguration",
-      "org.springframework.modulith.events.config.EventPublicationAutoConfiguration"
+      "org.springframework.modulith.events.config.EventPublicationAutoConfiguration",
+      "org.springframework.modulith.events.jdbc.JdbcEventPublicationAutoConfiguration"
     })
 @ConditionalOnClass({EventExternalizationConfiguration.class, KafkaOperations.class})
 @EnableConfigurationProperties(OutboxProperties.class)
@@ -56,5 +59,11 @@ public class OutboxAutoConfiguration {
   FailedPublicationResubmitter failedPublicationResubmitter(
       FailedEventPublications failed, OutboxProperties properties) {
     return new FailedPublicationResubmitter(failed, properties.resubmitFailedEvery());
+  }
+
+  @Bean
+  @ConditionalOnBean(EventPublicationRepository.class)
+  IncompletePublicationsGauge incompletePublicationsGauge(EventPublicationRepository publications) {
+    return new IncompletePublicationsGauge(publications);
   }
 }

@@ -1,0 +1,12 @@
+# Every dashboard is a JSON file in infra/docker/grafana/dashboards. Changes made in Grafana's UI
+# can't be saved over them: export the JSON and replace the file instead.
+apiVersion: 1
+
+providers:
+  - name: ecomm
+    folder: ecomm
+    type: file
+    allowUiUpdates: false
+    disableDeletion: true
+    options:
+      path: /var/lib/grafana/dashboards

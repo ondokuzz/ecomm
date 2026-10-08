@@ -31,9 +31,3 @@ ecomm:
     payment-url: http://localhost:8084
     order-management-url: http://localhost:8085
     promotions-url: http://localhost:8087
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health

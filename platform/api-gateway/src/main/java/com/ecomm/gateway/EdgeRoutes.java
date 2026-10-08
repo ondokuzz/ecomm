@@ -9,6 +9,7 @@ import static org.springframework.cloud.gateway.server.mvc.handler.HandlerFuncti
 import com.ecomm.commons.web.CorrelationId;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Stream;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.web.util.matcher.AndRequestMatcher;
@@ -21,11 +22,15 @@ import org.springframework.web.servlet.function.ServerResponse;
 /**
  * The gateway's route table, built from {@link GatewayProperties}: which requests reach which
  * service, and which of those need no token. Routing and edge security both read it, so they can't
- * disagree. A request it doesn't route, an internal endpoint included, never leaves the gateway.
+ * disagree. A request it doesn't route, an internal endpoint or a service's actuator included,
+ * never leaves the gateway.
  */
 final class EdgeRoutes {
 
   private static final RequestMatcher NOTHING = request -> false;
+
+  /** Every service's health and metrics: for Compose and Prometheus, never for browsers. */
+  private static final String ACTUATOR = "/actuator/**";
 
   private final List<Route> routes;
 
@@ -72,7 +77,10 @@ final class EdgeRoutes {
       Objects.requireNonNull(service.uri(), "ecomm.gateway.services." + name + ".uri");
       var prefix = "/api/" + name;
       var internal =
-          anyOf(service.internal().stream().map(entry -> internal(prefix, entry)).toList());
+          anyOf(
+              Stream.concat(Stream.of(ACTUATOR), service.internal().stream())
+                  .map(entry -> internal(prefix, entry))
+                  .toList());
       var routed =
           new AndRequestMatcher(path(null, prefix + "/**"), new NegatedRequestMatcher(internal));
       var publicReads =

@@ -25,9 +25,3 @@ spring:
         provider:
           keycloak:
             token-uri: http://localhost:8180/realms/ecomm/protocol/openid-connect/token
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health
