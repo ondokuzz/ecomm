@@ -22,6 +22,7 @@ stay with the services, which still check every token themselves.
 | `cart` | | |
 | `checkout-pricing` | | |
 | `order-management` | | `POST /orders`, `PATCH /orders/*/status` |
+| `payment` | | `POST /payments`, `POST /payments/*/void`: authorizing and voiding, which only Checkout calls |
 | `promotions` | | `/discounts/**`: Coupon evaluation, which only Checkout calls |
 | `search-discovery` | `/search` | |
 | `reviews-ratings` | `/products/*/reviews`, `/products/*/rating-summary`, `/rating-summaries` | |
@@ -39,8 +40,8 @@ network; outside Docker they are the services' dev host ports.
   service never sees the request. `Authorization` is forwarded unchanged, so the service checks
   the same token and applies its own roles.
 - **Internal endpoints**, those only other services call, are not routed and get a 404, token or
-  not, as does any path outside the table. Payment has no routes at all, so `POST /payments` is
-  among them. Hiding Promotions' `POST /discounts/evaluate` means nobody can probe Coupon codes
+  not, as does any path outside the table. Payment's reads are routed, the Customer's and Staff's,
+  but its commands aren't. Hiding Promotions' `POST /discounts/evaluate` means nobody can probe Coupon codes
   outside a checkout; Staff still reach `/coupons` through the gateway. Every service's
   `/actuator/**` is internal too, so its health and metrics are reached only on the Compose
   network or its own host port.

@@ -10,6 +10,7 @@ Changing an event means changing its schema here, in a reviewed pull request.
 | `inventory.stock` | `variantId` | Inventory |
 | `catalog.product` | `sku` | Catalog |
 | `catalog.category` | `slug` | Catalog |
+| `payment.payment` | `paymentId` | Payment |
 
 ## The shape of an event
 

@@ -1,0 +1,169 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "payment.payment",
+  "description": "A snapshot of a Payment with its Payment transactions, published with each change. Keyed by paymentId.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "eventId",
+    "occurredAt",
+    "paymentId",
+    "version",
+    "change",
+    "payment"
+  ],
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique per event; the same event delivered twice has the same eventId."
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the change was published, in the transaction that made it."
+    },
+    "paymentId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "The Payment's ID: the message key."
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "The Payment's version: how many transactions it has. Apply an event only if it is newer than what you hold."
+    },
+    "change": {
+      "type": "string",
+      "enum": [
+        "AUTHORIZED",
+        "DECLINED",
+        "PENDING",
+        "VOIDED",
+        "BACKFILLED"
+      ],
+      "description": "Why the event was published: the status a transaction left the Payment in, or BACKFILLED for a Payment recorded before Payment events."
+    },
+    "payment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "orderId",
+        "customerId",
+        "amount",
+        "status",
+        "transactions"
+      ],
+      "properties": {
+        "orderId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "customerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "amount": {
+          "$ref": "#/definitions/Money"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "PENDING",
+            "AUTHORIZED",
+            "DECLINED",
+            "VOIDED"
+          ],
+          "description": "Worked out from the transactions."
+        },
+        "declineReason": {
+          "type": "string",
+          "description": "The gateway's reason, such as insufficient_funds, when status is DECLINED."
+        },
+        "transactions": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Every Payment transaction, oldest first; never changed or removed.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "amount",
+              "outcome",
+              "gatewayReference",
+              "at",
+              "backfilled"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "AUTHORIZATION",
+                  "VOID"
+                ]
+              },
+              "amount": {
+                "$ref": "#/definitions/Money"
+              },
+              "outcome": {
+                "type": "string",
+                "enum": [
+                  "APPROVED",
+                  "DECLINED",
+                  "PENDING"
+                ]
+              },
+              "gatewayReference": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The gateway's reference for this interaction."
+              },
+              "declineReason": {
+                "type": "string",
+                "description": "The gateway's reason, when the outcome is DECLINED."
+              },
+              "gatewayEventId": {
+                "type": "string",
+                "description": "The gateway's event ID, when a webhook recorded the transaction."
+              },
+              "at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "backfilled": {
+                "type": "boolean",
+                "description": "True for an authorization reconstructed from a Payment recorded before the ledger; its at is when it was reconstructed."
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "Money": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "An amount in a Currency's Minor unit (GLOSSARY.md, Money).",
+      "required": [
+        "amountMinor",
+        "currency"
+      ],
+      "properties": {
+        "amountMinor": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The amount in its Currency's Minor unit."
+        },
+        "currency": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$",
+          "description": "The Currency's ISO 4217 code."
+        }
+      }
+    }
+  }
+}

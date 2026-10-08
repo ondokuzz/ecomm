@@ -49,7 +49,11 @@ class DeclinedPaymentApiTest extends PaymentApiTest {
         .jsonPath("$.declineReason")
         .isEqualTo(reason)
         .jsonPath("$.gatewayReference")
-        .isNotEmpty();
+        .isNotEmpty()
+        .jsonPath("$.transactions[0].outcome")
+        .isEqualTo("DECLINED")
+        .jsonPath("$.transactions[0].declineReason")
+        .isEqualTo(reason);
   }
 
   @Test

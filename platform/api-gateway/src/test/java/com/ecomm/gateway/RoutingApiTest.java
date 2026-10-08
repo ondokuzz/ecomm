@@ -26,6 +26,9 @@ class RoutingApiTest extends GatewayApiTest {
     "/api/order-management/orders/7f1c, /orders/7f1c",
     "/api/order-management/staff/orders?status=PAID&idPrefix=3f2a, /staff/orders?status=PAID&idPrefix=3f2a",
     "/api/order-management/staff/orders/7f1c, /staff/orders/7f1c",
+    "/api/payment/payments?orderId=7f1c, /payments?orderId=7f1c",
+    "/api/payment/payments/p-1, /payments/p-1",
+    "/api/payment/staff/payments?orderId=7f1c, /staff/payments?orderId=7f1c",
     "/api/promotions/coupons/WELCOME10, /coupons/WELCOME10",
     "/api/promotions/campaigns/7f1c, /campaigns/7f1c",
     "/api/search-discovery/search?category=phones&sort=newest, /search?category=phones&sort=newest",
@@ -63,7 +66,10 @@ class RoutingApiTest extends GatewayApiTest {
     "PATCH, /api/order-management/orders/7f1c/status",
     "POST, /api/order-management/orders/",
     "POST, /api/payment/payments",
-    "GET, /api/payment/payments/p-1",
+    "POST, /api/payment/payments/",
+    "POST, /api/payment/payments/p-1/void",
+    "POST, /api/payment/payments/p-1/void/",
+    "GET, /api/payment/actuator/prometheus",
     "POST, /api/promotions/discounts/evaluate",
     "POST, /api/promotions/discounts/evaluate/",
     "GET, /api/promotions/discounts/evaluate",
@@ -91,6 +97,7 @@ class RoutingApiTest extends GatewayApiTest {
     "POST, /api/inventory/reservations",
     "POST, /api/order-management/orders",
     "POST, /api/payment/payments",
+    "POST, /api/payment/payments/p-1/void",
     "POST, /api/promotions/discounts/evaluate"
   })
   void internalEndpointsAreNotFoundWithoutAToken(String method, String path) {

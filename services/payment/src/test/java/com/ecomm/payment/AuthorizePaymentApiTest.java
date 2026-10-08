@@ -1,7 +1,10 @@
 package com.ecomm.payment;
 
+import static java.time.temporal.ChronoUnit.MINUTES;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 
+import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -34,7 +37,7 @@ class AuthorizePaymentApiTest extends PaymentApiTest {
   }
 
   @Test
-  void eachAuthorizationGetsItsOwnPaymentAndGatewayReference() {
+  void eachKeyGetsItsOwnPaymentAndGatewayReference() {
     var body =
         """
         {"customerId": "customer-42", "orderId": "order-twice", "paymentMethod": "tok_approve", "amount": {"amountMinor": 100, "currency": "EUR"}}
@@ -44,6 +47,22 @@ class AuthorizePaymentApiTest extends PaymentApiTest {
 
     assertThat(second.id()).isNotEqualTo(first.id());
     assertThat(second.gatewayReference()).isNotEqualTo(first.gatewayReference());
+  }
+
+  @Test
+  void anAuthorizationIsItsPaymentsFirstTransaction() {
+    var payment = authorized("order-ledger");
+
+    assertThat(payment.transactions()).hasSize(1);
+    var authorization = payment.transactions().getFirst();
+    assertThat(authorization.kind()).isEqualTo("AUTHORIZATION");
+    assertThat(authorization.outcome()).isEqualTo("APPROVED");
+    assertThat(authorization.amount()).isEqualTo(new AmountView(79900, "EUR"));
+    assertThat(authorization.gatewayReference()).isEqualTo(payment.gatewayReference());
+    assertThat(authorization.declineReason()).isNull();
+    assertThat(authorization.gatewayEventId()).isNull();
+    assertThat(Instant.parse(authorization.at())).isCloseTo(Instant.now(), within(1, MINUTES));
+    assertThat(authorization.backfilled()).isFalse();
   }
 
   @ParameterizedTest

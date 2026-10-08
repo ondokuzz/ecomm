@@ -136,12 +136,16 @@ Every Order Status an Order has been in, oldest first, starting with its placeme
 _Avoid_: Status log, audit trail, timeline (the timeline is how the Storefront draws it)
 
 **Payment**:
-An Order's amount, as `Money`, taken through a payment gateway with a Payment method and recorded with the gateway's answer and its reference for it. A Payment is `AUTHORIZED` when the gateway has approved the amount but not yet captured it, or `DECLINED`, for good, with the gateway's decline reason (such as `insufficient_funds`). A gateway that fails to answer records no Payment at all. It belongs to the Customer who authorized it, and only they can see it. Capture and refund come later.
+An Order's amount, as `Money`, for one Customer, taken through a payment gateway with a Payment method and kept as its Payment transactions. Its status is worked out from them, and never set any other way: `PENDING` while its authorization awaits the gateway's answer; `AUTHORIZED` once the gateway has approved the amount, not yet captured, and while it isn't voided; `DECLINED`, for good, with the gateway's decline reason (such as `insufficient_funds`); or `VOIDED`, for good, once it is released by a Void. A gateway that fails to answer records no Payment at all. It belongs to the Customer who authorized it: only they and Staff can see it, and Staff can't change it. Capture and refund come later.
 _Avoid_: Charge, Transaction
 
 **Payment transaction**:
-One interaction with the payment gateway on a Payment, recorded for good: an authorization, capture, void or refund, with the amount, the gateway's answer and its reference for it. Payment owns them, and never changes or deletes one. A Payment's status and amounts are worked out from its transactions, which are what it is reconciled against the gateway by. Payment records them from Sprint 4.
+One interaction with the payment gateway on a Payment, recorded for good: an `AUTHORIZATION` or a `VOID`, and later a capture or refund. It records its amount, its outcome (`APPROVED`, `DECLINED` or `PENDING`), the gateway's reference and decline reason, the gateway's event ID when a webhook recorded it, when it happened, and whether it was backfilled: reconstructed from a Payment recorded before Sprint 4, timed when it was reconstructed. Payment owns them, and never changes or deletes one. A Payment's status is worked out from its transactions, which are what it is reconciled against the gateway by.
 _Avoid_: Charge, Transaction (on its own), Payment event
+
+**Void**:
+Releasing an authorized or pending Payment's authorization through the gateway before anything is captured, so the Customer's money is no longer held. It records a `VOID` Payment transaction and leaves the Payment `VOIDED`. Voiding a voided Payment again changes nothing; a declined one has nothing to release, and can't be voided. The checkout Saga is to void a Payment to compensate for an Order it can't complete.
+_Avoid_: Cancel (an Order is cancelled; a Payment is voided), Refund (which returns captured money)
 
 **Payment method**:
 How a Customer pays: an opaque token the payment gateway issued for their card, which Checkout passes on to Payment and nothing else reads. The mock gateway takes test tokens: `tok_approve` authorizes; `tok_decline` and `tok_insufficient_funds` decline; `tok_gateway_error` fails to answer.

@@ -9,9 +9,10 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 /**
- * Payment's {@code POST /payments}, called with Checkout's token for the named Customer. Payment
- * records a declined payment too, as a 201 with status {@code DECLINED}; a gateway that fails to
- * answer is a 502 from Payment, and so a {@link DownstreamFailureException}.
+ * Payment's {@code POST /payments}, called with Checkout's token for the named Customer and an
+ * {@code Idempotency-Key} from the Order's ID, since an Order is authorized once. Payment records a
+ * declined payment too, as a 201 with status {@code DECLINED}; a gateway that fails to answer is a
+ * 502 from Payment, and so a {@link DownstreamFailureException}.
  */
 @Component
 class PaymentClient implements PaymentPort {
@@ -40,7 +41,13 @@ class PaymentClient implements PaymentPort {
     var payment =
         Downstream.call(
             "Payment",
-            () -> http.post().uri("/payments").body(body).retrieve().body(PaymentBody.class));
+            () ->
+                http.post()
+                    .uri("/payments")
+                    .header("Idempotency-Key", "checkout:" + orderId + ":authorize")
+                    .body(body)
+                    .retrieve()
+                    .body(PaymentBody.class));
     var status = payment == null ? null : payment.status();
     if ("DECLINED".equals(status)) {
       throw new PaymentDeclinedException(payment.declineReason());

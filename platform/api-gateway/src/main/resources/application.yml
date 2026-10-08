@@ -23,6 +23,10 @@ ecomm:
       order-management:
         uri: http://localhost:8085
         internal: [POST /orders, PATCH /orders/*/status]
+      payment:
+        uri: http://localhost:8084
+        # The Customer's and Staff's reads are routed; only Checkout authorizes and voids.
+        internal: [POST /payments, POST /payments/*/void]
       promotions:
         uri: http://localhost:8087
         # Only Checkout evaluates Coupons, so nobody can probe codes from outside a checkout.

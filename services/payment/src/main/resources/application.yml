@@ -6,6 +6,16 @@ spring:
     url: jdbc:postgresql://localhost:${POSTGRES_PORT:5432}/payment
     username: ecomm
     password: ecomm
+  kafka:
+    bootstrap-servers: localhost:${KAFKA_PORT:9092}
+  modulith:
+    events:
+      # Send again, on startup, what the outbox holds unsent: a send cut short by a crash or restart.
+      republish-outstanding-events-on-restart: true
+
+ecomm:
+  events:
+    schema-registry-url: http://localhost:${APICURIO_PORT:8088}/apis/registry/v3
 
 payment:
   # The PaymentGatewayPort adapter; only mock so far. A value with no adapter fails at startup.

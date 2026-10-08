@@ -63,6 +63,7 @@ class PaymentIsolationApiTest extends PaymentApiTest {
     http.post()
         .uri("/payments")
         .headers(h -> h.setBearerAuth(FakeKeycloak.token("someone-" + role, role)))
+        .header("Idempotency-Key", "isolation-" + role)
         .contentType(MediaType.APPLICATION_JSON)
         .body(PAYMENT)
         .exchange()
@@ -84,9 +85,5 @@ class PaymentIsolationApiTest extends PaymentApiTest {
         .isForbidden()
         .expectHeader()
         .contentType(MediaType.APPLICATION_PROBLEM_JSON);
-  }
-
-  private static String staffToken() {
-    return FakeKeycloak.token("staff-1", "STAFF");
   }
 }

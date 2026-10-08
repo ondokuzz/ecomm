@@ -225,6 +225,7 @@ services:
     image: ${IMAGE_PREFIX:-ecomm}/payment:${IMAGE_TAG:-latest}
     ports: ["${PAYMENT_PORT:-8084}:8080"]
     depends_on:
+      <<: *event-backbone
       postgres-databases: { condition: service_completed_successfully }
       keycloak: { condition: service_healthy }
 
@@ -414,6 +415,7 @@ services:
       inventory: { condition: service_healthy }
       cart: { condition: service_healthy }
       order-management: { condition: service_healthy }
+      payment: { condition: service_healthy }
       checkout-pricing: { condition: service_healthy }
       promotions: { condition: service_healthy }
       search-discovery: { condition: service_healthy }

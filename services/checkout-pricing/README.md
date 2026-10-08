@@ -99,7 +99,8 @@ or belongs to someone else is a 404; in all three cases nothing else happens. Ot
 1. place the Order in `PLACED` in Order Management, at the session's Prices, with every Discount in
    order (`"discounts"`, possibly empty) and its tax;
 2. authorize the payment for the Order's total (lines less every Discount, plus tax), as Order
-   Management answers it, with the Payment method;
+   Management answers it, with the Payment method and the `Idempotency-Key`
+   `checkout:<orderId>:authorize`, which Payment requires;
 3. commit the Reservation, which takes its Stock off on-hand for good;
 4. set the Order to `PAID`;
 5. clear the Cart;

@@ -17,6 +17,8 @@ ecomm:
         uri: http://checkout-pricing:8080
       order-management:
         uri: http://order-management:8080
+      payment:
+        uri: http://payment:8080
       promotions:
         uri: http://promotions:8080
       search-discovery:

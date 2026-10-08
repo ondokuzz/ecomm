@@ -3,6 +3,7 @@ package com.ecomm.checkoutpricing;
 import static com.github.tomakehurst.wiremock.client.WireMock.anyRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.anyUrl;
 import static com.github.tomakehurst.wiremock.client.WireMock.deleteRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalToJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
@@ -72,6 +73,17 @@ class PaySessionApiTest extends CheckoutApiTest {
                      "amount": {"amountMinor": 159800, "currency": "EUR"}}
                     """
                         .formatted(ORDER_ID))));
+  }
+
+  @Test
+  void thePaymentIsAuthorizedWithAKeyFromTheOrder() {
+    stubSuccessfulCheckout();
+
+    pay(startedSessionId()).expectStatus().isOk();
+
+    DOWNSTREAM.verify(
+        postRequestedFor(urlEqualTo("/payments"))
+            .withHeader("Idempotency-Key", equalTo("checkout:" + ORDER_ID + ":authorize")));
   }
 
   @Test

@@ -1,8 +1,11 @@
 package com.ecomm.payment;
 
+import com.ecomm.commons.events.IntegrationEventPublisher;
 import com.ecomm.payment.application.PaymentService;
 import com.ecomm.payment.application.port.out.PaymentGatewayPort;
 import com.ecomm.payment.application.port.out.PaymentRepository;
+import com.ecomm.payment.application.port.out.TimeSource;
+import com.ecomm.payment.application.port.out.Transactions;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -13,9 +16,14 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 class UseCaseConfiguration {
 
-  /** Serves every Payment use case: authorizing a payment and reading one back. */
+  /** Serves every Payment use case. */
   @Bean
-  PaymentService paymentService(PaymentGatewayPort gateway, PaymentRepository payments) {
-    return new PaymentService(gateway, payments);
+  PaymentService paymentService(
+      PaymentGatewayPort gateway,
+      PaymentRepository payments,
+      Transactions transactions,
+      IntegrationEventPublisher events,
+      TimeSource time) {
+    return new PaymentService(gateway, payments, transactions, events, time);
   }
 }

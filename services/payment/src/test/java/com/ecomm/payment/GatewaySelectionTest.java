@@ -2,6 +2,7 @@ package com.ecomm.payment;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.ecomm.commons.events.EventBackbone;
 import com.ecomm.commons.security.FakeKeycloak;
 import java.util.HashMap;
 import java.util.Map;
@@ -33,10 +34,12 @@ class GatewaySelectionTest {
   private static Map<String, Object> infrastructure() {
     var properties = new HashMap<String, Object>();
     FakeKeycloak.registerWith((name, value) -> properties.put(name, value.get()));
+    EventBackbone.registerWith((name, value) -> properties.put(name, value.get()));
     PaymentApiTest.POSTGRES.start();
     properties.put("spring.datasource.url", PaymentApiTest.POSTGRES.getJdbcUrl());
     properties.put("spring.datasource.username", PaymentApiTest.POSTGRES.getUsername());
     properties.put("spring.datasource.password", PaymentApiTest.POSTGRES.getPassword());
+    properties.put("spring.flyway.locations", "classpath:db/migration,classpath:db/testdata");
     properties.put("server.port", 0);
     return properties;
   }

@@ -44,6 +44,7 @@ abstract class GatewayApiTest {
             "cart",
             "checkout-pricing",
             "order-management",
+            "payment",
             "promotions",
             "search-discovery",
             "reviews-ratings")) {

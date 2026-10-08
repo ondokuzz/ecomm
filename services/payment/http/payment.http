@@ -1,10 +1,12 @@
 # Exercises every Payment endpoint against the compose stack (`docker compose up -d --build`).
 # Run the requests top to bottom in the IntelliJ HTTP client; the token requests store tokens for
-# the ones after them.
+# the ones after them. Each change also publishes a payment.payment event; the README shows how to
+# watch the topic.
 
 @payment = http://localhost:8084
 @keycloak = http://localhost:8180/realms/ecomm/protocol/openid-connect/token
 @userinfo = http://localhost:8180/realms/ecomm/protocol/openid-connect/userinfo
+@gateway = http://localhost:8000/api/payment
 
 ### Customer token
 POST {{keycloak}}
@@ -28,22 +30,69 @@ grant_type=client_credentials&client_id=checkout&client_secret=checkout-dev-secr
 
 > {% client.global.set("checkoutToken", response.body.access_token); %}
 
-### Checkout authorizes an Order's payment for the Customer: 201, AUTHORIZED by the approving test card
+### Checkout authorizes an Order's payment for the Customer: 201, AUTHORIZED by the approving test card, with its AUTHORIZATION transaction
+< {% client.global.set("authorizeKey", $random.uuid); %}
 POST {{payment}}/payments
 Authorization: Bearer {{checkoutToken}}
+Idempotency-Key: {{authorizeKey}}
 Content-Type: application/json
 
 {"customerId": "{{customerId}}", "orderId": "order-1", "paymentMethod": "tok_approve", "amount": {"amountMinor": 79900, "currency": "EUR"}}
 
 > {% client.global.set("paymentId", response.body.id); %}
 
+### The same request with the same key: the first response again, Idempotent-Replayed: true, and nothing more is authorized
+POST {{payment}}/payments
+Authorization: Bearer {{checkoutToken}}
+Idempotency-Key: {{authorizeKey}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}", "orderId": "order-1", "paymentMethod": "tok_approve", "amount": {"amountMinor": 79900, "currency": "EUR"}}
+
+### Without a key: 400, idempotencyKeyRequired
+POST {{payment}}/payments
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}", "orderId": "order-1", "paymentMethod": "tok_approve", "amount": {"amountMinor": 79900, "currency": "EUR"}}
+
 ### The Customer reads it back with their own token
 GET {{payment}}/payments/{{paymentId}}
 Authorization: Bearer {{customerToken}}
 
+### The same, through the API gateway
+GET {{gateway}}/payments/{{paymentId}}
+Authorization: Bearer {{customerToken}}
+
+### The Customer's Payments for the Order, newest first, through the gateway
+GET {{gateway}}/payments?orderId=order-1
+Authorization: Bearer {{customerToken}}
+
+### Checkout voids it: 200, VOIDED, with a VOID transaction
+POST {{payment}}/payments/{{paymentId}}/void
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}"}
+
+### Voiding it again: the same 200, and nothing more is recorded
+POST {{payment}}/payments/{{paymentId}}/void
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}"}
+
+### The gateway hides the commands: 404
+POST {{gateway}}/payments/{{paymentId}}/void
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}"}
+
 ### A declining test card: 201, recorded as DECLINED with its declineReason, card_declined
 POST {{payment}}/payments
 Authorization: Bearer {{checkoutToken}}
+Idempotency-Key: {{$uuid}}
 Content-Type: application/json
 
 {"customerId": "{{customerId}}", "orderId": "order-2", "paymentMethod": "tok_decline", "amount": {"amountMinor": 79900, "currency": "EUR"}}
@@ -54,9 +103,17 @@ Content-Type: application/json
 GET {{payment}}/payments/{{declinedPaymentId}}
 Authorization: Bearer {{customerToken}}
 
+### A declined Payment can't be voided: 409, paymentNotVoidable
+POST {{payment}}/payments/{{declinedPaymentId}}/void
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}"}
+
 ### Not enough funds: DECLINED, insufficient_funds
 POST {{payment}}/payments
 Authorization: Bearer {{checkoutToken}}
+Idempotency-Key: {{$uuid}}
 Content-Type: application/json
 
 {"customerId": "{{customerId}}", "orderId": "order-3", "paymentMethod": "tok_insufficient_funds", "amount": {"amountMinor": 79900, "currency": "EUR"}}
@@ -64,6 +121,7 @@ Content-Type: application/json
 ### A token the mock doesn't know: DECLINED, unknown_payment_method
 POST {{payment}}/payments
 Authorization: Bearer {{checkoutToken}}
+Idempotency-Key: {{$uuid}}
 Content-Type: application/json
 
 {"customerId": "{{customerId}}", "orderId": "order-4", "paymentMethod": "tok_visa", "amount": {"amountMinor": 79900, "currency": "EUR"}}
@@ -71,6 +129,7 @@ Content-Type: application/json
 ### The gateway fails to answer: 502, and no Payment is recorded
 POST {{payment}}/payments
 Authorization: Bearer {{checkoutToken}}
+Idempotency-Key: {{$uuid}}
 Content-Type: application/json
 
 {"customerId": "{{customerId}}", "orderId": "order-5", "paymentMethod": "tok_gateway_error", "amount": {"amountMinor": 79900, "currency": "EUR"}}
@@ -78,6 +137,7 @@ Content-Type: application/json
 ### No paymentMethod: 400
 POST {{payment}}/payments
 Authorization: Bearer {{checkoutToken}}
+Idempotency-Key: {{$uuid}}
 Content-Type: application/json
 
 {"customerId": "{{customerId}}", "orderId": "order-1", "amount": {"amountMinor": 79900, "currency": "EUR"}}
@@ -89,6 +149,7 @@ Authorization: Bearer {{customerToken}}
 ### An amount that isn't positive: 400
 POST {{payment}}/payments
 Authorization: Bearer {{checkoutToken}}
+Idempotency-Key: {{$uuid}}
 Content-Type: application/json
 
 {"customerId": "{{customerId}}", "orderId": "order-1", "paymentMethod": "tok_approve", "amount": {"amountMinor": 0, "currency": "EUR"}}
@@ -96,6 +157,7 @@ Content-Type: application/json
 ### An unknown currency: 400
 POST {{payment}}/payments
 Authorization: Bearer {{checkoutToken}}
+Idempotency-Key: {{$uuid}}
 Content-Type: application/json
 
 {"customerId": "{{customerId}}", "orderId": "order-1", "paymentMethod": "tok_approve", "amount": {"amountMinor": 79900, "currency": "XYZ"}}
@@ -103,6 +165,7 @@ Content-Type: application/json
 ### A Customer can't authorize a payment, only Checkout can: 403
 POST {{payment}}/payments
 Authorization: Bearer {{customerToken}}
+Idempotency-Key: {{$uuid}}
 Content-Type: application/json
 
 {"customerId": "{{customerId}}", "orderId": "order-1", "paymentMethod": "tok_approve", "amount": {"amountMinor": 79900, "currency": "EUR"}}
@@ -113,7 +176,7 @@ Content-Type: application/json
 
 {"customerId": "{{customerId}}", "orderId": "order-1", "paymentMethod": "tok_approve", "amount": {"amountMinor": 79900, "currency": "EUR"}}
 
-### Staff have no Payments: 403
+### Staff token
 POST {{keycloak}}
 Content-Type: application/x-www-form-urlencoded
 
@@ -121,6 +184,14 @@ grant_type=password&client_id=dev-cli&username=staff@ecomm.local&password=staff
 
 > {% client.global.set("staffToken", response.body.access_token); %}
 
-###
+### Staff read every Payment for an Order, with its transactions, through the gateway
+GET {{gateway}}/staff/payments?orderId=order-1
+Authorization: Bearer {{staffToken}}
+
+### A Customer can't: 403
+GET {{gateway}}/staff/payments?orderId=order-1
+Authorization: Bearer {{customerToken}}
+
+### Staff read Payments only under /staff/payments: 403
 GET {{payment}}/payments/{{paymentId}}
 Authorization: Bearer {{staffToken}}

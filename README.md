@@ -128,7 +128,8 @@ Kafka, Mongo and the Apicurio schema registry run in the default stack. On every
 steps run once and exit before anything uses them ([ADR 0006](./docs/adr/0006-kafka-as-single-event-backbone.md)):
 
 - `kafka-topics` creates a topic for each event schema in [`platform/event-schemas`](./platform/event-schemas/README.md):
-  `order-management.order`, `inventory.stock`, `catalog.product` and `catalog.category`. Each is
+  `order-management.order`, `inventory.stock`, `catalog.product`, `catalog.category` and
+  `payment.payment`. Each is
   log-compacted, with 6 partitions. The broker creates no topics itself, so producing to any other
   topic fails.
 - `schema-registry-init` registers the schemas in Apicurio. It fails, and so does `make up`, if a
