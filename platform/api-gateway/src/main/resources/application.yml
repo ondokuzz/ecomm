@@ -18,14 +18,19 @@ ecomm:
         internal: [/stock/decrement, /reservations/**]
       cart:
         uri: http://localhost:8083
+        # Only Orchestration clears a named Customer's Cart.
+        internal: [/carts/**]
       checkout-pricing:
         uri: http://localhost:8086
+        # Only Orchestration ends a named Customer's Checkout Session.
+        internal: [POST /checkout/sessions/*/end]
       order-management:
         uri: http://localhost:8085
         internal: [POST /orders, PATCH /orders/*/status]
       payment:
         uri: http://localhost:8084
-        # The Customer's and Staff's reads are routed; only Checkout authorizes and voids.
+        # The Customer's and Staff's reads are routed; only Orchestration and Checkout authorize and
+        # void.
         internal: [POST /payments, POST /payments/*/void]
       promotions:
         uri: http://localhost:8087

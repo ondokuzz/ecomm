@@ -13,7 +13,7 @@
 POST {{keycloak}}
 Content-Type: application/x-www-form-urlencoded
 
-grant_type=password&client_id=dev-cli&username=demo@ecomm.local&password=demo
+grant_type=password&client_id=dev-cli&username=demo@ecomm.local&password=demo&scope=openid
 
 > {% client.global.set("customerToken", response.body.access_token); %}
 
@@ -154,3 +154,48 @@ Authorization: Bearer {{customerToken}}
 
 ### Without a token: 401
 POST {{checkout}}/checkout/sessions
+
+### Orchestration token: the checkout Saga's own identity, for the commands it calls
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&client_id=orchestration&client_secret=orchestration-dev-secret
+
+> {% client.global.set("orchestrationToken", response.body.access_token); %}
+
+### The demo Customer's ID: the sub Orchestration names in the body
+GET http://localhost:8180/realms/ecomm/protocol/openid-connect/userinfo
+Authorization: Bearer {{customerToken}}
+
+> {% client.global.set("customerId", response.body.sub); %}
+
+### Fill the Cart and start a session for the Saga to end
+PUT {{cart}}/cart/items/PHN-PIXEL-9-OBSIDIAN-256
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"quantity": 1}
+
+###
+POST {{checkout}}/checkout/sessions
+Authorization: Bearer {{customerToken}}
+
+> {% client.global.set("sagaSessionId", response.body.id); %}
+
+### Orchestration ends it: 204; sending it again is the same 204
+POST {{checkout}}/checkout/sessions/{{sagaSessionId}}/end
+Authorization: Bearer {{orchestrationToken}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}"}
+
+### The session is over: 404
+GET {{checkout}}/checkout/sessions/current
+Authorization: Bearer {{customerToken}}
+
+### A Customer can't end a session this way: 403
+POST {{checkout}}/checkout/sessions/{{sagaSessionId}}/end
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}"}

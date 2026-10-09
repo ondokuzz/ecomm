@@ -70,6 +70,10 @@ class RoutingApiTest extends GatewayApiTest {
     "POST, /api/payment/payments/p-1/void",
     "POST, /api/payment/payments/p-1/void/",
     "GET, /api/payment/actuator/prometheus",
+    "POST, /api/cart/carts/clear",
+    "POST, /api/cart/carts/clear/",
+    "POST, /api/checkout-pricing/checkout/sessions/s-1/end",
+    "POST, /api/checkout-pricing/checkout/sessions/s-1/end/",
     "POST, /api/promotions/discounts/evaluate",
     "POST, /api/promotions/discounts/evaluate/",
     "GET, /api/promotions/discounts/evaluate",
@@ -98,6 +102,8 @@ class RoutingApiTest extends GatewayApiTest {
     "POST, /api/order-management/orders",
     "POST, /api/payment/payments",
     "POST, /api/payment/payments/p-1/void",
+    "POST, /api/cart/carts/clear",
+    "POST, /api/checkout-pricing/checkout/sessions/s-1/end",
     "POST, /api/promotions/discounts/evaluate"
   })
   void internalEndpointsAreNotFoundWithoutAToken(String method, String path) {

@@ -139,6 +139,14 @@ public class CheckoutService implements CheckoutUseCase {
     return new CheckoutResult(orderId, OrderStatus.PAID);
   }
 
+  @Override
+  public void end(String customerId, String sessionId) {
+    sessions
+        .findByCustomer(customerId)
+        .filter(session -> session.id().equals(sessionId))
+        .ifPresent(sessions::delete);
+  }
+
   /**
    * The Customer's Checkout Session with this ID.
    *

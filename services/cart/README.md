@@ -23,6 +23,17 @@ names (its `sub`). No one can reach another Customer's Cart. Staff have no Cart:
 The quantity must be a positive JSON integer; anything else (`0`, `-1`, `1.5`, `"2"`, `null`, a
 missing field, a number past 2^31−1) is a 400. Every error is a problem detail.
 
+One endpoint is internal. The checkout Saga clears a Customer's Cart once their Order is paid, with
+Orchestration's own token (`ORCHESTRATION`,
+[ADR 0002](../identity-access/docs/adr/0002-service-identity-by-client-credentials.md)), naming
+the Customer in the body. Any other token, a Customer's or Checkout's included, gets 403, and the
+API gateway doesn't route it. Clearing an empty Cart changes nothing, so it takes no
+`Idempotency-Key`.
+
+| Endpoint | |
+|---|---|
+| `POST /carts/clear` | Body `{"customerId": "…"}`: empties that Customer's Cart; 204. A missing or blank `customerId` is a 400 |
+
 [`http/cart.http`](./http/cart.http) exercises every endpoint against the compose stack.
 
 ## Storage

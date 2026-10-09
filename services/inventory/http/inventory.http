@@ -203,3 +203,36 @@ Content-Type: application/json
 ### Stop stocking it: 204, then its stock is a 404. While Reservations hold some, 409 with reserved
 DELETE {{inventory}}/stock/HTTP-FILE-VARIANT
 Authorization: Bearer {{staffToken}}
+
+### Orchestration token: the checkout Saga's own identity, for the commands it calls
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&client_id=orchestration&client_secret=orchestration-dev-secret
+
+> {% client.global.set("orchestrationToken", response.body.access_token); %}
+
+### Checkout reserves a batch for the Saga to commit
+POST {{inventory}}/reservations
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"customerId": "http-file-customer", "expiresAt": "2030-01-01T00:00:00Z", "items": [
+  {"variantId": "PHN-PIXEL-9", "quantity": 1}
+]}
+
+> {% client.global.set("sagaReservationId", response.body.id); %}
+
+### Orchestration commits it, without a key: 200, COMMITTED; sending it again is the same 200 and takes nothing more
+POST {{inventory}}/reservations/{{sagaReservationId}}/commit
+Authorization: Bearer {{orchestrationToken}}
+Content-Type: application/json
+
+{"customerId": "http-file-customer"}
+
+### Orchestration can't reserve or release, only commit: 403
+POST {{inventory}}/reservations/{{sagaReservationId}}/release
+Authorization: Bearer {{orchestrationToken}}
+Content-Type: application/json
+
+{"customerId": "http-file-customer"}

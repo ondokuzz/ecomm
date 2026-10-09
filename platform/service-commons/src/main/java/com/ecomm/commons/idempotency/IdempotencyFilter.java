@@ -70,11 +70,9 @@ class IdempotencyFilter extends OncePerRequestFilter {
     }
     var key = request.getHeader(KEY_HEADER);
     if (key == null) {
-      if (command.required()) {
-        refuse(request, response, IdempotencyKeyException.required());
-      } else {
-        chain.doFilter(request, response);
-      }
+      // A command that requires a key refuses this once it has been authorized: see
+      // IdempotencyKeyRequirement.
+      chain.doFilter(request, response);
       return;
     }
     if (!isValid(key)) {

@@ -19,10 +19,10 @@ stay with the services, which still check every token themselves.
 |---|---|---|
 | `catalog` | `/products/**`, `/variants/**`, `/categories/**`, `/currencies` | |
 | `inventory` | `/stock/*`, but not Staff's `/stock/*/movements` | `/reservations/**`, and `/stock/decrement`, which Inventory no longer has |
-| `cart` | | |
-| `checkout-pricing` | | |
+| `cart` | | `/carts/**`: clearing a named Customer's Cart, which only Orchestration calls |
+| `checkout-pricing` | | `POST /checkout/sessions/*/end`: ending a named Customer's session, which only Orchestration calls |
 | `order-management` | | `POST /orders`, `PATCH /orders/*/status` |
-| `payment` | | `POST /payments`, `POST /payments/*/void`: authorizing and voiding, which only Checkout calls |
+| `payment` | | `POST /payments`, `POST /payments/*/void`: authorizing and voiding, which only Orchestration and Checkout call |
 | `promotions` | | `/discounts/**`: Coupon evaluation, which only Checkout calls |
 | `search-discovery` | `/search` | |
 | `reviews-ratings` | `/products/*/reviews`, `/products/*/rating-summary`, `/rating-summaries` | |

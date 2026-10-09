@@ -9,8 +9,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 
 /**
- * Only Checkout places Orders and changes their status; only a Customer reads their Orders. Every
- * endpoint needs a token.
+ * Only Orchestration and Checkout place Orders and change their status; only a Customer reads their
+ * Orders. Every endpoint needs a token.
  */
 class OrderSecurityApiTest extends OrderApiTest {
 
@@ -31,7 +31,7 @@ class OrderSecurityApiTest extends OrderApiTest {
 
   @ParameterizedTest
   @ValueSource(strings = {"CUSTOMER", "STAFF"})
-  void onlyCheckoutCanPlaceAndChangeOrders(String role) {
+  void onlyOrchestrationAndCheckoutCanPlaceAndChangeOrders(String role) {
     var id = placed().id();
     var token = FakeKeycloak.token(CUSTOMER, role);
 
@@ -45,7 +45,7 @@ class OrderSecurityApiTest extends OrderApiTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"CHECKOUT", "STAFF"})
+  @ValueSource(strings = {"CHECKOUT", "ORCHESTRATION", "STAFF"})
   void onlyACustomerCanReadOrders(String role) {
     var id = placed().id();
     var token = FakeKeycloak.token(CUSTOMER, role);

@@ -29,9 +29,11 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Checkout authorizes and voids a Customer's Payments with its own {@code CHECKOUT} token, naming
- * the Customer in the body. The Customer reads them back with a {@code CUSTOMER} token, whose
- * {@code sub} must own the Payment; Staff read them under {@code /staff/payments}.
+ * The checkout Saga authorizes, voids and reads a Customer's Payments with Orchestration's own
+ * {@code ORCHESTRATION} token, naming the Customer in the body, or as {@code customerId} when it
+ * reads one. Checkout's {@code CHECKOUT} token authorizes and voids too, until Checkout moves onto
+ * the Saga. The Customer reads them back with a {@code CUSTOMER} token, whose {@code sub} must own
+ * the Payment; Staff read them under {@code /staff/payments}.
  */
 @RestController
 @RequestMapping("/payments")
@@ -56,10 +58,11 @@ class PaymentController {
    * the gateway; a repeat replays the first response and authorizes nothing more.
    */
   @PostMapping
-  @PreAuthorize("hasRole('CHECKOUT')")
+  @PreAuthorize("hasAnyRole('CHECKOUT', 'ORCHESTRATION')")
   @IdempotentCommand
   ResponseEntity<PaymentResponse> authorize(
-      @RequestHeader("Idempotency-Key") String idempotencyKey,
+      // Never null here: @IdempotentCommand refuses a request without one.
+      @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
       @RequestBody AuthorizePaymentRequest request) {
     var payment = authorize.authorize(request.toAuthorizationRequest(), idempotencyKey);
     log.info(
@@ -77,7 +80,7 @@ class PaymentController {
    * answer.
    */
   @PostMapping("/{id}/void")
-  @PreAuthorize("hasRole('CHECKOUT')")
+  @PreAuthorize("hasAnyRole('CHECKOUT', 'ORCHESTRATION')")
   PaymentResponse voidPayment(@PathVariable String id, @RequestBody VoidPaymentRequest request) {
     var customerId = request.customer();
     var payment =
@@ -95,10 +98,17 @@ class PaymentController {
   @GetMapping("/{id}")
   @PreAuthorize("hasRole('CUSTOMER')")
   PaymentResponse payment(CurrentCustomer customer, @PathVariable String id) {
-    return parse(id)
-        .flatMap(paymentId -> find.payment(customer.id(), paymentId))
-        .map(PaymentResponse::of)
-        .orElseThrow(() -> new PaymentNotFoundException(id));
+    return ownedPayment(customer.id(), id);
+  }
+
+  /**
+   * The named Customer's Payment, as the checkout Saga reads it while it awaits settlement; 404 as
+   * for the Customer's own read.
+   */
+  @GetMapping(path = "/{id}", params = "customerId")
+  @PreAuthorize("hasRole('ORCHESTRATION')")
+  PaymentResponse customersPayment(@PathVariable String id, @RequestParam String customerId) {
+    return ownedPayment(customerId, id);
   }
 
   /** The Customer's Payments for one of their Orders, newest first; empty for anyone else's. */
@@ -106,6 +116,13 @@ class PaymentController {
   @PreAuthorize("hasRole('CUSTOMER')")
   List<PaymentResponse> payments(CurrentCustomer customer, @RequestParam String orderId) {
     return find.payments(customer.id(), orderId).stream().map(PaymentResponse::of).toList();
+  }
+
+  private PaymentResponse ownedPayment(String customerId, String id) {
+    return parse(id)
+        .flatMap(paymentId -> find.payment(customerId, paymentId))
+        .map(PaymentResponse::of)
+        .orElseThrow(() -> new PaymentNotFoundException(id));
   }
 
   private static Optional<UUID> parse(String id) {

@@ -20,6 +20,19 @@ Every endpoint is the calling Customer's own and needs a `CUSTOMER` token.
 | `DELETE /checkout/sessions/{id}/coupon` | Takes the Coupon off, if any; 200 with the session |
 | `POST /checkout/sessions/{id}/pay` | Pays it with `{"paymentMethod": "…"}`; 200 with `{"orderId": "…", "status": "PAID"}` |
 
+One endpoint is internal. The checkout Saga ends a Customer's Checkout Session once their Order is
+paid, with Orchestration's own token (`ORCHESTRATION`,
+[ADR 0002](../identity-access/docs/adr/0002-service-identity-by-client-credentials.md)), naming
+the Customer in the body. Any other token, a Customer's or Checkout's included, gets 403, and the
+API gateway doesn't route it.
+
+| Endpoint | |
+|---|---|
+| `POST /checkout/sessions/{id}/end` | Body `{"customerId": "…"}`: ends the session if the Customer's pointer still names it; 204 whether or not it did. A missing or blank `customerId` is a 400 |
+
+Ending a session the Customer has since replaced, or one already gone, changes nothing, so a
+repeat is harmless and the command takes no `Idempotency-Key`.
+
 A session looks like this. `discounts` lists every Discount in the order they apply, Promotions'
 answer: the running Campaigns', by ID and name, then the Coupon's, by its code, once one is applied.
 Its `total` is the `subtotal`, less every Discount, plus the `tax`:

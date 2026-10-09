@@ -56,7 +56,7 @@ abstract class PaymentApiTest {
     return FakeKeycloak.token("customer-42", "CUSTOMER");
   }
 
-  /** Checkout's own token: the only caller allowed to authorize and void a payment. */
+  /** Checkout's own token, which authorizes and voids until Checkout moves onto the Saga. */
   static String checkoutToken() {
     return FakeKeycloak.token("checkout", "CHECKOUT");
   }

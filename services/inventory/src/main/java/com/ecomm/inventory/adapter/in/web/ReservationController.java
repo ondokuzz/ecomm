@@ -27,9 +27,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Internal: only Checkout, with its own {@code CHECKOUT} token, holds Stock for a Customer and
- * commits or releases the Reservation, naming the Customer in the body (ADR 0002). A Reservation
- * owned by anyone else is a 404.
+ * Internal: Checkout, with its own {@code CHECKOUT} token, holds Stock for a Customer and releases
+ * the Reservation; the checkout Saga commits it with Orchestration's {@code ORCHESTRATION} token,
+ * as Checkout may too until it moves onto the Saga. Each names the Customer in the body (ADR 0002).
+ * A Reservation owned by anyone else is a 404.
  */
 @RestController
 @RequestMapping("/reservations")
@@ -59,8 +60,12 @@ class ReservationController {
         .body(ReservationResponse.of(reservation));
   }
 
-  /** 200 with the Reservation {@code COMMITTED}, its Stock taken off on-hand. */
+  /**
+   * 200 with the Reservation {@code COMMITTED}, its Stock taken off on-hand. Committing it again
+   * changes nothing, so the command takes no {@code Idempotency-Key}.
+   */
   @PostMapping("/{id}/commit")
+  @PreAuthorize("hasAnyRole('CHECKOUT', 'ORCHESTRATION')")
   ReservationResponse commit(@PathVariable String id, @RequestBody CustomerRequest request) {
     var reservation =
         owned(id, reservationId -> settle.commit(request.customerId(), reservationId));

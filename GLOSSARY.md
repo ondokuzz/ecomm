@@ -132,11 +132,11 @@ The lifecycle stage of an Order: `Placed → Paid → Fulfilled → Shipped → 
 _Avoid_: State (Status is the domain term; state is a general programming concept)
 
 **Order Status history**:
-Every Order Status an Order has been in, oldest first, starting with its placement: for each, when the Order reached it and which caller moved it there (`CHECKOUT` for now). Order Management appends an entry with every change, in the same transaction, and never changes or deletes one; the Order's current Order Status is its last entry. An Order placed before histories were kept (Sprints 1–2) has its placement and, if it had moved on, its Order Status then, marked _backfilled_ and timed at its placement, since the real time was never recorded.
+Every Order Status an Order has been in, oldest first, starting with its placement: for each, when the Order reached it and which caller moved it there: `ORCHESTRATION` for a change the checkout Saga made, or `CHECKOUT` for one Checkout made itself, as every change was before the Saga. Order Management appends an entry with every change, in the same transaction, and never changes or deletes one; the Order's current Order Status is its last entry. An Order placed before histories were kept (Sprints 1–2) has its placement and, if it had moved on, its Order Status then, marked _backfilled_ and timed at its placement, since the real time was never recorded.
 _Avoid_: Status log, audit trail, timeline (the timeline is how the Storefront draws it)
 
 **Payment**:
-An Order's amount, as `Money`, for one Customer, taken through a payment gateway with a Payment method and kept as its Payment transactions. Its status is worked out from them, and never set any other way: `PENDING` while its authorization awaits the gateway's answer; `AUTHORIZED` once the gateway has approved the amount, not yet captured, and while it isn't voided; `DECLINED`, for good, with the gateway's decline reason (such as `insufficient_funds`); or `VOIDED`, for good, once it is released by a Void. A gateway that fails to answer records no Payment at all. It belongs to the Customer who authorized it: only they and Staff can see it, and Staff can't change it. Capture and refund come later.
+An Order's amount, as `Money`, for one Customer, taken through a payment gateway with a Payment method and kept as its Payment transactions. Its status is worked out from them, and never set any other way: `PENDING` while its authorization awaits the gateway's answer; `AUTHORIZED` once the gateway has approved the amount, not yet captured, and while it isn't voided; `DECLINED`, for good, with the gateway's decline reason (such as `insufficient_funds`); or `VOIDED`, for good, once it is released by a Void. A gateway that fails to answer records no Payment at all. It belongs to the Customer who authorized it: only they, Staff and Orchestration (naming the Customer) can see it, and Staff can't change it. Capture and refund come later.
 _Avoid_: Charge, Transaction
 
 **Payment transaction**:
@@ -184,7 +184,7 @@ A business process that spans contexts, such as checkout, run as a Temporal work
 _Avoid_: Workflow (Temporal's mechanism, not the business process), Process manager
 
 **Orchestration**:
-The service that runs every Saga as Temporal's worker, owning no domain data. It calls other contexts with its own identity, the `orchestration` client whose service account holds the `ORCHESTRATION` role, never with a Customer's token.
+The service that runs every Saga as Temporal's worker, owning no domain data. It calls other contexts with its own identity, the `orchestration` client whose service account holds the `ORCHESTRATION` role, never with a Customer's token. Each command it calls names the Customer as `customerId` in its body, and the gateway routes none of them: placing an Order and changing its Order Status, authorizing and voiding a Payment, committing a Reservation, clearing a Customer's Cart, and ending a Checkout Session. It reads a Payment as the Customer's own read does, naming the Customer as `customerId` in the query.
 _Avoid_: Orchestrator, Saga service
 
 **Idempotency key**:

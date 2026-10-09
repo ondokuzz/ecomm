@@ -162,7 +162,7 @@ Content-Type: application/json
 
 {"customerId": "{{customerId}}", "orderId": "order-1", "paymentMethod": "tok_approve", "amount": {"amountMinor": 79900, "currency": "XYZ"}}
 
-### A Customer can't authorize a payment, only Checkout can: 403
+### A Customer can't authorize a payment, only Orchestration and Checkout can: 403
 POST {{payment}}/payments
 Authorization: Bearer {{customerToken}}
 Idempotency-Key: {{$uuid}}
@@ -195,3 +195,41 @@ Authorization: Bearer {{customerToken}}
 ### Staff read Payments only under /staff/payments: 403
 GET {{payment}}/payments/{{paymentId}}
 Authorization: Bearer {{staffToken}}
+
+### Orchestration token: the checkout Saga's own identity, for the commands it calls
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&client_id=orchestration&client_secret=orchestration-dev-secret
+
+> {% client.global.set("orchestrationToken", response.body.access_token); %}
+
+### Orchestration authorizes an Order's payment under its own key: 201, AUTHORIZED
+< {% client.global.set("sagaAuthorizeKey", "http-file-" + $random.uuid + ":run-1:authorizePayment"); %}
+POST {{payment}}/payments
+Authorization: Bearer {{orchestrationToken}}
+Idempotency-Key: {{sagaAuthorizeKey}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}", "orderId": "order-saga-1", "paymentMethod": "tok_approve", "amount": {"amountMinor": 79900, "currency": "EUR"}}
+
+> {% client.global.set("sagaPaymentId", response.body.id); %}
+
+### Orchestration reads it, naming the Customer, as the Saga does while it awaits settlement
+GET {{payment}}/payments/{{sagaPaymentId}}?customerId={{customerId}}
+Authorization: Bearer {{orchestrationToken}}
+
+### Naming another Customer: 404
+GET {{payment}}/payments/{{sagaPaymentId}}?customerId=someone-else
+Authorization: Bearer {{orchestrationToken}}
+
+### Orchestration voids it: 200, VOIDED; voiding again is the same 200
+POST {{payment}}/payments/{{sagaPaymentId}}/void
+Authorization: Bearer {{orchestrationToken}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}"}
+
+### A Customer can't read as Orchestration does: 403
+GET {{payment}}/payments/{{sagaPaymentId}}?customerId={{customerId}}
+Authorization: Bearer {{customerToken}}

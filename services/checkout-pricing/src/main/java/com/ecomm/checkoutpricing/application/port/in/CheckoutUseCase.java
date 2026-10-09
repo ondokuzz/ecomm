@@ -50,4 +50,11 @@ public interface CheckoutUseCase {
    * @throws PaymentDeclinedException when the gateway declines the payment method
    */
   CheckoutResult pay(String customerId, String sessionId, String paymentMethod);
+
+  /**
+   * Ends the Customer's Checkout Session {@code sessionId} once its Order is paid, but only while
+   * the Customer's pointer still names it: a session they have since replaced, or one that is gone,
+   * is left as it is.
+   */
+  void end(String customerId, String sessionId);
 }

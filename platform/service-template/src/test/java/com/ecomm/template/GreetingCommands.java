@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -57,6 +58,24 @@ class GreetingCommands {
   @PostMapping("/greetings/drafts")
   @IdempotentCommand(required = false)
   ResponseEntity<?> createDraft(@RequestBody CreateGreeting request) {
+    return create(request);
+  }
+
+  /**
+   * Requires an {@code Idempotency-Key}, except from {@code CHECKOUT}, as a command does while
+   * Checkout moves onto the Saga.
+   */
+  @PostMapping("/greetings/exempting-checkout")
+  @IdempotentCommand(exemptRoles = "CHECKOUT")
+  ResponseEntity<?> createExemptingCheckout(@RequestBody CreateGreeting request) {
+    return create(request);
+  }
+
+  /** Requires an {@code Idempotency-Key}, and only Orchestration may call it. */
+  @PostMapping("/greetings/guarded")
+  @PreAuthorize("hasRole('ORCHESTRATION')")
+  @IdempotentCommand
+  ResponseEntity<?> createGuarded(@RequestBody CreateGreeting request) {
     return create(request);
   }
 

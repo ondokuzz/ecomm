@@ -9,7 +9,7 @@
 POST {{keycloak}}
 Content-Type: application/x-www-form-urlencoded
 
-grant_type=password&client_id=dev-cli&username=demo@ecomm.local&password=demo
+grant_type=password&client_id=dev-cli&username=demo@ecomm.local&password=demo&scope=openid
 
 > {% client.global.set("customerToken", response.body.access_token); %}
 
@@ -67,3 +67,42 @@ grant_type=password&client_id=dev-cli&username=staff@ecomm.local&password=staff
 ###
 GET {{cart}}/cart
 Authorization: Bearer {{staffToken}}
+
+### Orchestration token: the checkout Saga's own identity, for the commands it calls
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&client_id=orchestration&client_secret=orchestration-dev-secret
+
+> {% client.global.set("orchestrationToken", response.body.access_token); %}
+
+### The demo Customer's ID: the sub Orchestration names in the body
+GET http://localhost:8180/realms/ecomm/protocol/openid-connect/userinfo
+Authorization: Bearer {{customerToken}}
+
+> {% client.global.set("customerId", response.body.sub); %}
+
+### Put something back in the Cart for the Saga to clear
+PUT {{cart}}/cart/items/PHN-PIXEL-9
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"quantity": 1}
+
+### Orchestration clears the named Customer's Cart: 204; sending it again is the same 204
+POST {{cart}}/carts/clear
+Authorization: Bearer {{orchestrationToken}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}"}
+
+### Empty now
+GET {{cart}}/cart
+Authorization: Bearer {{customerToken}}
+
+### A Customer can't: 403
+POST {{cart}}/carts/clear
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}"}

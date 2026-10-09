@@ -11,7 +11,7 @@ import org.springframework.http.MediaType;
 
 /**
  * The Reservation endpoints are internal: only Checkout, with its own {@code CHECKOUT} token, may
- * call them.
+ * call them, and Orchestration may commit (see {@link OrchestrationReservationApiTest}).
  */
 class ReservationSecurityApiTest extends InventoryApiTest {
 
@@ -37,7 +37,7 @@ class ReservationSecurityApiTest extends InventoryApiTest {
 
   @ParameterizedTest
   @ValueSource(strings = {"CUSTOMER", "STAFF"})
-  void onlyCheckoutCanReserveCommitAndRelease(String role) {
+  void customersAndStaffCanNeitherReserveCommitNorRelease(String role) {
     var variant = newVariant(10);
     var reservation = reserved(item(variant, 1));
     var token = FakeKeycloak.token(CUSTOMER, role);

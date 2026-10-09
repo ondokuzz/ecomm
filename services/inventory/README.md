@@ -42,7 +42,10 @@ they are committed, released or expired, it can go. Its past Reservations stay.
 
 The Reservation endpoints are internal: they need Checkout's own token, with the
 `CHECKOUT` role ([ADR 0002](../identity-access/docs/adr/0002-service-identity-by-client-credentials.md)),
-and the API gateway doesn't route them. On all of these a Customer's or the other role's token gets
+and the API gateway doesn't route them. The checkout Saga commits a Reservation with Orchestration's
+own token (`ORCHESTRATION`), as Checkout may too until it moves onto the Saga. Committing takes no
+`Idempotency-Key`: committing a `COMMITTED` Reservation again changes nothing and answers the same
+200. On all of these a Customer's or the other role's token gets
 403, and no token gets 401.
 
 ### Reservations

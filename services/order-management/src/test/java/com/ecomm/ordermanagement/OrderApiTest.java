@@ -75,7 +75,7 @@ abstract class OrderApiTest {
     return tokenOf(CUSTOMER);
   }
 
-  /** Checkout's own token: the only caller allowed to place Orders and change their status. */
+  /** Checkout's own token, which places Orders and changes their status without a key. */
   static String checkoutToken() {
     return FakeKeycloak.token("checkout", "CHECKOUT");
   }

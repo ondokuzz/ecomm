@@ -200,6 +200,46 @@ class IdempotencyApiTest {
   }
 
   @Test
+  void aCallerTheCommandRefusesIsForbiddenWithOrWithoutAKey() {
+    var text = newText();
+
+    var withoutKey = post("/greetings/guarded", CUSTOMER, null, text);
+    var withKey = post("/greetings/guarded", CUSTOMER, newKey(), text);
+
+    assertThat(withoutKey.status()).isEqualTo(403);
+    assertThat(withKey.status()).isEqualTo(403);
+    assertThat(greetingsWithText(text)).isEmpty();
+  }
+
+  @Test
+  void anExemptRoleActsWithoutAKeyWhereOthersAreRefused() {
+    var checkout = FakeKeycloak.token("checkout", "CHECKOUT");
+    var orchestration = FakeKeycloak.token("orchestration", "ORCHESTRATION");
+    var text = newText();
+
+    var exempt = post("/greetings/exempting-checkout", checkout, null, text);
+    var refused = post("/greetings/exempting-checkout", orchestration, null, newText());
+
+    assertThat(exempt.status()).isEqualTo(201);
+    assertThat(greetingsWithText(text)).containsExactly(exempt.greetingId());
+    assertThat(refused.status()).isEqualTo(400);
+    assertThat(refused.reason()).isEqualTo("idempotencyKeyRequired");
+  }
+
+  @Test
+  void anExemptRolesKeyIsStillHonoured() {
+    var checkout = FakeKeycloak.token("checkout", "CHECKOUT");
+    var key = newKey();
+    var text = newText();
+
+    var first = post("/greetings/exempting-checkout", checkout, key, text);
+    var repeat = post("/greetings/exempting-checkout", checkout, key, text);
+
+    assertThat(repeat.replayed()).isTrue();
+    assertThat(greetingsWithText(text)).containsExactly(first.greetingId());
+  }
+
+  @Test
   void aKeyOf255PrintableCharactersIsAccepted() {
     var key = "~ " + "k".repeat(253);
 

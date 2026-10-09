@@ -180,7 +180,12 @@ ResponseEntity<OrderResponse> place(@RequestBody PlaceOrderRequest request) { ..
   such as a Customer's ID.
 - **A key is 1 to 255 printable ASCII characters.** Anything else is a 400 with `reason`
   `idempotencyKeyInvalid`. A command that requires a key and gets none answers 400 with
-  `idempotencyKeyRequired`.
+  `idempotencyKeyRequired`, but only once its `@PreAuthorize` has let the caller through: a caller
+  it refuses gets 403 with or without a key.
+- **A role can be exempt** while its caller moves off a command:
+  `@IdempotentCommand(exemptRoles = "CHECKOUT")` lets a `CHECKOUT` token act without a key, while
+  every other caller still needs one. A key the exempt caller does send is honoured. Order
+  Management uses it until Checkout moves onto the checkout Saga.
 - **Keys are kept for 7 days** (`ecomm.idempotency.keep-for`), matching Temporal's retention, and
   pruned daily (`ecomm.idempotency.prune-every`).
 

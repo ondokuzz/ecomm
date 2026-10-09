@@ -1,5 +1,6 @@
 package com.ecomm.ordermanagement.adapter.in.web;
 
+import com.ecomm.commons.idempotency.IdempotentCommand;
 import com.ecomm.commons.security.CurrentCustomer;
 import com.ecomm.ordermanagement.application.port.in.ChangeOrderStatusUseCase;
 import com.ecomm.ordermanagement.application.port.in.ConcurrentStatusChangeException;
@@ -20,6 +21,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -31,10 +33,12 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Checkout places a Customer's Orders and moves them along their Order Status with its own {@code
- * CHECKOUT} token, naming the Customer in the body. The Customer reads them with a {@code CUSTOMER}
- * token, whose {@code sub} must own the Order. Staff have no Orders of their own, and read every
- * Customer's through {@link StaffOrderController}.
+ * The checkout Saga places a Customer's Orders and moves them along their Order Status with
+ * Orchestration's own {@code ORCHESTRATION} token, naming the Customer in the body, each command
+ * under an {@code Idempotency-Key}. Checkout's {@code CHECKOUT} token may too, without a key, until
+ * Checkout moves onto the Saga; each change records which of them made it. The Customer reads them
+ * with a {@code CUSTOMER} token, whose {@code sub} must own the Order. Staff have no Orders of
+ * their own, and read every Customer's through {@link StaffOrderController}.
  */
 @RestController
 @RequestMapping("/orders")
@@ -53,13 +57,18 @@ class OrderController {
     this.changeStatus = changeStatus;
   }
 
-  /** 201 with the new Order in {@code PLACED}, and its URL in {@code Location}. */
+  /**
+   * 201 with the new Order in {@code PLACED}, and its URL in {@code Location}. A repeat with the
+   * same {@code Idempotency-Key} replays it.
+   */
   @PostMapping
-  @PreAuthorize("hasRole('CHECKOUT')")
-  ResponseEntity<OrderResponse> place(@RequestBody PlaceOrderRequest request) {
+  @PreAuthorize("hasAnyRole('CHECKOUT', 'ORCHESTRATION')")
+  @IdempotentCommand(exemptRoles = "CHECKOUT")
+  ResponseEntity<OrderResponse> place(
+      Authentication caller, @RequestBody PlaceOrderRequest request) {
     var order =
         place.place(
-            Caller.CHECKOUT,
+            callerOf(caller),
             request.toCustomerId(),
             request.toOrderLines(),
             request.toDiscounts(),
@@ -95,18 +104,29 @@ class OrderController {
 
   /**
    * 200 with the Order in its new status; 409 when its current status can't reach that one. 404 for
-   * an unknown ID, or when the named Customer doesn't own the Order.
+   * an unknown ID, or when the named Customer doesn't own the Order. A repeat with the same {@code
+   * Idempotency-Key} replays the first answer.
    */
   @PatchMapping("/{id}/status")
-  @PreAuthorize("hasRole('CHECKOUT')")
-  OrderResponse changeStatus(@PathVariable String id, @RequestBody StatusChangeRequest request) {
+  @PreAuthorize("hasAnyRole('CHECKOUT', 'ORCHESTRATION')")
+  @IdempotentCommand(exemptRoles = "CHECKOUT")
+  OrderResponse changeStatus(
+      Authentication caller, @PathVariable String id, @RequestBody StatusChangeRequest request) {
     var customerId = request.toCustomerId();
     var next = request.toStatus();
+    var changedBy = callerOf(caller);
     var order =
-        ownedOrder(
-            id, orderId -> changeStatus.changeStatus(Caller.CHECKOUT, customerId, orderId, next));
+        ownedOrder(id, orderId -> changeStatus.changeStatus(changedBy, customerId, orderId, next));
     log.info("Moved Order {} to {}", id, next);
     return order;
+  }
+
+  /** Orchestration when its token holds the role; otherwise Checkout, the only other caller. */
+  private static Caller callerOf(Authentication caller) {
+    return caller.getAuthorities().stream()
+            .anyMatch(a -> "ROLE_ORCHESTRATION".equals(a.getAuthority()))
+        ? Caller.ORCHESTRATION
+        : Caller.CHECKOUT;
   }
 
   /**
