@@ -7,7 +7,7 @@ import type { Eligibility, RatingSummary } from '../src/domain/reviews'
 import type { SearchResults } from '../src/domain/search'
 
 /**
- * The smoke test: the definitions of done of Sprints 1 to 3, end to end, each test as a Customer of
+ * The smoke test: the definitions of done of Sprints 1 to 4, end to end, each test as a Customer of
  * its own, made in Keycloak for the test and deleted afterwards with their reviews. The Orders stay,
  * as Orders are never deleted.
  *
@@ -19,6 +19,9 @@ import type { SearchResults } from '../src/domain/search'
  *   applied by itself and WELCOME10 on top, pay, follow the Order's Status history, and review the
  *   Product, whose rating then shows on its card and its page. A Customer who never bought a
  *   Product is told they can't review it.
+ * - Pay with a card the bank confirms later: the page says the payment is being confirmed until the
+ *   gateway's webhook settles it, then shows the paid Order; or, declined, shows why, and the held
+ *   session is then paid with a card that approves.
  */
 
 // The first checkout compares Stock before and after, so nothing else may check out meanwhile:
@@ -191,11 +194,7 @@ test('a declined card shows why, and the held session can then be paid with one 
   const customer = signedUp()
   const token = await tokenFor(request, customer)
   const { variantId, stock } = await aProductInStock(request)
-  const put = await request.put(`/api/cart/cart/items/${encodeURIComponent(variantId)}`, {
-    headers: { Authorization: `Bearer ${token}` },
-    data: { quantity: 1 },
-  })
-  expect(put.ok()).toBeTruthy()
+  await putInCart(request, token, variantId)
 
   await page.goto('/checkout')
   await signInOnKeycloak(page, customer)
@@ -228,11 +227,7 @@ test('WELCOME10 takes 10% off at checkout, and the PAID Order shows the discount
   const token = await tokenFor(request, customer)
   // A phone, so the seeded Audio week Campaign takes nothing off.
   const { variantId, variant } = await aProductInStockIn(request, 'phones')
-  const put = await request.put(`/api/cart/cart/items/${encodeURIComponent(variantId)}`, {
-    headers: { Authorization: `Bearer ${token}` },
-    data: { quantity: 1 },
-  })
-  expect(put.ok()).toBeTruthy()
+  await putInCart(request, token, variantId)
   const subtotal = variant.price
   const currencies = await currenciesOfCatalog(request)
   // 10%, rounded down to the minor unit.
@@ -291,11 +286,7 @@ test('Audio week comes off an audio Product by itself, WELCOME10 on top, and the
   const customer = signedUp()
   const token = await tokenFor(request, customer)
   const { variantId, variant } = await aProductInStockIn(request, 'audio')
-  const put = await request.put(`/api/cart/cart/items/${encodeURIComponent(variantId)}`, {
-    headers: { Authorization: `Bearer ${token}` },
-    data: { quantity: 1 },
-  })
-  expect(put.ok()).toBeTruthy()
+  await putInCart(request, token, variantId)
   const subtotal = variant.price
   const currencies = await currenciesOfCatalog(request)
   // 15% off the audio line, then 10% off what is left, each rounded down to the minor unit.
@@ -547,6 +538,84 @@ test.describe('Sprint 3', () => {
     expect(((await posted.json()) as { reason: string }).reason).toBe('notPurchased')
   })
 })
+
+test.describe('Sprint 4', () => {
+  test('a card the bank confirms is confirmed, then the Order is paid', async ({ page, request }) => {
+    const customer = signedUp()
+    const token = await tokenFor(request, customer)
+    const { variantId } = await aProductInStock(request)
+    await putInCart(request, token, variantId)
+
+    await page.goto('/checkout')
+    await signInOnKeycloak(page, customer)
+    await expect(page.getByRole('timer', { name: 'Time left' })).toBeVisible()
+    await testCard(page, 'Bank confirms, approves').check()
+    await page.getByRole('button', { name: /^Pay/ }).click()
+
+    await expect(page.getByRole('status').filter({ hasText: 'Confirming your payment…' })).toBeVisible()
+    await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/)
+    await expect(page.locator('.status-paid')).toHaveText('Paid')
+    const orderId = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!)
+    // Pending at first, then approved by the gateway's webhook.
+    const [payment] = await paymentsOf(request, token, orderId)
+    expect(payment.status).toBe('AUTHORIZED')
+    expect(payment.transactions.map((t) => [t.kind, t.outcome])).toEqual([
+      ['AUTHORIZATION', 'PENDING'],
+      ['AUTHORIZATION', 'APPROVED'],
+    ])
+    expect(payment.transactions[1].gatewayEventId).toBeTruthy()
+  })
+
+  test('a card the bank declines says why, and the held session is then paid with one that approves', async ({
+    page,
+    request,
+  }) => {
+    const customer = signedUp()
+    const token = await tokenFor(request, customer)
+    const { variantId } = await aProductInStock(request)
+    await putInCart(request, token, variantId)
+
+    await page.goto('/checkout')
+    await signInOnKeycloak(page, customer)
+    await expect(page.getByRole('timer', { name: 'Time left' })).toBeVisible()
+    const sessionId = await currentSessionId(request, token)
+    await testCard(page, 'Bank confirms, declines').check()
+    await page.getByRole('button', { name: /^Pay/ }).click()
+
+    await expect(page.getByRole('status').filter({ hasText: 'Confirming your payment…' })).toBeVisible()
+    const declined = page.getByRole('alert').filter({ hasText: 'Your card was declined' })
+    await expect(declined).toContainText('Your bank declined the payment. Try another card.')
+    expect(await currentSessionId(request, token)).toBe(sessionId)
+
+    await testCard(page, 'Approve').check()
+    await page.getByRole('button', { name: /^Pay/ }).click()
+
+    await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/)
+    await expect(page.locator('.status-paid')).toHaveText('Paid')
+  })
+})
+
+async function putInCart(request: APIRequestContext, token: string, variantId: string) {
+  const put = await request.put(`/api/cart/cart/items/${encodeURIComponent(variantId)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { quantity: 1 },
+  })
+  expect(put.ok()).toBeTruthy()
+}
+
+/** A Payment as the Customer reads it, with its Payment transactions oldest first. */
+interface PaymentRead {
+  status: string
+  transactions: { kind: string; outcome: string; gatewayEventId: string | null }[]
+}
+
+async function paymentsOf(request: APIRequestContext, token: string, orderId: string): Promise<PaymentRead[]> {
+  const response = await request.get(`/api/payment/payments?orderId=${encodeURIComponent(orderId)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  expect(response.ok()).toBeTruthy()
+  return (await response.json()) as PaymentRead[]
+}
 
 /** The checkout page's test card radio, named by its card. */
 function testCard(page: Page, label: string) {

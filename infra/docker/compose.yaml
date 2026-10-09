@@ -224,6 +224,9 @@ services:
       dockerfile: services/payment/Dockerfile
     image: ${IMAGE_PREFIX:-ecomm}/payment:${IMAGE_TAG:-latest}
     ports: ["${PAYMENT_PORT:-8084}:8080"]
+    environment:
+      # The secret the mock gateway signs its webhooks with and Payment checks them by; dev-only.
+      PAYMENT_WEBHOOK_SECRET: payment-webhook-dev-secret
     depends_on:
       <<: *event-backbone
       postgres-databases: { condition: service_completed_successfully }

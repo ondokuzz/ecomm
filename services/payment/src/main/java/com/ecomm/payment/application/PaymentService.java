@@ -5,6 +5,7 @@ import com.ecomm.payment.application.port.in.AuthorizePaymentUseCase;
 import com.ecomm.payment.application.port.in.BrowsePaymentsUseCase;
 import com.ecomm.payment.application.port.in.FindPaymentUseCase;
 import com.ecomm.payment.application.port.in.PublishBackfillUseCase;
+import com.ecomm.payment.application.port.in.SettleAuthorizationUseCase;
 import com.ecomm.payment.application.port.in.VoidPaymentUseCase;
 import com.ecomm.payment.application.port.out.PaymentEvent;
 import com.ecomm.payment.application.port.out.PaymentEvent.Change;
@@ -13,6 +14,7 @@ import com.ecomm.payment.application.port.out.PaymentRepository;
 import com.ecomm.payment.application.port.out.TimeSource;
 import com.ecomm.payment.application.port.out.Transactions;
 import com.ecomm.payment.domain.AuthorizationRequest;
+import com.ecomm.payment.domain.GatewaySettlement;
 import com.ecomm.payment.domain.Payment;
 import com.ecomm.payment.domain.PaymentNotVoidableException;
 import com.ecomm.payment.domain.PaymentStatus;
@@ -25,7 +27,8 @@ public class PaymentService
         VoidPaymentUseCase,
         FindPaymentUseCase,
         BrowsePaymentsUseCase,
-        PublishBackfillUseCase {
+        PublishBackfillUseCase,
+        SettleAuthorizationUseCase {
 
   /** How many Payments the backfill publishes per transaction. */
   private static final int BACKFILL_BATCH = 100;
@@ -86,6 +89,32 @@ public class PaymentService
                       payments.recordLatestTransaction(voided);
                       events.publish(PaymentEvent.of(voided, Change.VOIDED));
                       return voided;
+                    }));
+  }
+
+  /**
+   * The Payment stays locked from reading it to recording the webhook, so two webhooks about one
+   * Payment, or one webhook delivered twice at once, are applied one after the other.
+   */
+  @Override
+  public Optional<Settlement> settle(GatewaySettlement settlement) {
+    return transactions.inTransaction(
+        () ->
+            payments
+                .lockToChangeByGatewayReference(settlement.reference())
+                .map(
+                    payment -> {
+                      var now = time.now();
+                      if (!payments.addReceivedWebhook(payment.id(), settlement, now)) {
+                        return new Settlement(payment, Outcome.ALREADY_RECEIVED);
+                      }
+                      if (payment.status() != PaymentStatus.PENDING) {
+                        return new Settlement(payment, Outcome.NOT_PENDING);
+                      }
+                      var settled = payment.settled(settlement, now);
+                      payments.recordLatestTransaction(settled);
+                      events.publish(PaymentEvent.of(settled, changeOf(settled.status())));
+                      return new Settlement(settled, Outcome.SETTLED);
                     }));
   }
 

@@ -4,7 +4,7 @@ spring:
 
 # The routed services, at /api/<name>/**. The URIs are the services' dev host ports;
 # application-docker.yml points them at the compose network. Every other method and path under a
-# service's prefix needs a token; internal endpoints get a 404.
+# service's prefix needs a token, except its public reads and webhooks; internal endpoints get a 404.
 ecomm:
   gateway:
     services:
@@ -31,6 +31,9 @@ ecomm:
         uri: http://localhost:8084
         # The Customer's and Staff's reads are routed; only Orchestration authorizes and voids.
         internal: [POST /payments, POST /payments/*/void]
+        # The payment gateway settles pending authorizations from outside; Payment checks the
+        # webhook's signature.
+        webhooks: [POST /webhooks/gateway]
       promotions:
         uri: http://localhost:8087
         # Only Checkout evaluates Coupons, so nobody can probe codes from outside a checkout.

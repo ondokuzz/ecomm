@@ -110,6 +110,36 @@ class EdgeAuthenticationApiTest extends GatewayApiTest {
   }
 
   @Test
+  void theGatewaysWebhookIsForwardedWithoutAToken() {
+    http.post()
+        .uri("/api/payment/webhooks/gateway")
+        .header("Gateway-Signature", "sha256=abc")
+        .contentType(MediaType.APPLICATION_JSON)
+        .body("{\"eventId\": \"evt-1\"}")
+        .exchange()
+        .expectStatus()
+        .isOk();
+
+    assertThat(forwarded())
+        .singleElement()
+        .satisfies(
+            call -> {
+              assertThat(call.getMethod().getName()).isEqualTo("POST");
+              assertThat(call.getUrl()).isEqualTo("/webhooks/gateway");
+              assertThat(call.getHeader("Gateway-Signature")).isEqualTo("sha256=abc");
+              assertThat(call.getBodyAsString()).isEqualTo("{\"eventId\": \"evt-1\"}");
+            });
+  }
+
+  @ParameterizedTest
+  @CsvSource({"GET, /api/payment/webhooks/gateway", "POST, /api/payment/webhooks/other"})
+  void onlyTheWebhooksOwnMethodAndPathNeedNoToken(String method, String path) {
+    http.method(HttpMethod.valueOf(method)).uri(path).exchange().expectStatus().isUnauthorized();
+
+    assertThat(forwarded()).isEmpty();
+  }
+
+  @Test
   void healthNeedsNoToken() {
     http.get().uri("/actuator/health").exchange().expectStatus().isOk();
   }

@@ -225,3 +225,40 @@ Content-Type: application/json
 ### A Customer can't read as Orchestration does: 403
 GET {{payment}}/payments/{{sagaPaymentId}}?customerId={{customerId}}
 Authorization: Bearer {{customerToken}}
+
+### A card the bank confirms later: 201, PENDING, until the mock's webhook settles it ~3 seconds on
+POST {{payment}}/payments
+Authorization: Bearer {{orchestrationToken}}
+Idempotency-Key: {{$uuid}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}", "orderId": "order-async-1", "paymentMethod": "tok_async_approve", "amount": {"amountMinor": 79900, "currency": "EUR"}}
+
+> {%
+  client.global.set("asyncPaymentId", response.body.id);
+  client.global.set("asyncReference", response.body.gatewayReference);
+%}
+
+### A few seconds later: AUTHORIZED, its second AUTHORIZATION carrying the webhook's event ID
+GET {{payment}}/payments/{{asyncPaymentId}}?customerId={{customerId}}
+Authorization: Bearer {{orchestrationToken}}
+
+### The gateway's webhook, signed as the mock signs it with compose's dev secret, through the API
+### gateway without a token: 200, and nothing changes, since the Payment is settled already
+< {%
+  const body = JSON.stringify({eventId: "evt-http-" + $random.uuid, reference: client.global.get("asyncReference"), outcome: "DECLINED", declineReason: "card_declined"});
+  request.variables.set("webhookBody", body);
+  request.variables.set("webhookSignature", "sha256=" + crypto.hmac.sha256().withTextSecret("payment-webhook-dev-secret").updateWithText(body).digest().toHex());
+%}
+POST {{gateway}}/webhooks/gateway
+Gateway-Signature: {{webhookSignature}}
+Content-Type: application/json
+
+{{webhookBody}}
+
+### A webhook with a wrong signature: 401
+POST {{gateway}}/webhooks/gateway
+Gateway-Signature: sha256=00
+Content-Type: application/json
+
+{"eventId": "evt-forged", "reference": "{{asyncReference}}", "outcome": "DECLINED", "declineReason": "card_declined"}

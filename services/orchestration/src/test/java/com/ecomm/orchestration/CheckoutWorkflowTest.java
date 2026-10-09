@@ -3,6 +3,8 @@ package com.ecomm.orchestration;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalToJson;
+import static com.github.tomakehurst.wiremock.client.WireMock.get;
+import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.patch;
@@ -53,6 +55,7 @@ class CheckoutWorkflowTest extends OrchestrationTest {
   static final String COMMIT = "/reservations/" + RESERVATION_ID + "/commit";
   static final String STATUS = "/orders/" + ORDER_ID + "/status";
   static final String VOID = "/payments/" + PAYMENT_ID + "/void";
+  static final String READ_PAYMENT = "/payments/" + PAYMENT_ID + "?customerId=" + CUSTOMER_ID;
 
   @Autowired WorkflowClient temporal;
   @Autowired RestTestClient http;
@@ -154,6 +157,81 @@ class CheckoutWorkflowTest extends OrchestrationTest {
         .isEqualTo(
             new CheckoutOutcome(CheckoutOutcome.Status.DECLINED, ORDER_ID, "insufficient_funds"));
     assertThat(calls()).containsExactly("POST /orders", "POST /payments", "PATCH " + STATUS);
+    DOWNSTREAM.verify(
+        patchRequestedFor(urlEqualTo(STATUS))
+            .withRequestBody(matchingJsonPath("$.status", equalTo("CANCELLED"))));
+  }
+
+  @Test
+  void aPendingAuthorizationThatTheBankApprovesGoesOnToPay() {
+    stubEveryStep();
+    stubAuthorization("PENDING", null);
+    stubInSequence(
+        () -> get(urlEqualTo(READ_PAYMENT)),
+        payment("PENDING", null, 200),
+        payment("AUTHORIZED", null, 200));
+
+    var outcome = checkout();
+
+    assertThat(outcome).isEqualTo(new CheckoutOutcome(CheckoutOutcome.Status.PAID, ORDER_ID, null));
+    assertThat(calls())
+        .containsExactly(
+            "POST /orders",
+            "POST /payments",
+            "GET " + READ_PAYMENT,
+            "GET " + READ_PAYMENT,
+            "POST " + COMMIT,
+            "PATCH " + STATUS,
+            "POST /carts/clear",
+            "POST /checkout/sessions/" + sessionId + "/end");
+    DOWNSTREAM.verify(
+        getRequestedFor(urlEqualTo(READ_PAYMENT))
+            .withHeader("Authorization", equalTo("Bearer orchestration-token"))
+            .withHeader("X-Correlation-Id", equalTo(CORRELATION_ID)));
+  }
+
+  @Test
+  void aPendingAuthorizationThatTheBankDeclinesCancelsTheOrder() {
+    stubEveryStep();
+    stubAuthorization("PENDING", null);
+    stubInSequence(
+        () -> get(urlEqualTo(READ_PAYMENT)),
+        payment("PENDING", null, 200),
+        payment("DECLINED", "card_declined", 200));
+
+    var outcome = checkout();
+
+    assertThat(outcome)
+        .isEqualTo(new CheckoutOutcome(CheckoutOutcome.Status.DECLINED, ORDER_ID, "card_declined"));
+    assertThat(calls())
+        .containsExactly(
+            "POST /orders",
+            "POST /payments",
+            "GET " + READ_PAYMENT,
+            "GET " + READ_PAYMENT,
+            "PATCH " + STATUS);
+    DOWNSTREAM.verify(
+        patchRequestedFor(urlEqualTo(STATUS))
+            .withRequestBody(matchingJsonPath("$.status", equalTo("CANCELLED"))));
+  }
+
+  @Test
+  void aPendingAuthorizationStillPendingAtTheDeadlineIsVoidedAndTheOrderCancelled() {
+    stubEveryStep();
+    stubAuthorization("PENDING", null);
+    DOWNSTREAM.stubFor(get(urlEqualTo(READ_PAYMENT)).willReturn(payment("PENDING", null, 200)));
+
+    var outcome = checkout();
+
+    assertThat(outcome)
+        .isEqualTo(new CheckoutOutcome(CheckoutOutcome.Status.FAILED, ORDER_ID, null));
+    var calls = calls();
+    // Read at 0, 1, 3 and 7 seconds, then every 5, for the 2 minutes the test server skipped.
+    assertThat(calls.stream().filter(c -> c.equals("GET " + READ_PAYMENT)).count())
+        .isBetween(22L, 27L);
+    assertThat(calls.subList(calls.size() - 2, calls.size()))
+        .containsExactly("POST " + VOID, "PATCH " + STATUS);
+    DOWNSTREAM.verify(0, postRequestedFor(urlEqualTo(COMMIT)));
     DOWNSTREAM.verify(
         patchRequestedFor(urlEqualTo(STATUS))
             .withRequestBody(matchingJsonPath("$.status", equalTo("CANCELLED"))));

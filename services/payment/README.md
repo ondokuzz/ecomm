@@ -30,7 +30,8 @@ A Payment's status is worked out from its transactions, oldest first (`PaymentSt
 Nothing else is a Payment: a pure domain test, `PaymentStatusTest`, tries every sequence of up to
 three transactions. The status is kept on the Payment's row beside its transactions, written in
 the same database transaction as each one from the status they give, so a read stays one query.
-The mock gateway never answers `PENDING` yet: bank-confirmed payments come with #61.
+A pending authorization is settled by a [Gateway webhook](#gateway-webhooks), whose authorization
+transaction carries the webhook's event ID.
 
 ## Gateways
 
@@ -50,12 +51,53 @@ The mock, `MockPaymentGatewayAdapter`, reads the request's `paymentMethod` as a 
 | `tok_decline` | `DECLINED`, `declineReason` `card_declined` |
 | `tok_insufficient_funds` | `DECLINED`, `declineReason` `insufficient_funds` |
 | `tok_gateway_error` | the gateway fails to answer: a 502, and no Payment is recorded |
+| `tok_async_approve` | `PENDING`; a webhook a few seconds later settles it as `AUTHORIZED` |
+| `tok_async_decline` | `PENDING`; a webhook a few seconds later settles it as `DECLINED`, `declineReason` `card_declined` |
 | anything else | `DECLINED`, `declineReason` `unknown_payment_method` |
 
 Each answer carries a fresh `mock-…` reference, a decline's too. A key the mock has seen gets its
 first answer and reference back, for its 10,000 most recent keys, until the service restarts. A
 failure to answer isn't remembered, so a retry can succeed. Every void succeeds, with a
 `mock-void-…` reference.
+
+The two async tokens stand for a card the Customer's bank confirms later, as 3-D Secure does. The
+mock answers them `PENDING`, and `payment.mock-gateway.webhook-delay` later (3 seconds unless set)
+it signs a webhook settling the authorization and hands it to a `WebhookDelivery`. On the stack that
+is `HttpWebhookDelivery`, which posts it to Payment's own `/webhooks/gateway` on the port it listens
+on (or to `payment.mock-gateway.webhook-url`), as a real gateway would from outside. A repeated key
+gets the first answer and sends no second webhook. A delivery that fails is logged and not sent
+again, and webhooks still waiting when the service stops are lost: the checkout Saga then voids
+the Payment at its deadline. Tests put their own `WebhookDelivery` in its place, to deliver,
+repeat, reorder or withhold webhooks. Voiding a pending Payment doesn't stop its webhook; it
+arrives, is recorded, and changes nothing.
+
+## Gateway webhooks
+
+`POST /webhooks/gateway` takes the Gateway webhook that settles a pending authorization:
+
+```json
+{"eventId": "evt_…", "reference": "mock-…", "outcome": "DECLINED", "declineReason": "card_declined"}
+```
+
+`reference` is the authorization's gateway reference, `outcome` is `APPROVED` or `DECLINED`, and
+`declineReason` comes with a decline only. The gateway calls from outside, with no token: the
+webhook is authenticated by its `Gateway-Signature` header instead, `sha256=` and the hex
+HMAC-SHA256 of the body's bytes, keyed with the secret Payment shares with the gateway,
+`payment.webhooks.secret`. It has no default: set `PAYMENT_WEBHOOK_SECRET`, which compose does with
+a dev-only value. The API gateway routes it as `POST /api/payment/webhooks/gateway` without a token.
+
+| Webhook | Answer | |
+|---|---|---|
+| a pending Payment's | 200 | records an `AUTHORIZATION` transaction with the outcome, the event ID and the time, and publishes the Payment |
+| an event ID received before | 200 | changes nothing |
+| an already settled or voided Payment's | 200 | recorded as received, changes nothing, and logged at warn |
+| no Payment's authorization has its reference | 404 | nothing recorded, so the gateway sends it again later |
+| a missing or wrong signature | 401 | |
+| a malformed body, or an outcome other than `APPROVED` or `DECLINED` | 400 | |
+
+Each webhook received is a row of `gateway_webhook`, keyed by its event ID, so it is recorded at
+most once. The Payment is locked from reading it to recording the webhook, so two webhooks about
+one Payment are applied one after the other.
 
 ## API
 
@@ -72,14 +114,15 @@ gets 403, and no token gets 401.
 
 | Endpoint | Called by | |
 |---|---|---|
-| `POST /payments` | Orchestration | Authorizes an Order's amount; 201 with the Payment, authorized or declined, its URL in `Location`. Requires an `Idempotency-Key` |
-| `POST /payments/{id}/void` | Orchestration | Releases an authorized Payment; 200 with the voided Payment |
+| `POST /payments` | Orchestration | Authorizes an Order's amount; 201 with the Payment, authorized, declined or pending, its URL in `Location`. Requires an `Idempotency-Key` |
+| `POST /payments/{id}/void` | Orchestration | Releases an authorized or pending Payment; 200 with the voided Payment |
+| `POST /webhooks/gateway` | the gateway | Settles a pending authorization; see [Gateway webhooks](#gateway-webhooks) |
 | `GET /payments/{id}` | Customer | The Customer's Payment; 404 for an unknown ID or another Customer's |
 | `GET /payments/{id}?customerId=` | Orchestration | The named Customer's Payment, as the Saga awaits its settlement; 404 as above |
 | `GET /payments?orderId=` | Customer | The Customer's Payments for one of their Orders, newest first; an empty list for anyone else's Order |
 | `GET /staff/payments?orderId=` | Staff | Every Payment for an Order, newest first |
 
-The API gateway routes the reads, as `/api/payment/…`, and hides the two commands.
+The API gateway routes the reads and the webhook, as `/api/payment/…`, and hides the two commands.
 
 An authorization looks like
 
@@ -103,7 +146,8 @@ code. A Payment comes back with its transactions, oldest first:
 
 `gatewayReference` is the authorization's. A declined payment is recorded too, and is still a 201:
 its `status` is `DECLINED` and its `declineReason` the gateway's reason, such as
-`insufficient_funds`. A gateway that fails to answer is a 502, and nothing is recorded, so the
+`insufficient_funds`. A card the bank confirms later is recorded `PENDING`, still a 201, until a
+webhook settles it. A gateway that fails to answer is a 502, and nothing is recorded, so the
 same key can be sent again.
 
 The key works as every `@IdempotentCommand`'s does
@@ -128,7 +172,9 @@ of an Order's Payments without `orderId`. Every error is a problem detail.
 - `POST /payments` requires an `Idempotency-Key`. Posting the same Order twice with different keys
   still records two Payments.
 - A Payment's response gains `transactions`, and its `status` may be `PENDING` or `VOIDED`.
-- The gateway now routes the Customer's `GET /payments/{id}`.
+- The gateway now routes the Customer's `GET /payments/{id}`, and `POST /webhooks/gateway` without
+  a token.
+- The service needs `PAYMENT_WEBHOOK_SECRET` to start.
 
 ## Events
 

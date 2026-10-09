@@ -46,30 +46,22 @@ public record PaymentTransaction(
     Objects.requireNonNull(at, "at");
   }
 
-  /** The authorization the gateway's {@code answer} makes, for {@code amount}, at {@code at}. */
-  static PaymentTransaction authorization(Money amount, GatewayAuthorization answer, Instant at) {
-    return switch (answer) {
-      case GatewayAuthorization.Approved approved ->
-          new PaymentTransaction(
-              Kind.AUTHORIZATION,
-              amount,
-              Outcome.APPROVED,
-              approved.reference(),
-              null,
-              null,
-              at,
-              false);
-      case GatewayAuthorization.Declined declined ->
-          new PaymentTransaction(
-              Kind.AUTHORIZATION,
-              amount,
-              Outcome.DECLINED,
-              declined.reference(),
-              declined.reason(),
-              null,
-              at,
-              false);
-    };
+  /**
+   * The authorization the gateway's {@code answer} makes, for {@code amount}, at {@code at}; {@code
+   * gatewayEventId} names the Gateway webhook that brought the answer, or is null when the gateway
+   * answered the request itself.
+   */
+  static PaymentTransaction authorization(
+      Money amount, GatewayAuthorization answer, String gatewayEventId, Instant at) {
+    return new PaymentTransaction(
+        Kind.AUTHORIZATION,
+        amount,
+        answer.outcome(),
+        answer.reference(),
+        answer.declineReason(),
+        gatewayEventId,
+        at,
+        false);
   }
 
   /** A void of {@code amount} the gateway confirmed with {@code reference}. */

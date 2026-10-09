@@ -26,6 +26,9 @@ import org.springframework.test.context.DynamicPropertySource;
 @AutoConfigureRestTestClient
 abstract class OrchestrationTest {
 
+  /** How long the Saga awaits a pending authorization here. */
+  static final String SETTLEMENT_DEADLINE = "2m";
+
   static final String TOKEN_PATH = "/realms/ecomm/protocol/openid-connect/token";
 
   private static final int TEMPORAL_PORT = freePort();
@@ -50,6 +53,8 @@ abstract class OrchestrationTest {
     }
     registry.add(
         "spring.security.oauth2.client.registration.orchestration.client-secret", () -> "test");
+    // Shorter than the stack's 10 minutes, so a test shows the setting is the one honoured.
+    registry.add("ecomm.orchestration.settlement-deadline", () -> SETTLEMENT_DEADLINE);
   }
 
   @BeforeEach

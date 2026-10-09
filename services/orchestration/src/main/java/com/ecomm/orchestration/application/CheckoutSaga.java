@@ -27,6 +27,10 @@ import org.slf4j.MDC;
  * does no I/O, reads no clock and keeps no state outside the workflow, and replays the same way
  * every time.
  *
+ * <p>A pending authorization, one the Customer's bank confirms later, is awaited until a Gateway
+ * webhook settles it: approved goes on, declined cancels the Order, and still pending at the
+ * deadline voids the Payment and cancels the Order.
+ *
  * <p>Up to the commit, a step that fails for good undoes what came before it: the Order is
  * cancelled, and an authorized Payment voided. Once the Stock is committed nothing is undone: the
  * Order is marked paid however long that takes, and the outcome is {@code PAID} from then on, kept
@@ -69,6 +73,24 @@ public class CheckoutSaga implements CheckoutWorkflow {
                   .build())
           .build();
 
+  /**
+   * Awaiting a pending authorization's settlement: the Payment is read again, backing off from 1 to
+   * 5 seconds, for up to 10 minutes. Orchestration's {@code
+   * ecomm.orchestration.settlement-deadline} sets that deadline in place of this one.
+   */
+  private static final ActivityOptions AWAITING_SETTLEMENT =
+      ActivityOptions.newBuilder()
+          .setStartToCloseTimeout(Duration.ofSeconds(10))
+          .setScheduleToCloseTimeout(Duration.ofMinutes(10))
+          .setRetryOptions(
+              RetryOptions.newBuilder()
+                  .setInitialInterval(Duration.ofSeconds(1))
+                  .setBackoffCoefficient(2)
+                  .setMaximumInterval(Duration.ofSeconds(5))
+                  .setDoNotRetry(Refusals.REFUSED)
+                  .build())
+          .build();
+
   /** Marking the Order paid and the compensations: retried until they succeed, refusals too. */
   private static final ActivityOptions UNTIL_DONE =
       ActivityOptions.newBuilder()
@@ -91,6 +113,8 @@ public class CheckoutSaga implements CheckoutWorkflow {
       Workflow.newActivityStub(OrderActivities.class, UNTIL_DONE);
   private final PaymentActivities paymentsTriedFourTimes =
       Workflow.newActivityStub(PaymentActivities.class, AUTHORIZING);
+  private final PaymentActivities settlements =
+      Workflow.newActivityStub(PaymentActivities.class, AWAITING_SETTLEMENT);
   private final PaymentActivities paymentsUntilDone =
       Workflow.newActivityStub(PaymentActivities.class, UNTIL_DONE);
   private final InventoryActivities inventoryForAMinute =
@@ -126,20 +150,21 @@ public class CheckoutSaga implements CheckoutWorkflow {
       cancelOrder(customerId, orderId);
       return ended(new CheckoutOutcome(Status.FAILED, orderId, null));
     }
-    switch (authorization.status()) {
-      case AUTHORIZED -> {}
-      case DECLINED -> {
-        log.info("Order {}'s Payment was declined: {}", orderId, authorization.declineReason());
-        cancelOrder(customerId, orderId);
-        return ended(new CheckoutOutcome(Status.DECLINED, orderId, authorization.declineReason()));
-      }
-      // Until the Saga awaits a bank's settlement (#61), a pending authorization is undone.
-      case PENDING -> {
-        log.warn("Order {}'s Payment is pending, which this Saga can't wait for yet", orderId);
+    if (authorization.status() == Authorization.Status.PENDING) {
+      log.info("Order {}'s Payment awaits its bank's confirmation", orderId);
+      try {
+        authorization = settlements.awaitSettlement(customerId, authorization.paymentId());
+      } catch (ActivityFailure e) {
+        log.error("Order {}'s Payment wasn't settled, by the deadline or at all", orderId, e);
         voidPayment(customerId, authorization.paymentId());
         cancelOrder(customerId, orderId);
         return ended(new CheckoutOutcome(Status.FAILED, orderId, null));
       }
+    }
+    if (authorization.status() == Authorization.Status.DECLINED) {
+      log.info("Order {}'s Payment was declined: {}", orderId, authorization.declineReason());
+      cancelOrder(customerId, orderId);
+      return ended(new CheckoutOutcome(Status.DECLINED, orderId, authorization.declineReason()));
     }
 
     Commitment commitment;

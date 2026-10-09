@@ -20,3 +20,10 @@ ecomm:
 payment:
   # The PaymentGatewayPort adapter; only mock so far. A value with no adapter fails at startup.
   gateway: mock
+  webhooks:
+    # The secret Gateway webhooks are signed with, shared with the gateway. It has no default: set
+    # PAYMENT_WEBHOOK_SECRET, which compose does.
+    secret: ${PAYMENT_WEBHOOK_SECRET}
+  mock-gateway:
+    # How long after answering tok_async_approve or tok_async_decline as pending the mock settles it.
+    webhook-delay: 3s

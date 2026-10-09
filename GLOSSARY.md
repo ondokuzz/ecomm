@@ -148,8 +148,12 @@ Releasing an authorized or pending Payment's authorization through the gateway b
 _Avoid_: Cancel (an Order is cancelled; a Payment is voided), Refund (which returns captured money)
 
 **Payment method**:
-How a Customer pays: an opaque token the payment gateway issued for their card, which the checkout Saga passes on to Payment and nothing else reads. It travels in the Saga's input, and so in its history, which is safe because it is never a card number. The mock gateway takes test tokens: `tok_approve` authorizes; `tok_decline` and `tok_insufficient_funds` decline; `tok_gateway_error` fails to answer.
+How a Customer pays: an opaque token the payment gateway issued for their card, which the checkout Saga passes on to Payment and nothing else reads. It travels in the Saga's input, and so in its history, which is safe because it is never a card number. The mock gateway takes test tokens: `tok_approve` authorizes; `tok_decline` and `tok_insufficient_funds` decline; `tok_gateway_error` fails to answer; `tok_async_approve` and `tok_async_decline` stand for a card the Customer's bank confirms later, answered as pending and settled a few seconds later by a Gateway webhook, approved or declined.
 _Avoid_: Card (a Payment method stands for a card, but is never its number)
+
+**Gateway webhook**:
+The payment gateway's notice to Payment that an authorization it left pending has settled, approved or declined, once the Customer's bank has confirmed it. It names the authorization by the gateway's reference, carries the gateway's own event ID, and is signed with a secret the two share, since the gateway calls from outside with no token. Payment records each event ID once: the first settles a pending Payment with an `AUTHORIZATION` Payment transaction carrying the event ID; a repeat, or one for a Payment already settled or voided, changes nothing.
+_Avoid_: Callback, notification (on their own), Payment event (what Payment publishes)
 
 **Payment attempt**:
 One try at paying a Checkout Session: one run of the checkout Saga, named by the session's ID. It is `PROCESSING` while the Saga runs, and ends `PAID`; `DECLINED`, with the gateway's reason; `HOLD_EXPIRED`, when the Reservation stopped holding the Stock before it could be committed, so the Payment was voided and the Order cancelled; or `FAILED`, when a step failed for good and what came before it was undone. A declined or failed attempt leaves the session to be paid again, as a new attempt with its own Order; paying while one runs joins it, and a session already paid is never paid again. The latest attempt can be read after the session has ended, for as long as Temporal keeps its history.

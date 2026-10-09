@@ -26,8 +26,8 @@ public record Payment(
   }
 
   /**
-   * The Payment the gateway's answer to {@code request} makes, at {@code at}: authorized or
-   * declined.
+   * The Payment the gateway's answer to {@code request} makes, at {@code at}: authorized, declined
+   * or pending.
    */
   public static Payment fromAuthorization(
       UUID id, AuthorizationRequest request, GatewayAuthorization answer, Instant at) {
@@ -36,7 +36,7 @@ public record Payment(
         request.customerId(),
         request.orderId(),
         request.amount(),
-        List.of(PaymentTransaction.authorization(request.amount(), answer, at)));
+        List.of(PaymentTransaction.authorization(request.amount(), answer, null, at)));
   }
 
   public PaymentStatus status() {
@@ -56,6 +56,22 @@ public record Payment(
   /** Goes up by one with every transaction. */
   public long version() {
     return transactions.size();
+  }
+
+  /**
+   * This Payment with its pending authorization settled by the gateway's {@code settlement}, at
+   * {@code at}: authorized or declined.
+   *
+   * @throws IllegalStateException unless it is {@code PENDING}
+   */
+  public Payment settled(GatewaySettlement settlement, Instant at) {
+    if (status() != PaymentStatus.PENDING) {
+      throw new IllegalStateException("Payment " + id + " is " + status() + ", not PENDING");
+    }
+    var appended = new ArrayList<>(transactions);
+    appended.add(
+        PaymentTransaction.authorization(amount, settlement.answer(), settlement.eventId(), at));
+    return new Payment(id, customerId, orderId, amount, appended);
   }
 
   /** Whether its authorization can still be released: it is authorized or pending. */

@@ -40,6 +40,7 @@ class GatewaySelectionTest {
     properties.put("spring.datasource.username", PaymentApiTest.POSTGRES.getUsername());
     properties.put("spring.datasource.password", PaymentApiTest.POSTGRES.getPassword());
     properties.put("spring.flyway.locations", "classpath:db/migration,classpath:db/testdata");
+    properties.put("payment.webhooks.secret", PaymentApiTest.WEBHOOK_SECRET);
     properties.put("server.port", 0);
     return properties;
   }

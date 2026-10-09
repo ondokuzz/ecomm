@@ -11,7 +11,7 @@ export interface TestCard {
   last4: string
 }
 
-/** One card per outcome of the mock gateway, the approving one first. */
+/** One card per outcome of the mock gateway, the approving one first, then the ones the bank confirms later. */
 export const testCards: readonly TestCard[] = [
   { token: 'tok_approve', label: 'Approve', outcome: 'The payment goes through.', last4: '4242' },
   { token: 'tok_decline', label: 'Decline', outcome: 'The bank declines the card.', last4: '0002' },
@@ -26,6 +26,18 @@ export const testCards: readonly TestCard[] = [
     label: 'Gateway error',
     outcome: 'The payment provider fails to answer.',
     last4: '0119',
+  },
+  {
+    token: 'tok_async_approve',
+    label: 'Bank confirms, approves',
+    outcome: 'Your bank confirms the payment a few seconds later, and it goes through.',
+    last4: '3155',
+  },
+  {
+    token: 'tok_async_decline',
+    label: 'Bank confirms, declines',
+    outcome: 'Your bank declines the payment a few seconds later.',
+    last4: '3184',
   },
 ]
 
@@ -101,6 +113,17 @@ export function attemptFailure(attempt: PaymentAttempt): PaymentFailure | undefi
     default:
       return undefined
   }
+}
+
+/** How long a Pay may wait for its answer before the page says the payment is being confirmed, in milliseconds. */
+export const confirmingAfter = 2000
+
+/**
+ * Whether a Pay sent at `payingSince` and still unanswered at `now` (both epoch ms) is being confirmed:
+ * a payment the bank confirms later keeps the answer waiting for seconds, which a plain one doesn't.
+ */
+export function isConfirmingPayment(payingSince: number | undefined, now: number): boolean {
+  return payingSince !== undefined && now - payingSince >= confirmingAfter
 }
 
 /** How often the Storefront asks how a payment still being confirmed stands, in milliseconds. */

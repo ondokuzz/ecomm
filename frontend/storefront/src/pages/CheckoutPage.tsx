@@ -30,13 +30,21 @@ import { type CartLine, itemCountLabel } from '../domain/cart'
 import { variantName } from '../domain/catalog'
 import { type CheckoutSession, checkoutProblem, sessionCountdown, sessionSummaryRows } from '../domain/checkout'
 import { appliedCoupon } from '../domain/order'
-import { type PaymentFailure, type TestCard, confirmation, defaultTestCard, testCards } from '../domain/payment'
+import {
+  type PaymentFailure,
+  type TestCard,
+  confirmation,
+  defaultTestCard,
+  isConfirmingPayment,
+  testCards,
+} from '../domain/payment'
 
 /**
  * Starts a Checkout Session for the Cart, or resumes the one that already holds it, and shows its
  * lines at their held Prices with a countdown to when the hold ends. Paying it with the chosen test
- * card starts the checkout Saga. When it hasn't finished within Checkout's wait (a 202), the page
- * shows "Confirming your payment…" and asks how it stands every 1.5 seconds, for up to 2 minutes;
+ * card starts the checkout Saga. A Pay still unanswered after 2 seconds, as one the bank confirms
+ * later is, shows "Confirming your payment…". When it hasn't finished within Checkout's wait (a
+ * 202), the page goes on showing it and asks how it stands every 1.5 seconds, for up to 2 minutes;
  * reloading the page while one is being confirmed resumes asking. A paid Order opens its page; a
  * declined or failed payment says why, and the Customer can pay again.
  */
@@ -54,6 +62,8 @@ export function CheckoutPage() {
   // When the payment being confirmed was made: null when there is none, undefined until the session's
   // latest payment has been read, in case one was still being confirmed when the page was left.
   const [confirmingSince, setConfirmingSince] = useState<number | null>()
+  // When the Pay waiting for its answer was sent; undefined when none is.
+  const [payingSince, setPayingSince] = useState<number>()
   const [newReference, setReference] = useState<string>()
   const reference = newReference ?? rememberedPaymentReference(session.data?.id)
   const payment = usePaymentAttempt(session.data?.id, confirmingSince ?? undefined)
@@ -96,9 +106,11 @@ export function CheckoutPage() {
 
   const payNow = () => {
     setConfirmingSince(null)
+    setPayingSince(Date.now())
     pay.mutate(
       { sessionId: session.data.id, paymentMethod: card.token },
       {
+        onSettled: () => setPayingSince(undefined),
         onSuccess: ({ attempt, reference }) => {
           setReference(reference)
           rememberPaymentReference(session.data.id, reference)
@@ -112,6 +124,8 @@ export function CheckoutPage() {
     )
   }
   const busy = pay.isPending || paidOrderId !== undefined || confirming?.kind === 'confirming'
+  const confirmingPayment =
+    (pay.isPending && isConfirmingPayment(payingSince, now)) || confirming?.kind === 'confirming'
   const payFailure = payFailureOf(pay.error)
 
   return (
@@ -137,7 +151,7 @@ export function CheckoutPage() {
               <Icon name="lock" size={16} />
               This is a demo: each test card shows one way a payment can go. Nothing is charged.
             </p>
-            {confirming?.kind === 'confirming' && (
+            {confirmingPayment && (
               <p className="alert alert-info confirming-payment" role="status">
                 <Icon name="lock" size={18} />
                 <span>Confirming your payment… This can take a little while; please keep this page open.</span>
@@ -178,10 +192,10 @@ export function CheckoutPage() {
               loading={busy}
               disabled={coupon.isPending}
             >
-              {pay.isPending
-                ? 'Paying…'
-                : confirming?.kind === 'confirming'
-                  ? 'Confirming your payment…'
+              {confirmingPayment
+                ? 'Confirming your payment…'
+                : pay.isPending
+                  ? 'Paying…'
                   : `Pay ${formatMoney(session.data.total)}`}
             </Button>
           </Card>

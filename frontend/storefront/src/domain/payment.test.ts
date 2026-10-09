@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { attemptFailure, confirmation, defaultTestCard, paymentFailure, pollFor, testCards } from './payment'
+import {
+  attemptFailure,
+  confirmation,
+  confirmingAfter,
+  defaultTestCard,
+  isConfirmingPayment,
+  paymentFailure,
+  pollFor,
+  testCards,
+} from './payment'
 
 describe('testCards', () => {
   it('offers one card per mock gateway outcome, approving first', () => {
@@ -8,12 +17,37 @@ describe('testCards', () => {
       'tok_decline',
       'tok_insufficient_funds',
       'tok_gateway_error',
+      'tok_async_approve',
+      'tok_async_decline',
     ])
     expect(defaultTestCard).toBe(testCards[0])
   })
 
   it('gives each card its own number', () => {
     expect(new Set(testCards.map((card) => card.last4)).size).toBe(testCards.length)
+  })
+})
+
+describe('testCards the bank confirms later', () => {
+  it('names them by what the bank does', () => {
+    expect(testCards.filter((card) => card.token.startsWith('tok_async_')).map((card) => card.label)).toEqual([
+      'Bank confirms, approves',
+      'Bank confirms, declines',
+    ])
+  })
+})
+
+describe('isConfirmingPayment', () => {
+  it('says a Pay still waiting after a moment is being confirmed', () => {
+    expect(confirmingAfter).toBe(2000)
+    expect(isConfirmingPayment(10_000, 12_000)).toBe(true)
+    expect(isConfirmingPayment(10_000, 40_000)).toBe(true)
+  })
+
+  it('says nothing yet of a Pay just sent, or of none', () => {
+    expect(isConfirmingPayment(10_000, 10_000)).toBe(false)
+    expect(isConfirmingPayment(10_000, 11_999)).toBe(false)
+    expect(isConfirmingPayment(undefined, 40_000)).toBe(false)
   })
 })
 

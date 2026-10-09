@@ -28,10 +28,10 @@ class GatewayConfiguration {
   }
 
   /**
-   * Authentication at the edge: a routed request needs a valid token unless it is a public read.
-   * Anything else is let through to the dispatcher, which has no route for it and answers 404, so
-   * an internal endpoint looks the same with a token as without. Authorization stays with the
-   * services.
+   * Authentication at the edge: a routed request needs a valid token unless it is a public read or
+   * a webhook. Anything else is let through to the dispatcher, which has no route for it and
+   * answers 404, so an internal endpoint looks the same with a token as without. Authorization
+   * stays with the services.
    */
   @Bean
   SecurityFilterChain edgeSecurity(
@@ -43,7 +43,7 @@ class GatewayConfiguration {
         .authorizeHttpRequests(
             requests ->
                 requests
-                    .requestMatchers(routes.publicReads())
+                    .requestMatchers(routes.tokenless())
                     .permitAll()
                     .requestMatchers(routes.routed())
                     .authenticated()

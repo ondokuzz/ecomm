@@ -2,11 +2,16 @@ package com.ecomm.payment;
 
 import com.ecomm.commons.events.EventBackbone;
 import com.ecomm.commons.security.FakeKeycloak;
+import com.ecomm.payment.adapter.out.gateway.WebhookDelivery;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureRestTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -17,11 +22,16 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 /**
  * Base for HTTP-seam tests: the app runs against one Postgres container shared by every test class,
  * and the shared Kafka and schema registry from {@link EventBackbone}, with the Payment topic
- * created and its schema registered as the stack does.
+ * created and its schema registered as the stack does. The mock gateway's webhooks are recorded at
+ * once instead of delivered, for each test to deliver, repeat, reorder or withhold.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureRestTestClient
+@Import(PaymentApiTest.RecordingWebhooks.class)
 abstract class PaymentApiTest {
+
+  /** The secret the gateway signs its webhooks with, as the stack sets it. */
+  static final String WEBHOOK_SECRET = "test-webhook-secret";
 
   static final PostgreSQLContainer POSTGRES =
       new PostgreSQLContainer("postgres:16").withDatabaseName("payment");
@@ -44,7 +54,21 @@ abstract class PaymentApiTest {
     registry.add("spring.datasource.password", POSTGRES::getPassword);
     // Sprint 3 Payments, there before the ledger and events (see BackfillApiTest).
     registry.add("spring.flyway.locations", () -> "classpath:db/migration,classpath:db/testdata");
+    registry.add("payment.webhooks.secret", () -> WEBHOOK_SECRET);
+    registry.add("payment.mock-gateway.webhook-delay", () -> "0s");
   }
+
+  @TestConfiguration
+  static class RecordingWebhooks {
+
+    @Bean
+    @Primary
+    RecordedWebhooks recordedWebhooks() {
+      return new RecordedWebhooks();
+    }
+  }
+
+  @Autowired RecordedWebhooks webhooks;
 
   @Autowired RestTestClient http;
 
@@ -111,6 +135,16 @@ abstract class PaymentApiTest {
         .headers(h -> h.setBearerAuth(orchestrationToken()))
         .contentType(MediaType.APPLICATION_JSON)
         .body("{\"customerId\": \"%s\"}".formatted(customerId))
+        .exchange();
+  }
+
+  /** Posts the webhook to Payment as the gateway does: no token, its signature in a header. */
+  RestTestClient.ResponseSpec deliver(WebhookDelivery.SignedWebhook webhook) {
+    return http.post()
+        .uri("/webhooks/gateway")
+        .header("Gateway-Signature", webhook.signature())
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(webhook.body())
         .exchange();
   }
 

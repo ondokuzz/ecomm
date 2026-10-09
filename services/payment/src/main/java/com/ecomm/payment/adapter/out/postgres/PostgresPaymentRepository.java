@@ -2,11 +2,13 @@ package com.ecomm.payment.adapter.out.postgres;
 
 import com.ecomm.commons.money.Money;
 import com.ecomm.payment.application.port.out.PaymentRepository;
+import com.ecomm.payment.domain.GatewaySettlement;
 import com.ecomm.payment.domain.Payment;
 import com.ecomm.payment.domain.PaymentTransaction;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -18,7 +20,8 @@ import org.springframework.stereotype.Component;
 /**
  * Payments as rows of the {@code payment} table, with their Payment transactions as rows of {@code
  * payment_transaction}, which are only ever inserted (see {@code db/migration}). {@code
- * payment.status} is written with each transaction, from the Payment's own status.
+ * payment.status} is written with each transaction, from the Payment's own status. Each Gateway
+ * webhook received is a row of {@code gateway_webhook}, keyed by its event ID.
  */
 @Component
 class PostgresPaymentRepository implements PaymentRepository {
@@ -82,6 +85,45 @@ class PostgresPaymentRepository implements PaymentRepository {
                 .list())
         .stream()
         .findFirst();
+  }
+
+  @Override
+  public Optional<Payment> lockToChangeByGatewayReference(String reference) {
+    return withTransactions(
+            jdbc.sql(
+                    "SELECT "
+                        + PAYMENT_COLUMNS
+                        + """
+                         FROM payment p
+                        JOIN payment_transaction t ON t.payment_id = p.id AND t.position = 0
+                        WHERE t.gateway_reference = :reference
+                        FOR UPDATE OF p
+                        """)
+                .param("reference", reference)
+                .query(this::header)
+                .list())
+        .stream()
+        .findFirst();
+  }
+
+  @Override
+  public boolean addReceivedWebhook(UUID paymentId, GatewaySettlement settlement, Instant at) {
+    return jdbc.sql(
+                """
+                INSERT INTO gateway_webhook
+                  (event_id, payment_id, gateway_reference, outcome, decline_reason, received_at)
+                VALUES
+                  (:eventId, :paymentId, :reference, :outcome, :declineReason, :receivedAt)
+                ON CONFLICT (event_id) DO NOTHING
+                """)
+            .param("eventId", settlement.eventId())
+            .param("paymentId", paymentId)
+            .param("reference", settlement.reference())
+            .param("outcome", settlement.answer().outcome().name())
+            .param("declineReason", settlement.answer().declineReason())
+            .param("receivedAt", Timestamp.from(at))
+            .update()
+        == 1;
   }
 
   @Override

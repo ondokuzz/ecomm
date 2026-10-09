@@ -35,6 +35,9 @@ spring:
 # Every context the Saga's steps call, on its compose host port.
 ecomm:
   orchestration:
+    # How long the checkout Saga awaits a bank's confirmation of a pending authorization before it
+    # voids the Payment and cancels the Order.
+    settlement-deadline: 10m
     order-management-url: http://localhost:8085
     payment-url: http://localhost:8084
     inventory-url: http://localhost:8082

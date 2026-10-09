@@ -50,9 +50,9 @@ final class EdgeRoutes {
     return anyOf(routes.stream().map(Route::routed).toList());
   }
 
-  /** Routed {@code GET}s that need no token. */
-  RequestMatcher publicReads() {
-    return new AndRequestMatcher(routed(), anyOf(routes.stream().map(Route::publicReads).toList()));
+  /** Routed requests that need no token: public reads, and webhooks the service authenticates. */
+  RequestMatcher tokenless() {
+    return new AndRequestMatcher(routed(), anyOf(routes.stream().map(Route::tokenless).toList()));
   }
 
   /**
@@ -71,7 +71,7 @@ final class EdgeRoutes {
       String name,
       GatewayProperties.Service service,
       RequestMatcher routed,
-      RequestMatcher publicReads) {
+      RequestMatcher tokenless) {
 
     static Route of(String name, GatewayProperties.Service service) {
       Objects.requireNonNull(service.uri(), "ecomm.gateway.services." + name + ".uri");
@@ -79,20 +79,24 @@ final class EdgeRoutes {
       var internal =
           anyOf(
               Stream.concat(Stream.of(ACTUATOR), service.internal().stream())
-                  .map(entry -> internal(prefix, entry))
+                  .map(entry -> endpoint(prefix, entry))
                   .toList());
       var routed =
           new AndRequestMatcher(path(null, prefix + "/**"), new NegatedRequestMatcher(internal));
-      var publicReads =
-          anyOf(service.publicReads().stream().map(p -> path(HttpMethod.GET, prefix + p)).toList());
-      return new Route(name, service, routed, publicReads);
+      var tokenless =
+          anyOf(
+              Stream.concat(
+                      service.publicReads().stream().map(p -> path(HttpMethod.GET, prefix + p)),
+                      service.webhooks().stream().map(entry -> endpoint(prefix, entry)))
+                  .toList());
+      return new Route(name, service, routed, tokenless);
     }
 
     /**
      * {@code /path} for every method, or {@code METHOD /path}. It matches with a trailing slash
      * too, so {@code /stock/decrement/} can't slip through to a service that is lenient about it.
      */
-    private static RequestMatcher internal(String prefix, String entry) {
+    private static RequestMatcher endpoint(String prefix, String entry) {
       var parts = entry.trim().split("\\s+", 2);
       var method = parts.length == 1 ? null : HttpMethod.valueOf(parts[0]);
       var pattern = prefix + parts[parts.length - 1];

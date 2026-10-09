@@ -21,7 +21,13 @@ record GatewayProperties(@DefaultValue Map<String, Service> services) {
    * @param publicReads paths anyone may {@code GET} without a token
    * @param internal endpoints only other services call, never routed: a path pattern for every
    *     method, or a method and a path pattern such as {@code POST /orders}
+   * @param webhooks endpoints a third party calls from outside, such as a payment gateway, routed
+   *     without a token since the service authenticates them itself; in the same form as {@code
+   *     internal}
    */
   record Service(
-      URI uri, @DefaultValue List<String> publicReads, @DefaultValue List<String> internal) {}
+      URI uri,
+      @DefaultValue List<String> publicReads,
+      @DefaultValue List<String> internal,
+      @DefaultValue List<String> webhooks) {}
 }

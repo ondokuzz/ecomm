@@ -27,14 +27,19 @@ stay with the services, which still check every token themselves.
 | `search-discovery` | `/search` | |
 | `reviews-ratings` | `/products/*/reviews`, `/products/*/rating-summary`, `/rating-summaries` | |
 
+Payment's `POST /webhooks/gateway` is its one webhook: routed without a token, since the payment
+gateway calls it from outside and Payment checks the webhook's signature itself.
+
 The table lives in [`application.yml`](./src/main/resources/application.yml) under
 `ecomm.gateway.services`, and routing and edge security are both built from it (`EdgeRoutes`), so
-they can't disagree. Adding a service is one entry: its `uri`, and any `public-reads` and
-`internal` paths, written as the service's own paths. An `internal` entry is a path pattern, for
-every method, or a method and a pattern. `application-docker.yml` points each `uri` at the compose
+they can't disagree. Adding a service is one entry: its `uri`, and any `public-reads`, `internal`
+and `webhooks` paths, written as the service's own paths. An `internal` or `webhooks` entry is a
+path pattern, for every method, or a method and a pattern. `application-docker.yml` points each `uri` at the compose
 network; outside Docker they are the services' dev host ports.
 
 - **Public reads** pass without a token. A token that is sent is still checked, and forwarded.
+- **Webhooks** pass without a token too, for the method and path listed only: the service
+  authenticates them itself.
 - **Everything else routed** needs a valid `ecomm` token: the same JWT validation as every
   service, from `service-commons`. Without one the gateway answers a 401 problem detail and the
   service never sees the request. `Authorization` is forwarded unchanged, so the service checks
@@ -79,7 +84,7 @@ HTTP-seam tests start the gateway with one WireMock server standing in for every
 
 - `RoutingApiTest`: each service is reached with the prefix stripped; internal and unknown
   endpoints are 404s that never reach the stub; no CORS headers.
-- `EdgeAuthenticationApiTest`: public reads pass without a token; every other route is a 401
+- `EdgeAuthenticationApiTest`: public reads and Payment's webhook pass without a token; every other route is a 401
   without a valid one and never reaches the stub; `Authorization` is forwarded untouched.
 - `CorrelationIdApiTest`: a valid incoming ID is kept and a malformed one replaced, on both the
   forwarded request and the response; the access log line.

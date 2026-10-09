@@ -237,9 +237,11 @@ Checkout shows where the Customer is (Cart → Payment → Done; the Order confi
 and a drawn payment card over a test-card picker: there is nothing to type, since the payment is
 mocked. Each test card is a radio named by its card and described by what it does
 (`testCards` in [`src/domain/payment.ts`](./src/domain/payment.ts)): **Approve**, **Decline**,
-**Insufficient funds** and **Gateway error**, sent as the Payment method `tok_approve`,
-`tok_decline`, `tok_insufficient_funds` and `tok_gateway_error`. Approve is chosen to begin with,
-and the drawn card shows the chosen one's last four digits.
+**Insufficient funds**, **Gateway error**, **Bank confirms, approves** and **Bank confirms,
+declines**, sent as the Payment method `tok_approve`, `tok_decline`, `tok_insufficient_funds`,
+`tok_gateway_error`, `tok_async_approve` and `tok_async_decline`. Approve is chosen to begin with,
+and the drawn card shows the chosen one's last four digits. A Pay still unanswered after 2 seconds,
+as one the bank confirms later is, shows "Confirming your payment…" (`isConfirmingPayment`).
 
 A declined card (402) shows "Your card was declined" inline, with a line for its `declineReason`;
 a payment that didn't go through (502) shows "The payment didn't go through" instead

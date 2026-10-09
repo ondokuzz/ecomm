@@ -1,6 +1,8 @@
 package com.ecomm.payment.application.port.out;
 
+import com.ecomm.payment.domain.GatewaySettlement;
 import com.ecomm.payment.domain.Payment;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -20,6 +22,18 @@ public interface PaymentRepository {
    * The Payment, locked until the transaction ends, so that changes to it are made one at a time.
    */
   Optional<Payment> lockToChange(UUID id);
+
+  /**
+   * The Payment whose authorization the gateway knows by {@code reference}, locked as {@link
+   * #lockToChange} locks it.
+   */
+  Optional<Payment> lockToChangeByGatewayReference(String reference);
+
+  /**
+   * Records that the Gateway webhook {@code settlement}, about the Payment {@code paymentId}, was
+   * received at {@code at}; false, recording nothing, when its event ID was received before.
+   */
+  boolean addReceivedWebhook(UUID paymentId, GatewaySettlement settlement, Instant at);
 
   /** Every Payment for the Order, newest authorization first. */
   List<Payment> findByOrder(String orderId);
