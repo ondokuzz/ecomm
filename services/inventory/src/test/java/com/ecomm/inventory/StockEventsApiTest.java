@@ -190,7 +190,7 @@ class StockEventsApiTest extends InventoryApiTest {
   private void settleWith(String reservationId, String action, String correlationId) {
     http.post()
         .uri("/reservations/{id}/{action}", reservationId, action)
-        .headers(h -> h.setBearerAuth(checkoutToken()))
+        .headers(h -> h.setBearerAuth(tokenToSettle(action)))
         .header("X-Correlation-Id", correlationId)
         .contentType(MediaType.APPLICATION_JSON)
         .body(customerBody(CUSTOMER))

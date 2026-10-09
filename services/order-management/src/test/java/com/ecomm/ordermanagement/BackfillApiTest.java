@@ -69,7 +69,7 @@ class BackfillApiTest extends OrderApiTest {
   void aBackfilledOrderMovesOnFromItsBackfilledVersion() {
     OrderEvents.keyed(MOVING_ORDER, 1);
 
-    changeStatus(checkoutToken(), MOVING_ORDER, statusChange(CUSTOMER, "PAID"))
+    changeStatus(orchestrationToken(), MOVING_ORDER, statusChange(CUSTOMER, "PAID"))
         .expectStatus()
         .isOk();
 

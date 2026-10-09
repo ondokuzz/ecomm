@@ -10,6 +10,4 @@ import java.util.List;
 public interface CartPort {
 
   List<CartLine> lines();
-
-  void clear();
 }

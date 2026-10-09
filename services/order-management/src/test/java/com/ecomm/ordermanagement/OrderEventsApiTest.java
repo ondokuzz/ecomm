@@ -20,7 +20,8 @@ class OrderEventsApiTest extends OrderApiTest {
     var order =
         http.post()
             .uri("/orders")
-            .headers(h -> h.setBearerAuth(checkoutToken()))
+            .headers(h -> h.setBearerAuth(orchestrationToken()))
+            .header("Idempotency-Key", newKey())
             .header("X-Correlation-Id", "order-events-place-1")
             .contentType(MediaType.APPLICATION_JSON)
             .body(
@@ -79,7 +80,7 @@ class OrderEventsApiTest extends OrderApiTest {
     assertThat(snapshot.at("/total/currency").asText()).isEqualTo("EUR");
     assertThat(snapshot.get("statusHistory")).hasSize(1);
     assertThat(snapshot.at("/statusHistory/0/status").asText()).isEqualTo("PLACED");
-    assertThat(snapshot.at("/statusHistory/0/changedBy").asText()).isEqualTo("CHECKOUT");
+    assertThat(snapshot.at("/statusHistory/0/changedBy").asText()).isEqualTo("ORCHESTRATION");
   }
 
   @Test
@@ -135,7 +136,8 @@ class OrderEventsApiTest extends OrderApiTest {
       String id, String status, String correlationId) {
     return http.patch()
         .uri("/orders/{id}/status", id)
-        .headers(h -> h.setBearerAuth(checkoutToken()))
+        .headers(h -> h.setBearerAuth(orchestrationToken()))
+        .header("Idempotency-Key", newKey())
         .header("X-Correlation-Id", correlationId)
         .contentType(MediaType.APPLICATION_JSON)
         .body(statusChange("customer-events", status))

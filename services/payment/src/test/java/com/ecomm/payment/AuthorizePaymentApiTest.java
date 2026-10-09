@@ -10,7 +10,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.MediaType;
 
-/** Checkout authorizes an Order's payment for a Customer, paid with a payment method. */
+/** The checkout Saga authorizes an Order's payment for a Customer, paid with a payment method. */
 class AuthorizePaymentApiTest extends PaymentApiTest {
 
   @Test

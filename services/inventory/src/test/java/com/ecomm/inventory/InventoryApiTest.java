@@ -63,9 +63,19 @@ abstract class InventoryApiTest {
   @Autowired RestTestClient http;
   @Autowired TestTimeSource clock;
 
-  /** Checkout's own token: the only caller allowed to reserve stock. */
+  /** Checkout's own token: the only caller allowed to reserve and release stock. */
   static String checkoutToken() {
     return FakeKeycloak.token("checkout", "CHECKOUT");
+  }
+
+  /** Orchestration's own token: the only caller allowed to commit a Reservation. */
+  static String orchestrationToken() {
+    return FakeKeycloak.token("orchestration", "ORCHESTRATION");
+  }
+
+  /** The token of the one caller allowed to {@code commit} or {@code release} a Reservation. */
+  static String tokenToSettle(String action) {
+    return "commit".equals(action) ? orchestrationToken() : checkoutToken();
   }
 
   /** A Staff member's token: the only caller allowed to set on-hand Stock. */
@@ -173,7 +183,7 @@ abstract class InventoryApiTest {
   }
 
   RestTestClient.ResponseSpec commit(String id) {
-    return settle(checkoutToken(), id, "commit", CUSTOMER);
+    return settle(orchestrationToken(), id, "commit", CUSTOMER);
   }
 
   RestTestClient.ResponseSpec release(String id) {

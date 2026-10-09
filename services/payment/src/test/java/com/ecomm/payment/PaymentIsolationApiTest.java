@@ -7,7 +7,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.MediaType;
 
 /**
- * Only Checkout authorizes Payments; only the Customer a Payment was authorized for can read it.
+ * Only the checkout Saga authorizes Payments; only the Customer a Payment was authorized for can
+ * read it.
  */
 class PaymentIsolationApiTest extends PaymentApiTest {
 
@@ -31,7 +32,7 @@ class PaymentIsolationApiTest extends PaymentApiTest {
   }
 
   @Test
-  void thePaymentBelongsToTheCustomerCheckoutNamed() {
+  void thePaymentBelongsToTheCustomerTheSagaNamed() {
     var id =
         authorize(
                 """
@@ -58,8 +59,8 @@ class PaymentIsolationApiTest extends PaymentApiTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"CUSTOMER", "STAFF"})
-  void onlyCheckoutCanAuthorizeAPayment(String role) {
+  @ValueSource(strings = {"CUSTOMER", "STAFF", "CHECKOUT"})
+  void onlyOrchestrationCanAuthorizeAPayment(String role) {
     http.post()
         .uri("/payments")
         .headers(h -> h.setBearerAuth(FakeKeycloak.token("someone-" + role, role)))

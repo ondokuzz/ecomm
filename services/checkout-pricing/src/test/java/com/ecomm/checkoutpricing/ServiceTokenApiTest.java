@@ -25,8 +25,8 @@ class ServiceTokenApiTest extends CheckoutApiTest {
   void oneTokenServesEveryCallAcrossCheckouts() {
     stubSuccessfulCheckout();
 
-    checkout().expectStatus().isOk();
-    checkout().expectStatus().isOk();
+    startedSessionId();
+    startedSessionId();
 
     DOWNSTREAM.verify(1, postRequestedFor(urlEqualTo(TOKEN_PATH)));
   }
@@ -34,10 +34,10 @@ class ServiceTokenApiTest extends CheckoutApiTest {
   @Test
   void aTokenWithMoreThanAMinuteLeftIsReused() {
     stubSuccessfulCheckout();
-    checkout().expectStatus().isOk();
+    startedSessionId();
 
     clock.advance(Duration.ofMinutes(5).minusSeconds(70));
-    checkout().expectStatus().isOk();
+    startedSessionId();
 
     DOWNSTREAM.verify(1, postRequestedFor(urlEqualTo(TOKEN_PATH)));
   }
@@ -46,19 +46,19 @@ class ServiceTokenApiTest extends CheckoutApiTest {
   void aTokenWithLessThanAMinuteLeftIsReplacedBeforeTheNextCall() {
     stubSuccessfulCheckout();
     stubTokenSequence("checkout-token-1", "checkout-token-2");
-    checkout().expectStatus().isOk();
+    startedSessionId();
 
     clock.advance(Duration.ofMinutes(5).minusSeconds(50));
-    checkout().expectStatus().isOk();
+    startedSessionId();
 
     DOWNSTREAM.verify(2, postRequestedFor(urlEqualTo(TOKEN_PATH)));
     DOWNSTREAM.verify(
         1,
-        postRequestedFor(urlEqualTo("/payments"))
+        postRequestedFor(urlEqualTo("/reservations"))
             .withHeader("Authorization", equalTo("Bearer checkout-token-1")));
     DOWNSTREAM.verify(
         1,
-        postRequestedFor(urlEqualTo("/payments"))
+        postRequestedFor(urlEqualTo("/reservations"))
             .withHeader("Authorization", equalTo("Bearer checkout-token-2")));
   }
 
@@ -67,59 +67,52 @@ class ServiceTokenApiTest extends CheckoutApiTest {
     stubSuccessfulCheckout();
     stubTokenSequence("revoked-token", "checkout-token-2");
     DOWNSTREAM.stubFor(
-        post("/orders")
+        post("/reservations")
             .withHeader("Authorization", equalTo("Bearer revoked-token"))
             .willReturn(
                 aResponse()
                     .withStatus(401)
                     .withHeader("WWW-Authenticate", "Bearer error=\"invalid_token\"")));
-    DOWNSTREAM.stubFor(
-        post("/orders")
-            .withHeader("Authorization", equalTo("Bearer checkout-token-2"))
-            .willReturn(placedOrder()));
 
-    checkout().expectStatus().isOk().expectBody().jsonPath("$.status").isEqualTo("PAID");
+    startSession().expectStatus().isCreated();
 
-    DOWNSTREAM.verify(2, postRequestedFor(urlEqualTo("/orders")));
+    DOWNSTREAM.verify(2, postRequestedFor(urlEqualTo("/reservations")));
     DOWNSTREAM.verify(2, postRequestedFor(urlEqualTo(TOKEN_PATH)));
-    DOWNSTREAM.verify(
-        postRequestedFor(urlEqualTo("/payments"))
-            .withHeader("Authorization", equalTo("Bearer checkout-token-2")));
   }
 
   @Test
   void a401IsRetriedOnlyOnce() {
     stubSuccessfulCheckout();
-    DOWNSTREAM.stubFor(post("/orders").willReturn(aResponse().withStatus(401)));
+    stubReserve(aResponse().withStatus(401));
 
-    checkout().expectStatus().isEqualTo(502);
+    startSession().expectStatus().isEqualTo(502);
 
-    DOWNSTREAM.verify(2, postRequestedFor(urlEqualTo("/orders")));
+    DOWNSTREAM.verify(2, postRequestedFor(urlEqualTo("/reservations")));
   }
 
   @Test
   void noOtherStatusIsRetried() {
     stubSuccessfulCheckout();
-    stubPayment(aResponse().withStatus(503));
+    stubReserve(aResponse().withStatus(503));
 
-    checkout().expectStatus().isEqualTo(502);
+    startSession().expectStatus().isEqualTo(502);
 
-    DOWNSTREAM.verify(1, postRequestedFor(urlEqualTo("/payments")));
+    DOWNSTREAM.verify(1, postRequestedFor(urlEqualTo("/reservations")));
   }
 
   @Test
   void a403KeepsTheCachedTokenAndIsNotRetried() {
     stubSuccessfulCheckout();
-    stubPayment(
+    stubReserve(
         aResponse()
             .withStatus(403)
             .withHeader("WWW-Authenticate", "Bearer error=\"insufficient_scope\""));
-    checkout().expectStatus().isEqualTo(502);
+    startSession().expectStatus().isEqualTo(502);
 
-    stubPayment();
-    checkout().expectStatus().isOk();
+    stubReserve();
+    startSession().expectStatus().isCreated();
 
-    DOWNSTREAM.verify(2, postRequestedFor(urlEqualTo("/payments")));
+    DOWNSTREAM.verify(2, postRequestedFor(urlEqualTo("/reservations")));
     DOWNSTREAM.verify(1, postRequestedFor(urlEqualTo(TOKEN_PATH)));
   }
 

@@ -5,9 +5,4 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 /** Where Checkout finds each service it calls. */
 @ConfigurationProperties("ecomm.checkout")
 record DownstreamProperties(
-    String cartUrl,
-    String catalogUrl,
-    String inventoryUrl,
-    String orderManagementUrl,
-    String paymentUrl,
-    String promotionsUrl) {}
+    String cartUrl, String catalogUrl, String inventoryUrl, String promotionsUrl) {}

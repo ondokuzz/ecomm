@@ -23,7 +23,8 @@ class StaffOrdersApiTest extends OrderApiTest {
   @Test
   void staffReadAnotherCustomersOrderWithItsCustomer() {
     var placed = placed("customer-erin");
-    var paid = changeStatus(checkoutToken(), placed.id(), statusChange("customer-erin", "PAID"));
+    var paid =
+        changeStatus(orchestrationToken(), placed.id(), statusChange("customer-erin", "PAID"));
     paid.expectStatus().isOk();
 
     var order = staffOrder(placed.id());
@@ -34,7 +35,7 @@ class StaffOrdersApiTest extends OrderApiTest {
     assertThat(order.total()).isEqualTo(placed.total());
     assertThat(order.statusHistory())
         .extracting(HistoryEntryView::status, HistoryEntryView::changedBy)
-        .containsExactly(tuple("PLACED", "CHECKOUT"), tuple("PAID", "CHECKOUT"));
+        .containsExactly(tuple("PLACED", "ORCHESTRATION"), tuple("PAID", "ORCHESTRATION"));
   }
 
   @Test
@@ -215,7 +216,7 @@ class StaffOrdersApiTest extends OrderApiTest {
 
   /** Moves the Customer's Order to {@code status} as Checkout. */
   private void move(String customerId, OrderView order, String status) {
-    changeStatus(checkoutToken(), order.id(), statusChange(customerId, status))
+    changeStatus(orchestrationToken(), order.id(), statusChange(customerId, status))
         .expectStatus()
         .isOk();
   }

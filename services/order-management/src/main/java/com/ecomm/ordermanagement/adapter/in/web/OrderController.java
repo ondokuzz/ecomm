@@ -21,7 +21,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -35,10 +34,9 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * The checkout Saga places a Customer's Orders and moves them along their Order Status with
  * Orchestration's own {@code ORCHESTRATION} token, naming the Customer in the body, each command
- * under an {@code Idempotency-Key}. Checkout's {@code CHECKOUT} token may too, without a key, until
- * Checkout moves onto the Saga; each change records which of them made it. The Customer reads them
- * with a {@code CUSTOMER} token, whose {@code sub} must own the Order. Staff have no Orders of
- * their own, and read every Customer's through {@link StaffOrderController}.
+ * under an {@code Idempotency-Key}; each change records it made it. The Customer reads them with a
+ * {@code CUSTOMER} token, whose {@code sub} must own the Order. Staff have no Orders of their own,
+ * and read every Customer's through {@link StaffOrderController}.
  */
 @RestController
 @RequestMapping("/orders")
@@ -62,13 +60,12 @@ class OrderController {
    * same {@code Idempotency-Key} replays it.
    */
   @PostMapping
-  @PreAuthorize("hasAnyRole('CHECKOUT', 'ORCHESTRATION')")
-  @IdempotentCommand(exemptRoles = "CHECKOUT")
-  ResponseEntity<OrderResponse> place(
-      Authentication caller, @RequestBody PlaceOrderRequest request) {
+  @PreAuthorize("hasRole('ORCHESTRATION')")
+  @IdempotentCommand
+  ResponseEntity<OrderResponse> place(@RequestBody PlaceOrderRequest request) {
     var order =
         place.place(
-            callerOf(caller),
+            Caller.ORCHESTRATION,
             request.toCustomerId(),
             request.toOrderLines(),
             request.toDiscounts(),
@@ -108,25 +105,17 @@ class OrderController {
    * Idempotency-Key} replays the first answer.
    */
   @PatchMapping("/{id}/status")
-  @PreAuthorize("hasAnyRole('CHECKOUT', 'ORCHESTRATION')")
-  @IdempotentCommand(exemptRoles = "CHECKOUT")
-  OrderResponse changeStatus(
-      Authentication caller, @PathVariable String id, @RequestBody StatusChangeRequest request) {
+  @PreAuthorize("hasRole('ORCHESTRATION')")
+  @IdempotentCommand
+  OrderResponse changeStatus(@PathVariable String id, @RequestBody StatusChangeRequest request) {
     var customerId = request.toCustomerId();
     var next = request.toStatus();
-    var changedBy = callerOf(caller);
     var order =
-        ownedOrder(id, orderId -> changeStatus.changeStatus(changedBy, customerId, orderId, next));
+        ownedOrder(
+            id,
+            orderId -> changeStatus.changeStatus(Caller.ORCHESTRATION, customerId, orderId, next));
     log.info("Moved Order {} to {}", id, next);
     return order;
-  }
-
-  /** Orchestration when its token holds the role; otherwise Checkout, the only other caller. */
-  private static Caller callerOf(Authentication caller) {
-    return caller.getAuthorities().stream()
-            .anyMatch(a -> "ROLE_ORCHESTRATION".equals(a.getAuthority()))
-        ? Caller.ORCHESTRATION
-        : Caller.CHECKOUT;
   }
 
   /**

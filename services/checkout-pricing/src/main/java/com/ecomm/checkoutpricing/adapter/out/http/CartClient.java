@@ -33,9 +33,4 @@ class CartClient implements CartPort {
     }
     return cart.items().stream().map(i -> new CartLine(i.variantId(), i.quantity())).toList();
   }
-
-  @Override
-  public void clear() {
-    Downstream.run("Cart", () -> http.delete().uri("/cart").retrieve().toBodilessEntity());
-  }
 }

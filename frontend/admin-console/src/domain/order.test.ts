@@ -155,6 +155,14 @@ describe('historyRowsOf', () => {
     expect(rows[1]).toMatchObject({ at: '2026-10-03T12:00:05Z', time: '3 Oct 2026, 21:00:05' })
   })
 
+  it('names the checkout Saga for the changes it made', () => {
+    const rows = historyRowsOf({
+      statusHistory: [{ status: 'PLACED', at: '2026-10-09T12:00:00Z', changedBy: 'ORCHESTRATION', backfilled: false }],
+    })
+
+    expect(rows[0].changedBy).toBe('Checkout Saga')
+  })
+
   it('says a backfilled change’s time is not known, since it is only the placement time', () => {
     const [cancelled] = historyRowsOf(order, 'en-GB')
 

@@ -1,11 +1,11 @@
 package com.ecomm.checkoutpricing.application.port.in;
 
-import com.ecomm.checkoutpricing.domain.CheckoutResult;
 import com.ecomm.checkoutpricing.domain.CheckoutSession;
 import com.ecomm.checkoutpricing.domain.CheckoutSessionExpiredException;
 import com.ecomm.checkoutpricing.domain.CheckoutSessionNotFoundException;
 import com.ecomm.checkoutpricing.domain.CouponNotApplicableException;
-import com.ecomm.checkoutpricing.domain.PaymentDeclinedException;
+import com.ecomm.checkoutpricing.domain.NoPaymentAttemptException;
+import com.ecomm.checkoutpricing.domain.PaymentAttempt;
 import java.util.Optional;
 
 /** Checkout in two steps: a Checkout Session holds the Customer's Cart, and paying it buys it. */
@@ -40,16 +40,27 @@ public interface CheckoutUseCase {
   CheckoutSession removeCoupon(String customerId, String sessionId);
 
   /**
-   * Turns the Customer's Checkout Session into a paid Order at its captured Prices, less its
-   * Discount, paid with {@code paymentMethod}, clears the Cart and ends the session. If a step
-   * fails once the Order exists, a declined payment included, the Order is cancelled and the Cart
-   * and session are left as they were, so the session can be paid again.
+   * Pays the Customer's Checkout Session with {@code paymentMethod}: starts the checkout Saga with
+   * the session as it stands, which turns it into a paid Order at its captured Prices, less its
+   * Discounts, or joins the attempt still running for it, and waits a while for how it ends. A
+   * session already paid isn't paid again: its paid attempt is the answer. After a decline, the
+   * session and its Reservation stay, so it can be paid again.
    *
+   * @return the attempt, {@code PROCESSING} while the Saga is still going
    * @throws CheckoutSessionNotFoundException when the Customer has no session with this ID
-   * @throws CheckoutSessionExpiredException when it has expired; nothing happens either way
-   * @throws PaymentDeclinedException when the gateway declines the payment method
+   * @throws CheckoutSessionExpiredException when it has expired; nothing is started either way
+   * @throws CheckoutUnavailableException when the Saga can't be started; nothing is
    */
-  CheckoutResult pay(String customerId, String sessionId, String paymentMethod);
+  PaymentAttempt pay(String customerId, String sessionId, String paymentMethod);
+
+  /**
+   * The latest attempt to pay the Customer's Checkout Session {@code sessionId}, even once the
+   * session has ended.
+   *
+   * @throws NoPaymentAttemptException when it was never paid, or isn't theirs
+   * @throws CheckoutUnavailableException when the Saga can't be read
+   */
+  PaymentAttempt latestPayment(String customerId, String sessionId);
 
   /**
    * Ends the Customer's Checkout Session {@code sessionId} once its Order is paid, but only while

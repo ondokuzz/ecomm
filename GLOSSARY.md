@@ -89,7 +89,7 @@ A Customer's in-progress, unconfirmed selection of Variants and quantities. Ephe
 _Avoid_: Basket, Bag
 
 **Checkout**:
-How a Customer turns their Cart into an Order, in two steps. Starting it opens a Checkout Session: the Cart's Variants are priced and their Stock reserved. Paying the session places the Order at those Prices, authorizes payment and commits the Reservation.
+How a Customer turns their Cart into an Order, in two steps. Starting it opens a Checkout Session: the Cart's Variants are priced and their Stock reserved, which Checkout does itself. Paying the session starts the checkout Saga, a Payment attempt, which places the Order at those Prices, authorizes its Payment, commits the Reservation, marks the Order paid, clears the Cart and ends the session. Checkout answers with the attempt's outcome, or that it is still being confirmed.
 _Avoid_: Purchase, Order placement
 
 **Checkout Session**:
@@ -144,12 +144,16 @@ One interaction with the payment gateway on a Payment, recorded for good: an `AU
 _Avoid_: Charge, Transaction (on its own), Payment event
 
 **Void**:
-Releasing an authorized or pending Payment's authorization through the gateway before anything is captured, so the Customer's money is no longer held. It records a `VOID` Payment transaction and leaves the Payment `VOIDED`. Voiding a voided Payment again changes nothing; a declined one has nothing to release, and can't be voided. The checkout Saga is to void a Payment to compensate for an Order it can't complete.
+Releasing an authorized or pending Payment's authorization through the gateway before anything is captured, so the Customer's money is no longer held. It records a `VOID` Payment transaction and leaves the Payment `VOIDED`. Voiding a voided Payment again changes nothing; a declined one has nothing to release, and can't be voided. The checkout Saga voids a Payment to compensate for an Order it can't complete.
 _Avoid_: Cancel (an Order is cancelled; a Payment is voided), Refund (which returns captured money)
 
 **Payment method**:
-How a Customer pays: an opaque token the payment gateway issued for their card, which Checkout passes on to Payment and nothing else reads. The mock gateway takes test tokens: `tok_approve` authorizes; `tok_decline` and `tok_insufficient_funds` decline; `tok_gateway_error` fails to answer.
+How a Customer pays: an opaque token the payment gateway issued for their card, which the checkout Saga passes on to Payment and nothing else reads. It travels in the Saga's input, and so in its history, which is safe because it is never a card number. The mock gateway takes test tokens: `tok_approve` authorizes; `tok_decline` and `tok_insufficient_funds` decline; `tok_gateway_error` fails to answer.
 _Avoid_: Card (a Payment method stands for a card, but is never its number)
+
+**Payment attempt**:
+One try at paying a Checkout Session: one run of the checkout Saga, named by the session's ID. It is `PROCESSING` while the Saga runs, and ends `PAID`; `DECLINED`, with the gateway's reason; `HOLD_EXPIRED`, when the Reservation stopped holding the Stock before it could be committed, so the Payment was voided and the Order cancelled; or `FAILED`, when a step failed for good and what came before it was undone. A declined or failed attempt leaves the session to be paid again, as a new attempt with its own Order; paying while one runs joins it, and a session already paid is never paid again. The latest attempt can be read after the session has ended, for as long as Temporal keeps its history.
+_Avoid_: Payment (what Payment records for an Order), Transaction, Checkout (the whole two-step process)
 
 **Fulfillment**:
 The physical pick/pack/ship process that turns a Paid Order into a Shipped Order.
@@ -180,7 +184,7 @@ Where a context records an Integration event, in the same transaction as the cha
 _Avoid_: Event store (no context is event-sourced)
 
 **Saga**:
-A business process that spans contexts, such as checkout, run as a Temporal workflow in Orchestration. Each step calls one context's command API; a step that fails is retried, and a business refusal is answered by compensating, undoing what the earlier steps did through those contexts' own commands. Its history in Temporal records the process, not the Order or Payment it touched, which their contexts keep.
+A business process that spans contexts, such as checkout, run as a Temporal workflow in Orchestration. Each step calls one context's command API, with an Idempotency key unless repeating the command changes nothing anyway; a step that fails is retried, and a business refusal, such as a declined Payment, is answered by compensating, undoing what the earlier steps did through those contexts' own commands, such as cancelling the Order and voiding the Payment. Compensations are retried until they succeed. Once a step can't be undone, such as committing Stock, the steps after it are retried rather than compensated: marking the Order paid until it succeeds, clearing the Cart and ending the session for up to an hour. Its history in Temporal records the process, not the Order or Payment it touched, which their contexts keep.
 _Avoid_: Workflow (Temporal's mechanism, not the business process), Process manager
 
 **Orchestration**:
@@ -188,5 +192,5 @@ The service that runs every Saga as Temporal's worker, owning no domain data. It
 _Avoid_: Orchestrator, Saga service
 
 **Idempotency key**:
-The value a caller sends in the `Idempotency-Key` header so that sending a command again does nothing twice. A context records it, scoped to the caller, in the transaction of the change the command made, with the request and the response it got. A repeat of the same request from the same caller gets that response back, marked `Idempotent-Replayed: true`, and the same key with a different request is refused. Only a successful response is recorded, so a refused or failed command is evaluated afresh when sent again. Keys are kept for 7 days. Orchestration is to send `<workflowId>:<runId>:<activity>`.
+The value a caller sends in the `Idempotency-Key` header so that sending a command again does nothing twice. A context records it, scoped to the caller, in the transaction of the change the command made, with the request and the response it got. A repeat of the same request from the same caller gets that response back, marked `Idempotent-Replayed: true`, and the same key with a different request is refused. Only a successful response is recorded, so a refused or failed command is evaluated afresh when sent again. Keys are kept for 7 days. Orchestration sends `<workflowId>:<runId>:<activity>`.
 _Avoid_: Request ID, Correlation ID (which names a request for following it, and decides nothing)

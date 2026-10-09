@@ -7,11 +7,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.github.tomakehurst.wiremock.verification.LoggedRequest;
 import java.util.List;
 import org.junit.jupiter.api.Test;
-import org.springframework.http.MediaType;
 
 /**
  * Each step of a checkout reads as one story across services: every downstream call names the
- * request it serves.
+ * request it serves. Paying hands the request's Correlation ID to the checkout Saga, whose calls
+ * carry it on (the Temporal adapter's test).
  */
 class CorrelationIdApiTest extends CheckoutApiTest {
 
@@ -40,41 +40,13 @@ class CorrelationIdApiTest extends CheckoutApiTest {
   }
 
   @Test
-  void everyCallPayingCarriesTheIncomingCorrelationId() {
-    stubSuccessfulCheckout();
-    var sessionId = startedSessionId();
-    DOWNSTREAM.resetRequests();
-
-    http.post()
-        .uri("/checkout/sessions/{id}/pay", sessionId)
-        .headers(
-            h -> {
-              h.setBearerAuth(customerToken());
-              h.set(HEADER, "pay-7f3a-42");
-            })
-        .contentType(MediaType.APPLICATION_JSON)
-        .body("{\"paymentMethod\": \"tok_approve\"}")
-        .exchange()
-        .expectStatus()
-        .isOk()
-        .expectHeader()
-        .valueEquals(HEADER, "pay-7f3a-42");
-
-    assertThat(downstreamCalls())
-        .isNotEmpty()
-        .allSatisfy(call -> assertThat(call.getHeader(HEADER)).isEqualTo("pay-7f3a-42"));
-  }
-
-  @Test
   void everyDownstreamCallCarriesTheGeneratedCorrelationId() {
     stubSuccessfulCheckout();
-    var sessionId = startedSessionId();
-    DOWNSTREAM.resetRequests();
 
     var generated =
-        pay(sessionId)
+        startSession()
             .expectStatus()
-            .isOk()
+            .isCreated()
             .returnResult(String.class)
             .getResponseHeaders()
             .getFirst(HEADER);
@@ -85,7 +57,7 @@ class CorrelationIdApiTest extends CheckoutApiTest {
         .allSatisfy(call -> assertThat(call.getHeader(HEADER)).isEqualTo(generated));
   }
 
-  /** Every call to Cart, Catalog, Inventory, Order Management and Payment, not to Keycloak. */
+  /** Every call to Cart, Catalog, Promotions and Inventory, not to Keycloak. */
   private static List<LoggedRequest> downstreamCalls() {
     return DOWNSTREAM.findAll(anyRequestedFor(anyUrl())).stream()
         .filter(call -> !call.getUrl().equals(TOKEN_PATH))

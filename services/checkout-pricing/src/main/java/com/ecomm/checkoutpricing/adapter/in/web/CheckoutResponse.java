@@ -1,10 +1,4 @@
 package com.ecomm.checkoutpricing.adapter.in.web;
 
-import com.ecomm.checkoutpricing.domain.CheckoutResult;
-
-record CheckoutResponse(String orderId, String status) {
-
-  static CheckoutResponse of(CheckoutResult result) {
-    return new CheckoutResponse(result.orderId(), result.status().name());
-  }
-}
+/** A paid Checkout Session: its Order, and that Order's Order Status, {@code PAID}. */
+record CheckoutResponse(String orderId, String status) {}

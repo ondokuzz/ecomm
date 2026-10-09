@@ -29,8 +29,7 @@ ecomm:
         internal: [POST /orders, PATCH /orders/*/status]
       payment:
         uri: http://localhost:8084
-        # The Customer's and Staff's reads are routed; only Orchestration and Checkout authorize and
-        # void.
+        # The Customer's and Staff's reads are routed; only Orchestration authorizes and voids.
         internal: [POST /payments, POST /payments/*/void]
       promotions:
         uri: http://localhost:8087

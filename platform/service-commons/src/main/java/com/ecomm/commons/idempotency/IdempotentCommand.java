@@ -18,11 +18,4 @@ public @interface IdempotentCommand {
 
   /** Whether a request without a key is refused with a 400, rather than acting without one. */
   boolean required() default true;
-
-  /**
-   * Roles whose requests without a key act without one, though the command requires a key from
-   * everyone else: a caller that keeps a command it is losing, until it moves off it. A key such a
-   * caller does send is honoured.
-   */
-  String[] exemptRoles() default {};
 }

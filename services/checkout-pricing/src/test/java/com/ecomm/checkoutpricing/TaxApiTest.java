@@ -1,9 +1,6 @@
 package com.ecomm.checkoutpricing;
 
-import static com.github.tomakehurst.wiremock.client.WireMock.equalToJson;
-import static com.github.tomakehurst.wiremock.client.WireMock.post;
-import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
-import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import com.ecomm.checkoutpricing.application.port.out.TaxCalculator;
 import com.ecomm.commons.money.Money;
@@ -74,42 +71,12 @@ class TaxApiTest extends CheckoutApiTest {
   }
 
   @Test
-  void theTaxIsSentWithTheOrder() {
+  void theSessionIsPaidWithItsTax() {
     stubSuccessfulCheckout();
 
     checkout().expectStatus().isOk();
 
-    // 2 × 799.00, and 20% of that.
-    DOWNSTREAM.verify(
-        postRequestedFor(urlEqualTo("/orders"))
-            .withRequestBody(
-                equalToJson(
-                    """
-                    {"customerId": "customer-42", "lines": [
-                      {"variantId": "PHN-PIXEL-9", "quantity": 2,
-                       "unitPrice": {"amountMinor": 79900, "currency": "EUR"}}
-                    ],
-                     "discounts": [],
-                     "tax": {"amountMinor": 31960, "currency": "EUR"}}
-                    """)));
-  }
-
-  @Test
-  void thePaymentIsForTheOrdersTotal() {
-    stubSuccessfulCheckout();
-    // Order Management's total for those lines and that tax: 1598.00 + 319.60.
-    DOWNSTREAM.stubFor(post("/orders").willReturn(placedOrder(191760)));
-
-    checkout().expectStatus().isOk();
-
-    DOWNSTREAM.verify(
-        postRequestedFor(urlEqualTo("/payments"))
-            .withRequestBody(
-                equalToJson(
-                    """
-                    {"customerId": "customer-42", "orderId": "%s", "paymentMethod": "tok_approve",
-                     "amount": {"amountMinor": 191760, "currency": "EUR"}}
-                    """
-                        .formatted(ORDER_ID))));
+    // 20% of 2 × 799.00.
+    assertThat(saga.started().getFirst().session().tax()).isEqualTo(Money.of(31960, "EUR"));
   }
 }

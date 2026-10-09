@@ -6,12 +6,16 @@ spring:
       host: localhost
       # REDIS_PORT matches the compose override, for when something else holds 6379.
       port: ${REDIS_PORT:6379}
+  # The checkout Saga's Temporal (ADR 0009). TEMPORAL_PORT matches the compose override.
+  temporal:
+    namespace: default
+    connection:
+      target: localhost:${TEMPORAL_PORT:7233}
   security:
     oauth2:
       client:
-        # Checkout's own identity for Inventory, Order Management, Payment and Promotions (Identity
-        # & Access ADR 0002). The secret has no default: set CHECKOUT_CLIENT_SECRET, which compose
-        # does.
+        # Checkout's own identity for Inventory and Promotions (Identity & Access ADR 0002). The
+        # secret has no default: set CHECKOUT_CLIENT_SECRET, which compose does.
         registration:
           checkout:
             provider: keycloak
@@ -28,6 +32,7 @@ ecomm:
     catalog-url: http://localhost:8081
     inventory-url: http://localhost:8082
     cart-url: http://localhost:8083
-    payment-url: http://localhost:8084
-    order-management-url: http://localhost:8085
     promotions-url: http://localhost:8087
+    # How long paying waits for the Saga's outcome before answering 202.
+    saga:
+      wait: 10s

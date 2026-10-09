@@ -3,6 +3,7 @@ package com.ecomm.ordermanagement;
 import com.ecomm.commons.events.EventBackbone;
 import com.ecomm.commons.security.FakeKeycloak;
 import java.util.List;
+import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureRestTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -75,16 +76,25 @@ abstract class OrderApiTest {
     return tokenOf(CUSTOMER);
   }
 
-  /** Checkout's own token, which places Orders and changes their status without a key. */
-  static String checkoutToken() {
-    return FakeKeycloak.token("checkout", "CHECKOUT");
+  /** Orchestration's own token, with which the checkout Saga places Orders and changes them. */
+  static String orchestrationToken() {
+    return FakeKeycloak.token("orchestration", "ORCHESTRATION");
   }
 
-  /** Places an Order as Checkout; the body names the Customer. */
+  /** A key no request has used yet, as the checkout Saga sends one per step and run. */
+  static String newKey() {
+    return "session-" + UUID.randomUUID() + ":run-1:step";
+  }
+
+  /** Places an Order as the checkout Saga, under a new key; the body names the Customer. */
   RestTestClient.ResponseSpec place(String body) {
     return http.post()
         .uri("/orders")
-        .headers(h -> h.setBearerAuth(checkoutToken()))
+        .headers(
+            h -> {
+              h.setBearerAuth(orchestrationToken());
+              h.set("Idempotency-Key", newKey());
+            })
         .contentType(MediaType.APPLICATION_JSON)
         .body(body)
         .exchange();
@@ -104,18 +114,23 @@ abstract class OrderApiTest {
     return placed(CUSTOMER);
   }
 
+  /** Changes the Order's status with {@code token}, under a new key. */
   RestTestClient.ResponseSpec changeStatus(String token, String id, String body) {
     return http.patch()
         .uri("/orders/{id}/status", id)
-        .headers(h -> h.setBearerAuth(token))
+        .headers(
+            h -> {
+              h.setBearerAuth(token);
+              h.set("Idempotency-Key", newKey());
+            })
         .contentType(MediaType.APPLICATION_JSON)
         .body(body)
         .exchange();
   }
 
-  /** Moves {@link #CUSTOMER}'s Order to {@code status} as Checkout. */
+  /** Moves {@link #CUSTOMER}'s Order to {@code status} as the checkout Saga. */
   RestTestClient.ResponseSpec changeStatus(String id, String status) {
-    return changeStatus(checkoutToken(), id, statusChange(CUSTOMER, status));
+    return changeStatus(orchestrationToken(), id, statusChange(CUSTOMER, status));
   }
 
   static String statusChange(String customerId, String status) {

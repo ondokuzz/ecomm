@@ -1,5 +1,6 @@
 package com.ecomm.checkoutpricing.adapter.in.web;
 
+import com.ecomm.checkoutpricing.application.port.in.CheckoutUnavailableException;
 import com.ecomm.checkoutpricing.application.port.in.CheckoutUseCase;
 import com.ecomm.checkoutpricing.application.port.in.DownstreamFailureException;
 import com.ecomm.checkoutpricing.application.port.in.ServiceTokenUnavailableException;
@@ -8,8 +9,8 @@ import com.ecomm.checkoutpricing.domain.CheckoutSessionNotFoundException;
 import com.ecomm.checkoutpricing.domain.CouponNotApplicableException;
 import com.ecomm.checkoutpricing.domain.EmptyCartException;
 import com.ecomm.checkoutpricing.domain.MixedCurrencyException;
+import com.ecomm.checkoutpricing.domain.NoPaymentAttemptException;
 import com.ecomm.checkoutpricing.domain.OutOfStockException;
-import com.ecomm.checkoutpricing.domain.PaymentDeclinedException;
 import com.ecomm.checkoutpricing.domain.UnknownVariantsException;
 import com.ecomm.commons.security.CurrentCustomer;
 import java.net.URI;
@@ -92,18 +93,60 @@ class CheckoutSessionController {
   }
 
   /**
-   * 200 with the paid Order's ID and Order Status; 402 when the payment is declined, 410 once the
-   * session has expired. The body is optional here only so that a caller who isn't a Customer gets
-   * its 403 before a missing body gets a 400.
+   * Pays the session through the checkout Saga, waiting a while for how it ends: 200 with the paid
+   * Order's ID and Order Status; 402 with the gateway's {@code declineReason}; 410 with {@code
+   * reason} {@code holdExpired} when the Reservation stopped holding the Stock; 502 when the Saga
+   * failed; and 202 while it is still going, with the payment's URL in {@code Location}. 410 too
+   * once the session has expired, and 503 with {@code reason} {@code checkoutUnavailable} when the
+   * Saga can't be started. The body is optional here only so that a caller who isn't a Customer
+   * gets its 403 before a missing body gets a 400.
    */
   @PostMapping("/{id}/pay")
-  CheckoutResponse pay(
+  ResponseEntity<?> pay(
       @PathVariable String id,
       CurrentCustomer customer,
       @RequestBody(required = false) PayRequest request) {
-    var result = checkout.pay(customer.id(), id, PayRequest.paymentMethodOf(request));
-    log.info("Paid Checkout Session {} as Order {}, {}", id, result.orderId(), result.status());
-    return CheckoutResponse.of(result);
+    var attempt = checkout.pay(customer.id(), id, PayRequest.paymentMethodOf(request));
+    log.info("Paying Checkout Session {}: {}, Order {}", id, attempt.status(), attempt.orderId());
+    return switch (attempt.status()) {
+      case PAID -> ResponseEntity.ok(new CheckoutResponse(attempt.orderId(), "PAID"));
+      case PROCESSING ->
+          ResponseEntity.accepted()
+              .location(URI.create("/checkout/sessions/" + id + "/payment"))
+              .body(PaymentResponse.of(attempt));
+      case DECLINED -> {
+        var problem =
+            ProblemDetail.forStatusAndDetail(
+                HttpStatus.PAYMENT_REQUIRED,
+                "The payment was declined: " + attempt.declineReason());
+        problem.setProperty("declineReason", attempt.declineReason());
+        yield ResponseEntity.of(problem).build();
+      }
+      case HOLD_EXPIRED -> {
+        var problem =
+            ProblemDetail.forStatusAndDetail(
+                HttpStatus.GONE,
+                "The items were no longer held, so the payment was released and nothing was"
+                    + " charged.");
+        problem.setProperty("reason", "holdExpired");
+        yield ResponseEntity.of(problem).build();
+      }
+      case FAILED ->
+          ResponseEntity.of(
+                  ProblemDetail.forStatusAndDetail(
+                      HttpStatus.BAD_GATEWAY,
+                      "The payment couldn't be completed, and nothing was charged."))
+              .build();
+    };
+  }
+
+  /**
+   * The latest attempt to pay the session, still there once the session has ended; 404 for a
+   * session never paid, or another Customer's.
+   */
+  @GetMapping("/{id}/payment")
+  PaymentResponse payment(@PathVariable String id, CurrentCustomer customer) {
+    return PaymentResponse.of(checkout.latestPayment(customer.id(), id));
   }
 
   @ExceptionHandler(CheckoutSessionNotFoundException.class)
@@ -135,11 +178,19 @@ class CheckoutSessionController {
     return problem;
   }
 
-  @ExceptionHandler(PaymentDeclinedException.class)
-  ProblemDetail paymentDeclined(PaymentDeclinedException e) {
-    log.info("Payment declined: {}", e.reason());
-    var problem = ProblemDetail.forStatusAndDetail(HttpStatus.PAYMENT_REQUIRED, e.getMessage());
-    problem.setProperty("declineReason", e.reason());
+  @ExceptionHandler(NoPaymentAttemptException.class)
+  ProblemDetail noPaymentAttempt(NoPaymentAttemptException e) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
+  }
+
+  @ExceptionHandler(CheckoutUnavailableException.class)
+  ProblemDetail checkoutUnavailable(CheckoutUnavailableException e) {
+    log.warn("The checkout Saga couldn't be reached", e);
+    var problem =
+        ProblemDetail.forStatusAndDetail(
+            HttpStatus.SERVICE_UNAVAILABLE,
+            "Checkout can't take payments right now; please try again.");
+    problem.setProperty("reason", "checkoutUnavailable");
     return problem;
   }
 

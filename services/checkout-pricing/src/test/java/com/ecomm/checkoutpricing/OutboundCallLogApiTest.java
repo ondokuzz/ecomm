@@ -16,18 +16,13 @@ class OutboundCallLogApiTest extends CheckoutApiTest {
   void everyDownstreamCallIsLoggedWithItsStatus(CapturedOutput output) {
     stubSuccessfulCheckout();
 
-    checkout().expectStatus().isOk();
+    startedSessionId();
 
     assertThat(output)
         .contains("GET " + DOWNSTREAM.baseUrl() + "/cart -> 200")
         .contains("GET " + DOWNSTREAM.baseUrl() + "/variants/PHN-PIXEL-9 -> 200")
-        .contains("POST " + DOWNSTREAM.baseUrl() + "/reservations -> 201")
-        .contains("POST " + DOWNSTREAM.baseUrl() + "/orders -> 201")
-        .contains("POST " + DOWNSTREAM.baseUrl() + "/payments -> 201")
-        .contains(
-            "POST " + DOWNSTREAM.baseUrl() + "/reservations/" + RESERVATION_ID + "/commit -> 200")
-        .contains("PATCH " + DOWNSTREAM.baseUrl() + "/orders/" + ORDER_ID + "/status -> 200")
-        .contains("DELETE " + DOWNSTREAM.baseUrl() + "/cart -> 204");
+        .contains("POST " + DOWNSTREAM.baseUrl() + EVALUATE_PATH + " -> 200")
+        .contains("POST " + DOWNSTREAM.baseUrl() + "/reservations -> 201");
   }
 
   @Test

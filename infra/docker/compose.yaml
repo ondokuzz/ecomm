@@ -292,15 +292,15 @@ services:
       # Checkout's own client in the ecomm realm (Identity & Access ADR 0002); dev-only, like the
       # value in the realm file.
       CHECKOUT_CLIENT_SECRET: checkout-dev-secret
+    # Paying starts the checkout Saga on Temporal, which Orchestration runs.
     depends_on:
       redis: { condition: service_healthy }
       keycloak: { condition: service_healthy }
       catalog: { condition: service_healthy }
       inventory: { condition: service_healthy }
       cart: { condition: service_healthy }
-      payment: { condition: service_healthy }
-      order-management: { condition: service_healthy }
       promotions: { condition: service_healthy }
+      temporal-namespace: { condition: service_completed_successfully }
 
   # Sets up or migrates Temporal's schema in its databases on the shared Postgres, then exits; see
   # the script.

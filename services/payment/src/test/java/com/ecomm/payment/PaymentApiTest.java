@@ -56,9 +56,9 @@ abstract class PaymentApiTest {
     return FakeKeycloak.token("customer-42", "CUSTOMER");
   }
 
-  /** Checkout's own token, which authorizes and voids until Checkout moves onto the Saga. */
-  static String checkoutToken() {
-    return FakeKeycloak.token("checkout", "CHECKOUT");
+  /** Orchestration's own token, with which the checkout Saga authorizes and voids. */
+  static String orchestrationToken() {
+    return FakeKeycloak.token("orchestration", "ORCHESTRATION");
   }
 
   static String staffToken() {
@@ -78,16 +78,16 @@ abstract class PaymentApiTest {
             .formatted(orderId, paymentMethod));
   }
 
-  /** Authorizes as Checkout with a fresh idempotency key; the body names the Customer. */
+  /** Authorizes as the checkout Saga with a fresh idempotency key; the body names the Customer. */
   RestTestClient.ResponseSpec authorize(String body) {
     return authorizeWithKey(UUID.randomUUID().toString(), body);
   }
 
-  /** Authorizes as Checkout with {@code idempotencyKey}; the body names the Customer. */
+  /** Authorizes as the checkout Saga with {@code idempotencyKey}; the body names the Customer. */
   RestTestClient.ResponseSpec authorizeWithKey(String idempotencyKey, String body) {
     return http.post()
         .uri("/payments")
-        .headers(h -> h.setBearerAuth(checkoutToken()))
+        .headers(h -> h.setBearerAuth(orchestrationToken()))
         .header("Idempotency-Key", idempotencyKey)
         .contentType(MediaType.APPLICATION_JSON)
         .body(body)
@@ -104,11 +104,11 @@ abstract class PaymentApiTest {
         .getResponseBody();
   }
 
-  /** Voids the Payment as Checkout, for {@code customerId}. */
+  /** Voids the Payment as the checkout Saga, for {@code customerId}. */
   RestTestClient.ResponseSpec voidPayment(String id, String customerId) {
     return http.post()
         .uri("/payments/{id}/void", id)
-        .headers(h -> h.setBearerAuth(checkoutToken()))
+        .headers(h -> h.setBearerAuth(orchestrationToken()))
         .contentType(MediaType.APPLICATION_JSON)
         .body("{\"customerId\": \"%s\"}".formatted(customerId))
         .exchange();

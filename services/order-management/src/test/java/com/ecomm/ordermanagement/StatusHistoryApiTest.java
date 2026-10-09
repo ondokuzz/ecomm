@@ -16,7 +16,7 @@ class StatusHistoryApiTest extends OrderApiTest {
     var order = placed();
 
     assertThat(order.statusHistory())
-        .containsExactly(new HistoryEntryView("PLACED", order.placedAt(), "CHECKOUT", false));
+        .containsExactly(new HistoryEntryView("PLACED", order.placedAt(), "ORCHESTRATION", false));
   }
 
   @Test
@@ -35,7 +35,7 @@ class StatusHistoryApiTest extends OrderApiTest {
     assertThat(paid.statusHistory().getFirst()).isEqualTo(order.statusHistory().getFirst());
     var payment = paid.statusHistory().getLast();
     assertThat(payment.status()).isEqualTo("PAID");
-    assertThat(payment.changedBy()).isEqualTo("CHECKOUT");
+    assertThat(payment.changedBy()).isEqualTo("ORCHESTRATION");
     assertThat(payment.backfilled()).isFalse();
     assertThat(Instant.parse(payment.at())).isAfterOrEqualTo(Instant.parse(order.placedAt()));
     assertThat(read(order.id())).isEqualTo(paid);

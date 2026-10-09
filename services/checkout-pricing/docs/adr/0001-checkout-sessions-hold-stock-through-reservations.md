@@ -16,3 +16,7 @@ Checkout happens in two steps. Starting it creates a Checkout Session: the Cart'
 - Paying a session that has expired is a 410, and nothing happens. Once Redis has dropped it, 2 minutes later, paying it is a 404.
 - Until the checkout Saga arrives (Sprint 4, [ADR 0009](../../../../docs/adr/0009-sagas-on-temporal.md)), Checkout calls Inventory, Order Management and Payment directly. If the commit fails after the Payment is authorized, the Order is cancelled but the Payment stays authorized.
 - `POST /stock/decrement` is gone, and Staff setting on-hand Stock can never drop it below what active Reservations hold.
+
+## Revised 2026-10-09
+
+The authorized-but-cancelled gap is closed (#60). Paying a session now starts the checkout Saga in Orchestration ([ADR 0009](../../../../docs/adr/0009-sagas-on-temporal.md)), and Checkout no longer calls Order Management or Payment, nor commits the Reservation. When the commit is refused because the Reservation has expired or been released, the Saga voids the Payment and cancels the Order, and the Customer is told nothing was charged (`HOLD_EXPIRED`). The Reservation's 2 minutes of grace still let a payment started in the session's last moments commit. What this ADR decided about sessions and Reservations is unchanged: Checkout still starts sessions, reserves their Stock, and releases a replaced session's Reservation.

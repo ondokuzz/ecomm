@@ -14,6 +14,12 @@ spring:
 
 # Keys come over the internal network; the issuer stays the browser-facing one tokens carry.
 ecomm:
+  orchestration:
+    order-management-url: http://order-management:8080
+    payment-url: http://payment:8080
+    inventory-url: http://inventory:8080
+    cart-url: http://cart:8080
+    checkout-pricing-url: http://checkout-pricing:8080
   security:
     jwt:
       jwk-set-uri: http://keycloak:8080/realms/ecomm/protocol/openid-connect/certs

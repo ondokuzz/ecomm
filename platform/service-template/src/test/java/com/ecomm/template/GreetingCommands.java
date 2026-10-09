@@ -61,16 +61,6 @@ class GreetingCommands {
     return create(request);
   }
 
-  /**
-   * Requires an {@code Idempotency-Key}, except from {@code CHECKOUT}, as a command does while
-   * Checkout moves onto the Saga.
-   */
-  @PostMapping("/greetings/exempting-checkout")
-  @IdempotentCommand(exemptRoles = "CHECKOUT")
-  ResponseEntity<?> createExemptingCheckout(@RequestBody CreateGreeting request) {
-    return create(request);
-  }
-
   /** Requires an {@code Idempotency-Key}, and only Orchestration may call it. */
   @PostMapping("/greetings/guarded")
   @PreAuthorize("hasRole('ORCHESTRATION')")

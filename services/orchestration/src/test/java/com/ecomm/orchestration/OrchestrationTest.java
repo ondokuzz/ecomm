@@ -8,6 +8,7 @@ import io.temporal.testserver.TestServer;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.ServerSocket;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureRestTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -16,8 +17,10 @@ import org.springframework.test.context.DynamicPropertySource;
 
 /**
  * Base for Orchestration's tests. The application runs against Temporal's own test server, reached
- * over gRPC like the real one, and one WireMock server stands in for every service it calls and for
- * Keycloak's token endpoint. Each test starts with no stubs.
+ * over gRPC like the real one, with time skipping on: whenever every workflow is only waiting, on a
+ * retry's backoff or a timer, the server's clock jumps ahead. One WireMock server stands in for
+ * every service Orchestration calls and for Keycloak's token endpoint. Each test starts with no
+ * stubs.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureRestTestClient
@@ -30,7 +33,7 @@ abstract class OrchestrationTest {
   static final WireMockServer DOWNSTREAM = new WireMockServer(wireMockConfig().dynamicPort());
 
   static {
-    TestServer.createPortBoundServer(TEMPORAL_PORT);
+    TestServer.createPortBoundServer(TEMPORAL_PORT, false);
     DOWNSTREAM.start();
   }
 
@@ -41,6 +44,10 @@ abstract class OrchestrationTest {
     registry.add(
         "spring.security.oauth2.client.provider.keycloak.token-uri",
         () -> DOWNSTREAM.baseUrl() + TOKEN_PATH);
+    for (var service :
+        List.of("order-management", "payment", "inventory", "cart", "checkout-pricing")) {
+      registry.add("ecomm.orchestration." + service + "-url", DOWNSTREAM::baseUrl);
+    }
     registry.add(
         "spring.security.oauth2.client.registration.orchestration.client-secret", () -> "test");
   }

@@ -65,7 +65,7 @@ class ChangeOrderStatusApiTest extends OrderApiTest {
         "not json"
       })
   void anInvalidChangeIsABadRequest(String body) {
-    changeStatus(checkoutToken(), placed().id(), body)
+    changeStatus(orchestrationToken(), placed().id(), body)
         .expectStatus()
         .isBadRequest()
         .expectHeader()
@@ -75,7 +75,7 @@ class ChangeOrderStatusApiTest extends OrderApiTest {
   @ParameterizedTest
   @ValueSource(strings = {"6f1c2d3e-0000-4000-8000-000000000000", "not-an-order-id"})
   void anInvalidCustomerIdIsABadRequestWhateverTheOrder(String id) {
-    changeStatus(checkoutToken(), id, statusChange(" ", "PAID"))
+    changeStatus(orchestrationToken(), id, statusChange(" ", "PAID"))
         .expectStatus()
         .isBadRequest()
         .expectHeader()
@@ -96,7 +96,7 @@ class ChangeOrderStatusApiTest extends OrderApiTest {
   void checkoutNamingTheWrongCustomerGetsNotFound() {
     var id = placed().id();
 
-    changeStatus(checkoutToken(), id, statusChange("customer-7", "CANCELLED"))
+    changeStatus(orchestrationToken(), id, statusChange("customer-7", "CANCELLED"))
         .expectStatus()
         .isNotFound()
         .expectHeader()

@@ -45,6 +45,22 @@ interface RequestOptions {
 
 /** Calls a service's endpoint and returns its JSON body, or undefined for an empty one. */
 export async function api<T>(service: Service, path: string, options: RequestOptions = {}): Promise<T> {
+  return (await apiResponse<T>(service, path, options)).body
+}
+
+/** A successful answer: its status, its JSON body, and the Correlation ID that names the request. */
+export interface ApiResponse<T> {
+  status: number
+  body: T
+  correlationId: string | undefined
+}
+
+/** Calls a service's endpoint like {@link api}, and keeps the answer's status and Correlation ID too. */
+export async function apiResponse<T>(
+  service: Service,
+  path: string,
+  options: RequestOptions = {},
+): Promise<ApiResponse<T>> {
   const headers: Record<string, string> = { Accept: 'application/json' }
   if (options.token) headers.Authorization = `Bearer ${options.token}`
   if (options.body !== undefined) headers['Content-Type'] = 'application/json'
@@ -58,7 +74,11 @@ export async function api<T>(service: Service, path: string, options: RequestOpt
   })
   if (!response.ok) throw await errorFrom(response)
   const text = await response.text()
-  return (text && isJson(response) ? JSON.parse(text) : undefined) as T
+  return {
+    status: response.status,
+    body: (text && isJson(response) ? JSON.parse(text) : undefined) as T,
+    correlationId: response.headers.get(correlationIdHeader) ?? undefined,
+  }
 }
 
 /**

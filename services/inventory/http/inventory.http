@@ -22,6 +22,14 @@ grant_type=client_credentials&client_id=checkout&client_secret=checkout-dev-secr
 
 > {% client.global.set("checkoutToken", response.body.access_token); %}
 
+### Orchestration token: the checkout Saga's own identity, which alone commits a Reservation
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&client_id=orchestration&client_secret=orchestration-dev-secret
+
+> {% client.global.set("orchestrationToken", response.body.access_token); %}
+
 ### Staff token: for setting on-hand Stock
 POST {{keycloak}}
 Content-Type: application/x-www-form-urlencoded
@@ -83,14 +91,14 @@ Content-Type: application/json
 
 ### Another Customer's Reservation: 404
 POST {{inventory}}/reservations/{{reservationId}}/commit
-Authorization: Bearer {{checkoutToken}}
+Authorization: Bearer {{orchestrationToken}}
 Content-Type: application/json
 
 {"customerId": "someone-else"}
 
 ### Commit it: 200, COMMITTED, and on-hand goes down by what it held
 POST {{inventory}}/reservations/{{reservationId}}/commit
-Authorization: Bearer {{checkoutToken}}
+Authorization: Bearer {{orchestrationToken}}
 Content-Type: application/json
 
 {"customerId": "http-file-customer"}
@@ -122,7 +130,7 @@ Content-Type: application/json
 
 ### A released Reservation can't be committed: 409 with reservationReleased
 POST {{inventory}}/reservations/{{reservationId}}/commit
-Authorization: Bearer {{checkoutToken}}
+Authorization: Bearer {{orchestrationToken}}
 Content-Type: application/json
 
 {"customerId": "http-file-customer"}
@@ -204,14 +212,6 @@ Content-Type: application/json
 DELETE {{inventory}}/stock/HTTP-FILE-VARIANT
 Authorization: Bearer {{staffToken}}
 
-### Orchestration token: the checkout Saga's own identity, for the commands it calls
-POST {{keycloak}}
-Content-Type: application/x-www-form-urlencoded
-
-grant_type=client_credentials&client_id=orchestration&client_secret=orchestration-dev-secret
-
-> {% client.global.set("orchestrationToken", response.body.access_token); %}
-
 ### Checkout reserves a batch for the Saga to commit
 POST {{inventory}}/reservations
 Authorization: Bearer {{checkoutToken}}
@@ -233,6 +233,13 @@ Content-Type: application/json
 ### Orchestration can't reserve or release, only commit: 403
 POST {{inventory}}/reservations/{{sagaReservationId}}/release
 Authorization: Bearer {{orchestrationToken}}
+Content-Type: application/json
+
+{"customerId": "http-file-customer"}
+
+### Checkout can no longer commit: 403
+POST {{inventory}}/reservations/{{sagaReservationId}}/commit
+Authorization: Bearer {{checkoutToken}}
 Content-Type: application/json
 
 {"customerId": "http-file-customer"}

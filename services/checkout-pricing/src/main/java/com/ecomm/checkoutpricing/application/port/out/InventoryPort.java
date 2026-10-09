@@ -5,7 +5,10 @@ import com.ecomm.checkoutpricing.domain.OutOfStockException;
 import java.time.Instant;
 import java.util.List;
 
-/** Inventory's Reservations, which hold Stock for a Customer until they pay. */
+/**
+ * Inventory's Reservations, which hold Stock for a Customer until they pay; the checkout Saga, not
+ * Checkout, commits one.
+ */
 public interface InventoryPort {
 
   /**
@@ -15,9 +18,6 @@ public interface InventoryPort {
    * @throws OutOfStockException when some Variant doesn't have enough
    */
   String reserve(String customerId, List<CartLine> lines, Instant expiresAt);
-
-  /** Takes the Reservation's Stock off on-hand for good. */
-  void commit(String customerId, String reservationId);
 
   /** Gives the Reservation's Stock back; one that is gone or already settled needs nothing. */
   void release(String customerId, String reservationId);

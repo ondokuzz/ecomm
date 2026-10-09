@@ -87,19 +87,26 @@ Content-Type: application/json
 
 {"code": "WELCOME10"}
 
-### Pay with a declining test card: 402 with its declineReason; that Order is CANCELLED
+### Pay with a declining test card: the checkout Saga's run ends DECLINED, a 402 with its
+### declineReason; that Order is CANCELLED, and the run is in Temporal's UI (http://localhost:8233)
+### under the session's ID
 POST {{checkout}}/checkout/sessions/{{sessionId}}/pay
 Authorization: Bearer {{customerToken}}
 Content-Type: application/json
 
 {"paymentMethod": "tok_insufficient_funds"}
 
-### The gateway fails to answer: 502, and that Order is CANCELLED too
+### The gateway fails to answer: the Saga tries 4 times over about 10 seconds, then cancels that
+### Order too. Checkout waits 10 seconds, so this is a 502, or a 202 PROCESSING if it is still trying
 POST {{checkout}}/checkout/sessions/{{sessionId}}/pay
 Authorization: Bearer {{customerToken}}
 Content-Type: application/json
 
 {"paymentMethod": "tok_gateway_error"}
+
+### The latest attempt to pay the session: FAILED once the Saga gives up
+GET {{checkout}}/checkout/sessions/{{sessionId}}/payment
+Authorization: Bearer {{customerToken}}
 
 ### The session still holds the Cart, so it can be paid again
 GET {{checkout}}/checkout/sessions/current
@@ -112,7 +119,7 @@ Content-Type: application/json
 
 {}
 
-### Pay with the approving test card: 200 with the Order in PAID
+### Pay with the approving test card: 200 with the Order in PAID, the Saga's new run
 POST {{checkout}}/checkout/sessions/{{sessionId}}/pay
 Authorization: Bearer {{customerToken}}
 Content-Type: application/json
@@ -122,13 +129,16 @@ Content-Type: application/json
 > {% client.global.set("orderId", response.body.orderId); %}
 
 ### The Order, at the session's Prices, with Audio week's and WELCOME10's Discounts, its tax (zero for
-### now) and the
-### total its Payment was for
+### now) and the total its Payment was for, every change by ORCHESTRATION
 GET {{orders}}/orders/{{orderId}}
 Authorization: Bearer {{customerToken}}
 
 ### Two fewer on hand now: the Reservation was committed
 GET {{inventory}}/stock/PHN-PIXEL-9-OBSIDIAN-256
+
+### The latest attempt still answers once the session is over: PAID, with the Order
+GET {{checkout}}/checkout/sessions/{{sessionId}}/payment
+Authorization: Bearer {{customerToken}}
 
 ### The Cart is empty again, and the session is over: 404
 GET {{cart}}/cart

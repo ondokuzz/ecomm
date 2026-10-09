@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 
 import com.ecomm.commons.security.FakeKeycloak;
-import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.client.RestTestClient;
@@ -12,8 +11,7 @@ import org.springframework.test.web.servlet.client.RestTestClient;
 /**
  * The checkout Saga places Orders and changes their status with Orchestration's own token, each
  * command under an {@code Idempotency-Key}: a repeat replays the first response, and every change
- * it makes is recorded as {@code ORCHESTRATION}'s. Checkout keeps both commands, without a key,
- * until it moves onto the Saga.
+ * it makes is recorded as {@code ORCHESTRATION}'s.
  */
 class OrchestrationOrderApiTest extends OrderApiTest {
 
@@ -85,7 +83,7 @@ class OrchestrationOrderApiTest extends OrderApiTest {
     assertThat(cancelled.statusHistory())
         .extracting(HistoryEntryView::status, HistoryEntryView::changedBy)
         .containsExactly(
-            tuple("PLACED", "CHECKOUT"),
+            tuple("PLACED", "ORCHESTRATION"),
             tuple("PAID", "ORCHESTRATION"),
             tuple("CANCELLED", "ORCHESTRATION"));
   }
@@ -106,15 +104,6 @@ class OrchestrationOrderApiTest extends OrderApiTest {
         .expectBody()
         .jsonPath("$.reason")
         .isEqualTo("idempotencyKeyRequired");
-  }
-
-  @Test
-  void checkoutStillPlacesAndChangesOrdersWithoutAKey() {
-    var order = placed();
-
-    changeStatus(order.id(), "PAID").expectStatus().isOk();
-
-    assertThat(order.statusHistory().getFirst().changedBy()).isEqualTo("CHECKOUT");
   }
 
   private RestTestClient.ResponseSpec orchestrationPlaces(String key, String body) {
@@ -145,9 +134,5 @@ class OrchestrationOrderApiTest extends OrderApiTest {
         .contentType(MediaType.APPLICATION_JSON)
         .body(body)
         .exchange();
-  }
-
-  private static String newKey() {
-    return "checkout-" + UUID.randomUUID() + ":run-1:activity";
   }
 }

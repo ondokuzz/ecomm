@@ -20,7 +20,11 @@ The first build takes several minutes. Then open the Storefront on http://localh
 2. sign in as `demo@ecomm.local` / `demo`, or register a new Customer on Keycloak's page;
 3. add Products to the Cart and go to checkout, which holds them and their Prices for 15 minutes
    and shows the time left. An `audio` Product gets the "Audio week" Campaign's 15% off by itself.
-   Enter the Coupon `WELCOME10` for 10% off what is left, then pick a test card and press **Pay**. Paying again with another card works while the Checkout Session lasts;
+   Enter the Coupon `WELCOME10` for 10% off what is left, then pick a test card and press **Pay**.
+   Paying starts the checkout Saga in [Orchestration](./services/orchestration/README.md), which
+   you can follow step by step in Temporal's UI on http://localhost:8233; a payment that takes more
+   than a few seconds shows "Confirming your payment…" until it is done. Paying again with another
+   card works while the Checkout Session lasts;
 4. see the Order confirmation with its Order Status, **Paid**, its timeline drawn from the Order
    Status history (Placed, then Paid, each with its time) and each of its Discounts, and find the
    Order under **My Orders**;
@@ -35,7 +39,7 @@ The payment gateway is mocked, and each test card stands for a Payment method:
 | Approve | `tok_approve` | pays: the Order is **Paid** |
 | Decline | `tok_decline` | is declined: "Your card was declined" |
 | Insufficient funds | `tok_insufficient_funds` | is declined for insufficient funds |
-| Gateway error | `tok_gateway_error` | fails at the gateway, and no Payment is recorded |
+| Gateway error | `tok_gateway_error` | fails at the gateway, and no Payment is recorded; the Saga tries 4 times over about 10 seconds, then says the payment didn't go through |
 
 A checkout left unpaid expires after 15 minutes, and the Storefront offers to start again. Its
 Reservation stops holding the Stock 2 minutes later, and Inventory's sweeper marks it `RELEASED`
@@ -65,7 +69,8 @@ docker compose logs | grep '<Correlation ID>'
 ```
 
 Paying on the Storefront, for instance, logs it in the Storefront's nginx, the gateway and
-Checkout, then in Order Management, Payment, Inventory and Cart as Checkout calls them, and last in
+Checkout, then in Orchestration's checkout Saga and in Order Management, Payment, Inventory, Cart
+and Checkout again as the Saga calls them, and last in
 Reviews & Ratings' consumer as it applies the `order-management.order` events (`Applied Order …
 version 2`) and in Search & Discovery's as it applies the `inventory.stock` one.
 
@@ -111,7 +116,7 @@ between restarts, so saved queries and layout are lost when the container is rec
 Every Spring service, the gateway included, serves its metrics on `/actuator/prometheus`
 ([service template](./platform/service-template/README.md#metrics)). Prometheus scrapes them every
 15 seconds and keeps 2 days of them, and Grafana shows them on http://localhost:3000, open to
-anyone for viewing (sign in as `admin` / `admin` to explore). Its data source and its two
+anyone for viewing (sign in as `admin` / `admin` to explore). Its data source and its three
 dashboards, under **ecomm**, are files in [`infra/docker/grafana`](./infra/docker/grafana):
 
 - **Services:** request rate, 5xx rate and p95 latency per service, request rate per route, and
@@ -119,6 +124,9 @@ dashboards, under **ecomm**, are files in [`infra/docker/grafana`](./infra/docke
   measured).
 - **Event consumers:** lag per consumer group, and per group, topic and partition; consumption
   rate; retries.
+- **Checkout Saga:** checkouts by outcome (`PAID`, `DECLINED`, `HOLD_EXPIRED`, `FAILED`), step
+  failures by step, compensations by kind, and Temporal's own activity failures and workflow
+  durations.
 
 A dashboard changed in Grafana can't be saved there: export its JSON and replace the file.
 

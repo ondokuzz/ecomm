@@ -4,6 +4,9 @@ spring:
     redis:
       host: redis
       port: 6379
+  temporal:
+    connection:
+      target: temporal:7233
   security:
     oauth2:
       client:
@@ -18,8 +21,6 @@ ecomm:
     catalog-url: http://catalog:8080
     inventory-url: http://inventory:8080
     cart-url: http://cart:8080
-    payment-url: http://payment:8080
-    order-management-url: http://order-management:8080
     promotions-url: http://promotions:8080
   security:
     jwt:

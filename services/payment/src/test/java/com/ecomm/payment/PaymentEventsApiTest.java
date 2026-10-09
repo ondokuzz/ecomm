@@ -21,7 +21,7 @@ class PaymentEventsApiTest extends PaymentApiTest {
     var payment =
         http.post()
             .uri("/payments")
-            .headers(h -> h.setBearerAuth(checkoutToken()))
+            .headers(h -> h.setBearerAuth(orchestrationToken()))
             .header("Idempotency-Key", UUID.randomUUID().toString())
             .header("X-Correlation-Id", "payment-events-authorize-1")
             .contentType(MediaType.APPLICATION_JSON)

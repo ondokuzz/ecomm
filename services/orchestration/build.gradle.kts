@@ -13,4 +13,5 @@ dependencies {
 
   testImplementation(libs.temporal.testing)
   testImplementation(libs.wiremock.standalone)
+  testImplementation("org.awaitility:awaitility")
 }

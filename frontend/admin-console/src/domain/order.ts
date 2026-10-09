@@ -15,7 +15,7 @@ export const orderStatuses: readonly OrderStatus[] = [
 ]
 
 /** The caller that made a Status change: Checkout, for now. */
-export type Caller = 'CHECKOUT'
+export type Caller = 'CHECKOUT' | 'ORCHESTRATION'
 
 /**
  * One entry in an Order's Order Status history. A backfilled entry was reconstructed for an Order
@@ -181,7 +181,7 @@ export interface HistoryRow {
   note?: string
 }
 
-const callers: Record<Caller, string> = { CHECKOUT: 'Checkout' }
+const callers: Record<Caller, string> = { CHECKOUT: 'Checkout', ORCHESTRATION: 'Checkout Saga' }
 
 /**
  * The Order's Status history for Staff, newest first, each change with when it happened and the

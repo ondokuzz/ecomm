@@ -244,7 +244,7 @@ class ReservationApiTest extends InventoryApiTest {
     var reservation = reserved(item(variant, 3));
 
     for (var action : new String[] {"commit", "release"}) {
-      settle(checkoutToken(), reservation.id(), action, "someone-else")
+      settle(tokenToSettle(action), reservation.id(), action, "someone-else")
           .expectStatus()
           .isNotFound()
           .expectHeader()
@@ -314,7 +314,7 @@ class ReservationApiTest extends InventoryApiTest {
     for (var action : new String[] {"commit", "release"}) {
       http.post()
           .uri("/reservations/{id}/{action}", reservation.id(), action)
-          .headers(h -> h.setBearerAuth(checkoutToken()))
+          .headers(h -> h.setBearerAuth(tokenToSettle(action)))
           .contentType(MediaType.APPLICATION_JSON)
           .body("{}")
           .exchange()

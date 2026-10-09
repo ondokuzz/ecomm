@@ -3,21 +3,20 @@ package com.ecomm.checkoutpricing.application;
 import com.ecomm.checkoutpricing.application.port.in.CheckoutUseCase;
 import com.ecomm.checkoutpricing.application.port.out.CartPort;
 import com.ecomm.checkoutpricing.application.port.out.CatalogPort;
+import com.ecomm.checkoutpricing.application.port.out.CheckoutSaga;
 import com.ecomm.checkoutpricing.application.port.out.CheckoutSessionRepository;
 import com.ecomm.checkoutpricing.application.port.out.InventoryPort;
-import com.ecomm.checkoutpricing.application.port.out.OrderPort;
-import com.ecomm.checkoutpricing.application.port.out.PaymentPort;
 import com.ecomm.checkoutpricing.application.port.out.PromotionsPort;
 import com.ecomm.checkoutpricing.application.port.out.TaxCalculator;
 import com.ecomm.checkoutpricing.application.port.out.TimeSource;
 import com.ecomm.checkoutpricing.domain.CartLine;
-import com.ecomm.checkoutpricing.domain.CheckoutResult;
 import com.ecomm.checkoutpricing.domain.CheckoutSession;
 import com.ecomm.checkoutpricing.domain.CheckoutSessionExpiredException;
 import com.ecomm.checkoutpricing.domain.CheckoutSessionNotFoundException;
 import com.ecomm.checkoutpricing.domain.Discount;
 import com.ecomm.checkoutpricing.domain.EmptyCartException;
-import com.ecomm.checkoutpricing.domain.OrderStatus;
+import com.ecomm.checkoutpricing.domain.NoPaymentAttemptException;
+import com.ecomm.checkoutpricing.domain.PaymentAttempt;
 import com.ecomm.checkoutpricing.domain.PricedCart;
 import com.ecomm.checkoutpricing.domain.PricedLine;
 import com.ecomm.checkoutpricing.domain.UnknownVariantsException;
@@ -28,9 +27,9 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Checks out in two steps, synchronously, one service after another. Starting holds the Cart's
- * Stock through a Reservation; paying commits it. Until the Sagas arrive, the only compensation
- * once an Order exists is cancelling it.
+ * Checks out in two steps. Starting prices the Cart and holds its Stock through a Reservation, in a
+ * Checkout Session. Paying hands the session to the checkout Saga, which places the Order, takes
+ * the Payment and the Stock, and undoes what it must when a step fails.
  */
 public class CheckoutService implements CheckoutUseCase {
 
@@ -38,9 +37,8 @@ public class CheckoutService implements CheckoutUseCase {
 
   private final CartPort cart;
   private final CatalogPort catalog;
-  private final OrderPort orders;
   private final InventoryPort inventory;
-  private final PaymentPort payments;
+  private final CheckoutSaga saga;
   private final PromotionsPort promotions;
   private final TaxCalculator taxes;
   private final CheckoutSessionRepository sessions;
@@ -49,18 +47,16 @@ public class CheckoutService implements CheckoutUseCase {
   public CheckoutService(
       CartPort cart,
       CatalogPort catalog,
-      OrderPort orders,
       InventoryPort inventory,
-      PaymentPort payments,
+      CheckoutSaga saga,
       PromotionsPort promotions,
       TaxCalculator taxes,
       CheckoutSessionRepository sessions,
       TimeSource time) {
     this.cart = cart;
     this.catalog = catalog;
-    this.orders = orders;
     this.inventory = inventory;
-    this.payments = payments;
+    this.saga = saga;
     this.promotions = promotions;
     this.taxes = taxes;
     this.sessions = sessions;
@@ -117,26 +113,18 @@ public class CheckoutService implements CheckoutUseCase {
   }
 
   @Override
-  public CheckoutResult pay(String customerId, String sessionId, String paymentMethod) {
+  public PaymentAttempt pay(String customerId, String sessionId, String paymentMethod) {
     var session = live(customerId, sessionId);
+    // Its session ends once it is paid, but until then, paying it again must not buy it twice.
+    var paid = saga.latestAttempt(sessionId).filter(a -> a.status() == PaymentAttempt.Status.PAID);
+    return paid.orElseGet(() -> saga.pay(session, paymentMethod));
+  }
 
-    // The Payment is for the Order's total, as Order Management records it, so the two always
-    // match.
-    var order =
-        orders.place(customerId, session.cart().lines(), session.discounts(), session.tax());
-    var orderId = order.id();
-    try {
-      payments.authorize(customerId, orderId, order.total(), paymentMethod);
-      inventory.commit(customerId, session.reservationId());
-      orders.changeStatus(customerId, orderId, OrderStatus.PAID);
-    } catch (RuntimeException e) {
-      cancel(customerId, orderId, e);
-      throw e;
-    }
-
-    clearCart(orderId);
-    endSession(session, orderId);
-    return new CheckoutResult(orderId, OrderStatus.PAID);
+  @Override
+  public PaymentAttempt latestPayment(String customerId, String sessionId) {
+    return saga.latestAttempt(sessionId)
+        .filter(attempt -> attempt.customerId().equals(customerId))
+        .orElseThrow(() -> new NoPaymentAttemptException(sessionId));
   }
 
   @Override
@@ -206,41 +194,6 @@ public class CheckoutService implements CheckoutUseCase {
       throw new UnknownVariantsException(unknown);
     }
     return new PricedCart(priced);
-  }
-
-  /** Cancels the Order a failed step leaves behind; a failure to cancel rides on {@code cause}. */
-  private void cancel(String customerId, String orderId, RuntimeException cause) {
-    try {
-      orders.changeStatus(customerId, orderId, OrderStatus.CANCELLED);
-    } catch (RuntimeException e) {
-      log.log(System.Logger.Level.ERROR, "Order " + orderId + " could not be cancelled", e);
-      cause.addSuppressed(e);
-    }
-  }
-
-  /**
-   * The Order is paid by now, so a Cart that can't be cleared doesn't undo it: the Customer keeps a
-   * stale Cart rather than losing a paid Order.
-   */
-  private void clearCart(String orderId) {
-    try {
-      cart.clear();
-    } catch (RuntimeException e) {
-      log.log(
-          System.Logger.Level.WARNING, "Cart not cleared after Order " + orderId + " was paid", e);
-    }
-  }
-
-  /** Likewise a session that outlives its paid Order only until it expires. */
-  private void endSession(CheckoutSession session, String orderId) {
-    try {
-      sessions.delete(session);
-    } catch (RuntimeException e) {
-      log.log(
-          System.Logger.Level.WARNING,
-          "Checkout Session " + session.id() + " not ended after Order " + orderId + " was paid",
-          e);
-    }
   }
 
   /** Gives a replaced session's Stock back and forgets it. */

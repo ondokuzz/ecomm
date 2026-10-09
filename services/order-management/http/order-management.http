@@ -14,24 +14,26 @@ grant_type=password&client_id=dev-cli&username=demo@ecomm.local&password=demo&sc
 
 > {% client.global.set("customerToken", response.body.access_token); %}
 
-### The demo Customer's ID: the sub Checkout names in the body
+### The demo Customer's ID: the sub the checkout Saga names in the body
 GET {{userinfo}}
 Authorization: Bearer {{customerToken}}
 
 > {% client.global.set("customerId", response.body.sub); %}
 
-### Checkout token: Checkout's own identity, for the internal endpoints
+### Orchestration token: the checkout Saga's own identity, for the commands it calls
 POST {{keycloak}}
 Content-Type: application/x-www-form-urlencoded
 
-grant_type=client_credentials&client_id=checkout&client_secret=checkout-dev-secret
+grant_type=client_credentials&client_id=orchestration&client_secret=orchestration-dev-secret
 
-> {% client.global.set("checkoutToken", response.body.access_token); %}
+> {% client.global.set("orchestrationToken", response.body.access_token); %}
 
-### Checkout places an Order for the Customer: 201 with the Order in PLACED, its subtotal, tax, total
-### and its Order Status history, its placement by CHECKOUT
+### The checkout Saga places an Order for the Customer: 201 with the Order in PLACED, its subtotal,
+### tax, total and its Order Status history, its placement by ORCHESTRATION. Every command takes an
+### Idempotency-Key; each request here sends a new one
 POST {{orders}}/orders
-Authorization: Bearer {{checkoutToken}}
+Authorization: Bearer {{orchestrationToken}}
+Idempotency-Key: {{$uuid}}
 Content-Type: application/json
 
 {"customerId": "{{customerId}}", "lines": [
@@ -44,7 +46,8 @@ Content-Type: application/json
 
 ### With a Campaign's and a Coupon's Discounts: the total is the lines, less both, plus the tax
 POST {{orders}}/orders
-Authorization: Bearer {{checkoutToken}}
+Authorization: Bearer {{orchestrationToken}}
+Idempotency-Key: {{$uuid}}
 Content-Type: application/json
 
 {"customerId": "{{customerId}}", "lines": [
@@ -62,9 +65,10 @@ Content-Type: application/json
 GET {{orders}}/orders/{{orderId}}
 Authorization: Bearer {{customerToken}}
 
-### Checkout marks it paid after authorizing the payment: its history gains PAID
+### The Saga marks it paid after authorizing the payment: its history gains PAID
 PATCH {{orders}}/orders/{{orderId}}/status
-Authorization: Bearer {{checkoutToken}}
+Authorization: Bearer {{orchestrationToken}}
+Idempotency-Key: {{$uuid}}
 Content-Type: application/json
 X-Correlation-Id: http-file-pay-1
 
@@ -72,28 +76,32 @@ X-Correlation-Id: http-file-pay-1
 
 ### Paid, then cancelled: the history shows PLACED, then PAID, then CANCELLED
 PATCH {{orders}}/orders/{{discountedOrderId}}/status
-Authorization: Bearer {{checkoutToken}}
+Authorization: Bearer {{orchestrationToken}}
+Idempotency-Key: {{$uuid}}
 Content-Type: application/json
 
 {"customerId": "{{customerId}}", "status": "PAID"}
 
 ###
 PATCH {{orders}}/orders/{{discountedOrderId}}/status
-Authorization: Bearer {{checkoutToken}}
+Authorization: Bearer {{orchestrationToken}}
+Idempotency-Key: {{$uuid}}
 Content-Type: application/json
 
 {"customerId": "{{customerId}}", "status": "CANCELLED"}
 
 ### An illegal transition, PAID to DELIVERED: 409, the history unchanged and no event published
 PATCH {{orders}}/orders/{{orderId}}/status
-Authorization: Bearer {{checkoutToken}}
+Authorization: Bearer {{orchestrationToken}}
+Idempotency-Key: {{$uuid}}
 Content-Type: application/json
 
 {"customerId": "{{customerId}}", "status": "DELIVERED"}
 
 ### Naming a Customer who doesn't own the Order: 404
 PATCH {{orders}}/orders/{{orderId}}/status
-Authorization: Bearer {{checkoutToken}}
+Authorization: Bearer {{orchestrationToken}}
+Idempotency-Key: {{$uuid}}
 Content-Type: application/json
 
 {"customerId": "someone-else", "status": "CANCELLED"}
@@ -116,7 +124,8 @@ Authorization: Bearer {{customerToken}}
 
 ### Lines in two currencies: 400
 POST {{orders}}/orders
-Authorization: Bearer {{checkoutToken}}
+Authorization: Bearer {{orchestrationToken}}
+Idempotency-Key: {{$uuid}}
 Content-Type: application/json
 
 {"customerId": "{{customerId}}", "lines": [
@@ -127,7 +136,8 @@ Content-Type: application/json
 
 ### Discounts larger than the lines plus the tax: 400
 POST {{orders}}/orders
-Authorization: Bearer {{checkoutToken}}
+Authorization: Bearer {{orchestrationToken}}
+Idempotency-Key: {{$uuid}}
 Content-Type: application/json
 
 {"customerId": "{{customerId}}", "lines": [
@@ -139,7 +149,8 @@ Content-Type: application/json
 
 ### The single "discount" of before Sprint 3 is gone: 400
 POST {{orders}}/orders
-Authorization: Bearer {{checkoutToken}}
+Authorization: Bearer {{orchestrationToken}}
+Idempotency-Key: {{$uuid}}
 Content-Type: application/json
 
 {"customerId": "{{customerId}}", "lines": [
@@ -148,16 +159,17 @@ Content-Type: application/json
  "discount": {"couponCode": "WELCOME10", "amount": {"amountMinor": 7990, "currency": "EUR"}},
  "tax": {"amountMinor": 0, "currency": "EUR"}}
 
-### No tax: 400; Checkout always sends it, even when zero
+### No tax: 400; the Saga always sends it, even when zero
 POST {{orders}}/orders
-Authorization: Bearer {{checkoutToken}}
+Authorization: Bearer {{orchestrationToken}}
+Idempotency-Key: {{$uuid}}
 Content-Type: application/json
 
 {"customerId": "{{customerId}}", "lines": [
   {"variantId": "PHN-PIXEL-9", "quantity": 1, "unitPrice": {"amountMinor": 79900, "currency": "EUR"}}
 ]}
 
-### A Customer can't place an Order, only Orchestration and Checkout can: 403
+### A Customer can't place an Order, only Orchestration can: 403
 POST {{orders}}/orders
 Authorization: Bearer {{customerToken}}
 Content-Type: application/json
@@ -167,7 +179,7 @@ Content-Type: application/json
 ],
  "tax": {"amountMinor": 0, "currency": "EUR"}}
 
-### A Customer can't change their Order's status, only Orchestration and Checkout can: 403
+### A Customer can't change their Order's status, only Orchestration can: 403
 PATCH {{orders}}/orders/{{orderId}}/status
 Authorization: Bearer {{customerToken}}
 Content-Type: application/json
@@ -229,14 +241,6 @@ Authorization: Bearer {{customerToken}}
 GET {{orders}}/staff/orders/{{orderId}}
 Authorization: Bearer {{customerToken}}
 
-### Orchestration token: the checkout Saga's own identity, for the commands it calls
-POST {{keycloak}}
-Content-Type: application/x-www-form-urlencoded
-
-grant_type=client_credentials&client_id=orchestration&client_secret=orchestration-dev-secret
-
-> {% client.global.set("orchestrationToken", response.body.access_token); %}
-
 ### Orchestration places an Order under an Idempotency-Key: 201, its placement by ORCHESTRATION
 < {% client.global.set("placeKey", "http-file-" + $random.uuid + ":run-1:placeOrder"); %}
 POST {{orders}}/orders
@@ -271,9 +275,27 @@ Content-Type: application/json
 
 {"customerId": "{{customerId}}", "status": "PAID"}
 
-### Orchestration without a key: 400, idempotencyKeyRequired (Checkout needs none until it moves onto the Saga)
+### Orchestration without a key: 400, idempotencyKeyRequired
 PATCH {{orders}}/orders/{{sagaOrderId}}/status
 Authorization: Bearer {{orchestrationToken}}
 Content-Type: application/json
 
 {"customerId": "{{customerId}}", "status": "CANCELLED"}
+
+### Checkout token: Checkout lost these commands to the checkout Saga
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&client_id=checkout&client_secret=checkout-dev-secret
+
+> {% client.global.set("checkoutToken", response.body.access_token); %}
+
+### Checkout can no longer place an Order: 403
+POST {{orders}}/orders
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}", "lines": [
+  {"variantId": "PHN-PIXEL-9", "quantity": 1, "unitPrice": {"amountMinor": 79900, "currency": "EUR"}}
+],
+ "tax": {"amountMinor": 0, "currency": "EUR"}}

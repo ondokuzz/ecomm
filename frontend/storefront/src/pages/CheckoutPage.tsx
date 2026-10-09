@@ -5,9 +5,13 @@ import { useVariants } from '../api/catalog'
 import {
   couponRejectionOf,
   isSessionOver,
+  latestAttempt,
   payFailureOf,
+  rememberPaymentReference,
+  rememberedPaymentReference,
   useCheckoutSession,
   usePayCheckoutSession,
+  usePaymentAttempt,
   useSessionCoupon,
 } from '../api/checkout'
 import { useFormatMoney } from '../api/currencies'
@@ -26,12 +30,15 @@ import { type CartLine, itemCountLabel } from '../domain/cart'
 import { variantName } from '../domain/catalog'
 import { type CheckoutSession, checkoutProblem, sessionCountdown, sessionSummaryRows } from '../domain/checkout'
 import { appliedCoupon } from '../domain/order'
-import { type TestCard, defaultTestCard, testCards } from '../domain/payment'
+import { type PaymentFailure, type TestCard, confirmation, defaultTestCard, testCards } from '../domain/payment'
 
 /**
  * Starts a Checkout Session for the Cart, or resumes the one that already holds it, and shows its
  * lines at their held Prices with a countdown to when the hold ends. Paying it with the chosen test
- * card places the Order; a declined or failed payment says why, and the Customer can pay again.
+ * card starts the checkout Saga. When it hasn't finished within Checkout's wait (a 202), the page
+ * shows "Confirming your payment…" and asks how it stands every 1.5 seconds, for up to 2 minutes;
+ * reloading the page while one is being confirmed resumes asking. A paid Order opens its page; a
+ * declined or failed payment says why, and the Customer can pay again.
  */
 export function CheckoutPage() {
   const formatMoney = useFormatMoney()
@@ -44,10 +51,27 @@ export function CheckoutPage() {
   const [card, setCard] = useState(defaultTestCard)
   const now = useNow()
   const navigate = useNavigate()
+  // When the payment being confirmed was made: null when there is none, undefined until the session's
+  // latest payment has been read, in case one was still being confirmed when the page was left.
+  const [confirmingSince, setConfirmingSince] = useState<number | null>()
+  const [newReference, setReference] = useState<string>()
+  const reference = newReference ?? rememberedPaymentReference(session.data?.id)
+  const payment = usePaymentAttempt(session.data?.id, confirmingSince ?? undefined)
+  if (confirmingSince === undefined && payment.data !== undefined) {
+    setConfirmingSince(payment.data?.status === 'PROCESSING' ? now : null)
+  }
+  const confirming = confirmingSince == null ? undefined : confirmation(latestAttempt(payment), confirmingSince, now)
+
+  const paidOrderId = confirming?.kind === 'paid' ? confirming.orderId : undefined
+  useEffect(() => {
+    if (paidOrderId) navigate(`/orders/${encodeURIComponent(paidOrderId)}?placed`, { replace: true })
+  }, [paidOrderId, navigate])
 
   const startAgain = () => {
     pay.reset()
     coupon.reset()
+    setConfirmingSince(undefined)
+    setReference(undefined)
     setAttempt((n) => n + 1)
   }
 
@@ -70,13 +94,25 @@ export function CheckoutPage() {
   if (countdown.expired || isSessionOver(pay.error) || isSessionOver(coupon.error))
     return <SessionExpired onStartAgain={startAgain} />
 
-  const payNow = () =>
+  const payNow = () => {
+    setConfirmingSince(null)
     pay.mutate(
       { sessionId: session.data.id, paymentMethod: card.token },
       {
-        onSuccess: (result) => navigate(`/orders/${encodeURIComponent(result.orderId)}?placed`, { replace: true }),
+        onSuccess: ({ attempt, reference }) => {
+          setReference(reference)
+          rememberPaymentReference(session.data.id, reference)
+          if (attempt.status === 'PAID' && attempt.orderId) {
+            navigate(`/orders/${encodeURIComponent(attempt.orderId)}?placed`, { replace: true })
+          } else {
+            setConfirmingSince(Date.now())
+          }
+        },
       },
     )
+  }
+  const busy = pay.isPending || paidOrderId !== undefined || confirming?.kind === 'confirming'
+  const payFailure = payFailureOf(pay.error)
 
   return (
     <section>
@@ -90,26 +126,63 @@ export function CheckoutPage() {
             <MockCard card={card} />
             <TestCardPicker
               selected={card}
-              disabled={pay.isPending || pay.isSuccess}
+              disabled={busy}
               onSelect={(picked) => {
                 setCard(picked)
                 pay.reset()
+                setConfirmingSince(null)
               }}
             />
             <p className="muted payment-note">
               <Icon name="lock" size={16} />
               This is a demo: each test card shows one way a payment can go. Nothing is charged.
             </p>
-            {pay.error && <PayError error={pay.error} />}
+            {confirming?.kind === 'confirming' && (
+              <p className="alert alert-info confirming-payment" role="status">
+                <Icon name="lock" size={18} />
+                <span>Confirming your payment… This can take a little while; please keep this page open.</span>
+              </p>
+            )}
+            {confirming?.kind === 'stillConfirming' && (
+              <div className="alert alert-info" role="status">
+                <Icon name="lock" size={18} />
+                <div className="alert-body">
+                  <strong>We're still confirming your payment</strong>
+                  <span>
+                    You won't be charged twice. Check again in a moment, or look for the order under My Orders.
+                  </span>
+                </div>
+                <Button size="sm" className="alert-action" onClick={() => setConfirmingSince(Date.now())}>
+                  Check again
+                </Button>
+              </div>
+            )}
+            {confirming?.kind === 'failed' && (
+              <PaymentFailureAlert failure={confirming.failure} reference={reference} onStartAgain={startAgain} />
+            )}
+            {pay.error &&
+              (payFailure ? (
+                <PaymentFailureAlert
+                  failure={payFailure}
+                  reference={failureOf(pay.error).reference}
+                  onStartAgain={startAgain}
+                />
+              ) : (
+                <ErrorMessage error={pay.error} />
+              ))}
             <Button
               variant="primary"
               size="lg"
               className="pay-button"
               onClick={payNow}
-              loading={pay.isPending || pay.isSuccess}
+              loading={busy}
               disabled={coupon.isPending}
             >
-              {pay.isPending ? 'Paying…' : `Pay ${formatMoney(session.data.total)}`}
+              {pay.isPending
+                ? 'Paying…'
+                : confirming?.kind === 'confirming'
+                  ? 'Confirming your payment…'
+                  : `Pay ${formatMoney(session.data.total)}`}
             </Button>
           </Card>
         </div>
@@ -117,8 +190,11 @@ export function CheckoutPage() {
           <CouponField
             session={session.data}
             coupon={coupon}
-            disabled={pay.isPending || pay.isSuccess}
-            onChange={pay.reset}
+            disabled={busy}
+            onChange={() => {
+              pay.reset()
+              setConfirmingSince(null)
+            }}
           />
         </SessionSummary>
       </div>
@@ -379,14 +455,18 @@ function TestCardPicker({
 }
 
 /**
- * Why paying failed. A decline and a payment that didn't go through each have their own message, and
- * the session still holds the items, so the Customer can pay again; anything else says what the
- * service said.
+ * Why paying failed, with what the Customer can do: try another card after a decline, start again
+ * once their hold ran out, or pay again after a failure. Each carries the payment's reference.
  */
-function PayError({ error }: { error: unknown }) {
-  const failure = payFailureOf(error)
-  if (!failure) return <ErrorMessage error={error} />
-  const { reference } = failureOf(error)
+function PaymentFailureAlert({
+  failure,
+  reference,
+  onStartAgain,
+}: {
+  failure: PaymentFailure
+  reference: string | undefined
+  onStartAgain: () => void
+}) {
   return (
     <div className={`alert alert-danger pay-error pay-error-${failure.kind}`} role="alert">
       <Icon name="alert" size={18} />
@@ -395,6 +475,11 @@ function PayError({ error }: { error: unknown }) {
         <span>{failure.message}</span>
         {reference && <SupportReference reference={reference} />}
       </div>
+      {failure.kind === 'holdExpired' && (
+        <Button size="sm" className="alert-action" onClick={onStartAgain}>
+          Start again
+        </Button>
+      )}
     </div>
   )
 }

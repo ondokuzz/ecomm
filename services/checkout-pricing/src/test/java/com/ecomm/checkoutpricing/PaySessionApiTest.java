@@ -2,33 +2,53 @@ package com.ecomm.checkoutpricing;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.anyRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.anyUrl;
-import static com.github.tomakehurst.wiremock.client.WireMock.deleteRequestedFor;
-import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
-import static com.github.tomakehurst.wiremock.client.WireMock.equalToJson;
-import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
-import static com.github.tomakehurst.wiremock.client.WireMock.post;
-import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
-import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
-import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.ecomm.checkoutpricing.domain.Discount;
+import com.ecomm.checkoutpricing.domain.PaymentAttempt.Status;
+import com.ecomm.checkoutpricing.domain.PricedLine;
+import com.ecomm.commons.money.Money;
 import com.ecomm.commons.security.FakeKeycloak;
-import com.github.tomakehurst.wiremock.stubbing.ServeEvent;
 import java.time.Duration;
-import java.util.Comparator;
-import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 
 /**
- * Paying a Checkout Session places the Order at the session's Prices, authorizes its Payment,
- * commits the Reservation, marks the Order paid, clears the Cart and ends the session. An expired
- * or unknown session does nothing.
+ * Paying a Checkout Session starts the checkout Saga with the session as it stands, and answers
+ * with how it ended, or that it is still going. Checkout calls no other service to pay. An expired,
+ * unknown or invalid payment starts nothing.
  */
 class PaySessionApiTest extends CheckoutApiTest {
 
   @Test
-  void payingReturnsThePaidOrder() {
+  void payingStartsTheSagaWithTheSessionAsItStands() {
+    stubSuccessfulCheckout();
+    stubDiscount("WELCOME10", 15980);
+    var sessionId = startedSessionId();
+    applyCoupon(sessionId, "welcome10").expectStatus().isOk();
+    stubVariant("PHN-PIXEL-9", 99900);
+    DOWNSTREAM.resetRequests();
+
+    pay(sessionId).expectStatus().isOk();
+
+    DOWNSTREAM.verify(0, anyRequestedFor(anyUrl()));
+    assertThat(saga.started()).hasSize(1);
+    var started = saga.started().getFirst();
+    assertThat(started.paymentMethod()).isEqualTo(APPROVE);
+    var session = started.session();
+    assertThat(session.id()).isEqualTo(sessionId);
+    assertThat(session.customerId()).isEqualTo(CUSTOMER_ID);
+    assertThat(session.reservationId()).isEqualTo(RESERVATION_ID);
+    assertThat(session.cart().lines())
+        .containsExactly(
+            new PricedLine("PHN-PIXEL-9", "PHN-PIXEL-9", "phones", 2, Money.of(79900, "EUR")));
+    assertThat(session.discounts())
+        .containsExactly(Discount.coupon("WELCOME10", Money.of(15980, "EUR")));
+    assertThat(session.tax()).isEqualTo(Money.of(0, "EUR"));
+  }
+
+  @Test
+  void aPaidOrderIsOk() {
     stubSuccessfulCheckout();
 
     checkout()
@@ -42,169 +62,188 @@ class PaySessionApiTest extends CheckoutApiTest {
   }
 
   @Test
-  void theStepsRunInOrder() {
+  void aDeclineIsPaymentRequiredWithItsReason() {
     stubSuccessfulCheckout();
-    var sessionId = startedSessionId();
-    DOWNSTREAM.resetRequests();
+    saga.answer(Status.DECLINED, "insufficient_funds");
 
-    pay(sessionId).expectStatus().isOk();
-
-    assertThat(downstreamCalls())
-        .containsExactly(
-            "POST /orders",
-            "POST /payments",
-            "POST /reservations/" + RESERVATION_ID + "/commit",
-            "PATCH /orders/" + ORDER_ID + "/status",
-            "DELETE /cart");
+    checkout()
+        .expectStatus()
+        .isEqualTo(402)
+        .expectHeader()
+        .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+        .expectBody()
+        .jsonPath("$.declineReason")
+        .isEqualTo("insufficient_funds");
   }
 
   @Test
-  void theOrdersTotalIsAuthorizedWithTheCustomersPaymentMethod() {
+  void aHoldThatRanOutIsGoneSayingSo() {
     stubSuccessfulCheckout();
+    saga.answer(Status.HOLD_EXPIRED);
 
-    pay(startedSessionId()).expectStatus().isOk();
-
-    DOWNSTREAM.verify(
-        postRequestedFor(urlEqualTo("/payments"))
-            .withRequestBody(
-                equalToJson(
-                    """
-                    {"customerId": "customer-42", "orderId": "%s", "paymentMethod": "tok_approve",
-                     "amount": {"amountMinor": 159800, "currency": "EUR"}}
-                    """
-                        .formatted(ORDER_ID))));
+    checkout()
+        .expectStatus()
+        .isEqualTo(410)
+        .expectHeader()
+        .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+        .expectBody()
+        .jsonPath("$.reason")
+        .isEqualTo("holdExpired");
   }
 
   @Test
-  void thePaymentIsAuthorizedWithAKeyFromTheOrder() {
+  void aFailedSagaIsABadGatewayWithTheCorrelationId() {
     stubSuccessfulCheckout();
+    saga.answer(Status.FAILED);
 
-    pay(startedSessionId()).expectStatus().isOk();
-
-    DOWNSTREAM.verify(
-        postRequestedFor(urlEqualTo("/payments"))
-            .withHeader("Idempotency-Key", equalTo("checkout:" + ORDER_ID + ":authorize")));
+    checkout()
+        .expectStatus()
+        .isEqualTo(502)
+        .expectHeader()
+        .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+        .expectBody()
+        .jsonPath("$.correlationId")
+        .isNotEmpty();
   }
 
   @Test
-  void theReservationIsCommittedForTheCustomer() {
+  void aSagaStillRunningIsAcceptedAndThePaymentEndpointThenReportsHowItEnded() {
     stubSuccessfulCheckout();
-
-    checkout().expectStatus().isOk();
-
-    DOWNSTREAM.verify(
-        postRequestedFor(urlEqualTo("/reservations/" + RESERVATION_ID + "/commit"))
-            .withRequestBody(equalToJson("{\"customerId\": \"customer-42\"}")));
-  }
-
-  @Test
-  void theCartIsClearedAndTheSessionEnds() {
-    stubSuccessfulCheckout();
+    saga.answer(Status.PROCESSING);
     var sessionId = startedSessionId();
 
-    pay(sessionId).expectStatus().isOk();
+    pay(sessionId)
+        .expectStatus()
+        .isAccepted()
+        .expectHeader()
+        .location("/checkout/sessions/" + sessionId + "/payment")
+        .expectBody()
+        .jsonPath("$.status")
+        .isEqualTo("PROCESSING");
+    payment(sessionId)
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .jsonPath("$.status")
+        .isEqualTo("PROCESSING");
 
-    DOWNSTREAM.verify(1, deleteRequestedFor(urlEqualTo("/cart")));
-    currentSession().expectStatus().isNotFound();
-    pay(sessionId).expectStatus().isNotFound();
+    saga.finish(sessionId, Status.PAID);
+
+    payment(sessionId)
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .jsonPath("$.status")
+        .isEqualTo("PAID")
+        .jsonPath("$.orderId")
+        .isEqualTo(ORDER_ID);
   }
 
   @Test
-  void theOrderIsPlacedAtThePricesCapturedWhenTheSessionStarted() {
+  void thePaymentEndpointGivesADeclinesReason() {
+    stubSuccessfulCheckout();
+    saga.answer(Status.DECLINED, "card_declined");
+    var sessionId = startedSessionId();
+    pay(sessionId).expectStatus().isEqualTo(402);
+
+    payment(sessionId)
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .jsonPath("$.status")
+        .isEqualTo("DECLINED")
+        .jsonPath("$.declineReason")
+        .isEqualTo("card_declined");
+  }
+
+  @Test
+  void aSecondPayWhileTheFirstRunsJoinsIt() {
+    stubSuccessfulCheckout();
+    saga.answer(Status.PROCESSING);
+    var sessionId = startedSessionId();
+    pay(sessionId).expectStatus().isAccepted();
+
+    pay(sessionId).expectStatus().isAccepted();
+
+    assertThat(saga.started()).hasSize(1);
+  }
+
+  @Test
+  void theSessionCanBePaidAgainAfterADecline() {
+    stubSuccessfulCheckout();
+    saga.answer(Status.DECLINED, "card_declined");
+    var sessionId = startedSessionId();
+    payWithMethod(sessionId, "tok_decline").expectStatus().isEqualTo(402);
+
+    saga.answer(Status.PAID);
+    payWithMethod(sessionId, APPROVE).expectStatus().isOk();
+
+    assertThat(saga.started())
+        .extracting(FakeCheckoutSaga.Started::paymentMethod)
+        .containsExactly("tok_decline", APPROVE);
+  }
+
+  @Test
+  void aPaidSessionIsNeverPaidTwice() {
     stubSuccessfulCheckout();
     var sessionId = startedSessionId();
-    stubVariant("PHN-PIXEL-9", 99900);
-    DOWNSTREAM.resetRequests();
-
     pay(sessionId).expectStatus().isOk();
 
-    DOWNSTREAM.verify(0, getRequestedFor(urlPathMatching("/variants/.*")));
-    DOWNSTREAM.verify(
-        postRequestedFor(urlEqualTo("/orders"))
-            .withRequestBody(
-                equalToJson(
-                    """
-                    {"customerId": "customer-42", "lines": [
-                      {"variantId": "PHN-PIXEL-9", "quantity": 2,
-                       "unitPrice": {"amountMinor": 79900, "currency": "EUR"}}
-                    ],
-                     "discounts": [],
-                     "tax": {"amountMinor": 0, "currency": "EUR"}}
-                    """)));
+    pay(sessionId).expectStatus().isOk().expectBody().jsonPath("$.orderId").isEqualTo(ORDER_ID);
+
+    assertThat(saga.started()).hasSize(1);
   }
 
   @Test
-  void theOrderIsPlacedWithTheSessionsDiscounts() {
+  void anUnreachableSagaIsServiceUnavailableAndStartsNothing() {
     stubSuccessfulCheckout();
-    stubDiscount("WELCOME10", 15980);
     var sessionId = startedSessionId();
-    applyCoupon(sessionId, "welcome10").expectStatus().isOk();
+    saga.unreachable();
 
-    pay(sessionId).expectStatus().isOk();
-
-    DOWNSTREAM.verify(
-        postRequestedFor(urlEqualTo("/orders"))
-            .withRequestBody(
-                equalToJson(
-                    """
-                    {"customerId": "customer-42", "lines": [
-                      {"variantId": "PHN-PIXEL-9", "quantity": 2,
-                       "unitPrice": {"amountMinor": 79900, "currency": "EUR"}}
-                    ],
-                     "discounts": [{"source": "COUPON", "couponCode": "WELCOME10",
-                                    "amount": {"amountMinor": 15980, "currency": "EUR"}}],
-                     "tax": {"amountMinor": 0, "currency": "EUR"}}
-                    """)));
+    pay(sessionId)
+        .expectStatus()
+        .isEqualTo(503)
+        .expectHeader()
+        .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+        .expectBody()
+        .jsonPath("$.reason")
+        .isEqualTo("checkoutUnavailable");
+    assertThat(saga.started()).isEmpty();
   }
 
   @Test
-  void theDiscountedTotalIsAuthorized() {
+  void thePaymentEndpointStillAnswersOnceTheSessionHasEnded() {
     stubSuccessfulCheckout();
-    stubDiscount("WELCOME10", 15980);
-    // Order Management's total for those lines, less the discount: 1598.00 - 159.80.
-    DOWNSTREAM.stubFor(post("/orders").willReturn(placedOrder(143820)));
     var sessionId = startedSessionId();
-    applyCoupon(sessionId, "WELCOME10").expectStatus().isOk();
-
     pay(sessionId).expectStatus().isOk();
 
-    DOWNSTREAM.verify(
-        postRequestedFor(urlEqualTo("/payments"))
-            .withRequestBody(
-                equalToJson(
-                    """
-                    {"customerId": "customer-42", "orderId": "%s", "paymentMethod": "tok_approve",
-                     "amount": {"amountMinor": 143820, "currency": "EUR"}}
-                    """
-                        .formatted(ORDER_ID))));
+    clock.advance(Duration.ofHours(1));
+
+    payment(sessionId).expectStatus().isOk().expectBody().jsonPath("$.status").isEqualTo("PAID");
   }
 
   @Test
-  void aRemovedCouponIsNotSentWithTheOrder() {
+  void aSessionNeverPaidHasNoPayment() {
     stubSuccessfulCheckout();
-    stubDiscount("WELCOME10", 15980);
-    var sessionId = startedSessionId();
-    applyCoupon(sessionId, "WELCOME10").expectStatus().isOk();
-    removeCoupon(sessionId).expectStatus().isOk();
 
-    pay(sessionId).expectStatus().isOk();
-
-    DOWNSTREAM.verify(
-        postRequestedFor(urlEqualTo("/orders"))
-            .withRequestBody(
-                equalToJson(
-                    """
-                    {"customerId": "customer-42", "lines": [
-                      {"variantId": "PHN-PIXEL-9", "quantity": 2,
-                       "unitPrice": {"amountMinor": 79900, "currency": "EUR"}}
-                    ],
-                     "discounts": [],
-                     "tax": {"amountMinor": 0, "currency": "EUR"}}
-                    """)));
+    payment(startedSessionId())
+        .expectStatus()
+        .isNotFound()
+        .expectHeader()
+        .contentType(MediaType.APPLICATION_PROBLEM_JSON);
   }
 
   @Test
-  void payingAnExpiredSessionIsGoneAndDoesNothing() {
+  void anotherCustomersPaymentIsNotFound() {
+    stubSuccessfulCheckout();
+    var sessionId = startedSessionId();
+    pay(sessionId).expectStatus().isOk();
+
+    payment(FakeKeycloak.token("customer-7", "CUSTOMER"), sessionId).expectStatus().isNotFound();
+  }
+
+  @Test
+  void payingAnExpiredSessionIsGoneAndStartsNothing() {
     stubSuccessfulCheckout();
     var sessionId = startedSessionId();
     DOWNSTREAM.resetRequests();
@@ -217,6 +256,7 @@ class PaySessionApiTest extends CheckoutApiTest {
         .expectHeader()
         .contentType(MediaType.APPLICATION_PROBLEM_JSON);
     DOWNSTREAM.verify(0, anyRequestedFor(anyUrl()));
+    assertThat(saga.started()).isEmpty();
   }
 
   @Test
@@ -230,7 +270,7 @@ class PaySessionApiTest extends CheckoutApiTest {
   }
 
   @Test
-  void payingAnUnknownSessionIsNotFoundAndDoesNothing() {
+  void payingAnUnknownSessionIsNotFoundAndStartsNothing() {
     stubSuccessfulCheckout();
 
     pay("0b7e6a52-0000-4000-8000-000000000009")
@@ -238,28 +278,17 @@ class PaySessionApiTest extends CheckoutApiTest {
         .isNotFound()
         .expectHeader()
         .contentType(MediaType.APPLICATION_PROBLEM_JSON);
-    DOWNSTREAM.verify(0, anyRequestedFor(anyUrl()));
+    assertThat(saga.started()).isEmpty();
   }
 
   @Test
-  void anotherCustomersSessionIsNotFound() {
+  void anotherCustomersSessionIsNotFoundAndStartsNothing() {
     stubSuccessfulCheckout();
     var sessionId = startedSessionId();
-    DOWNSTREAM.resetRequests();
 
     pay(FakeKeycloak.token("customer-7", "CUSTOMER"), sessionId).expectStatus().isNotFound();
 
-    DOWNSTREAM.verify(0, anyRequestedFor(anyUrl()));
+    assertThat(saga.started()).isEmpty();
     currentSession().expectStatus().isOk();
-  }
-
-  /** Every call to another service, not to Keycloak, in the order they were made. */
-  private static List<String> downstreamCalls() {
-    return DOWNSTREAM.getAllServeEvents().stream()
-        .sorted(Comparator.comparing(e -> e.getRequest().getLoggedDate()))
-        .map(ServeEvent::getRequest)
-        .filter(r -> !r.getUrl().equals(TOKEN_PATH))
-        .map(r -> r.getMethod() + " " + r.getUrl())
-        .toList();
   }
 }

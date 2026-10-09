@@ -11,7 +11,7 @@ import org.springframework.test.web.servlet.client.RestTestClient;
 /**
  * The checkout Saga authorizes, awaits and voids a Customer's Payments with Orchestration's own
  * token, naming the Customer: in the body of a command, and as {@code customerId} when it reads
- * one. Checkout keeps authorizing and voiding until it moves onto the Saga.
+ * one.
  */
 class OrchestrationPaymentApiTest extends PaymentApiTest {
 

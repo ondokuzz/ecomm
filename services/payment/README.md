@@ -63,16 +63,17 @@ The checkout Saga authorizes, voids and reads Payments with Orchestration's own 
 `ORCHESTRATION` role
 ([ADR 0002](../identity-access/docs/adr/0002-service-identity-by-client-credentials.md)), and names
 the Customer the Payment is for: in the body of a command, and as `customerId` when it reads one,
-which finds nothing for another Customer's Payment. Checkout keeps authorizing and voiding with its
-own token (`CHECKOUT`) until it moves onto the Saga. That Customer reads it back with their own token (`CUSTOMER`),
+which finds nothing for another Customer's Payment. Checkout's own token (`CHECKOUT`) lost both
+commands once Checkout moved onto the Saga (#60). That Customer reads it back with their own token
+(`CUSTOMER`),
 whose `sub` must match: another Customer's Payment is a 404, the same as an unknown one, so its
 existence never leaks. Staff read every Payment for an Order with a `STAFF` token. Any other token
 gets 403, and no token gets 401.
 
 | Endpoint | Called by | |
 |---|---|---|
-| `POST /payments` | Orchestration, Checkout | Authorizes an Order's amount; 201 with the Payment, authorized or declined, its URL in `Location`. Requires an `Idempotency-Key` |
-| `POST /payments/{id}/void` | Orchestration, Checkout | Releases an authorized Payment; 200 with the voided Payment |
+| `POST /payments` | Orchestration | Authorizes an Order's amount; 201 with the Payment, authorized or declined, its URL in `Location`. Requires an `Idempotency-Key` |
+| `POST /payments/{id}/void` | Orchestration | Releases an authorized Payment; 200 with the voided Payment |
 | `GET /payments/{id}` | Customer | The Customer's Payment; 404 for an unknown ID or another Customer's |
 | `GET /payments/{id}?customerId=` | Orchestration | The named Customer's Payment, as the Saga awaits its settlement; 404 as above |
 | `GET /payments?orderId=` | Customer | The Customer's Payments for one of their Orders, newest first; an empty list for anyone else's Order |
@@ -109,8 +110,7 @@ The key works as every `@IdempotentCommand`'s does
 ([service template](../../platform/service-template/README.md#idempotent-commands)): a repeat with
 the same key and body gets the first response back, with `Idempotent-Replayed: true`, and nothing
 more is authorized; the same key with another body is a 422; no key is a 400 with
-`idempotencyKeyRequired`. Orchestration is to send `<workflowId>:<runId>:<activity>`, and Checkout
-sends `checkout:<orderId>:authorize`.
+`idempotencyKeyRequired`. Orchestration sends `<workflowId>:<runId>:authorizePayment`.
 
 A void names the Customer, `{"customerId": "…"}`, and needs no key: voiding a `VOIDED` Payment
 changes nothing and answers the same 200. Voiding a `DECLINED` Payment is a 409 with `reason`

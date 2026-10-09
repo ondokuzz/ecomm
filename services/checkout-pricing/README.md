@@ -2,7 +2,9 @@
 
 Turns a Customer's Cart into a paid Order in two steps: a **Checkout Session** holds the Cart for
 15 minutes, at the Prices of the moment it started, with every running **Campaign**'s Discount it is
-due, and may take a **Coupon** on top; paying the session buys it. Built from
+due, and may take a **Coupon** on top; paying the session starts the **checkout Saga**, which
+Orchestration runs on Temporal ([ADR 0009](../../docs/adr/0009-sagas-on-temporal.md)), and buys it.
+Built from
 [`platform/service-template`](../../platform/service-template/README.md), so its layout, security
 and testing conventions apply here. Checkout Sessions live in Redis; otherwise it holds nothing
 but its own cached token. Why sessions hold Stock through Inventory's Reservations is in
@@ -18,7 +20,8 @@ Every endpoint is the calling Customer's own and needs a `CUSTOMER` token.
 | `GET /checkout/sessions/current` | The caller's live Checkout Session, or 404 |
 | `PUT /checkout/sessions/{id}/coupon` | Applies a Coupon with `{"code": "WELCOME10"}`, in place of any it had; 200 with the session |
 | `DELETE /checkout/sessions/{id}/coupon` | Takes the Coupon off, if any; 200 with the session |
-| `POST /checkout/sessions/{id}/pay` | Pays it with `{"paymentMethod": "…"}`; 200 with `{"orderId": "…", "status": "PAID"}` |
+| `POST /checkout/sessions/{id}/pay` | Pays it with `{"paymentMethod": "…"}`; 200 with `{"orderId": "…", "status": "PAID"}`, or 202 while the Saga is still going ([below](#paying-a-session)) |
+| `GET /checkout/sessions/{id}/payment` | The latest attempt to pay it: `{"status", "orderId", "declineReason"}` |
 
 One endpoint is internal. The checkout Saga ends a Customer's Checkout Session once their Order is
 paid, with Orchestration's own token (`ORCHESTRATION`,
@@ -104,27 +107,56 @@ in the meantime.
 ### Paying a session
 
 The body names the Payment method, `{"paymentMethod": "tok_approve"}`: an opaque token from the
-payment gateway, which Checkout passes on to Payment unread (the mock's test tokens are in
+payment gateway, which Checkout passes on unread (the mock's test tokens are in
 [Payment's README](../payment/README.md#gateways)). A missing, blank or non-string one, or one past
 255 characters, is a 400. A session that has expired is a 410, and one that doesn't exist, has ended
-or belongs to someone else is a 404; in all three cases nothing else happens. Otherwise, in order:
+or belongs to someone else is a 404; in all three cases nothing is started.
 
-1. place the Order in `PLACED` in Order Management, at the session's Prices, with every Discount in
-   order (`"discounts"`, possibly empty) and its tax;
-2. authorize the payment for the Order's total (lines less every Discount, plus tax), as Order
-   Management answers it, with the Payment method and the `Idempotency-Key`
-   `checkout:<orderId>:authorize`, which Payment requires;
-3. commit the Reservation, which takes its Stock off on-hand for good;
-4. set the Order to `PAID`;
-5. clear the Cart;
-6. end the session;
-7. return the Order's ID and Order Status.
+Otherwise Checkout starts the checkout Saga through its `CheckoutSaga` port, whose adapter is
+Temporal's client. Checkout calls no other service to pay: Orchestration's workflow places the Order,
+authorizes the Payment for the Order's total, commits the Reservation, marks the Order paid, clears
+the Cart and ends the session, and undoes what it must when a step can't go on
+([Orchestration](../orchestration/README.md#the-checkout-saga)).
+
+- The workflow is `checkout`, on the task queue `checkout`, and its ID is the session's. While one
+  runs for the session, paying again joins it rather than starting another. Once it has closed,
+  paying again starts a new run, so a Customer can pay again after a decline.
+- A session whose latest run paid it is never paid again: paying answers that run's 200.
+- Its input is the session as it stands, with the Customer, the lines at their captured Prices,
+  every Discount, the tax, the Reservation's ID and the Payment method, and the Correlation ID of
+  the Pay request, which every call the Saga makes carries. Its memo names the Customer, so that
+  only they read the attempt.
+- **The Payment method token travels in the workflow's input, and so in its history**, which
+  Temporal keeps for 7 days after the run closes. It is the gateway's opaque token for a card, never
+  a card number, so it may.
+
+Checkout then waits up to 10 seconds (`ecomm.checkout.saga.wait`) for how the run ends:
+
+| Outcome | Answer |
+|---|---|
+| `PAID` | 200 `{"orderId", "status": "PAID"}` |
+| `DECLINED` | 402 with `declineReason`, such as `insufficient_funds`. The Order is cancelled; the session and its Reservation stay, so it can be paid again |
+| `HOLD_EXPIRED` | 410 with `reason` `holdExpired`: the Reservation no longer held the Stock, so the Payment was voided and the Order cancelled. Nothing was charged |
+| `FAILED` | 502, with the Correlation ID as every problem detail has it. Whatever the run did is undone |
+| still running | 202 `{"status": "PROCESSING", "orderId": null, "declineReason": null}`, with `Location: /checkout/sessions/{id}/payment` |
+
+A run reports `PAID` as soon as its Order is marked paid, though it goes on to clear the Cart and
+end the session: it keeps that outcome in its memo meanwhile, and Checkout reads it from there.
+
+`GET /checkout/sessions/{id}/payment` answers the latest run's outcome in the same shape, `status`
+being `PROCESSING`, `PAID`, `DECLINED`, `HOLD_EXPIRED` or `FAILED`. It reads the workflow, not the
+session, so it still answers once the session has ended, for as long as Temporal keeps the run. A
+session never paid, or another Customer's, is a 404.
+
+Temporal being unreachable is a 503 with `reason` `checkoutUnavailable`, and nothing is started.
+Temporal's client gives up after 5 seconds (`ecomm.checkout.saga.unavailable-after`) rather than its
+default minute, so the Customer isn't kept waiting.
 
 Tax comes from the `TaxCalculator` port, on the subtotal less every Discount. For now that is
 `ZeroTaxCalculator` ([ADR 0005](../../docs/adr/0005-localization-compliance-abstracted.md)). It is
-worked out when the session starts and again whenever its Coupon changes, sent on `POST /orders`
-even when zero, and the Order records it. The Payment is authorized for the total Order Management
-gives the Order, never one Checkout works out itself, so the two always match.
+worked out when the session starts and again whenever its Coupon changes, and goes to the Saga with
+the session; the Order records it. The Payment is authorized for the total Order Management gives
+the Order, never one worked out from the session, so the two always match.
 
 ### Errors
 
@@ -134,22 +166,18 @@ Every error is a problem detail.
 |---|---|
 | 400 | Starting: the Cart is empty. Paying: no usable `paymentMethod`. Applying a Coupon: no usable `code` |
 | 401 / 403 | No token / not a Customer (Staff and services have no Cart) |
-| 404 | No live session (`current`), or paying or changing the Coupon of one the Customer doesn't have |
+| 404 | No live session (`current`), paying or changing the Coupon of one the Customer doesn't have, or reading the payment of one never paid or not theirs |
 | 409 | Starting: `unknownVariants`: Catalog no longer has these Variants. `outOfStock`: Inventory can't hold these. Also a Cart priced in more than one currency |
-| 402 | Paying: the gateway declined the payment; `declineReason` gives its reason, such as `insufficient_funds` |
+| 402 | Paying: the gateway declined the payment; `declineReason` gives its reason |
 | 422 | Applying a Coupon that doesn't apply; `reason` says why, as Promotions does |
-| 410 | Paying, or changing the Coupon of, a session that has expired |
-| 502 | Another service failed or answered unexpectedly, the payment gateway failing to answer included, or Promotions answered Discounts that can't be right |
-| 503 | Keycloak couldn't issue Checkout's own token |
+| 410 | Paying, or changing the Coupon of, a session that has expired. Paying, with `reason` `holdExpired`: the hold ran out during the Saga |
+| 502 | Starting or changing a Coupon: another service failed or answered unexpectedly, or Promotions answered Discounts that can't be right. Paying: the Saga failed |
+| 503 | Keycloak couldn't issue Checkout's own token, or, paying, Temporal can't be reached (`checkoutUnavailable`) |
 
 Starting a session changes nothing when it fails, except that a replaced session is gone and its
-Stock released. Once paying has placed the Order, a failing step sets it to `CANCELLED` and leaves
-the Cart and the session as they were. A declined payment (402) and a gateway failure (502) are
-such steps: the session and its Reservation stay, so the Customer can pay it again, with another
-Payment method, until it expires. Each attempt places a new Order. That's the only compensation for now: if the commit fails
-after the Payment is authorized, the Payment stays authorized, the same known limitation as Sprint
-1, which the checkout Saga fixes in Sprint 4. A Cart that can't be cleared, or a session that can't be ended,
-after the Order is paid is only logged, since the Customer keeps the paid Order either way.
+Stock released. A payment that ends without paying leaves the Cart and the session as they were, so
+the Customer can pay again, with another Payment method, until it expires; each attempt places a new
+Order.
 
 ## Checkout Sessions
 
@@ -175,15 +203,17 @@ at the Reservation's own `expiresAt`, 2 minutes later.
 Checkout calls each service with the identity that service expects
 ([ADR 0002](../identity-access/docs/adr/0002-service-identity-by-client-credentials.md)):
 
-- **Cart** (read, clear): the Customer's own JWT, forwarded as is. The Cart adapter takes it from
+- **Cart** (read): the Customer's own JWT, forwarded as is. The Cart adapter takes it from
   the current request's security context, so the use case and its ports only ever see the
   Customer ID.
 - **Catalog**: no token; reads are public.
-- **Inventory, Order Management, Payment, Promotions**: Checkout's own token, from the confidential `checkout`
-  client (client credentials, `CHECKOUT` role). The Customer goes in the body as `customerId`, on
-  `POST /reservations` and its commit and release, `POST /orders`, every
-  `PATCH /orders/{id}/status` (the compensating `CANCELLED` too), and `POST /payments`.
-  `POST /discounts/evaluate` names no Customer: a Coupon applies the same to everyone.
+- **Inventory, Promotions**: Checkout's own token, from the confidential `checkout` client (client
+  credentials, `CHECKOUT` role). The Customer goes in the body as `customerId`, on
+  `POST /reservations` and its release. `POST /discounts/evaluate` names no Customer: a Coupon
+  applies the same to everyone.
+
+Order Management, Payment, Inventory's commit, Cart's clear and Checkout's own end-session command
+are the checkout Saga's, called with Orchestration's token.
 
 The client secret comes from `CHECKOUT_CLIENT_SECRET`, which compose sets; there is no default.
 
@@ -198,9 +228,7 @@ service, the cached token is dropped and the call is retried exactly once with a
 is safe even for a `POST`, because a resource server rejects a bad token before any handler runs.
 No other status is retried.
 
-If Keycloak is unreachable when a session starts, or before the Order is placed, the step fails
-with a 503. If it becomes unreachable afterwards, the compensating `CANCELLED` can't be sent
-either, and the Order stays `PLACED`. That's a known Sprint 1 limitation, fixed by the checkout Saga in Sprint 4.
+If Keycloak is unreachable when a session starts, or a Coupon changes, the step fails with a 503.
 
 [`http/checkout-pricing.http`](./http/checkout-pricing.http) checks out the demo Customer's Cart
 against the compose stack.
@@ -214,6 +242,17 @@ docker compose up -d --build checkout-pricing   # from the repo root; listens on
 That host port bypasses the [API gateway](../../platform/api-gateway/README.md), for development
 only. Browsers reach the service through the gateway, at `/api/checkout-pricing/`.
 
-Or run the rest of the stack in compose, Redis included, and start the service with
+Or run the rest of the stack in compose, Redis and Temporal included, and start the service with
 `CHECKOUT_CLIENT_SECRET=checkout-dev-secret ./gradlew :services:checkout-pricing:bootRun` on port
-8080. It finds the other services on their compose host ports.
+8080. It finds the other services on their compose host ports, and Temporal on `localhost:7233`.
+
+## Tests
+
+`./gradlew :services:checkout-pricing:check`. The application runs against Redis in Testcontainers,
+with one WireMock server for the services it calls and Keycloak's token endpoint, and a fake
+`CheckoutSaga` port that ends each attempt as a test says, or keeps it running. `PaySessionApiTest`
+covers each outcome's status, 202 then the payment endpoint, a second Pay joining the first, an
+unreachable Temporal, and an expired or unknown session starting nothing; `PayRequestApiTest`, a
+missing or invalid `paymentMethod` starting nothing. `TemporalCheckoutSagaTest` runs the Temporal
+adapter itself against Temporal's test server, with a stand-in for Orchestration's workflow: start,
+join while running, start again after it closes, read the outcome.

@@ -11,7 +11,8 @@ import org.springframework.http.MediaType;
 
 /**
  * The Reservation endpoints are internal: only Checkout, with its own {@code CHECKOUT} token, may
- * call them, and Orchestration may commit (see {@link OrchestrationReservationApiTest}).
+ * reserve and release, and only Orchestration may commit (see {@link
+ * OrchestrationReservationApiTest}).
  */
 class ReservationSecurityApiTest extends InventoryApiTest {
 

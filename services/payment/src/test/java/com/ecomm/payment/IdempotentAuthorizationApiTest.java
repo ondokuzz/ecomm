@@ -22,7 +22,7 @@ class IdempotentAuthorizationApiTest extends PaymentApiTest {
   void aKeyIsRequired() {
     http.post()
         .uri("/payments")
-        .headers(h -> h.setBearerAuth(checkoutToken()))
+        .headers(h -> h.setBearerAuth(orchestrationToken()))
         .contentType(MediaType.APPLICATION_JSON)
         .body(BODY.formatted("order-no-key"))
         .exchange()
@@ -66,7 +66,8 @@ class IdempotentAuthorizationApiTest extends PaymentApiTest {
 
   @Test
   void theKeyIsPassedOnToTheGateway() {
-    // Keys are scoped to their caller, so another Checkout client with the same key reaches the
+    // Keys are scoped to their caller, so another Orchestration client with the same key reaches
+    // the
     // gateway again, with the same key: the gateway answers with its first reference.
     var body = BODY.formatted("order-gateway-key");
     var first =
@@ -75,7 +76,7 @@ class IdempotentAuthorizationApiTest extends PaymentApiTest {
     var second =
         http.post()
             .uri("/payments")
-            .headers(h -> h.setBearerAuth(FakeKeycloak.token("checkout-2", "CHECKOUT")))
+            .headers(h -> h.setBearerAuth(FakeKeycloak.token("orchestration-2", "ORCHESTRATION")))
             .header("Idempotency-Key", "gateway-key-1")
             .contentType(MediaType.APPLICATION_JSON)
             .body(body)

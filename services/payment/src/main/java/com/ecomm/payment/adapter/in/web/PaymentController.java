@@ -31,8 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * The checkout Saga authorizes, voids and reads a Customer's Payments with Orchestration's own
  * {@code ORCHESTRATION} token, naming the Customer in the body, or as {@code customerId} when it
- * reads one. Checkout's {@code CHECKOUT} token authorizes and voids too, until Checkout moves onto
- * the Saga. The Customer reads them back with a {@code CUSTOMER} token, whose {@code sub} must own
+ * reads one. The Customer reads them back with a {@code CUSTOMER} token, whose {@code sub} must own
  * the Payment; Staff read them under {@code /staff/payments}.
  */
 @RestController
@@ -58,7 +57,7 @@ class PaymentController {
    * the gateway; a repeat replays the first response and authorizes nothing more.
    */
   @PostMapping
-  @PreAuthorize("hasAnyRole('CHECKOUT', 'ORCHESTRATION')")
+  @PreAuthorize("hasRole('ORCHESTRATION')")
   @IdempotentCommand
   ResponseEntity<PaymentResponse> authorize(
       // Never null here: @IdempotentCommand refuses a request without one.
@@ -80,7 +79,7 @@ class PaymentController {
    * answer.
    */
   @PostMapping("/{id}/void")
-  @PreAuthorize("hasAnyRole('CHECKOUT', 'ORCHESTRATION')")
+  @PreAuthorize("hasRole('ORCHESTRATION')")
   PaymentResponse voidPayment(@PathVariable String id, @RequestBody VoidPaymentRequest request) {
     var customerId = request.customer();
     var payment =

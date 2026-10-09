@@ -49,7 +49,7 @@ export function appliedCoupon(discounts: Discount[]): Discount | undefined {
 export interface StatusHistoryEntry {
   status: OrderStatus
   at: string
-  changedBy: 'CHECKOUT'
+  changedBy: 'CHECKOUT' | 'ORCHESTRATION'
   backfilled: boolean
 }
 
@@ -71,12 +71,6 @@ export interface Order {
 
 /** How many Orders a page of the Customer's list shows. */
 export const ordersPageSize = 12
-
-/** What checkout answers with: the new Order's ID and its Order Status. */
-export interface CheckoutResult {
-  orderId: string
-  status: OrderStatus
-}
 
 /** An Order Status as the Customer reads it: "Placed", "Paid", … */
 export function orderStatusLabel(status: OrderStatus): string {

@@ -22,7 +22,7 @@ stay with the services, which still check every token themselves.
 | `cart` | | `/carts/**`: clearing a named Customer's Cart, which only Orchestration calls |
 | `checkout-pricing` | | `POST /checkout/sessions/*/end`: ending a named Customer's session, which only Orchestration calls |
 | `order-management` | | `POST /orders`, `PATCH /orders/*/status` |
-| `payment` | | `POST /payments`, `POST /payments/*/void`: authorizing and voiding, which only Orchestration and Checkout call |
+| `payment` | | `POST /payments`, `POST /payments/*/void`: authorizing and voiding, which only Orchestration calls |
 | `promotions` | | `/discounts/**`: Coupon evaluation, which only Checkout calls |
 | `search-discovery` | `/search` | |
 | `reviews-ratings` | `/products/*/reviews`, `/products/*/rating-summary`, `/rating-summaries` | |

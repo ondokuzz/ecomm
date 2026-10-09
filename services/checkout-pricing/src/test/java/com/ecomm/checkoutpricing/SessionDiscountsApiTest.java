@@ -3,10 +3,12 @@ package com.ecomm.checkoutpricing;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalToJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
-import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
+import static org.assertj.core.api.Assertions.assertThat;
 
+import com.ecomm.checkoutpricing.domain.Discount;
+import com.ecomm.commons.money.Money;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -143,53 +145,29 @@ class SessionDiscountsApiTest extends CheckoutApiTest {
   }
 
   @Test
-  void theOrderIsPlacedWithEveryDiscountAndTheTotalAuthorizedIsOrderManagements() {
+  void theSessionIsPaidWithEveryDiscountInTheOrderTheyApply() {
     stubPhonesAndHeadphones();
     stubCampaigns(campaignDiscount(AUDIO_WEEK, "Audio week", 3735));
     stubCouponEvaluation(
         campaignDiscount(AUDIO_WEEK, "Audio week", 3735), couponDiscount("WELCOME10", 18096));
-    // 1847.00 − 37.35 − 180.96, as Order Management works it out.
-    DOWNSTREAM.stubFor(post("/orders").willReturn(placedOrder(162869)));
     var sessionId = startedSessionId();
     applyCoupon(sessionId, "WELCOME10").expectStatus().isOk();
 
     pay(sessionId).expectStatus().isOk();
 
-    DOWNSTREAM.verify(
-        postRequestedFor(urlEqualTo("/orders"))
-            .withRequestBody(
-                equalToJson(
-                    """
-                    {"discounts": [
-                      {"source": "CAMPAIGN", "campaignId": "%s", "campaignName": "Audio week",
-                       "amount": {"amountMinor": 3735, "currency": "EUR"}},
-                      {"source": "COUPON", "couponCode": "WELCOME10",
-                       "amount": {"amountMinor": 18096, "currency": "EUR"}}],
-                     "tax": {"amountMinor": 0, "currency": "EUR"}}
-                    """
-                        .formatted(AUDIO_WEEK),
-                    true,
-                    true)));
-    DOWNSTREAM.verify(
-        postRequestedFor(urlEqualTo("/payments"))
-            .withRequestBody(
-                equalToJson(
-                    """
-                    {"amount": {"amountMinor": 162869, "currency": "EUR"}}
-                    """,
-                    true,
-                    true)));
+    assertThat(saga.started().getFirst().session().discounts())
+        .containsExactly(
+            Discount.campaign(AUDIO_WEEK, "Audio week", Money.of(3735, "EUR")),
+            Discount.coupon("WELCOME10", Money.of(18096, "EUR")));
   }
 
   @Test
-  void anOrderWithoutDiscountsIsPlacedWithAnEmptyList() {
+  void aSessionWithoutDiscountsIsPaidWithNone() {
     stubSuccessfulCheckout();
 
     checkout().expectStatus().isOk();
 
-    DOWNSTREAM.verify(
-        postRequestedFor(urlEqualTo("/orders"))
-            .withRequestBody(equalToJson("{\"discounts\": []}", true, true)));
+    assertThat(saga.started().getFirst().session().discounts()).isEmpty();
   }
 
   @Test

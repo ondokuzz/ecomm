@@ -10,7 +10,13 @@ spring:
     workers:
       - task-queue: checkout
         workflow-classes:
-          - com.ecomm.orchestration.application.PlaceholderCheckoutWorkflow
+          - com.ecomm.orchestration.application.CheckoutSaga
+        activity-beans:
+          - orderActivities
+          - paymentActivities
+          - inventoryActivities
+          - cartActivities
+          - checkoutSessionActivities
   security:
     oauth2:
       client:
@@ -25,3 +31,12 @@ spring:
         provider:
           keycloak:
             token-uri: http://localhost:8180/realms/ecomm/protocol/openid-connect/token
+
+# Every context the Saga's steps call, on its compose host port.
+ecomm:
+  orchestration:
+    order-management-url: http://localhost:8085
+    payment-url: http://localhost:8084
+    inventory-url: http://localhost:8082
+    cart-url: http://localhost:8083
+    checkout-pricing-url: http://localhost:8086

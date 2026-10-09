@@ -28,13 +28,14 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Internal: Checkout, with its own {@code CHECKOUT} token, holds Stock for a Customer and releases
- * the Reservation; the checkout Saga commits it with Orchestration's {@code ORCHESTRATION} token,
- * as Checkout may too until it moves onto the Saga. Each names the Customer in the body (ADR 0002).
- * A Reservation owned by anyone else is a 404.
+ * the Reservation; the checkout Saga commits it with Orchestration's {@code ORCHESTRATION} token.
+ * Each names the Customer in the body (ADR 0002). A Reservation owned by anyone else is a 404.
+ *
+ * <p>Each endpoint checks its own role. A role on the class would guard the exception handlers too,
+ * and turn a 404 or 409 for the other caller into a 500.
  */
 @RestController
 @RequestMapping("/reservations")
-@PreAuthorize("hasRole('CHECKOUT')")
 class ReservationController {
 
   private static final Logger log = LoggerFactory.getLogger(ReservationController.class);
@@ -49,6 +50,7 @@ class ReservationController {
 
   /** 201 with the new {@code ACTIVE} Reservation, and its URL in {@code Location}. */
   @PostMapping
+  @PreAuthorize("hasRole('CHECKOUT')")
   ResponseEntity<ReservationResponse> reserve(@RequestBody ReservationRequest request) {
     var reservation =
         reserve.reserve(request.customerId(), request.toItems(), request.toExpiresAt());
@@ -65,7 +67,7 @@ class ReservationController {
    * changes nothing, so the command takes no {@code Idempotency-Key}.
    */
   @PostMapping("/{id}/commit")
-  @PreAuthorize("hasAnyRole('CHECKOUT', 'ORCHESTRATION')")
+  @PreAuthorize("hasRole('ORCHESTRATION')")
   ReservationResponse commit(@PathVariable String id, @RequestBody CustomerRequest request) {
     var reservation =
         owned(id, reservationId -> settle.commit(request.customerId(), reservationId));
@@ -75,6 +77,7 @@ class ReservationController {
 
   /** 200 with the Reservation {@code RELEASED}, its Stock available again. */
   @PostMapping("/{id}/release")
+  @PreAuthorize("hasRole('CHECKOUT')")
   ReservationResponse release(@PathVariable String id, @RequestBody CustomerRequest request) {
     var reservation =
         owned(id, reservationId -> settle.release(request.customerId(), reservationId));

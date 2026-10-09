@@ -19,8 +19,9 @@ The checkout Saga places Orders and changes their status with Orchestration's ow
 Customer in the body. Both commands require an `Idempotency-Key` from it, and work as every
 `@IdempotentCommand` does ([service template](../../platform/service-template/README.md#idempotent-commands)):
 a repeat with the same key and body replays the first response with `Idempotent-Replayed: true` and
-changes nothing; no key is a 400 with `idempotencyKeyRequired`. Checkout keeps both commands with
-its own token (`CHECKOUT`), without a key, until it moves onto the Saga. An Order belongs to that Customer, and they read it with their own token
+changes nothing; no key is a 400 with `idempotencyKeyRequired`. Checkout's own token (`CHECKOUT`)
+lost both commands once Checkout moved onto the Saga (#60), and gets 403. An Order belongs to that
+Customer, and they read it with their own token
 (`CUSTOMER`), whose `sub` must match. Another Customer's Order is a 404, the same as an unknown one,
 so its existence never leaks, and the same goes for a status change naming a Customer who doesn't
 own the Order. Staff read every Customer's Orders under `/staff/orders` with a `STAFF` token, and
@@ -28,8 +29,8 @@ nothing there changes an Order. Any other token gets 403, and no token gets 401.
 
 | Endpoint | Called by | |
 |---|---|---|
-| `POST /orders` | Orchestration, Checkout | Places an Order in `PLACED`; 201 with the Order, its URL in `Location` |
-| `PATCH /orders/{id}/status` | Orchestration, Checkout | Moves the Order: `{"customerId", "status": "PAID"}`; 200 with the Order, 409 if illegal |
+| `POST /orders` | Orchestration | Places an Order in `PLACED`; 201 with the Order, its URL in `Location` |
+| `PATCH /orders/{id}/status` | Orchestration | Moves the Order: `{"customerId", "status": "PAID"}`; 200 with the Order, 409 if illegal |
 | `GET /orders/{id}` | Customer | The Customer's Order; 404 for an unknown ID or another Customer's |
 | `GET /orders?page=0&size=20` | Customer | A page of the Customer's Orders, newest first, with their total |
 | `GET /staff/orders?status=&customerId=&placedFrom=&placedTo=&idPrefix=&page=0&size=20` | Staff | A page of every Customer's Orders that match, newest first, with their total |
@@ -69,13 +70,13 @@ now holds the list, and a body that still sends `discount` is a 400.
  "tax": {"amountMinor": 0, "currency": "EUR"},
  "total": {"amountMinor": 136629, "currency": "EUR"}, "placedAt": "2026-09-27T14:00:00.123456Z",
  "statusHistory": [{"status": "PLACED", "at": "2026-09-27T14:00:00.123456Z",
-                    "changedBy": "CHECKOUT", "backfilled": false}]}
+                    "changedBy": "ORCHESTRATION", "backfilled": false}]}
 ```
 
 `customerId` is the Customer the Order belongs to: the `sub` of their token. `statusHistory` is
 oldest first, and its last entry is the current `status`. `changedBy` is the caller that made the
-change: `ORCHESTRATION` for the checkout Saga, `CHECKOUT` for Checkout. Earlier entries keep the
-caller they were made by.
+change: `ORCHESTRATION`, for the checkout Saga. A change made before Checkout moved onto the Saga
+(#60) keeps `CHECKOUT`, the caller it was made by.
 
 `GET /orders` pages the list: `page` counts from 0 (default 0) and `size` is 1 to 100 (default
 20). Anything else is a 400. The page comes back with how many Orders the Customer has in all:
@@ -157,8 +158,8 @@ is the definition:
            "tax": {"amountMinor": 0, "currency": "EUR"},
            "subtotal": {"amountMinor": 79900, "currency": "EUR"},
            "total": {"amountMinor": 71910, "currency": "EUR"},
-           "statusHistory": [{"status": "PLACED", "at": "2026-10-03T12:00:00Z", "changedBy": "CHECKOUT"},
-                             {"status": "PAID", "at": "2026-10-03T12:00:05Z", "changedBy": "CHECKOUT"}]}}
+           "statusHistory": [{"status": "PLACED", "at": "2026-10-03T12:00:00Z", "changedBy": "ORCHESTRATION"},
+                             {"status": "PAID", "at": "2026-10-03T12:00:05Z", "changedBy": "ORCHESTRATION"}]}}
 ```
 
 - `change` is `PLACED`, `STATUS_CHANGED` or `BACKFILLED`.

@@ -64,18 +64,6 @@ class InventoryClient implements InventoryPort {
   }
 
   @Override
-  public void commit(String customerId, String reservationId) {
-    Downstream.run(
-        "Inventory",
-        () ->
-            http.post()
-                .uri("/reservations/{id}/commit", reservationId)
-                .body(new CustomerBody(customerId))
-                .retrieve()
-                .toBodilessEntity());
-  }
-
-  @Override
   public void release(String customerId, String reservationId) {
     Downstream.run(
         "Inventory",

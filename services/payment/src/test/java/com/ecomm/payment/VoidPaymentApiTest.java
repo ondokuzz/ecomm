@@ -10,7 +10,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.MediaType;
 
 /**
- * Checkout voids an authorized Payment, releasing it through the gateway: a {@code VOID}
+ * The checkout Saga voids an authorized Payment, releasing it through the gateway: a {@code VOID}
  * transaction is recorded and the Payment is {@code VOIDED}. Voiding again changes nothing; a
  * declined Payment can't be voided.
  */
@@ -101,7 +101,7 @@ class VoidPaymentApiTest extends PaymentApiTest {
 
     http.post()
         .uri("/payments/{id}/void", payment.id())
-        .headers(h -> h.setBearerAuth(checkoutToken()))
+        .headers(h -> h.setBearerAuth(orchestrationToken()))
         .contentType(MediaType.APPLICATION_JSON)
         .body(body)
         .exchange()
@@ -110,8 +110,8 @@ class VoidPaymentApiTest extends PaymentApiTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"CUSTOMER", "STAFF"})
-  void onlyCheckoutCanVoidAPayment(String role) {
+  @ValueSource(strings = {"CUSTOMER", "STAFF", "CHECKOUT"})
+  void onlyOrchestrationCanVoidAPayment(String role) {
     var payment = authorized("order-void-forbidden");
 
     http.post()

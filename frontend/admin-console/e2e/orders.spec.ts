@@ -5,13 +5,13 @@ import type { Order } from '../src/domain/order'
  * Staff find a Customer's Order in the Admin Console by its Order reference and by its Customer and
  * Status, open it and read its Status history with each change's time and caller.
  *
- * The test places its own Order for a Customer of its own, straight at Order Management as Checkout
- * does, since the gateway never routes placement. Orders are never deleted, so it ends the Order
+ * The test places its own Order for a Customer of its own, straight at Order Management as the
+ * checkout Saga does, since the gateway never routes placement. Orders are never deleted, so it ends the Order
  * as Cancelled: the history the test reads.
  */
 
 const keycloakUrl = process.env.KEYCLOAK_URL ?? 'http://localhost:8180'
-/** Order Management's compose host port, which bypasses the gateway, for Checkout's internal calls. */
+/** Order Management's compose host port, which bypasses the gateway, for the checkout Saga's commands. */
 const orderManagementUrl = process.env.ORDER_MANAGEMENT_URL ?? 'http://localhost:8085'
 const staff = { email: 'staff@ecomm.local', password: 'staff' }
 
@@ -55,7 +55,7 @@ test('Staff find a Customer’s Order and see its Status history', async ({ page
   for (const [i, entry] of [...order.statusHistory].reverse().entries()) {
     const row = history.nth(i + 1)
     await expect(row).toContainText(entry.status.charAt(0) + entry.status.slice(1).toLowerCase())
-    await expect(row).toContainText('Checkout')
+    await expect(row).toContainText('Checkout Saga')
     await expect(row.locator('time')).toHaveAttribute('datetime', entry.at)
   }
   await expect(history.nth(1)).toContainText('(current)')
@@ -77,17 +77,19 @@ async function signInOnKeycloak(page: Page) {
 }
 
 /**
- * Places an Order for `customerId`, pays it and cancels it, as Checkout, and returns it as Staff
+ * Places an Order for `customerId`, pays it and cancels it, as the checkout Saga does with
+ * Orchestration's token and a key per command, and returns it as Staff
  * read it through the gateway, with its times as Order Management stores them.
  */
 async function placePaidThenCancelledOrder(request: APIRequestContext, customerId: string): Promise<Order> {
   const headers = await tokenHeaders(request, {
     grant_type: 'client_credentials',
-    client_id: 'checkout',
-    client_secret: 'checkout-dev-secret',
+    client_id: 'orchestration',
+    client_secret: 'orchestration-dev-secret',
   })
+  const key = (step: string) => `e2e-${customerId}:run-1:${step}`
   const placed = await request.post(`${orderManagementUrl}/orders`, {
-    headers,
+    headers: { ...headers, 'Idempotency-Key': key('placeOrder') },
     data: {
       customerId,
       lines: [{ variantId: 'PHN-PIXEL-9', quantity: 1, unitPrice: { amountMinor: 79900, currency: 'EUR' } }],
@@ -98,7 +100,7 @@ async function placePaidThenCancelledOrder(request: APIRequestContext, customerI
   const { id } = (await placed.json()) as Order
   for (const status of ['PAID', 'CANCELLED']) {
     const changed = await request.patch(`${orderManagementUrl}/orders/${id}/status`, {
-      headers,
+      headers: { ...headers, 'Idempotency-Key': key(status) },
       data: { customerId, status },
     })
     expect(changed.ok()).toBeTruthy()
