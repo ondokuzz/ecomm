@@ -1,5 +1,6 @@
 package com.ecomm.searchdiscovery;
 
+import com.ecomm.commons.events.kafka.DeadLetterTopics;
 import com.networknt.schema.InputFormat;
 import com.networknt.schema.JsonSchema;
 import com.networknt.schema.JsonSchemaFactory;
@@ -25,6 +26,9 @@ final class Events {
   static final String CATEGORIES = "catalog.category";
   static final String STOCK = "inventory.stock";
   static final List<String> TOPICS = List.of(PRODUCTS, CATEGORIES, STOCK);
+  static final String PRODUCTS_GROUP = "search-discovery.products";
+  static final List<String> GROUPS =
+      List.of(PRODUCTS_GROUP, "search-discovery.categories", "search-discovery.stock");
 
   private static final JsonMapper JSON = new JsonMapper();
   private static final JsonSchemaFactory SCHEMAS =
@@ -124,6 +128,18 @@ final class Events {
     }
 
     void publish() {
+      send(PRODUCTS, sku, event());
+    }
+
+    /**
+     * Puts the event on the Products consumer group's dead-letter topic, as if Search had failed on
+     * it.
+     */
+    void deadLetter() {
+      send(PRODUCTS, DeadLetterTopics.deadLetterTopicOf(PRODUCTS_GROUP), sku, event());
+    }
+
+    private Map<String, Object> event() {
       var product = new LinkedHashMap<String, Object>();
       product.put("name", name);
       if (description != null) {
@@ -135,7 +151,7 @@ final class Events {
       product.put("variants", variants.stream().map(Variant::json).toList());
       product.put("removed", removed);
       var change = removed ? "REMOVED" : version == 1 ? "CREATED" : "UPDATED";
-      send(PRODUCTS, sku, envelope("sku", sku, version, change, "product", product));
+      return envelope("sku", sku, version, change, "product", product);
     }
   }
 
@@ -239,12 +255,18 @@ final class Events {
   }
 
   private static void send(String topic, String key, Map<String, Object> event) {
+    send(topic, topic, key, event);
+  }
+
+  /** Sends a {@code topic} event, checked against its schema, to {@code destination}. */
+  private static void send(
+      String topic, String destination, String key, Map<String, Object> event) {
     var json = JSON.writeValueAsString(event);
     var errors = schemaOf(topic).validate(json, InputFormat.JSON);
     if (!errors.isEmpty()) {
       throw new IllegalArgumentException(topic + " event breaks its schema: " + errors);
     }
-    Topics.send(topic, key, json, null);
+    Topics.send(destination, key, json, null);
   }
 
   private static JsonSchema schemaOf(String topic) {

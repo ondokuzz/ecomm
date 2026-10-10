@@ -8,6 +8,7 @@ import com.ecomm.searchdiscovery.application.port.in.ProjectionUseCase.StockPubl
 import com.ecomm.searchdiscovery.domain.AttributeDefinition;
 import com.ecomm.searchdiscovery.domain.AttributeType;
 import com.ecomm.searchdiscovery.domain.SearchableVariant;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -25,31 +26,51 @@ class ProjectionListener {
 
   private static final Logger log = LoggerFactory.getLogger(ProjectionListener.class);
 
-  /** The fields of a {@code catalog.product} event Search needs; the others are ignored. */
-  record ProductEvent(String sku, long version, Instant occurredAt, Product product) {
+  /**
+   * The fields of a {@code catalog.product} event Search needs; the others are ignored. An event
+   * missing one it can't do without can't be read, and is dead-lettered at once.
+   */
+  record ProductEvent(
+      @JsonProperty(required = true) String sku,
+      @JsonProperty(required = true) long version,
+      Instant occurredAt,
+      @JsonProperty(required = true) Product product) {
     record Product(
         String name,
         String description,
         String category,
         Map<String, String> attributes,
         List<String> images,
-        List<Variant> variants,
+        @JsonProperty(required = true) List<Variant> variants,
         boolean removed) {}
 
     record Variant(
-        String variantId, Map<String, String> axisValues, Price price, List<String> images) {}
+        @JsonProperty(required = true) String variantId,
+        Map<String, String> axisValues,
+        @JsonProperty(required = true) Price price,
+        List<String> images) {}
 
-    record Price(long amountMinor, String currency) {}
+    record Price(
+        @JsonProperty(required = true) long amountMinor,
+        @JsonProperty(required = true) String currency) {}
   }
 
-  record CategoryEvent(String slug, long version, Category category) {
+  record CategoryEvent(
+      @JsonProperty(required = true) String slug,
+      @JsonProperty(required = true) long version,
+      @JsonProperty(required = true) Category category) {
     record Category(String name, List<Attribute> attributes, boolean removed) {}
 
     record Attribute(String name, AttributeType type, List<String> values) {}
   }
 
-  record StockEvent(String variantId, long version, Stock stock) {
-    record Stock(long available, boolean stocked) {}
+  record StockEvent(
+      @JsonProperty(required = true) String variantId,
+      @JsonProperty(required = true) long version,
+      @JsonProperty(required = true) Stock stock) {
+    record Stock(
+        @JsonProperty(required = true) long available,
+        @JsonProperty(required = true) boolean stocked) {}
   }
 
   private final ProjectionUseCase projection;

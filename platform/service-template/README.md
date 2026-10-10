@@ -135,11 +135,30 @@ void on(ProductChanged event) {
   partition, which one consumer reads in order ([Search ADR 0001](../../services/search-discovery/docs/adr/0001-search-on-mongodb.md)).
 - **The event's Correlation ID is in the MDC** while the listener runs, so its log lines carry it,
   as do any calls or events it makes. An event without one gets a new one.
-- **A failure is retried** 3 times, after 0.5, 1 and 2 seconds (`ecomm.events.consumer.retries`,
-  `ecomm.events.consumer.initial-backoff`). The event is then logged at error level with its
-  `eventId`, topic, partition and offset, and skipped, so the partition moves on. An event that
-  can't be read at all is skipped at once. Dead-letter topics arrive in Sprint 4. Each retry is
-  counted ([Metrics](#metrics)).
+- **Mark the fields you can't do without** `@JsonProperty(required = true)`. An event missing one
+  can't be read, as malformed JSON can't.
+- **A failure is retried** 5 times, after 0.5, 1, 2, 4 and 8 seconds
+  (`ecomm.events.consumer.retries`, `ecomm.events.consumer.initial-backoff`), blocking the
+  partition so one aggregate's events stay in order. The event then goes to the group's
+  **dead-letter topic**, `<group>.dlt`, and is logged at error level with its `eventId`, topic,
+  partition and offset, so the partition moves on. An event that can't be read at all goes there
+  at once. The dead-letter record keeps the key, value and headers as they were read, the
+  Correlation ID included, and adds Spring Kafka's `kafka_dlt-original-topic`,
+  `-original-partition` (a big-endian int), `-original-offset` (a big-endian long),
+  `-original-consumer-group`, and `-exception-fqcn`, `-exception-cause-fqcn` and
+  `-exception-message`, all three naming the innermost cause rather than Spring's wrappers, such
+  as Jackson's exception naming a missing field; and `ecomm_dlt-dead-lettered-at`. If the dead-letter topic can't be written to, the event is
+  retried again rather than lost.
+- **Add the group to `infra/docker/consumer-groups`**, so the topics init creates its `<group>.dlt`
+  and `<group>.redrive` (6 partitions, not compacted, kept 14 days). Tests create them with
+  `EventBackbone.createDeadLetterTopicsOf(group)`.
+- **Redrive** a group's dead events once the cause is fixed: `make dlt-redrive GROUP=<group>` copies
+  what was dead-lettered since the last redrive to `<group>.redrive`. Every `@KafkaListener` that
+  names its topics and group consumes that topic too, with the same method, so a redriven event is
+  applied by version like any other, and a stale one is ignored. One that fails again goes back to
+  the dead-letter topic, keeping the topic, partition and offset it first came from.
+- **Retries, dead-lettered and redriven events are counted** per group and topic
+  ([Metrics](#metrics)).
 
 ### Testing
 
@@ -221,8 +240,10 @@ exports:
   partition's metrics show up within a minute of it being assigned. The `group` tag comes from
   Kafka's default client ID, so don't set `spring.kafka.client-id` or a listener's
   `clientIdPrefix`.
-- **Retries:** `ecomm_events_retried_total`, each retry of an event a listener failed on, per
-  `group` and `topic`.
+- **Retries and dead letters:** per `group` and `topic`, the topic an event was first read from:
+  - `ecomm_events_retried_total`, each retry of an event a listener failed on;
+  - `ecomm_events_dead_lettered_total`, each event sent to its group's dead-letter topic;
+  - `ecomm_events_redriven_total`, each redriven event a listener handled.
 - **Outbox:** in a Postgres service with the outbox (Spring Modulith's event publication
   registry), `ecomm_outbox_incomplete_publications`, the events not yet sent to Kafka, per
   `status`: `published` and `processing` are on their way, `failed` and

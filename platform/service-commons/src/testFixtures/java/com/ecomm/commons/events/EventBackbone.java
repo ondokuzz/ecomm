@@ -1,5 +1,6 @@
 package com.ecomm.commons.events;
 
+import com.ecomm.commons.events.kafka.DeadLetterTopics;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.URI;
@@ -7,12 +8,18 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.admin.NewTopic;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.TopicExistsException;
+import org.apache.kafka.common.serialization.StringDeserializer;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
@@ -35,7 +42,8 @@ import tools.jackson.databind.json.JsonMapper;
  *
  * and create each topic the test uses, with its schema, before the application starts: {@code
  * EventBackbone.createTopic("inventory.stock")} and {@code
- * EventBackbone.registerSchemaOf("inventory.stock")}.
+ * EventBackbone.registerSchemaOf("inventory.stock")}, and each consumer group's dead-letter and
+ * redrive topics: {@code EventBackbone.createDeadLetterTopicsOf("search-discovery.stock")}.
  */
 public final class EventBackbone {
 
@@ -71,11 +79,25 @@ public final class EventBackbone {
 
   /** Creates a compacted topic with one partition, if it doesn't exist yet. */
   public static void createTopic(String topic) {
+    createTopic(topic, "compact");
+  }
+
+  /**
+   * Creates the consumer group's dead-letter and redrive topics, {@code <group>.dlt} and {@code
+   * <group>.redrive}, with one partition each and not compacted, if they don't exist yet.
+   */
+  public static void createDeadLetterTopicsOf(String group) {
+    createTopic(DeadLetterTopics.deadLetterTopicOf(group), "delete");
+    createTopic(DeadLetterTopics.redriveTopicOf(group), "delete");
+  }
+
+  private static void createTopic(String topic, String cleanupPolicy) {
     try (var admin = Admin.create(Map.of("bootstrap.servers", bootstrapServers()))) {
       admin
           .createTopics(
               List.of(
-                  new NewTopic(topic, 1, (short) 1).configs(Map.of("cleanup.policy", "compact"))))
+                  new NewTopic(topic, 1, (short) 1)
+                      .configs(Map.of("cleanup.policy", cleanupPolicy))))
           .all()
           .get();
     } catch (ExecutionException e) {
@@ -85,6 +107,32 @@ public final class EventBackbone {
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       throw new IllegalStateException(e);
+    }
+  }
+
+  /** Every record on {@code topic} keyed {@code key}, from its start to its end now. */
+  public static List<ConsumerRecord<String, String>> recordsKeyed(String topic, String key) {
+    try (var consumer =
+        new KafkaConsumer<String, String>(
+            Map.of("bootstrap.servers", bootstrapServers()),
+            new StringDeserializer(),
+            new StringDeserializer())) {
+      var partitions =
+          consumer.partitionsFor(topic).stream()
+              .map(p -> new TopicPartition(topic, p.partition()))
+              .toList();
+      consumer.assign(partitions);
+      consumer.seekToBeginning(partitions);
+      var ends = consumer.endOffsets(partitions);
+      var keyed = new ArrayList<ConsumerRecord<String, String>>();
+      while (partitions.stream().anyMatch(p -> consumer.position(p) < ends.get(p))) {
+        for (var record : consumer.poll(Duration.ofMillis(200))) {
+          if (key.equals(record.key())) {
+            keyed.add(record);
+          }
+        }
+      }
+      return keyed;
     }
   }
 

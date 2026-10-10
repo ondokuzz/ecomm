@@ -7,8 +7,8 @@ import org.testcontainers.mongodb.MongoDBContainer;
 
 /**
  * What every test's application runs against: a Mongo container shared by every test class, the
- * shared Kafka and schema registry from {@link EventBackbone} with the two topics Reviews consumes,
- * and {@link FakeKeycloak}.
+ * shared Kafka and schema registry from {@link EventBackbone} with the two topics Reviews consumes
+ * and its consumer groups' dead-letter and redrive topics, and {@link FakeKeycloak}.
  */
 final class TestInfrastructure {
 
@@ -18,6 +18,9 @@ final class TestInfrastructure {
     MONGO.start();
     for (var topic : Events.TOPICS) {
       EventBackbone.createTopic(topic);
+    }
+    for (var group : Events.GROUPS) {
+      EventBackbone.createDeadLetterTopicsOf(group);
     }
   }
 

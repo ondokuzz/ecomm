@@ -125,7 +125,7 @@ dashboards, under **ecomm**, are files in [`infra/docker/grafana`](./infra/docke
   each Postgres service's outbox events not yet sent to Kafka (Catalog's Couchbase outbox isn't
   measured).
 - **Event consumers:** lag per consumer group, and per group, topic and partition; consumption
-  rate; retries.
+  rate; retries; dead-lettered and redriven events.
 - **Checkout Saga:** checkouts by outcome (`PAID`, `DECLINED`, `HOLD_EXPIRED`, `FAILED`), step
   failures by step, compensations by kind, and Temporal's own activity failures and workflow
   durations.
@@ -140,8 +140,11 @@ steps run once and exit before anything uses them ([ADR 0006](./docs/adr/0006-ka
 - `kafka-topics` creates a topic for each event schema in [`platform/event-schemas`](./platform/event-schemas/README.md):
   `order-management.order`, `inventory.stock`, `catalog.product`, `catalog.category` and
   `payment.payment`. Each is
-  log-compacted, with 6 partitions. The broker creates no topics itself, so producing to any other
-  topic fails.
+  log-compacted, with 6 partitions. It also creates a dead-letter topic, `<group>.dlt`, and a
+  redrive topic, `<group>.redrive`, for each consumer group in
+  [`infra/docker/consumer-groups`](./infra/docker/consumer-groups): not compacted, kept for 14
+  days, with 6 partitions and no schema. The broker creates no topics itself, so producing to any
+  other topic fails.
 - `schema-registry-init` registers the schemas in Apicurio. It fails, and so does `make up`, if a
   schema changed in a way that isn't backward compatible.
 
@@ -183,9 +186,10 @@ take, stay.
 | `make up` | Build and start the stack, and wait until it is healthy |
 | `make down` | Stop the stack, keeping its data |
 | `make status` | Say whether every service is running and healthy, naming any that isn't with its exit code and whether it was killed for its memory cap. Both Playwright suites run it first |
-| `make seed-reset` | Put the seed Categories, Products, Stock, Coupons and Campaigns back and drop every Cart, Checkout Session, Reservation, Order, Payment and review; registered Customers stay. It also empties the event topics and Search's and Reviews' projections, since the reset stores count their events' versions from 1 again |
+| `make seed-reset` | Put the seed Categories, Products, Stock, Coupons and Campaigns back and drop every Cart, Checkout Session, Reservation, Order, Payment and review; registered Customers stay. It also empties the event topics, dead-letter and redrive topics included, and Search's and Reviews' projections, since the reset stores count their events' versions from 1 again |
 | `make upgrade-from FROM=<commit>`, `make upgrade-to`, `make upgrade-clean` | Start the stack as it was at a commit under a project of its own, bring it up to this tree keeping its data, and remove it ([the upgrade check](./docs/agents/upgrade-check.md)) |
 | `make search-rebuild` | Rebuild Search's projection from the topics ([Search & Discovery](./services/search-discovery/README.md#rebuilding)) |
+| `make dlt-redrive GROUP=<group>` | Redrive a consumer group's dead events once their cause is fixed: copy what reached `<group>.dlt` since the last redrive to `<group>.redrive`, which the group's listeners also consume ([service template](./platform/service-template/README.md#consuming)) |
 | `make reviews-rebuild` | Rebuild Reviews' projection of Orders and Products from the topics, keeping the reviews ([Reviews & Ratings](./services/reviews-ratings/README.md#rebuilding)) |
 
 Every checkout takes Stock, so after many smoke-test runs `make seed-reset` refills it. To wipe

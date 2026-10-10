@@ -9,14 +9,20 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.kafka.autoconfigure.ConcurrentKafkaListenerContainerFactoryConfigurer;
 import org.springframework.context.annotation.Bean;
+import org.springframework.kafka.annotation.KafkaListenerAnnotationBeanPostProcessor.AnnotationEnhancer;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
+import org.springframework.kafka.core.ProducerFactory;
 import org.springframework.kafka.listener.CommonErrorHandler;
+import org.springframework.kafka.listener.CompositeRecordInterceptor;
+import org.springframework.kafka.listener.ConsumerRecordRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
+import org.springframework.kafka.listener.ErrorHandlingUtils;
 import org.springframework.kafka.listener.RecordInterceptor;
 import org.springframework.kafka.support.ExponentialBackOffWithMaxRetries;
 import org.springframework.kafka.support.converter.StringJacksonJsonMessageConverter;
+import org.springframework.util.backoff.BackOff;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
@@ -26,11 +32,16 @@ import tools.jackson.databind.json.JsonMapper;
  *   <li>its event as the listener method's parameter type, read tolerantly: unknown fields are
  *       ignored and nothing is validated against the schema;
  *   <li>the event's Correlation ID in the MDC (see {@link CorrelationIdRecordInterceptor});
- *   <li>a failure retried with backoff (see {@link ConsumerProperties}), then logged and skipped
- *       (see {@link SkippedEventLogger}). An event that can't be read at all is skipped at once;
- *   <li>its retries counted per group and topic (see {@link RetriedEventCounter}), and its group
- *       tagged on Kafka's consumer metrics (see {@link GroupTaggedConsumerMetrics} and {@link
- *       LegacyTopicMetricsFilter}).
+ *   <li>a failure retried with backoff (see {@link ConsumerProperties}), then sent to the consumer
+ *       group's dead-letter topic (see {@link DeadLetterRecoverer}). An event that can't be read at
+ *       all, malformed or missing a field its record marks {@code @JsonProperty(required = true)},
+ *       goes there at once;
+ *   <li>its consumer group's redrive topic consumed too (see {@link RedriveTopicEnhancer} and
+ *       {@link DeadLetterRedrive});
+ *   <li>its retries, dead-lettered and redriven events counted per group and topic (see {@link
+ *       RetriedEventCounter}, {@link DeadLetterRecoverer} and {@link RedrivenEventCounter}), and
+ *       its group tagged on Kafka's consumer metrics (see {@link GroupTaggedConsumerMetrics} and
+ *       {@link LegacyTopicMetricsFilter}).
  * </ul>
  *
  * Apply each event only if it is newer than what you hold, with {@code Versions.applyIfNewer}.
@@ -42,23 +53,57 @@ import tools.jackson.databind.json.JsonMapper;
 @EnableConfigurationProperties(ConsumerProperties.class)
 public class EventConsumerAutoConfiguration {
 
+  /** Static, as it is used by the post-processor that reads the annotations. */
   @Bean
-  @ConditionalOnMissingBean
-  RecordInterceptor<Object, Object> correlationIdRecordInterceptor() {
-    return new CorrelationIdRecordInterceptor();
+  static AnnotationEnhancer redriveTopicEnhancer() {
+    return new RedriveTopicEnhancer();
   }
 
   @Bean
   @ConditionalOnMissingBean
-  CommonErrorHandler skipAfterRetriesErrorHandler(
-      JsonMapper json, ConsumerProperties properties, ObjectProvider<MeterRegistry> registry) {
+  RecordInterceptor<Object, Object> recordInterceptor(ObjectProvider<MeterRegistry> registry) {
+    var correlationId = new CorrelationIdRecordInterceptor();
+    var meters = registry.getIfAvailable();
+    return meters == null
+        ? correlationId
+        : new CompositeRecordInterceptor<>(correlationId, new RedrivenEventCounter(meters));
+  }
+
+  @Bean
+  DeadLetterRecoverer deadLetterRecoverer(
+      ProducerFactory<?, ?> producerFactory,
+      JsonMapper json,
+      ObjectProvider<MeterRegistry> registry) {
+    return new DeadLetterRecoverer(producerFactory, json, registry.getIfAvailable());
+  }
+
+  @Bean
+  @ConditionalOnMissingBean
+  CommonErrorHandler deadLetterAfterRetriesErrorHandler(
+      DeadLetterRecoverer recoverer,
+      ConsumerProperties properties,
+      ObjectProvider<MeterRegistry> registry) {
     var backOff = new ExponentialBackOffWithMaxRetries(properties.retries());
     backOff.setInitialInterval(properties.initialBackoff().toMillis());
     backOff.setMultiplier(2);
-    var handler = new DefaultErrorHandler(new SkippedEventLogger(json), backOff);
+    var handler = new RetryClassifyingErrorHandler(recoverer, backOff);
     registry.ifAvailable(
-        meters -> handler.setRetryListeners(new RetriedEventCounter(meters, properties.retries())));
+        meters ->
+            handler.setRetryListeners(
+                new RetriedEventCounter(meters, properties.retries(), handler::isRetryable)));
     return handler;
+  }
+
+  /** Says whether it retries a failure, so that only retries are counted as such. */
+  private static class RetryClassifyingErrorHandler extends DefaultErrorHandler {
+
+    RetryClassifyingErrorHandler(ConsumerRecordRecoverer recoverer, BackOff backOff) {
+      super(recoverer, backOff);
+    }
+
+    boolean isRetryable(Exception failure) {
+      return getExceptionMatcher().match(ErrorHandlingUtils.unwrapIfNeeded(failure));
+    }
   }
 
   @Bean

@@ -1,9 +1,13 @@
 package com.ecomm.template;
 
 import static com.ecomm.template.TestInfrastructure.GREETINGS;
+import static com.ecomm.template.TestInfrastructure.METRICS_GROUP;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
+import com.ecomm.commons.events.EventBackbone;
+import com.ecomm.commons.events.kafka.DeadLetterRedrive;
+import com.ecomm.commons.events.kafka.DeadLetterTopics;
 import com.ecomm.commons.security.FakeKeycloak;
 import java.time.Duration;
 import java.time.Instant;
@@ -22,13 +26,13 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * What every service exports for Prometheus with no code of its own, at {@code
  * /actuator/prometheus} and without a token: HTTP request metrics, Kafka consumer metrics with
- * their lag per group, topic and partition, retried events, and the outbox's incomplete
- * publications. Every metric names the service.
+ * their lag per group, topic and partition, retried, dead-lettered and redriven events, and the
+ * outbox's incomplete publications. Every metric names the service.
  */
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
     properties = {
-      "greetings.group-id=service-template.metrics",
+      "greetings.group-id=" + METRICS_GROUP,
       "ecomm.events.consumer.retries=1",
       "ecomm.events.consumer.initial-backoff=50ms"
     })
@@ -61,6 +65,15 @@ class MetricsApiTest {
     var failing = "greeting-" + UUID.randomUUID();
     Topics.send(GREETINGS, failing, boom(failing), null);
     await().atMost(Duration.ofSeconds(30)).until(() -> projection.attemptsOn(failing) == 2);
+    await()
+        .atMost(Duration.ofSeconds(30))
+        .until(
+            () ->
+                !EventBackbone.recordsKeyed(
+                        DeadLetterTopics.deadLetterTopicOf(METRICS_GROUP), failing)
+                    .isEmpty());
+    projection.fix(failing);
+    DeadLetterRedrive.redrive(EventBackbone.bootstrapServers(), METRICS_GROUP);
 
     // Per-partition consumer metrics show once Micrometer's minutely refresh finds them.
     await()
@@ -88,6 +101,16 @@ class MetricsApiTest {
                         line ->
                             assertThat(line)
                                 .startsWith("ecomm_events_retried_total{")
+                                .contains(SERVICE, GROUP, TOPIC))
+                    .anySatisfy(
+                        line ->
+                            assertThat(line)
+                                .startsWith("ecomm_events_dead_lettered_total{")
+                                .contains(SERVICE, GROUP, TOPIC))
+                    .anySatisfy(
+                        line ->
+                            assertThat(line)
+                                .startsWith("ecomm_events_redriven_total{")
                                 .contains(SERVICE, GROUP, TOPIC))
                     .anySatisfy(
                         line ->

@@ -1,7 +1,7 @@
 {
   "uid": "ecomm-event-consumers",
   "title": "Event consumers",
-  "description": "Every consumer group's lag, consumption and retries, from the Kafka consumer's client metrics and service-commons' retry counter.",
+  "description": "Every consumer group's lag, consumption, retries, and dead-lettered and redriven events, from the Kafka consumer's client metrics and service-commons' counters.",
   "tags": [
     "ecomm"
   ],
@@ -219,7 +219,7 @@
       "id": 4,
       "type": "timeseries",
       "title": "Retries",
-      "description": "Retries per second of events a listener failed on, per group and topic. An event still failing after its last retry is logged and skipped.",
+      "description": "Retries per second of events a listener failed on, per group and topic. An event still failing after its last retry goes to the group's dead-letter topic.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -266,6 +266,116 @@
             "uid": "prometheus"
           },
           "expr": "sum by (group, topic) (rate(ecomm_events_retried_total{group=~\"$group\"}[$__rate_interval]))",
+          "legendFormat": "{{group}} {{topic}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Dead-lettered events",
+      "description": "Events sent to their consumer group's dead-letter topic, <group>.dlt, per group and the topic they were first read from, counted since each service started; a step up is a new dead event. Redrive them with make dlt-redrive GROUP=<group> once the cause is fixed.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 26,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (group, topic) (ecomm_events_dead_lettered_total{group=~\"$group\"})",
+          "legendFormat": "{{group}} {{topic}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Redriven events",
+      "description": "Redriven events the group's listeners handled from <group>.redrive, per group and the topic they were first read from, counted since each service started. One that fails again is dead-lettered again.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 26,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (group, topic) (ecomm_events_redriven_total{group=~\"$group\"})",
           "legendFormat": "{{group}} {{topic}}"
         }
       ]

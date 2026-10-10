@@ -1,0 +1,9 @@
+# Every consumer group on the event backbone, one per line. The topics init gives each a
+# dead-letter topic, <group>.dlt, and a redrive topic, <group>.redrive; the Makefile's rebuild and
+# dlt-redrive targets read it too. A group is named <service>.<what it projects>, its service as
+# named in compose.yaml. A new @KafkaListener's group is added here.
+search-discovery.products
+search-discovery.categories
+search-discovery.stock
+reviews-ratings.orders
+reviews-ratings.products

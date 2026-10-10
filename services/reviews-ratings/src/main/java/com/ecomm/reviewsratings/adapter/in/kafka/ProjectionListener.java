@@ -4,6 +4,7 @@ import com.ecomm.reviewsratings.application.port.in.ProjectionUseCase;
 import com.ecomm.reviewsratings.application.port.in.ProjectionUseCase.OrderPublished;
 import com.ecomm.reviewsratings.application.port.in.ProjectionUseCase.ProductPublished;
 import com.ecomm.reviewsratings.domain.OrderStatus;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.Instant;
 import java.util.List;
 import org.slf4j.Logger;
@@ -22,19 +23,30 @@ class ProjectionListener {
 
   /**
    * The fields of an {@code order-management.order} event Reviews needs. The Status is read as
-   * text, since Order Management may add one (event-schemas README).
+   * text, since Order Management may add one (event-schemas README). An event missing a field
+   * Reviews can't do without can't be read, and is dead-lettered at once.
    */
-  record OrderEvent(String orderId, long version, Order order) {
-    record Order(String customerId, String status, Instant placedAt, List<Line> lines) {}
+  record OrderEvent(
+      @JsonProperty(required = true) String orderId,
+      @JsonProperty(required = true) long version,
+      @JsonProperty(required = true) Order order) {
+    record Order(
+        @JsonProperty(required = true) String customerId,
+        @JsonProperty(required = true) String status,
+        Instant placedAt,
+        @JsonProperty(required = true) List<Line> lines) {}
 
-    record Line(String variantId) {}
+    record Line(@JsonProperty(required = true) String variantId) {}
   }
 
   /** The fields of a {@code catalog.product} event Reviews needs: its Variants' IDs. */
-  record ProductEvent(String sku, long version, Product product) {
-    record Product(List<Variant> variants) {}
+  record ProductEvent(
+      @JsonProperty(required = true) String sku,
+      @JsonProperty(required = true) long version,
+      @JsonProperty(required = true) Product product) {
+    record Product(@JsonProperty(required = true) List<Variant> variants) {}
 
-    record Variant(String variantId) {}
+    record Variant(@JsonProperty(required = true) String variantId) {}
   }
 
   private final ProjectionUseCase projection;

@@ -69,7 +69,10 @@ count of 0.
 ## The projection
 
 Reviews consumes two topics, each in its own consumer group, and keeps the newest version of every
-aggregate it is sent; a duplicate or an older event is ignored.
+aggregate it is sent; a duplicate or an older event is ignored. An event it can't apply goes to its
+group's dead-letter topic, such as `reviews-ratings.orders.dlt`, after its retries, or at once if
+it can't be read, and `make dlt-redrive GROUP=<group>` applies it once the cause is fixed
+([service template](../../platform/service-template/README.md#consuming)).
 
 | Topic | Group | Becomes |
 |---|---|---|
@@ -101,7 +104,7 @@ make reviews-rebuild
 ```
 
 stops the service, drops `orders` and `products`, resets both consumer groups to the earliest
-offset and starts it again. `make seed-reset` drops the whole `reviews` database instead, reviews
+offset, apart from their redrive topics, which are moved to their end, and starts it again. `make seed-reset` drops the whole `reviews` database instead, reviews
 included, since every Order goes with it and the topics are emptied.
 
 ## Run it

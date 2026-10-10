@@ -8,13 +8,16 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 /**
  * What every test's application runs against: a Postgres container shared by every test class, the
  * shared Kafka and schema registry from {@link EventBackbone}, and {@link FakeKeycloak}. A
- * test-only migration adds the tables the Greeting fixtures use, and the Greeting topics' test
- * schemas are registered. {@link #LATE_GREETINGS} has no topic until a test creates it.
+ * test-only migration adds the tables the Greeting fixtures use. The Greeting topics' test schemas
+ * are registered, and the Greeting consumer groups' dead-letter and redrive topics created. {@link
+ * #LATE_GREETINGS} has no topic until a test creates it.
  */
 final class TestInfrastructure {
 
   static final String GREETINGS = "service-template.greeting";
   static final String LATE_GREETINGS = "service-template.late-greeting";
+  static final String GREETINGS_GROUP = "service-template.greetings";
+  static final String METRICS_GROUP = "service-template.metrics";
 
   private static final PostgreSQLContainer POSTGRES =
       new PostgreSQLContainer("postgres:16").withDatabaseName("service_template");
@@ -22,6 +25,8 @@ final class TestInfrastructure {
   static {
     POSTGRES.start();
     EventBackbone.createTopic(GREETINGS);
+    EventBackbone.createDeadLetterTopicsOf(GREETINGS_GROUP);
+    EventBackbone.createDeadLetterTopicsOf(METRICS_GROUP);
     EventBackbone.registerSchemaOf(GREETINGS);
     EventBackbone.registerSchemaOf(LATE_GREETINGS);
   }

@@ -79,7 +79,10 @@ choosing it as well would add. Every other filter applies.
 ## The projection
 
 Search consumes three topics, each in its own consumer group, and keeps the newest version of every
-aggregate it is sent; a duplicate or an older event is ignored.
+aggregate it is sent; a duplicate or an older event is ignored. An event it can't apply goes to its
+group's dead-letter topic, such as `search-discovery.products.dlt`, after its retries, or at once
+if it can't be read, and `make dlt-redrive GROUP=<group>` applies it once the cause is fixed
+([service template](../../platform/service-template/README.md#consuming)).
 
 | Topic | Group | Becomes |
 |---|---|---|
@@ -115,7 +118,8 @@ each Product's Stock, joined from `stock` by Variant ID.
 
 The topics are compacted, so they always hold every aggregate's latest event, and the projection can
 be rebuilt from them at any time: stop the service, drop its collections, reset its consumer groups
-to the earliest offset, and start it again. From the repo root:
+to the earliest offset, and start it again. Each group's redrive topic is moved to its end instead,
+since what was redriven is still on the topic it came from. From the repo root:
 
 ```sh
 make search-rebuild
@@ -129,6 +133,8 @@ docker compose exec -T mongo mongosh --quiet search --eval 'db.products.drop(); 
 for group in search-discovery.products search-discovery.categories search-discovery.stock; do
   docker compose exec -T kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:19092 \
     --group $group --reset-offsets --to-earliest --all-topics --execute
+  docker compose exec -T kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:19092 \
+    --group $group --reset-offsets --to-latest --topic $group.redrive --execute
 done
 docker compose up -d --wait search-discovery
 ```

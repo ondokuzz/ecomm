@@ -187,6 +187,10 @@ _Avoid_: Domain event (one that stays inside a context), Message, Command
 Where a context records an Integration event, in the same transaction as the change it describes, until Kafka has it. The Postgres-backed contexts use Spring Modulith's event publication registry; Catalog writes an outbox document in the same Couchbase transaction, which a relay in Catalog sends. Either way, an event whose send failed stays there, visible, and is sent again.
 _Avoid_: Event store (no context is event-sourced)
 
+**Dead-letter topic**:
+Where a consumer group's Integration events go when it can't handle them: `<consumer group>.dlt`, one per group. An event the group's listener keeps failing on goes there after its retries, and one it can't read at all goes at once, so that the partition moves on to later events. Each keeps the event as it was read, Correlation ID included, with where it came from (topic, partition, offset, group), the error and when. Once the cause is fixed, its dead events are redriven: copied to `<consumer group>.redrive`, which the group's listeners also consume, and applied by version like any other event. One that fails again is dead-lettered again.
+_Avoid_: Error queue, Poison queue, Parking lot
+
 **Saga**:
 A business process that spans contexts, such as checkout, run as a Temporal workflow in Orchestration. Each step calls one context's command API, with an Idempotency key unless repeating the command changes nothing anyway; a step that fails is retried, and a business refusal, such as a declined Payment, is answered by compensating, undoing what the earlier steps did through those contexts' own commands, such as cancelling the Order and voiding the Payment. Compensations are retried until they succeed. Once a step can't be undone, such as committing Stock, the steps after it are retried rather than compensated: marking the Order paid until it succeeds, clearing the Cart and ending the session for up to an hour. Its history in Temporal records the process, not the Order or Payment it touched, which their contexts keep.
 _Avoid_: Workflow (Temporal's mechanism, not the business process), Process manager

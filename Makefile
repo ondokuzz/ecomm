@@ -3,10 +3,12 @@
 COMPOSE := docker compose
 KAFKA := $(COMPOSE) exec -T kafka /opt/kafka/bin
 TOPICS := $(basename $(notdir $(wildcard platform/event-schemas/schemas/*.json)))
-SEARCH_GROUPS := search-discovery.products search-discovery.categories search-discovery.stock
-REVIEWS_GROUPS := reviews-ratings.orders reviews-ratings.products
+GROUPS := $(shell grep -v '^\#' infra/docker/consumer-groups)
+SEARCH_GROUPS := $(filter search-discovery.%,$(GROUPS))
+REVIEWS_GROUPS := $(filter reviews-ratings.%,$(GROUPS))
+DEAD_LETTER_TOPICS := $(foreach group,$(GROUPS),$(group).dlt $(group).redrive)
 
-.PHONY: up down status seed-reset search-rebuild reviews-rebuild upgrade-from upgrade-to upgrade-clean
+.PHONY: up down status seed-reset search-rebuild reviews-rebuild dlt-redrive upgrade-from upgrade-to upgrade-clean
 
 ## Build and start the default stack, and wait until every service is healthy.
 up:
@@ -23,9 +25,9 @@ status:
 
 ## Put the seed Categories, Products, Stock and Coupons back and drop every Cart, Checkout Session,
 ## Reservation, Order, Payment and review. Keycloak is left alone, so registered Customers stay. The
-## reset stores count their events' versions from the start again, so every topic is emptied and
-## Search's and Reviews' databases dropped, or their consumers would take the new events for stale
-## ones. Kafka deletes topics in the background, and one can't be created again until it has gone.
+## reset stores count their events' versions from the start again, so every topic, dead-letter and
+## redrive topics included, is emptied and Search's and Reviews' databases dropped, or their
+## consumers would take the new events for stale ones. Kafka deletes topics in the background, and one can't be created again until it has gone.
 seed-reset:
 	$(COMPOSE) up -d --wait couchbase postgres redis kafka mongo
 	$(COMPOSE) stop storefront checkout-pricing catalog inventory cart payment order-management promotions search-discovery reviews-ratings
@@ -36,10 +38,10 @@ seed-reset:
 	    -c "DROP DATABASE IF EXISTS $$db WITH (FORCE)" -c "CREATE DATABASE $$db" || exit 1; \
 	done
 	$(COMPOSE) exec -T redis redis-cli FLUSHALL
-	for topic in $(TOPICS); do \
+	for topic in $(TOPICS) $(DEAD_LETTER_TOPICS); do \
 	  $(KAFKA)/kafka-topics.sh --bootstrap-server localhost:19092 --delete --if-exists --topic $$topic || exit 1; \
 	done
-	until [ -z "$$($(KAFKA)/kafka-topics.sh --bootstrap-server localhost:19092 --list | grep -xF $(TOPICS:%=-e %))" ]; do sleep 1; done
+	until [ -z "$$($(KAFKA)/kafka-topics.sh --bootstrap-server localhost:19092 --list | grep -xF $(TOPICS:%=-e %) $(DEAD_LETTER_TOPICS:%=-e %))" ]; do sleep 1; done
 	for db in search reviews; do \
 	  $(COMPOSE) exec -T mongo mongosh --quiet $$db --eval 'db.dropDatabase()' || exit 1; \
 	done
@@ -47,26 +49,41 @@ seed-reset:
 	$(COMPOSE) up -d --wait
 
 ## Rebuild Search's projection from the topics: drop its collections and read every topic again
-## from the start (services/search-discovery/README.md).
+## from the start (services/search-discovery/README.md). The redrive topics aren't replayed: what
+## was redriven is still on the topic it came from.
 search-rebuild:
 	$(COMPOSE) stop search-discovery
 	$(COMPOSE) exec -T mongo mongosh --quiet search --eval 'db.products.drop(); db.categories.drop(); db.stock.drop()'
 	for group in $(SEARCH_GROUPS); do \
 	  $(KAFKA)/kafka-consumer-groups.sh --bootstrap-server localhost:19092 --group $$group \
 	    --reset-offsets --to-earliest --all-topics --execute || exit 1; \
+	  $(KAFKA)/kafka-consumer-groups.sh --bootstrap-server localhost:19092 --group $$group \
+	    --reset-offsets --to-latest --topic $$group.redrive --execute || exit 1; \
 	done
 	$(COMPOSE) up -d --wait search-discovery
 
 ## Rebuild Reviews' projection of Orders and Products from the topics; the reviews themselves stay
-## (services/reviews-ratings/README.md).
+## (services/reviews-ratings/README.md). As for Search, the redrive topics aren't replayed.
 reviews-rebuild:
 	$(COMPOSE) stop reviews-ratings
 	$(COMPOSE) exec -T mongo mongosh --quiet reviews --eval 'db.orders.drop(); db.products.drop()'
 	for group in $(REVIEWS_GROUPS); do \
 	  $(KAFKA)/kafka-consumer-groups.sh --bootstrap-server localhost:19092 --group $$group \
 	    --reset-offsets --to-earliest --all-topics --execute || exit 1; \
+	  $(KAFKA)/kafka-consumer-groups.sh --bootstrap-server localhost:19092 --group $$group \
+	    --reset-offsets --to-latest --topic $$group.redrive --execute || exit 1; \
 	done
 	$(COMPOSE) up -d --wait reviews-ratings
+
+## Redrive a consumer group's dead events once their cause is fixed, e.g.
+## `make dlt-redrive GROUP=search-discovery.products`: copy what was dead-lettered since the last
+## redrive to <group>.redrive, which the group's listeners also consume. It runs in the image of the
+## service that owns the group (DeadLetterRedrive in platform/service-commons).
+dlt-redrive:
+	@grep -qxF '$(GROUP)' infra/docker/consumer-groups || { echo "Set GROUP to a consumer group in infra/docker/consumer-groups, e.g. make dlt-redrive GROUP=search-discovery.products"; exit 1; }
+	$(COMPOSE) run --rm --no-deps --entrypoint java $(firstword $(subst ., ,$(GROUP))) \
+	  -Dloader.main=com.ecomm.commons.events.kafka.DeadLetterRedrive \
+	  org.springframework.boot.loader.launch.PropertiesLauncher kafka:19092 $(GROUP)
 
 # The upgrade check (docs/agents/upgrade-check.md): a stack from an earlier commit, under a Compose
 # project and image tag of its own, brought up to this tree's. Ports are shared, so the default

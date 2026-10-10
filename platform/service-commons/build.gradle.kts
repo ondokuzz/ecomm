@@ -29,6 +29,6 @@ dependencies {
   testFixturesImplementation("org.springframework.security:spring-security-oauth2-jose")
   testFixturesImplementation("org.springframework:spring-test")
   testFixturesImplementation("org.testcontainers:testcontainers-kafka")
-  testFixturesImplementation("org.apache.kafka:kafka-clients")
+  testFixturesApi("org.apache.kafka:kafka-clients")
   testFixturesImplementation("tools.jackson.core:jackson-databind")
 }
