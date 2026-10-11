@@ -269,6 +269,7 @@ once. On a private repository, branch protection needs a paid GitHub plan.
 
 - [`GLOSSARY-MAP.md`](./GLOSSARY-MAP.md) — the fifteen bounded contexts, how they relate, and where their docs live
 - [`GLOSSARY.md`](./GLOSSARY.md) — the shared domain glossary
+- [`docs/architecture.md`](./docs/architecture.md) — Mermaid diagrams of the requests, the events and the checkout Saga
 - [`docs/roadmap.md`](./docs/roadmap.md) — the sprint-by-sprint delivery plan
 - [`docs/adr/`](./docs/adr/) — system-wide architecture decision records
 - Context-specific ADRs live inside the service they belong to, e.g. [`services/catalog/docs/adr/`](./services/catalog/docs/adr/)
