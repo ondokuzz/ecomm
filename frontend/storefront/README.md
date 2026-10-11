@@ -40,7 +40,9 @@ cancels, and Cancel has focus first so Enter never confirms by accident.
 
 The Product page's Stock indicator reads "In stock", "Only N left" at 5 or fewer
 (`lowStockThreshold` in [`src/domain/stock.ts`](./src/domain/stock.ts)), or "Out of stock", which
-also disables "Add to cart".
+also disables "Add to cart". The page reads every one of the Product's Variants' Stock through
+Inventory's batch read (`GET /stock?variantIds=…`), one request per 50 Variants, for the indicator
+and the Variant picker alike; the Cart page does the same for its lines.
 
 ## Variants
 
@@ -230,7 +232,10 @@ shows the Checkout Session instead, priced by Checkout; what the Customer pays i
 The Cart page lists each line with its Variant's thumbnail and name, a quantity stepper and a
 remove button, beside an order summary (item count, subtotal, total) that stays in view on wide
 screens and moves below the lines on phones. Checkout adds no tax or shipping yet, so the total is
-the subtotal. "Empty cart" clears it through `DELETE /cart` once the Customer confirms, then moves
+the subtotal. A line whose Variant is out of stock, or has fewer left than the line holds or 5 or
+fewer, says so ("Out of stock", "Only 2 left", by `lineAvailability`), and above "Go to checkout"
+a warning lists the lines that have less available than the Cart holds, since checkout would refuse
+them. It doesn't stop the Customer: Inventory decides when the session starts. "Empty cart" clears it through `DELETE /cart` once the Customer confirms, then moves
 focus to the empty state, since the button that had it is gone.
 
 Checkout shows where the Customer is (Cart → Payment → Done; the Order confirmation shows Done),
@@ -354,7 +359,7 @@ Sign in as `demo@ecomm.local` / `demo`, or register a new Customer.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: failed responses as messages and support references, Money formatting by Catalog's Minor units, Cart pricing, checkout problems, the session countdown and the price breakdown with each Discount, Coupon rejections, test cards and payment failures, quantities, Stock levels, toasts, the search's URL and its Facets as chips and filters, rating stars and summaries and the review form's validation, Product specs by their Category's definitions, Customer initials, Orders and their timeline from the Order Status history, the Orders list's paging, Order Status colours, seed Product images, the Keycloak theme's and the Admin Console's copies of the tokens
+npm test          # Vitest: failed responses as messages and support references, Money formatting by Catalog's Minor units, Cart pricing, checkout problems, the session countdown and the price breakdown with each Discount, Coupon rejections, test cards and payment failures, quantities, Stock levels and Cart lines' availability, toasts, the search's URL and its Facets as chips and filters, rating stars and summaries and the review form's validation, Product specs by their Category's definitions, Customer initials, Orders and their timeline from the Order Status history, the Orders list's paging, Order Status colours, seed Product images, the Keycloak theme's and the Admin Console's copies of the tokens
 npm run test:e2e  # Playwright smoke, search and error-states tests against the running compose stack (`make up`)
 ```
 

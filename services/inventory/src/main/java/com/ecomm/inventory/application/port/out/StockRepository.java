@@ -13,7 +13,13 @@ import java.util.OptionalLong;
  */
 public interface StockRepository {
 
+  /** A Variant's on-hand count and the version of its last write. */
+  record OnHand(int units, long version) {}
+
   Optional<Integer> onHand(String variantId);
+
+  /** The on-hand counts of those Variants that exist, with their versions, by Variant ID. */
+  Map<String, OnHand> onHandWithVersions(Collection<String> variantIds);
 
   /**
    * The on-hand counts of those Variants that exist, locked until the surrounding transaction ends,

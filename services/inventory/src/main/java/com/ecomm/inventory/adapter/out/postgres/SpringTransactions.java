@@ -5,6 +5,8 @@ import java.util.function.Supplier;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /** A Postgres transaction around the work; any exception it throws rolls it back. */
@@ -31,5 +33,16 @@ class SpringTransactions implements Transactions {
   @Override
   public <T> T inSnapshot(Supplier<T> work) {
     return snapshotTemplate.execute(status -> work.get());
+  }
+
+  @Override
+  public void afterCommit(Runnable work) {
+    TransactionSynchronizationManager.registerSynchronization(
+        new TransactionSynchronization() {
+          @Override
+          public void afterCommit() {
+            work.run();
+          }
+        });
   }
 }

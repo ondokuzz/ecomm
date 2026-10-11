@@ -2,7 +2,9 @@ import { Link } from 'react-router'
 import { useFormatMoney } from '../api/currencies'
 import type { VariantDetail } from '../domain/catalog'
 import type { Money } from '../domain/money'
+import { lineAvailability } from '../domain/stock'
 import { ProductThumb } from './ProductImage'
+import { Badge } from './ui/Badge'
 import { Button } from './ui/Button'
 import { Icon } from './ui/Icon'
 import { QuantityStepper } from './ui/QuantityStepper'
@@ -21,7 +23,8 @@ export interface ProductLine {
 /**
  * A Cart's or an Order's lines, each with its Product's thumbnail and name, in a list named
  * `label`. With `onChange` and `onRemove`, the Customer can change a quantity or remove a line;
- * without, it is `compact` enough for a summary.
+ * without, it is `compact` enough for a summary. With `stocks`, each line says when its Variant is out of stock or
+ * running low, by Variant ID.
  */
 export function ProductLines({
   lines,
@@ -30,6 +33,7 @@ export function ProductLines({
   onRemove,
   disabled,
   compact,
+  stocks,
 }: {
   lines: ProductLine[]
   label: string
@@ -37,6 +41,7 @@ export function ProductLines({
   onRemove?: (variantId: string) => void
   disabled?: boolean
   compact?: boolean
+  stocks?: Record<string, number | undefined>
 }) {
   const formatMoney = useFormatMoney()
   return (
@@ -45,6 +50,7 @@ export function ProductLines({
         // The Variant ID stands in while the Variant loads, or when Catalog doesn't have it.
         const name = line.name ?? line.variantId
         const href = variantHref(line)
+        const availability = stocks && lineAvailability(line.quantity, stocks[line.variantId])
         return (
           <li key={line.variantId} className="cart-line">
             <Link to={href} className="cart-line-thumb" tabIndex={-1} aria-hidden="true">
@@ -59,6 +65,11 @@ export function ProductLines({
                 {line.unitPrice ? formatMoney(line.unitPrice) : 'Price unavailable'}
                 {!compact && line.unitPrice && ' each'}
               </span>
+              {availability && (
+                <Badge tone={availability.level === 'out' ? 'danger' : 'warning'} dot className="cart-line-stock">
+                  {availability.label}
+                </Badge>
+              )}
             </div>
             {!compact && onChange && (
               <QuantityStepper

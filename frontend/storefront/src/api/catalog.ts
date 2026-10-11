@@ -47,34 +47,42 @@ export function useVariants(variantIds: string[]): {
   }
 }
 
-/** How many units of a Variant Inventory has; null data once loaded means it has no Stock record. */
+/** The prefix of every Stock query, so a checkout can refresh them all. */
 export const stockKey = ['stock']
 
-function stockQuery(variantId: string) {
+/** The most Variants Inventory's batch read takes at once. */
+const stockBatchSize = 50
+
+/** Up to 50 Variants' available Stock in one request, by Variant ID; a Variant Inventory doesn't stock is left out. */
+function stockBatchQuery(variantIds: string[]) {
   return {
-    queryKey: [...stockKey, variantId],
-    queryFn: () =>
-      api<{ quantity: number }>('inventory', `/stock/${encodeURIComponent(variantId)}`)
-        .then((stock) => stock.quantity)
-        .catch(orNullOn404),
+    queryKey: [...stockKey, ...variantIds],
+    queryFn: async () => {
+      const query = new URLSearchParams({ variantIds: variantIds.join(',') })
+      const stocks = await api<{ variantId: string; quantity: number }[]>('inventory', `/stock?${query}`)
+      return Object.fromEntries(stocks.map((stock) => [stock.variantId, stock.quantity])) as Record<string, number>
+    },
   }
 }
 
-export function useStock(variantId: string) {
-  return useQuery(stockQuery(variantId))
-}
-
 /**
- * Several Variants' Stock, as each loads; an ID maps to undefined until known, or when Inventory has
- * no record. `failure` says when Inventory couldn't be asked.
+ * Several Variants' available Stock, read in batches; an ID maps to undefined until known, or when Inventory has
+ * no record. `isPending` until every batch has answered; `failure` says when Inventory couldn't be asked.
  */
 export function useStocks(variantIds: string[]): {
   stocks: Record<string, number | undefined>
+  isPending: boolean
   failure?: LookupFailure
 } {
-  const results = useQueries({ queries: variantIds.map(stockQuery) })
+  const unique = [...new Set(variantIds)]
+  const batches = Array.from({ length: Math.ceil(unique.length / stockBatchSize) }, (_, i) =>
+    unique.slice(i * stockBatchSize, (i + 1) * stockBatchSize),
+  )
+  const results = useQueries({ queries: batches.map(stockBatchQuery) })
+  const known = Object.assign({}, ...results.map((result) => result.data ?? {})) as Record<string, number>
   return {
-    stocks: Object.fromEntries(variantIds.map((variantId, i) => [variantId, results[i]?.data ?? undefined])),
+    stocks: Object.fromEntries(unique.map((variantId) => [variantId, known[variantId]])),
+    isPending: results.some((result) => result.isPending),
     failure: lookupFailure(results),
   }
 }

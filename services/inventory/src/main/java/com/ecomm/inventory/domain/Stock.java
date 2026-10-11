@@ -2,6 +2,7 @@ package com.ecomm.inventory.domain;
 
 import java.time.Instant;
 import java.util.Collection;
+import java.util.Optional;
 
 /**
  * A Variant's Stock, {@link #available}: its on-hand units less how many of them Reservations hold.
@@ -32,6 +33,19 @@ public record Stock(String variantId, int onHand, int reserved) {
             .mapToInt(r -> r.items().quantityOf(variantId))
             .sum();
     return new Stock(variantId, onHand, reserved);
+  }
+
+  /**
+   * When the soonest of {@code reservations} holding some of the Variant at {@code now} expires,
+   * and with it the Variant's available Stock goes up without any change to it; empty when none
+   * hold it.
+   */
+  public static Optional<Instant> nextExpiry(
+      String variantId, Collection<Reservation> reservations, Instant now) {
+    return reservations.stream()
+        .filter(r -> r.holdsStockAt(now) && r.items().quantityOf(variantId) > 0)
+        .map(Reservation::expiresAt)
+        .min(Instant::compareTo);
   }
 
   /**

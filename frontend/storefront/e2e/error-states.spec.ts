@@ -48,7 +48,9 @@ test('a failed request shows the error panel with its reference, and "Try again"
 
 test('a lookup beside the main content that fails says so, with its reference', async ({ page, request }) => {
   const product = await aProductInStock(request)
-  await page.route('**/api/inventory/stock/*', (route) =>
+  // The Product page reads every Variant's Stock in one batch read.
+  const stockRead = /\/api\/inventory\/stock\?/
+  await page.route(stockRead, (route) =>
     route.fulfill({
       status: 503,
       contentType: 'application/problem+json',
@@ -60,7 +62,7 @@ test('a lookup beside the main content that fails says so, with its reference', 
   const alert = page.getByRole('alert').filter({ hasText: "We couldn't check the stock" })
   await expect(alert).toContainText('Reference: e2e-stock-1')
 
-  await page.unroute('**/api/inventory/stock/*')
+  await page.unroute(stockRead)
   await alert.getByRole('button', { name: 'Try again' }).click()
   await expect(alert).toBeHidden()
   await expect(page.locator('.stock-indicator')).not.toHaveText('Stock unknown')

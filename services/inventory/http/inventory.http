@@ -44,6 +44,9 @@ GET {{inventory}}/stock/PHN-PIXEL-9
 ### An unknown Variant: 404
 GET {{inventory}}/stock/NO-SUCH-VARIANT
 
+### Several Variants' stock at once, up to 50, no token needed; unknown ones are left out
+GET {{inventory}}/stock?variantIds=PHN-PIXEL-9,LPT-MBA-13-M3,NO-SUCH-VARIANT
+
 ### Staff set a Variant's on-hand Stock: 200, or 201 for a Variant Inventory didn't stock yet
 # Recorded as an ADJUSTED movement of the difference, with the reason, which is optional.
 PUT {{inventory}}/stock/PHN-PIXEL-9

@@ -24,6 +24,7 @@ class EdgeAuthenticationApiTest extends GatewayApiTest {
         "/api/catalog/variants",
         "/api/catalog/categories",
         "/api/inventory/stock/PHN-PIXEL-9",
+        "/api/inventory/stock?variantIds=PHN-PIXEL-9,LPT-MBA-13-M3",
         "/api/search-discovery/search",
         "/api/search-discovery/search?q=pixel&attr.storage=128",
         "/api/reviews-ratings/products/PHN-PIXEL-9/reviews?page=1",

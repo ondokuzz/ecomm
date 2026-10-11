@@ -12,4 +12,10 @@ public interface Transactions {
    * committed state.
    */
   <T> T inSnapshot(Supplier<T> work);
+
+  /**
+   * Runs {@code work} once the surrounding transaction commits, and never if it rolls back. Call it
+   * inside {@link #inTransaction}.
+   */
+  void afterCommit(Runnable work);
 }

@@ -4,6 +4,10 @@ spring:
     url: jdbc:postgresql://postgres:5432/inventory
   kafka:
     bootstrap-servers: kafka:19092
+  data:
+    redis:
+      host: redis
+      port: 6379
 
 # Keys come over the internal network; the issuer stays the browser-facing one tokens carry.
 ecomm:

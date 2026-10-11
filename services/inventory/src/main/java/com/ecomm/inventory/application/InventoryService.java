@@ -10,22 +10,29 @@ import com.ecomm.inventory.application.port.in.RemoveStockUseCase;
 import com.ecomm.inventory.application.port.in.ReserveStockUseCase;
 import com.ecomm.inventory.application.port.in.SetOnHandUseCase;
 import com.ecomm.inventory.application.port.in.SettleReservationUseCase;
+import com.ecomm.inventory.application.port.out.CachedStock;
 import com.ecomm.inventory.application.port.out.ReservationRepository;
+import com.ecomm.inventory.application.port.out.StockCache;
 import com.ecomm.inventory.application.port.out.StockEvent;
 import com.ecomm.inventory.application.port.out.StockEvent.Change;
 import com.ecomm.inventory.application.port.out.StockMovementRepository;
 import com.ecomm.inventory.application.port.out.StockRepository;
 import com.ecomm.inventory.application.port.out.TimeSource;
 import com.ecomm.inventory.application.port.out.Transactions;
+import com.ecomm.inventory.domain.InsufficientStockException;
 import com.ecomm.inventory.domain.Reservation;
 import com.ecomm.inventory.domain.Stock;
 import com.ecomm.inventory.domain.StockBatch;
 import com.ecomm.inventory.domain.StockMovement;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -39,7 +46,8 @@ import java.util.stream.Collectors;
  * two Reservations of the last unit can't both succeed.
  *
  * <p>In the same transaction, each change records its Stock movements and publishes the Stock of
- * every Variant it touched, under a new version.
+ * every Variant it touched, under a new version. Once it commits, it writes that Stock to the Stock
+ * cache, which serves Stock reads and refuses a Reservation it already shows can't be met.
  */
 public class InventoryService
     implements ReadStockUseCase,
@@ -57,12 +65,16 @@ public class InventoryService
   /** How many Variants the backfill publishes per transaction. */
   private static final int BACKFILL_BATCH = 100;
 
+  /** The longest a Stock cache entry is trusted, unless a Reservation holding it expires sooner. */
+  static final Duration CACHE_FRESHNESS = Duration.ofSeconds(60);
+
   private final StockRepository stock;
   private final ReservationRepository reservations;
   private final StockMovementRepository movements;
   private final Transactions transactions;
   private final IntegrationEventPublisher events;
   private final TimeSource time;
+  private final StockCache cache;
 
   public InventoryService(
       StockRepository stock,
@@ -70,29 +82,57 @@ public class InventoryService
       StockMovementRepository movements,
       Transactions transactions,
       IntegrationEventPublisher events,
-      TimeSource time) {
+      TimeSource time,
+      StockCache cache) {
     this.stock = stock;
     this.reservations = reservations;
     this.movements = movements;
     this.transactions = transactions;
     this.events = events;
     this.time = time;
+    this.cache = cache;
   }
 
   @Override
   public Optional<Stock> stock(String variantId) {
-    // One snapshot for both reads, so a change landing between them can't mismatch the counts.
+    return stocks(List.of(variantId)).stream().findFirst();
+  }
+
+  @Override
+  public List<Stock> stocks(Collection<String> variantIds) {
+    var asked = new LinkedHashSet<>(variantIds);
+    var cached = cache.get(asked, time.now());
+    var missed = asked.stream().filter(id -> !cached.containsKey(id)).toList();
+    var read = missed.isEmpty() ? Map.<String, CachedStock>of() : readStock(missed);
+    cache.put(read.values(), time.now());
+    return asked.stream()
+        .map(id -> cached.getOrDefault(id, read.get(id)))
+        .filter(Objects::nonNull)
+        .flatMap(entry -> entry.stock().stream())
+        .toList();
+  }
+
+  /**
+   * The Stock of those Variants that exist, from Postgres, as Stock cache entries. One snapshot for
+   * both reads, so a change landing between them can't mismatch the counts.
+   */
+  private Map<String, CachedStock> readStock(Collection<String> variantIds) {
     return transactions.inSnapshot(
-        () ->
-            stock
-                .onHand(variantId)
-                .map(
-                    onHand ->
-                        Stock.of(
-                            variantId,
-                            onHand,
-                            reservations.activeFor(List.of(variantId)),
-                            time.now())));
+        () -> {
+          var onHand = stock.onHandWithVersions(variantIds);
+          var holding = reservations.activeFor(onHand.keySet());
+          var now = time.now();
+          return onHand.entrySet().stream()
+              .collect(
+                  Collectors.toMap(
+                      Map.Entry::getKey,
+                      e ->
+                          cacheEntry(
+                              Stock.of(e.getKey(), e.getValue().units(), holding, now),
+                              e.getValue().version(),
+                              holding,
+                              now)));
+        });
   }
 
   @Override
@@ -127,6 +167,7 @@ public class InventoryService
             StockMovement.adjusted(variantId, 0, onHand, validReason, now)
                 .ifPresent(m -> movements.append(List.of(m)));
             events.publish(StockEvent.of(created, inserted.getAsLong(), Change.ADJUSTED));
+            cacheOnCommit(List.of(cacheEntry(created, inserted.getAsLong(), List.of(), now)));
             return new Result(created, true);
           }
           var current = lockStock(List.of(variantId)).get(variantId);
@@ -150,9 +191,12 @@ public class InventoryService
           }
           current.requireUnreserved();
           var version = stock.delete(variantId);
-          StockMovement.adjusted(variantId, current.onHand(), 0, REMOVAL_REASON, time.now())
+          var now = time.now();
+          StockMovement.adjusted(variantId, current.onHand(), 0, REMOVAL_REASON, now)
               .ifPresent(m -> movements.append(List.of(m)));
           events.publish(StockEvent.removed(variantId, version));
+          cacheOnCommit(
+              List.of(CachedStock.removed(variantId, version, now.plus(CACHE_FRESHNESS))));
           return true;
         });
   }
@@ -161,6 +205,7 @@ public class InventoryService
   public Reservation reserve(String customerId, StockBatch items, Instant expiresAt) {
     var reservation =
         Reservation.create(UUID.randomUUID(), customerId, items, expiresAt, time.now());
+    refuseWhatTheCacheShowsShort(items);
     return transactions.inTransaction(
         () -> {
           var locked = lockStock(items.variantIds());
@@ -276,6 +321,41 @@ public class InventoryService
   }
 
   /**
+   * Throws {@link InsufficientStockException}, without touching Postgres, when the Stock cache
+   * already shows too little available of some Variant in the batch. Otherwise Postgres decides.
+   */
+  private void refuseWhatTheCacheShowsShort(StockBatch items) {
+    var cached = cache.get(items.variantIds(), time.now());
+    var wanting =
+        items.variantIds().stream()
+            .filter(id -> cached.containsKey(id) && cached.get(id).stocked())
+            .filter(id -> cached.get(id).available() < items.quantityOf(id))
+            .toList();
+    if (!wanting.isEmpty()) {
+      throw new InsufficientStockException(wanting);
+    }
+  }
+
+  /**
+   * The Stock cache entry of {@code stock} at {@code version}: fresh for {@link #CACHE_FRESHNESS},
+   * or until the first of the Reservations holding some of it expires, giving its units back.
+   */
+  private static CachedStock cacheEntry(
+      Stock stock, long version, Collection<Reservation> holding, Instant now) {
+    var maxFreshness = now.plus(CACHE_FRESHNESS);
+    var freshUntil =
+        Stock.nextExpiry(stock.variantId(), holding, now)
+            .filter(expiry -> expiry.isBefore(maxFreshness))
+            .orElse(maxFreshness);
+    return CachedStock.of(stock, version, freshUntil);
+  }
+
+  /** Writes the entries to the Stock cache once the surrounding transaction commits. */
+  private void cacheOnCommit(List<CachedStock> entries) {
+    transactions.afterCommit(() -> cache.put(entries, time.now()));
+  }
+
+  /**
    * Records the movements, writes the on-hand counts of the Variants they touched, and publishes
    * each of those Variants' Stock as it now is. Call it inside a transaction holding their stock
    * rows. A Variant missing from {@code onHandByVariant}, being no longer stocked, gets its
@@ -289,13 +369,14 @@ public class InventoryService
     }
     var versions = stock.update(onHandByVariant);
     var holding = reservations.activeFor(versions.keySet());
+    var entries = new ArrayList<CachedStock>();
     versions.forEach(
-        (variantId, version) ->
-            events.publish(
-                StockEvent.of(
-                    Stock.of(variantId, onHandByVariant.get(variantId), holding, now),
-                    version,
-                    change)));
+        (variantId, version) -> {
+          var changed = Stock.of(variantId, onHandByVariant.get(variantId), holding, now);
+          events.publish(StockEvent.of(changed, version, change));
+          entries.add(cacheEntry(changed, version, holding, now));
+        });
+    cacheOnCommit(entries);
   }
 
   private Optional<Reservation> owned(String customerId, UUID id) {

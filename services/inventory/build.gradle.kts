@@ -5,6 +5,8 @@ dependencies {
   implementation("org.springframework.boot:spring-boot-starter-flyway")
   implementation("org.flywaydb:flyway-database-postgresql")
   runtimeOnly("org.postgresql:postgresql")
+  // The Stock cache, in the stack's Redis.
+  implementation("org.springframework.boot:spring-boot-starter-data-redis")
 
   // Publishing Stock events through service-commons' port, with Postgres as the outbox.
   implementation(platform(libs.spring.modulith.bom))

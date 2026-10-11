@@ -64,6 +64,10 @@ _Avoid_: Inventory (that's the context, not the count)
 How many units of a Variant Inventory physically has, whether or not Reservations hold them. Staff set it, never below what Reservations hold; committing a Reservation takes its units off it.
 _Avoid_: Stock (Stock is what's left to sell), Physical stock
 
+**Stock cache**:
+Inventory's copy of each Variant's Stock in Redis, kept to spare Postgres the Storefront's Stock reads and Reservations that can't succeed. It is never the authority: Postgres decides every change, and each change rewrites the Variant's entry once it commits, a newer version never overwritten by an older one. An entry is trusted for 60 seconds at most, and no longer than the first Reservation holding some of the Variant has to run, so Stock an expiring Reservation gives back is available at once. Stock reads are served from it; a Reservation it already shows can't be met is refused without asking Postgres. Inventory works without it, from Postgres, while Redis is down.
+_Avoid_: Stock snapshot, Stock replica
+
 **Stock movement**:
 One change to a Variant's On-hand units or to what Reservations hold of them, recorded for good: units received, reserved, released, committed, adjusted by Staff, or restocked from a return, with how many and when. Inventory owns them, and never changes or deletes one: a mistake is corrected by another. A Variant's On-hand is the sum of its movements, so the counter Inventory keeps beside them can always be checked against them. A Variant's ledger starts with an opening balance: an adjustment equal to the On-hand it had when Inventory began recording movements, and a reservation for each active Reservation then holding some of it.
 _Avoid_: Stock change, Adjustment (one kind of movement), Transaction

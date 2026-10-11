@@ -3,6 +3,7 @@ package com.ecomm.inventory;
 import com.ecomm.commons.events.IntegrationEventPublisher;
 import com.ecomm.inventory.application.InventoryService;
 import com.ecomm.inventory.application.port.out.ReservationRepository;
+import com.ecomm.inventory.application.port.out.StockCache;
 import com.ecomm.inventory.application.port.out.StockMovementRepository;
 import com.ecomm.inventory.application.port.out.StockRepository;
 import com.ecomm.inventory.application.port.out.TimeSource;
@@ -25,7 +26,8 @@ class UseCaseConfiguration {
       StockMovementRepository movements,
       Transactions transactions,
       IntegrationEventPublisher events,
-      TimeSource time) {
-    return new InventoryService(stock, reservations, movements, transactions, events, time);
+      TimeSource time,
+      StockCache cache) {
+    return new InventoryService(stock, reservations, movements, transactions, events, time, cache);
   }
 }

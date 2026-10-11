@@ -2,10 +2,9 @@ import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { useAuth } from 'react-oidc-context'
 import { useCart, useSetQuantity } from '../api/cart'
-import { useCategory, useProduct, useStock, useStocks } from '../api/catalog'
+import { useCategory, useProduct, useStocks } from '../api/catalog'
 import { useRatingSummary } from '../api/reviews'
 import { useFormatMoney } from '../api/currencies'
-import { lookupFailure } from '../api/failure'
 import { useAuthPending, useSignin } from '../auth/session'
 import { ProductImage } from '../components/ProductImage'
 import { ProductReviews } from '../components/ProductReviews'
@@ -54,12 +53,10 @@ function ProductDetail({ product }: { product: Product }) {
   // The chosen Variant lives in the URL, so a reload or a shared link keeps it.
   const [params, setParams] = useSearchParams()
   const variant = chosenVariant(product, params.get('variant'))
-  const stock = useStock(variant.id)
-  const { stocks, failure: stocksFailure } = useStocks(product.variants.map((v) => v.id))
-  // The chosen Variant's own lookup first, then the picker's; one message says Inventory couldn't be asked.
-  const stockFailure = lookupFailure([stock]) ?? stocksFailure
+  // Every Variant's Stock in one request, for the picker and the chosen Variant alike.
+  const { stocks, isPending: stockPending, failure: stockFailure } = useStocks(product.variants.map((v) => v.id))
   // How many units Inventory has; undefined while unknown, or when it has no Stock record.
-  const available = stock.data ?? undefined
+  const available = stocks[variant.id]
   // Until the Category loads (or if it fails to), the specs keep the Product's own order.
   const category = useCategory(product.category)
   const definitions = category.data?.attributes
@@ -85,7 +82,7 @@ function ProductDetail({ product }: { product: Product }) {
                 onChoose={(chosen) => setParams({ variant: chosen.id }, { replace: true, preventScrollReset: true })}
               />
             )}
-            {stock.isPending ? <Badge>Checking stock…</Badge> : <StockIndicator quantity={available} />}
+            {stockPending ? <Badge>Checking stock…</Badge> : <StockIndicator quantity={available} />}
             <LookupError failure={stockFailure} title="We couldn't check the stock" />
             {/* A fresh quantity for each Variant. */}
             <AddToCart key={variant.id} productName={product.name} variantId={variant.id} available={available} />

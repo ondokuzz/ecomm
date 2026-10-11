@@ -2,6 +2,12 @@ package com.ecomm.inventory;
 
 import com.ecomm.commons.events.EventBackbone;
 import com.ecomm.commons.security.FakeKeycloak;
+import com.github.dockerjava.api.model.ExposedPort;
+import com.github.dockerjava.api.model.PortBinding;
+import com.github.dockerjava.api.model.Ports;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.net.ServerSocket;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
@@ -16,14 +22,16 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.client.RestTestClient;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
- * Base for HTTP-seam tests: the app runs against one Postgres container shared by every test class,
- * and the shared Kafka and schema registry from {@link EventBackbone}, with the Stock topic created
- * and its schema registered as the stack does. Besides the seed stock, test-only migrations add
- * Variants and Reservations as a Sprint 2 stack holds them; each test that changes stock uses
- * Variants of its own, from those migrations or from {@link #newVariant}.
+ * Base for HTTP-seam tests: the app runs against one Postgres container and one Redis container,
+ * the Stock cache's, shared by every test class, and the shared Kafka and schema registry from
+ * {@link EventBackbone}, with the Stock topic created and its schema registered as the stack does.
+ * Besides the seed stock, test-only migrations add Variants and Reservations as a Sprint 2 stack
+ * holds them; each test that changes stock uses Variants of its own, from those migrations or from
+ * {@link #newVariant}.
  *
  * <p>The clock is a {@link TestTimeSource} and the scheduled sweeper is off, so a test sees what
  * happens before any sweep and triggers one itself.
@@ -38,13 +46,37 @@ abstract class InventoryApiTest {
   private static final PostgreSQLContainer POSTGRES =
       new PostgreSQLContainer("postgres:16").withDatabaseName("inventory");
 
+  /**
+   * On a host port of its own, so {@link RedisDownApiTest} can stop it and start it again where the
+   * app expects it. It keeps nothing on disk, so it starts again empty.
+   */
+  static final GenericContainer<?> REDIS =
+      new GenericContainer<>("redis:7")
+          .withCommand("redis-server", "--save", "", "--appendonly", "no")
+          .withExposedPorts(6379)
+          .withCreateContainerCmdModifier(
+              cmd ->
+                  cmd.getHostConfig()
+                      .withPortBindings(
+                          new PortBinding(
+                              Ports.Binding.bindPort(freePort()), new ExposedPort(6379))));
+
   /** The topic Stock events are published to. */
   static final String STOCK_TOPIC = "inventory.stock";
 
   static {
     POSTGRES.start();
+    REDIS.start();
     EventBackbone.createTopic(STOCK_TOPIC);
     EventBackbone.registerSchemaOf(STOCK_TOPIC);
+  }
+
+  private static int freePort() {
+    try (var socket = new ServerSocket(0)) {
+      return socket.getLocalPort();
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
+    }
   }
 
   @DynamicPropertySource
@@ -55,6 +87,8 @@ abstract class InventoryApiTest {
     registry.add("spring.datasource.username", POSTGRES::getUsername);
     registry.add("spring.datasource.password", POSTGRES::getPassword);
     registry.add("spring.flyway.locations", () -> "classpath:db/migration,classpath:db/testdata");
+    registry.add("spring.data.redis.host", REDIS::getHost);
+    registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
   }
 
   /** The Customer every test reserves for, unless it names another. */
@@ -221,6 +255,27 @@ abstract class InventoryApiTest {
         .expectBody(LedgerView.class)
         .returnResult()
         .getResponseBody();
+  }
+
+  /**
+   * The total of a counter on {@code /actuator/prometheus}, as Prometheus would read it, over every
+   * series of it; 0 before it is first counted.
+   */
+  double counter(String name) {
+    var scrape =
+        http.get()
+            .uri("/actuator/prometheus")
+            .exchange()
+            .expectStatus()
+            .isOk()
+            .expectBody(String.class)
+            .returnResult()
+            .getResponseBody();
+    return scrape
+        .lines()
+        .filter(line -> line.startsWith(name + "{") || line.startsWith(name + " "))
+        .mapToDouble(line -> Double.parseDouble(line.substring(line.lastIndexOf(' ') + 1)))
+        .sum();
   }
 
   /** The parts of a stock level a client reads, independent of the service's classes. */

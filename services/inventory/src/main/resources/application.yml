@@ -8,14 +8,28 @@ spring:
     password: ecomm
   kafka:
     bootstrap-servers: localhost:${KAFKA_PORT:9092}
+  # The Stock cache. It is never required, so a call to Redis gives up fast and Postgres answers.
+  data:
+    redis:
+      host: localhost
+      # REDIS_PORT matches the compose override, for when something else holds 6379.
+      port: ${REDIS_PORT:6379}
+      connect-timeout: 250ms
+      timeout: 250ms
   modulith:
     events:
       # Send again, on startup, what the outbox holds unsent: a send cut short by a crash or restart.
       republish-outstanding-events-on-restart: true
 
+# Redis down leaves Inventory healthy: it serves Stock from Postgres.
+management:
+  health:
+    redis:
+      enabled: false
+
 ecomm:
   security:
-    # Anyone may read a Variant's stock; changing it or reserving it still needs a token.
-    public-read-paths: /stock/*
+    # Anyone may read a Variant's stock, or a batch's; changing it or reserving it still needs a token.
+    public-read-paths: /stock, /stock/*
   events:
     schema-registry-url: http://localhost:${APICURIO_PORT:8088}/apis/registry/v3

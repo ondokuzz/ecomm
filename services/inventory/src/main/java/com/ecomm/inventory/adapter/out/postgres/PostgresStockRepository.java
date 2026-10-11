@@ -33,6 +33,20 @@ class PostgresStockRepository implements StockRepository {
   }
 
   @Override
+  public Map<String, OnHand> onHandWithVersions(Collection<String> variantIds) {
+    var onHand = new LinkedHashMap<String, OnHand>();
+    jdbc.sql("SELECT variant_id, on_hand, version FROM stock WHERE variant_id IN (:ids)")
+        .param("ids", variantIds)
+        .query(
+            rs -> {
+              onHand.put(
+                  rs.getString("variant_id"),
+                  new OnHand(rs.getInt("on_hand"), rs.getLong("version")));
+            });
+    return onHand;
+  }
+
+  @Override
   public Map<String, Integer> lockOnHand(Collection<String> variantIds) {
     var onHand = new LinkedHashMap<String, Integer>();
     jdbc.sql(

@@ -3,7 +3,8 @@
 Stock levels per Variant. Built from
 [`platform/service-template`](../../platform/service-template/README.md), so its layout, security
 and testing conventions apply here. Data lives in the `inventory` database on the shared Postgres,
-with the schema under Flyway ([`db/migration`](./src/main/resources/db/migration)).
+with the schema under Flyway ([`db/migration`](./src/main/resources/db/migration)), and Stock reads
+are served from a [cache](#the-stock-cache) in the stack's Redis.
 
 Stock is counted per Variant as **on-hand** units, some of which Reservations may hold. What is
 left is available to sell. Checkout takes Stock only through Reservations: a Checkout Session
@@ -18,6 +19,7 @@ beside the Stock counter, so On-hand can be checked against it, and is published
 | Endpoint | Who | |
 |---|---|---|
 | `GET /stock/{variantId}` | anyone | `{"variantId", "quantity", "onHand", "reserved"}`; 404 for an unknown Variant |
+| `GET /stock?variantIds=a,b,c` | anyone | A list of those Variants' Stock, as above, in the order asked, each once; unknown ones are left out. 1 to 50 distinct IDs, comma-separated or repeated, or it is a 400 |
 | `PUT /stock/{variantId}` | Staff | Sets on-hand Stock: 201 for a new Variant, 200 otherwise |
 | `GET /stock/{variantId}/movements` | Staff | A page of the Variant's Stock movements, newest first, and whether On-hand equals their sum |
 | `DELETE /stock/{variantId}` | Staff | Stops stocking a Variant: 204; 404 for an unknown Variant, 409 while Reservations hold some |
@@ -26,7 +28,8 @@ beside the Stock counter, so On-hand can be checked against it, and is published
 | `POST /reservations/{id}/release` | Checkout | Gives the held Stock back |
 
 `quantity` is what is available to sell: `onHand` less what `ACTIVE` Reservations that haven't
-expired yet hold (`reserved`).
+expired yet hold (`reserved`). Both reads are served from the [Stock cache](#the-stock-cache); the
+gateway routes both without a token.
 
 Setting on-hand Stock needs a Staff token (`STAFF` role). It takes `{"onHand": 12}`, and
 optionally a `reason` of up to 200 characters (`{"onHand": 12, "reason": "stocktake"}`), and adds
@@ -123,6 +126,37 @@ like a missing `reason`, it is `null`.
 What Reservations hold isn't checked the same way: a Reservation stops holding Stock the moment it
 expires, but its `RELEASED` movement waits for the sweep.
 
+## The Stock cache
+
+Stock reads are served from a copy of each Variant's Stock in the stack's Redis, so a busy
+Storefront doesn't put its reads on Postgres beside Checkout's Reservations. Postgres stays the only
+authority: the cache only spares it reads, and Reservations that can't succeed.
+
+- **Entries.** One JSON string per Variant, `inventory:stock:<Variant ID>`: its `onHand`,
+  `reserved`, `available`, whether it is `stocked`, and its Stock `version`, the one its last
+  [Stock event](#stock-events) carried. A Variant Staff stopped stocking has an entry with `stocked`
+  false, so it reads as a 404 from the cache too.
+- **Writes.** Every change to Stock writes the entry of each Variant it touched once its
+  transaction commits. A Lua script compares versions, so a write that lands late never overwrites
+  a newer one. A read that misses fills the entry from Postgres the same way. The
+  startup backfill writes nothing: it changes no counts.
+- **Time to live.** An entry lives for the earlier of 60 seconds and the soonest `expiresAt` of
+  the active Reservations holding some of the Variant, and is trusted only until then by
+  Inventory's own clock. So Stock an expiring Reservation gives back is available from the cache
+  the moment it expires, as from Postgres, before any sweep.
+- **Reservations.** A Reservation first reads the cache. If it shows less available of some
+  Variant than the batch asks for, it is a 409 with `insufficientStock`, without a Postgres
+  transaction. Otherwise the Reservation runs in Postgres as above, and Postgres decides.
+- **Staff.** Setting On-hand, removing a Variant and reading its Stock movements always use
+  Postgres.
+- **Redis down.** The cache is never required. A call to Redis that fails, which gives up within
+  about 250 ms, is logged at warn, and reads and Reservations go to Postgres. Redis doesn't count
+  in Inventory's health.
+
+Inventory counts `ecomm_stock_cache_hits_total` and `ecomm_stock_cache_misses_total` per Variant
+looked up, by a Stock read or a Reservation's check, and `ecomm_stock_cache_errors_total` per failed call to Redis. Grafana's **Services**
+dashboard shows the hit ratio and all three.
+
 ## Stock events
 
 Each change publishes one `inventory.stock` event per Variant it touched, in its transaction. The
@@ -203,6 +237,6 @@ docker compose up -d --build inventory   # from the repo root; listens on localh
 That host port bypasses the [API gateway](../../platform/api-gateway/README.md), for development
 only. Browsers reach the service through the gateway, at `/api/inventory/`.
 
-Or run Postgres and Keycloak in compose (`docker compose up -d keycloak`) and start the service
-with `./gradlew :services:inventory:bootRun` on port 8080. Set `POSTGRES_PORT` for both when
-something else holds 5432.
+Or run Postgres, Redis and Keycloak in compose (`docker compose up -d redis keycloak`) and start
+the service with `./gradlew :services:inventory:bootRun` on port 8080. Set `POSTGRES_PORT` (or
+`REDIS_PORT`) for both when something else holds 5432 (or 6379).

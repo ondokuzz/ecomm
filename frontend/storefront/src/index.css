@@ -554,6 +554,10 @@ code {
   background: var(--color-info-soft);
   color: var(--color-info);
 }
+.alert-warning {
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
 .alert-list {
   margin: var(--space-1) 0 var(--space-2);
   padding-left: var(--space-5);
@@ -1297,6 +1301,10 @@ main {
 }
 .stock-indicator {
   font-size: var(--text-sm);
+}
+.cart-line-stock {
+  align-self: flex-start;
+  margin-top: var(--space-1);
 }
 
 .add-to-cart {

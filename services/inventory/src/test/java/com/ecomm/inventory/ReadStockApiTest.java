@@ -6,11 +6,14 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.MediaType;
 import tools.jackson.databind.json.JsonMapper;
 
-/** Anyone can read a Variant's stock without logging in. */
+/** Anyone can read a Variant's stock, or several Variants' at once, without logging in. */
 class ReadStockApiTest extends InventoryApiTest {
 
   /** Catalog's seed data; the test runs from this module's directory. */
@@ -47,6 +50,82 @@ class ReadStockApiTest extends InventoryApiTest {
         .expectBody()
         .jsonPath("$.status")
         .isEqualTo(404);
+  }
+
+  @Test
+  void anyoneCanReadSeveralVariantsStockAtOnceInTheOrderAskedLeavingOutUnknownOnes() {
+    var first = newVariant(3);
+    var second = newVariant(0);
+
+    var stocks = stocksOf(second + ",NO-SUCH-VARIANT," + first + "," + second);
+
+    assertThat(stocks)
+        .containsExactly(new StockView(second, 0, 0, 0), new StockView(first, 3, 3, 0));
+  }
+
+  @Test
+  void variantIdsMayBeRepeatedInsteadOfCommaSeparated() {
+    var first = newVariant(3);
+    var second = newVariant(4);
+
+    var stocks =
+        http.get()
+            .uri("/stock?variantIds={a}&variantIds={b}", first, second)
+            .exchange()
+            .expectStatus()
+            .isOk()
+            .expectBody(StockView[].class)
+            .returnResult()
+            .getResponseBody();
+
+    assertThat(stocks)
+        .containsExactly(new StockView(first, 3, 3, 0), new StockView(second, 4, 4, 0));
+  }
+
+  @Test
+  void aBatchOfOnlyUnknownVariantsIsEmpty() {
+    assertThat(stocksOf("NO-SUCH-VARIANT")).isEmpty();
+  }
+
+  @Test
+  void aBatchOfFiftyVariantsCanBeRead() {
+    var ids = IntStream.range(0, 50).mapToObj(i -> "NO-SUCH-VARIANT-" + i).toList();
+
+    assertThat(stocksOf(String.join(",", ids))).isEmpty();
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"/stock", "/stock?variantIds=", "/stock?variantIds=,"})
+  void aBatchNamingNoVariantIsABadRequest(String uri) {
+    expectBadRequest(uri);
+  }
+
+  @Test
+  void aBatchOfMoreThanFiftyVariantsIsABadRequest() {
+    var ids = IntStream.range(0, 51).mapToObj(i -> "V-" + i).toList();
+
+    expectBadRequest("/stock?variantIds=" + String.join(",", ids));
+  }
+
+  private StockView[] stocksOf(String variantIds) {
+    return http.get()
+        .uri("/stock?variantIds={ids}", variantIds)
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody(StockView[].class)
+        .returnResult()
+        .getResponseBody();
+  }
+
+  private void expectBadRequest(String uri) {
+    http.get()
+        .uri(uri)
+        .exchange()
+        .expectStatus()
+        .isBadRequest()
+        .expectHeader()
+        .contentType(MediaType.APPLICATION_PROBLEM_JSON);
   }
 
   @Test

@@ -26,9 +26,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Anyone may read stock (see {@code public-read-paths}); only Staff may set how many units are on
- * hand, stop stocking a Variant, or read its Stock movements. Checkout takes Stock through
- * Reservations ({@link ReservationController}).
+ * Anyone may read stock, one Variant's or a batch's (see {@code public-read-paths}); only Staff may
+ * set how many units are on hand, stop stocking a Variant, or read its Stock movements. Checkout
+ * takes Stock through Reservations ({@link ReservationController}).
  */
 @RestController
 @RequestMapping("/stock")
@@ -37,6 +37,9 @@ class StockController {
   private static final Logger log = LoggerFactory.getLogger(StockController.class);
 
   static final int MAX_PAGE_SIZE = 100;
+
+  /** The most Variants one batch read names. */
+  static final int MAX_BATCH = 50;
 
   private final ReadStockUseCase read;
   private final ReadStockMovementsUseCase readMovements;
@@ -52,6 +55,24 @@ class StockController {
     this.readMovements = readMovements;
     this.setOnHand = setOnHand;
     this.remove = remove;
+  }
+
+  /**
+   * The Stock of each Variant Inventory stocks of those named, comma-separated or repeated: in the
+   * order asked, each once, leaving out those it doesn't stock. 1 to {@value #MAX_BATCH} distinct
+   * Variant IDs, or it is a 400.
+   */
+  @GetMapping
+  List<StockResponse> stocks(@RequestParam(required = false) List<String> variantIds) {
+    var asked =
+        variantIds == null
+            ? List.<String>of()
+            : variantIds.stream().map(String::trim).filter(id -> !id.isEmpty()).distinct().toList();
+    if (asked.isEmpty() || asked.size() > MAX_BATCH) {
+      throw new InvalidStockRequestException(
+          "variantIds names 1 to " + MAX_BATCH + " distinct Variants");
+    }
+    return read.stocks(asked).stream().map(StockResponse::of).toList();
   }
 
   @GetMapping("/{variantId}")

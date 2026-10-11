@@ -121,9 +121,9 @@ Every Spring service, the gateway included, serves its metrics on `/actuator/pro
 anyone for viewing (sign in as `admin` / `admin` to explore). Its data source and its three
 dashboards, under **ecomm**, are files in [`infra/docker/grafana`](./infra/docker/grafana):
 
-- **Services:** request rate, 5xx rate and p95 latency per service, request rate per route, and
+- **Services:** request rate, 5xx rate and p95 latency per service, request rate per route,
   each Postgres service's outbox events not yet sent to Kafka (Catalog's Couchbase outbox isn't
-  measured).
+  measured), and Inventory's Stock cache: its hit ratio, and its hits, misses and Redis errors.
 - **Event consumers:** lag per consumer group, and per group, topic and partition; consumption
   rate; retries; dead-lettered and redriven events.
 - **Checkout Saga:** checkouts by outcome (`PAID`, `DECLINED`, `HOLD_EXPIRED`, `FAILED`), step

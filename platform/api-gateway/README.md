@@ -18,7 +18,7 @@ stay with the services, which still check every token themselves.
 | Service | Public reads (`GET`, no token) | Internal, never routed |
 |---|---|---|
 | `catalog` | `/products/**`, `/variants/**`, `/categories/**`, `/currencies` | |
-| `inventory` | `/stock/*`, but not Staff's `/stock/*/movements` | `/reservations/**`, and `/stock/decrement`, which Inventory no longer has |
+| `inventory` | `/stock` (a batch read), `/stock/*`, but not Staff's `/stock/*/movements` | `/reservations/**`, and `/stock/decrement`, which Inventory no longer has |
 | `cart` | | `/carts/**`: clearing a named Customer's Cart, which only Orchestration calls |
 | `checkout-pricing` | | `POST /checkout/sessions/*/end`: ending a named Customer's session, which only Orchestration calls |
 | `order-management` | | `POST /orders`, `PATCH /orders/*/status` |
