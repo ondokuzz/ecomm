@@ -4,6 +4,7 @@ import {
   type Product,
   type Variant,
   chosenVariant,
+  productCardOf,
   productCountLabel,
   productImage,
   specs,
@@ -203,5 +204,38 @@ describe('specs', () => {
       { name: 'brand', value: 'Sony' },
       { name: 'wireless', value: 'true' },
     ])
+  })
+})
+
+describe('productCardOf', () => {
+  it('shows a Catalog Product as a card: its brand, its first image, and its lowest Price', () => {
+    const card = productCardOf({
+      ...product(['pixel.png']),
+      attributes: { brand: 'Google' },
+      priceFrom: eur(79900),
+      variants: [variant('A', 'Obsidian', '128 GB', 79900), variant('B', 'Obsidian', '256 GB', 89900)],
+    })
+
+    expect(card).toEqual({
+      sku: 'PHN-PIXEL-9',
+      name: 'Google Pixel 9',
+      attributes: { brand: 'Google' },
+      image: 'pixel.png',
+      priceFrom: eur(79900),
+      priceVaries: true,
+    })
+  })
+
+  it("takes its first Variant's image when the Product has none, and doesn't say 'from' for one Price", () => {
+    const card = productCardOf(
+      product([], [variant('A', 'Obsidian', '128 GB', 79900, ['a.png']), variant('B', 'Obsidian', '256 GB', 79900)]),
+    )
+
+    expect(card.image).toBe('a.png')
+    expect(card.priceVaries).toBe(false)
+  })
+
+  it('has no image when neither the Product nor its first Variant has one', () => {
+    expect(productCardOf(product([])).image).toBeNull()
   })
 })

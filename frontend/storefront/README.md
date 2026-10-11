@@ -117,6 +117,16 @@ problem shows under its field once the Customer has pressed the button, and clea
 per-star shares. Posting, editing or deleting reloads the Product's summary, reviews and
 eligibility, and the listing's summaries.
 
+## Customers also bought
+
+Under its reviews, a Product page shows what Customers also bought with it, from
+[Recommendations](../../services/recommendations/README.md)' `GET /products/{sku}/also-bought`: up to
+four Products, most bought together first, each a card as the listing's are, built from Catalog's
+Product (shared with its own page's query) and the Rating summaries asked for in one request
+([`src/components/AlsoBought.tsx`](./src/components/AlsoBought.tsx)). The row shows nothing while
+it loads, when nothing was bought with the Product, or when Recommendations can't be asked; a
+Product Catalog doesn't have, or can't be asked about, is left out of it.
+
 ## Orders
 
 After checkout the Order page opens with a confirmation: a big check, confetti that falls once, the
@@ -212,7 +222,7 @@ to the page they asked for.
 ## Calling the services
 
 The browser reaches each service at `/api/<service>/…` on the Storefront's own origin: `catalog`,
-`inventory`, `cart`, `checkout-pricing`, `order-management`, `search-discovery` and `reviews-ratings`. Everything under `/api/` goes to the
+`inventory`, `cart`, `checkout-pricing`, `order-management`, `search-discovery`, `reviews-ratings` and `recommendations`. Everything under `/api/` goes to the
 [API gateway](../../platform/api-gateway/README.md), which checks the token and routes it; it sends
 no CORS headers. In development the Vite dev proxy forwards `/api` to the gateway's compose host
 port, 8000 ([`vite.config.ts`](./vite.config.ts)); in compose, nginx does
@@ -382,7 +392,10 @@ is in stock, checking each count against Search's, searches its brand and opens 
 Audio week applied by itself and `WELCOME10` on top, pays, and sees the timeline's Placed then Paid
 at their recorded times; once Reviews has the paid Order's event it posts a review and sees the
 Rating summary on the Product's page and its card. The other opens a Product it never bought and is told it
-can't review it, and Reviews refuses a post with `notPurchased`. The error-states test
+can't review it, and Reviews refuses a post with `notPurchased`. Of Sprint 4's, one creates two
+Products of its own as Staff through Catalog's and Inventory's APIs, buys them together, waits for
+Recommendations to have the Order, and sees each one's page show the other, alone, under "Customers
+also bought"; it deletes both Products and their Stock afterwards. The error-states test
 ([`e2e/error-states.spec.ts`](./e2e/error-states.spec.ts)) opens unknown route, Product and Order
 addresses and sees the Not Found page, answers the Product list with a 500 and sees the panel's
 reference and "Try again" recover, fails the Product page's Stock lookup and sees it say so with its

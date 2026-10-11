@@ -56,6 +56,10 @@ _Avoid_: Testimonial, Feedback, Comment
 A Product's Reviews in numbers: how many it has, their average rating to one decimal (a half rounded up; none without Reviews), and how many gave each star. Product cards and pages show it.
 _Avoid_: Score, Rating (one Review's stars)
 
+**Recommendation**:
+A Product shown on another Product's page because Customers bought the two together: it was in Orders that also bought one of that Product's Variants and that count, `Paid` or later and not `Cancelled` or `Returned`. Recommendations are ranked by how many such Orders bought both, then by the most recently placed of them, then by SKU, and leave out the Product itself and Products removed from the Catalog. They are worked out when asked from what Recommendations has projected, so an Order cancelled after it was paid stops counting. The Storefront shows up to four as "Customers also bought". Recommendations owns them.
+_Avoid_: Suggestion, Related product (which would be by likeness, not by what was bought), Cross-sell
+
 **Stock**:
 How many units of a Variant are available to sell, counted per Variant ID and never negative: its On-hand units less what active Reservations hold of them. Inventory owns Stock. Checkout takes it only through Reservations, which hold several Variants as one batch that applies whole or not at all. Staff remove a Variant's Stock when its Product leaves the Catalog, but not while Reservations hold some of it; Inventory then doesn't stock the Variant, and nothing can reserve it, until Staff set its On-hand count again. Its past Reservations stay.
 _Avoid_: Inventory (that's the context, not the count)

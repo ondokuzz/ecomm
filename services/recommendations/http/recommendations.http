@@ -1,0 +1,17 @@
+# Exercises the Recommendations endpoint against the compose stack (`make up`). It needs no token.
+# A Product has something bought with it once an Order with it and another Product is paid: check
+# out a Google Pixel 9 and a Sony WH-1000XM5 together as demo@ecomm.local on the Storefront first.
+
+@recommendations = http://localhost:8098
+
+### What Customers also bought with a Product, most bought together first: 4 unless `limit` says (1 to 12)
+GET {{recommendations}}/products/PHN-PIXEL-9/also-bought
+
+### Up to 12 of them
+GET {{recommendations}}/products/PHN-PIXEL-9/also-bought?limit=12
+
+### A limit outside 1 to 12: 400
+GET {{recommendations}}/products/PHN-PIXEL-9/also-bought?limit=13
+
+### A SKU nothing was bought with, or that Recommendations has never heard of: no items
+GET {{recommendations}}/products/NO-SUCH-SKU/also-bought

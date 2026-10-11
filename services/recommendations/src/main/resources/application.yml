@@ -1,0 +1,15 @@
+spring:
+  application:
+    name: recommendations
+  datasource:
+    # POSTGRES_PORT matches the compose override, for when something else holds 5432.
+    url: jdbc:postgresql://localhost:${POSTGRES_PORT:5432}/recommendations
+    username: ecomm
+    password: ecomm
+  kafka:
+    bootstrap-servers: localhost:${KAFKA_PORT:9092}
+
+ecomm:
+  security:
+    # Anyone may read what was bought with a Product.
+    public-read-paths: [/products/*/also-bought]

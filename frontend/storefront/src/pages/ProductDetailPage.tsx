@@ -6,6 +6,7 @@ import { useCategory, useProduct, useStocks } from '../api/catalog'
 import { useRatingSummary } from '../api/reviews'
 import { useFormatMoney } from '../api/currencies'
 import { useAuthPending, useSignin } from '../auth/session'
+import { AlsoBought } from '../components/AlsoBought'
 import { ProductImage } from '../components/ProductImage'
 import { ProductReviews } from '../components/ProductReviews'
 import { SummaryStars } from '../components/StarRating'
@@ -107,6 +108,7 @@ function ProductDetail({ product }: { product: Product }) {
       {/* Outside the article's grid, so the image, sticky within it, never slides over the reviews. A
           new Product starts on its first page of reviews. */}
       <ProductReviews key={product.sku} sku={product.sku} variants={product.variants} />
+      <AlsoBought sku={product.sku} />
     </>
   )
 }

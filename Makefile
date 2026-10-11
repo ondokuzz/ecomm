@@ -6,9 +6,10 @@ TOPICS := $(basename $(notdir $(wildcard platform/event-schemas/schemas/*.json))
 GROUPS := $(shell grep -v '^\#' infra/docker/consumer-groups)
 SEARCH_GROUPS := $(filter search-discovery.%,$(GROUPS))
 REVIEWS_GROUPS := $(filter reviews-ratings.%,$(GROUPS))
+RECOMMENDATIONS_GROUPS := $(filter recommendations.%,$(GROUPS))
 DEAD_LETTER_TOPICS := $(foreach group,$(GROUPS),$(group).dlt $(group).redrive)
 
-.PHONY: up down status seed-reset search-rebuild reviews-rebuild dlt-redrive upgrade-from upgrade-to upgrade-clean
+.PHONY: up down status seed-reset search-rebuild reviews-rebuild recommendations-rebuild dlt-redrive upgrade-from upgrade-to upgrade-clean
 
 ## Build and start the default stack, and wait until every service is healthy.
 up:
@@ -26,14 +27,14 @@ status:
 ## Put the seed Categories, Products, Stock and Coupons back and drop every Cart, Checkout Session,
 ## Reservation, Order, Payment and review. Keycloak is left alone, so registered Customers stay. The
 ## reset stores count their events' versions from the start again, so every topic, dead-letter and
-## redrive topics included, is emptied and Search's and Reviews' databases dropped, or their
-## consumers would take the new events for stale ones. Kafka deletes topics in the background, and one can't be created again until it has gone.
+## redrive topics included, is emptied and Search's, Reviews' and Recommendations' databases
+## dropped, or their consumers would take the new events for stale ones. Kafka deletes topics in the background, and one can't be created again until it has gone.
 seed-reset:
 	$(COMPOSE) up -d --wait couchbase postgres redis kafka mongo
-	$(COMPOSE) stop storefront checkout-pricing catalog inventory cart payment order-management promotions search-discovery reviews-ratings
+	$(COMPOSE) stop storefront checkout-pricing catalog inventory cart payment order-management promotions search-discovery reviews-ratings recommendations
 	$(COMPOSE) exec -T couchbase couchbase-cli bucket-delete -c localhost:8091 -u admin -p password --bucket catalog
 	$(COMPOSE) run --rm --no-deps couchbase-init
-	for db in inventory payment orders promotions; do \
+	for db in inventory payment orders promotions recommendations; do \
 	  $(COMPOSE) exec -T postgres psql -U ecomm -d postgres -v ON_ERROR_STOP=1 \
 	    -c "DROP DATABASE IF EXISTS $$db WITH (FORCE)" -c "CREATE DATABASE $$db" || exit 1; \
 	done
@@ -74,6 +75,20 @@ reviews-rebuild:
 	    --reset-offsets --to-latest --topic $$group.redrive --execute || exit 1; \
 	done
 	$(COMPOSE) up -d --wait reviews-ratings
+
+## Rebuild Recommendations' projection of Orders and Products from the topics
+## (services/recommendations/README.md). As for Search, the redrive topics aren't replayed.
+recommendations-rebuild:
+	$(COMPOSE) stop recommendations
+	$(COMPOSE) exec -T postgres psql -U ecomm -d recommendations -v ON_ERROR_STOP=1 \
+	  -c 'TRUNCATE orders, order_variants, products, variants'
+	for group in $(RECOMMENDATIONS_GROUPS); do \
+	  $(KAFKA)/kafka-consumer-groups.sh --bootstrap-server localhost:19092 --group $$group \
+	    --reset-offsets --to-earliest --all-topics --execute || exit 1; \
+	  $(KAFKA)/kafka-consumer-groups.sh --bootstrap-server localhost:19092 --group $$group \
+	    --reset-offsets --to-latest --topic $$group.redrive --execute || exit 1; \
+	done
+	$(COMPOSE) up -d --wait recommendations
 
 ## Redrive a consumer group's dead events once their cause is fixed, e.g.
 ## `make dlt-redrive GROUP=search-discovery.products`: copy what was dead-lettered since the last

@@ -1,13 +1,10 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
-import { useFormatMoney } from '../api/currencies'
 import { useRatingSummaries } from '../api/reviews'
 import { searchPageSize, useSearch } from '../api/search'
 import { FilterPanel } from '../components/FilterPanel'
-import { ProductImage } from '../components/ProductImage'
-import { SummaryStars } from '../components/StarRating'
+import { ProductCard } from '../components/ProductCard'
 import { EmptyState, ErrorState } from '../components/Status'
-import { Badge } from '../components/ui/Badge'
 import { Button, ButtonLink } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { Icon } from '../components/ui/Icon'
@@ -15,11 +12,9 @@ import { Input } from '../components/ui/Input'
 import { Skeleton } from '../components/ui/Skeleton'
 import { productCountLabel } from '../domain/catalog'
 import { pageCount } from '../domain/paging'
-import type { RatingSummary } from '../domain/reviews'
 import {
   type FacetOption,
   type Facets,
-  type ProductSummary,
   type Search,
   type SearchResults,
   type SortKey,
@@ -279,29 +274,6 @@ function ProductGrid({ results, busy }: { results: SearchResults | undefined; bu
         <ProductCardSkeletons />
       )}
     </ul>
-  )
-}
-
-function ProductCard({ product, summary }: { product: ProductSummary; summary: RatingSummary | undefined }) {
-  const formatMoney = useFormatMoney()
-  return (
-    <li>
-      <Link to={`/products/${encodeURIComponent(product.sku)}`} className="card-link">
-        <Card interactive className="product-card">
-          <div className="product-card-media">
-            <ProductImage product={{ name: product.name, images: product.image ? [product.image] : [] }} />
-            {!product.inStock && <Badge className="product-card-stock">Out of stock</Badge>}
-          </div>
-          <span className="brand-name">{product.attributes.brand}</span>
-          <span className="product-name">{product.name}</span>
-          <SummaryStars summary={summary} />
-          <span className="price">
-            {product.priceVaries && <span className="price-from">From </span>}
-            {formatMoney(product.priceFrom)}
-          </span>
-        </Card>
-      </Link>
-    </li>
   )
 }
 

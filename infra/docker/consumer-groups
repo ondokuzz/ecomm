@@ -7,3 +7,5 @@ search-discovery.categories
 search-discovery.stock
 reviews-ratings.orders
 reviews-ratings.products
+recommendations.orders
+recommendations.products

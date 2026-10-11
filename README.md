@@ -30,7 +30,9 @@ The first build takes several minutes. Then open the Storefront on http://localh
    Order under **My Orders**;
 5. go back to a Product you paid for and review it: rate it, and give it a title and a few words.
    Its stars show on its card and its page, and you can edit or delete your review there. On a
-   Product you haven't bought, the page says why you can't review it.
+   Product you haven't bought, the page says why you can't review it;
+6. see, under a Product's page, what Customers also bought with it: the Products most often in the
+   same paid Orders, from [Recommendations](./services/recommendations/README.md).
 
 The payment gateway is mocked, and each test card stands for a Payment method:
 
@@ -73,8 +75,8 @@ docker compose logs | grep '<Correlation ID>'
 Paying on the Storefront, for instance, logs it in the Storefront's nginx, the gateway and
 Checkout, then in Orchestration's checkout Saga and in Order Management, Payment, Inventory, Cart
 and Checkout again as the Saga calls them, and last in
-Reviews & Ratings' consumer as it applies the `order-management.order` events (`Applied Order …
-version 2`) and in Search & Discovery's as it applies the `inventory.stock` one.
+Reviews & Ratings' and Recommendations' consumers as they apply the `order-management.order` events
+(`Applied Order … version 2`), and in Search & Discovery's as it applies the `inventory.stock` one.
 
 ### Ports
 
@@ -93,6 +95,7 @@ Orchestration, which serves nothing but its health:
 | 8087 | Promotions |
 | 8089 | Search & Discovery |
 | 8097 | Reviews & Ratings |
+| 8098 | Recommendations |
 | 8088 | Apicurio schema registry: the event schemas, under `/apis/registry/v3` |
 | 9092 | Kafka |
 | 7233 | Temporal, for workers and clients run from the host ([Orchestration](./services/orchestration/README.md#temporal)) |
@@ -186,11 +189,12 @@ take, stay.
 | `make up` | Build and start the stack, and wait until it is healthy |
 | `make down` | Stop the stack, keeping its data |
 | `make status` | Say whether every service is running and healthy, naming any that isn't with its exit code and whether it was killed for its memory cap. Both Playwright suites run it first |
-| `make seed-reset` | Put the seed Categories, Products, Stock, Coupons and Campaigns back and drop every Cart, Checkout Session, Reservation, Order, Payment and review; registered Customers stay. It also empties the event topics, dead-letter and redrive topics included, and Search's and Reviews' projections, since the reset stores count their events' versions from 1 again |
+| `make seed-reset` | Put the seed Categories, Products, Stock, Coupons and Campaigns back and drop every Cart, Checkout Session, Reservation, Order, Payment and review; registered Customers stay. It also empties the event topics, dead-letter and redrive topics included, and Search's, Reviews' and Recommendations' projections, since the reset stores count their events' versions from 1 again |
 | `make upgrade-from FROM=<commit>`, `make upgrade-to`, `make upgrade-clean` | Start the stack as it was at a commit under a project of its own, bring it up to this tree keeping its data, and remove it ([the upgrade check](./docs/agents/upgrade-check.md)) |
 | `make search-rebuild` | Rebuild Search's projection from the topics ([Search & Discovery](./services/search-discovery/README.md#rebuilding)) |
 | `make dlt-redrive GROUP=<group>` | Redrive a consumer group's dead events once their cause is fixed: copy what reached `<group>.dlt` since the last redrive to `<group>.redrive`, which the group's listeners also consume ([service template](./platform/service-template/README.md#consuming)) |
 | `make reviews-rebuild` | Rebuild Reviews' projection of Orders and Products from the topics, keeping the reviews ([Reviews & Ratings](./services/reviews-ratings/README.md#rebuilding)) |
+| `make recommendations-rebuild` | Rebuild Recommendations' projection of Orders and Products from the topics ([Recommendations](./services/recommendations/README.md#rebuilding)) |
 
 Every checkout takes Stock, so after many smoke-test runs `make seed-reset` refills it. To wipe
 everything, Keycloak's users included, run `docker compose down -v`.

@@ -33,7 +33,8 @@ class RoutingApiTest extends GatewayApiTest {
     "/api/promotions/coupons/WELCOME10, /coupons/WELCOME10",
     "/api/promotions/campaigns/7f1c, /campaigns/7f1c",
     "/api/search-discovery/search?category=phones&sort=newest, /search?category=phones&sort=newest",
-    "/api/reviews-ratings/products/PHN-PIXEL-9/reviews?page=1, /products/PHN-PIXEL-9/reviews?page=1"
+    "/api/reviews-ratings/products/PHN-PIXEL-9/reviews?page=1, /products/PHN-PIXEL-9/reviews?page=1",
+    "/api/recommendations/products/PHN-PIXEL-9/also-bought?limit=4, /products/PHN-PIXEL-9/also-bought?limit=4"
   })
   void eachServiceIsReachedWithThePrefixStripped(String path, String downstreamPath) {
     http.get()

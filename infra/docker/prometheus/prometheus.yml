@@ -20,4 +20,5 @@ scrape_configs:
           - checkout-pricing:8080
           - search-discovery:8080
           - reviews-ratings:8080
+          - recommendations:8080
           - orchestration:8080

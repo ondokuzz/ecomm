@@ -1,4 +1,5 @@
 import type { Money } from './money'
+import type { ProductSummary } from './search'
 
 /**
  * A purchasable version of a Product, told apart from its siblings by its axis values (such as color
@@ -59,6 +60,25 @@ export function chosenVariant(product: Product, variantId: string | null): Varia
 /** The image the Storefront shows a Product (or one of its Variants) by: the Variant's own first, else the Product's. */
 export function productImage(product: Pick<Product, 'images'>, variant?: Pick<Variant, 'images'>): string | undefined {
   return variant?.images[0] ?? product.images[0]
+}
+
+/**
+ * What a Product card shows: a Product as Search's listing gives it, or as Catalog's is made into
+ * one. `inStock` is unknown, and no badge shows, where nothing said.
+ */
+export type ProductCardInfo = Omit<ProductSummary, 'inStock'> & { inStock?: boolean }
+
+/** A Catalog Product as a card, the way Search's listing shows it; its Stock isn't known. */
+export function productCardOf(product: Product): ProductCardInfo {
+  const prices = new Set(product.variants.map((v) => `${v.price.amountMinor} ${v.price.currency}`))
+  return {
+    sku: product.sku,
+    name: product.name,
+    attributes: product.attributes,
+    image: product.images[0] ?? product.variants[0]?.images[0] ?? null,
+    priceFrom: product.priceFrom,
+    priceVaries: prices.size > 1,
+  }
 }
 
 /** A Variant by its Product's name and its axis values, e.g. "Google Pixel 9 · Obsidian · 256 GB". */

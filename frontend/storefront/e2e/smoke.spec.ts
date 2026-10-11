@@ -3,6 +3,7 @@ import { type Product, type Variant, defaultVariant } from '../src/domain/catalo
 import { type Currencies, type Currency, type Money, currenciesOf, formatMoney } from '../src/domain/money'
 import { type Order, ordersPageSize } from '../src/domain/order'
 import type { Page as ListPage } from '../src/domain/paging'
+import type { AlsoBought } from '../src/domain/recommendations'
 import type { Eligibility, RatingSummary } from '../src/domain/reviews'
 import type { SearchResults } from '../src/domain/search'
 
@@ -19,6 +20,7 @@ import type { SearchResults } from '../src/domain/search'
  *   applied by itself and WELCOME10 on top, pay, follow the Order's Status history, and review the
  *   Product, whose rating then shows on its card and its page. A Customer who never bought a
  *   Product is told they can't review it.
+ * - Buy two new Products together, and see each under "Customers also bought" on the other's page.
  * - Pay with a card the bank confirms later: the page says the payment is being confirmed until the
  *   gateway's webhook settles it, then shows the paid Order; or, declined, shows why, and the held
  *   session is then paid with a card that approves.
@@ -355,6 +357,69 @@ test('a Customer empties their Cart after confirming', async ({ page, request })
   await expect(page.getByRole('link', { name: 'Cart', exact: true })).toBeVisible()
   const cart = await request.get('/api/cart/cart', { headers: { Authorization: `Bearer ${token}` } })
   expect(((await cart.json()) as { items: unknown[] }).items).toEqual([])
+})
+
+test('after a Customer buys two Products together, each one’s page shows the other under Customers also bought', async ({
+  page,
+  request,
+}) => {
+  // Two Products of the test's own, so nothing bought with them before decides what shows.
+  const run = `${Date.now().toString(36)}${test.info().workerIndex}`.toUpperCase()
+  const pair = ['Buds', 'Case'].map((kind) => ({ sku: `E2E-${kind.toUpperCase()}-${run}`, name: `E2E ${kind} ${run}` }))
+  const staff = {
+    Authorization: `Bearer ${await tokenFor(request, { email: 'staff@ecomm.local', password: 'staff' })}`,
+  }
+  try {
+    for (const { sku, name } of pair) {
+      const created = await request.post('/api/catalog/products', {
+        headers: staff,
+        data: {
+          sku,
+          name,
+          category: 'audio',
+          attributes: { brand: 'E2E', type: 'In-ear', wireless: 'true' },
+          variants: [{ id: sku, axisValues: {}, price: { amountMinor: 4999, currency: 'EUR' } }],
+        },
+      })
+      expect(created.status()).toBe(201)
+      const stocked = await request.put(`/api/inventory/stock/${encodeURIComponent(sku)}`, {
+        headers: staff,
+        data: { onHand: 5, reason: 'stocktake' },
+      })
+      expect(stocked.ok()).toBeTruthy()
+    }
+    const customer = signedUp()
+    const token = await tokenFor(request, customer)
+    for (const { sku } of pair) await putInCart(request, token, sku)
+
+    await page.goto('/checkout')
+    await signInOnKeycloak(page, customer)
+    await testCard(page, 'Approve').check()
+    await page.getByRole('button', { name: /^Pay/ }).click()
+    await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/)
+    await expect(page.locator('.status-paid')).toHaveText('Paid')
+
+    for (const [product, other] of [pair, [...pair].reverse()]) {
+      // Recommendations learns of the Order from its event, a moment after it is paid.
+      await expect
+        .poll(async () => (await alsoBoughtOf(request, product.sku)).map((item) => item.sku), { timeout: 15_000 })
+        .toEqual([other.sku])
+      await page.goto(`/products/${encodeURIComponent(product.sku)}`)
+      const row = page.getByRole('region', { name: 'Customers also bought' })
+      await expect(row.getByRole('link')).toHaveCount(1)
+      await expect(row.getByRole('link', { name: new RegExp(escape(other.name)) })).toHaveAttribute(
+        'href',
+        `/products/${encodeURIComponent(other.sku)}`,
+      )
+    }
+  } finally {
+    for (const { sku } of pair) {
+      const product = await request.delete(`/api/catalog/products/${encodeURIComponent(sku)}`, { headers: staff })
+      expect([204, 404]).toContain(product.status())
+      const stock = await request.delete(`/api/inventory/stock/${encodeURIComponent(sku)}`, { headers: staff })
+      expect([204, 404]).toContain(stock.status())
+    }
+  }
 })
 
 test('a new Customer registers on Keycloak and comes back signed in', async ({ page, request, baseURL }) => {
@@ -820,6 +885,13 @@ async function ratingSummaryOf(request: APIRequestContext, sku: string): Promise
   const response = await request.get(`/api/reviews-ratings/products/${encodeURIComponent(sku)}/rating-summary`)
   expect(response.ok()).toBeTruthy()
   return (await response.json()) as RatingSummary
+}
+
+/** What Recommendations says Customers also bought with the Product, most bought together first. */
+async function alsoBoughtOf(request: APIRequestContext, sku: string): Promise<AlsoBought['items']> {
+  const response = await request.get(`/api/recommendations/products/${encodeURIComponent(sku)}/also-bought`)
+  expect(response.ok()).toBeTruthy()
+  return ((await response.json()) as AlsoBought).items
 }
 
 async function searchOf(request: APIRequestContext, query: Record<string, string>): Promise<SearchResults> {
