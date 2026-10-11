@@ -1,15 +1,15 @@
 # Architecture
 
-Three views of the running stack as of Sprint 4: what calls what, what flows over Kafka, and how
-the checkout Saga pays for a Checkout Session. [`GLOSSARY-MAP.md`](../GLOSSARY-MAP.md) is the
+Four views of the running stack as of Sprint 4: how browsers reach the services, how the contexts
+call each other, what flows over Kafka, and how the checkout Saga pays for a Checkout Session. [`GLOSSARY-MAP.md`](../GLOSSARY-MAP.md) is the
 source of truth for the relationships. Update these diagrams when a relationship there changes.
 
 ## Requests
 
 Browsers reach the services only through the API gateway, which rejects a missing or invalid token
 at the edge ([ADR 0010](./adr/0010-api-gateway-authenticates-at-the-edge.md)). Every service still
-checks the Keycloak-issued JWT itself. Each service shows the store it owns. Solid arrows are
-synchronous calls through the gateway or to Temporal; dotted arrows are calls the gateway never routes.
+checks the Keycloak-issued JWT itself. Each service shows the store it owns. The gateway routes
+nothing to Payment except the payment gateway's webhook.
 
 ```mermaid
 flowchart LR
@@ -37,11 +37,6 @@ flowchart LR
     payment["Payment<br/><i>Postgres</i>"]
   end
 
-  subgraph saga["Orchestration"]
-    orchestration["Orchestration workers"]
-    temporal[("Temporal<br/><i>Postgres</i>")]
-  end
-
   browser --> storefront & admin
   browser -. sign in .-> keycloak
   storefront & admin -- "/api/" --> gateway
@@ -50,17 +45,55 @@ flowchart LR
   gateway --> catalog & search & reviews & recs & cart & checkout & promotions & inventory & orders
   bank -- "signed webhook" --> gateway
   gateway -- "webhook only" --> payment
+```
 
-  checkout -. reads Cart .-> cart
-  checkout -. prices lines .-> catalog
-  checkout -. evaluates Discounts .-> promotions
-  checkout -. reserves / releases Stock .-> inventory
-  checkout -- "starts checkout Saga" --> temporal
-  promotions -. reads Categories, currencies .-> catalog
-  payment -. authorizes .-> bank
+## Calls between contexts
 
+Contexts call each other's internal endpoints, which the gateway never routes, each with its own
+client-credentials identity
+([Identity ADR 0002](../services/identity-access/docs/adr/0002-service-identity-by-client-credentials.md)).
+Checkout calls four contexts to start and change a Checkout Session, and starts the checkout Saga
+to pay one. The Saga's workers then send each step's command.
+
+```mermaid
+flowchart TB
+  checkout["Checkout & Pricing"]
+
+  subgraph session["Starting and changing a Checkout Session"]
+    direction LR
+    cart["Cart"]
+    catalog["Catalog"]
+    promotions["Promotions"]
+    inventory["Inventory"]
+  end
+
+  subgraph saga["Orchestration"]
+    direction LR
+    temporal[("Temporal<br/><i>Postgres</i>")]
+    orchestration["Orchestration workers"]
+  end
+
+  subgraph paying["Paying"]
+    direction LR
+    orders["Order Management"]
+    payment["Payment"]
+    bank(["Payment gateway<br/>(mock)"])
+  end
+
+  checkout -- reads Cart --> cart
+  checkout -- prices lines --> catalog
+  checkout -- evaluates Discounts --> promotions
+  checkout -- reserves / releases Stock --> inventory
+  promotions -- "reads Categories,<br/>currencies" --> catalog
+
+  checkout == "starts checkout Saga,<br/>reads outcome" ==> temporal
   temporal <--> orchestration
-  orchestration -. commands .-> orders & payment & inventory & cart & checkout
+  orchestration -- "place, cancel,<br/>mark paid" --> orders
+  orchestration -- "authorize, await<br/>settlement, void" --> payment
+  payment -- authorizes --> bank
+  orchestration -- commit Reservation --> inventory
+  orchestration -- clear Cart --> cart
+  orchestration -- end session --> checkout
 ```
 
 ## Events
