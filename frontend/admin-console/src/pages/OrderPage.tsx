@@ -2,15 +2,18 @@ import { Link, useLocation, useParams } from 'react-router'
 import { useCurrencies } from '../api/currencies'
 import { isNotFound } from '../api/failure'
 import { useOrder } from '../api/orders'
+import { usePayments } from '../api/payments'
 import { NotFound } from '../components/NotFound'
 import { OrderStatusBadge } from '../components/OrderStatusBadge'
 import { ErrorMessage } from '../components/Status'
+import { Badge, type Tone } from '../components/ui/Badge'
 import { Icon } from '../components/ui/Icon'
-import { type Currencies, formatMoney } from '../domain/money'
+import { type Currencies, type Money, formatMoney } from '../domain/money'
 import { type Order, discountLabel, formatTime, historyRowsOf, orderReference } from '../domain/order'
+import { type Payment, type PaymentStatus, paymentStatusLabel, transactionRowsOf } from '../domain/payment'
 import type { FromListState } from './OrderListPage'
 
-/** `/orders/:id`: one Order, whoever it belongs to, and how it got to its Status. Read only. */
+/** `/orders/:id`: one Order, whoever it belongs to, how it got to its Status, and its Payments. Read only. */
 export function OrderPage() {
   const { id } = useParams()
   const order = useOrder(id!)
@@ -59,7 +62,8 @@ function BackLink() {
 }
 
 function OrderDetail({ order, currencies }: { order: Order; currencies: Currencies }) {
-  const money = (amount: Order['total']) => formatMoney(amount, currencies)
+  const payments = usePayments(order.id)
+  const money = (amount: Money) => formatMoney(amount, currencies)
   return (
     <>
       <BackLink />
@@ -160,6 +164,11 @@ function OrderDetail({ order, currencies }: { order: Order; currencies: Currenci
         </div>
       </section>
 
+      <section className="panel" aria-labelledby="order-payments">
+        <h2 id="order-payments">Payments</h2>
+        <Payments payments={payments} money={money} />
+      </section>
+
       <section className="panel" aria-labelledby="order-history">
         <h2 id="order-history">Status history</h2>
         <div className="table-scroll">
@@ -190,5 +199,116 @@ function OrderDetail({ order, currencies }: { order: Order; currencies: Currenci
         </div>
       </section>
     </>
+  )
+}
+
+type PaymentsQuery = ReturnType<typeof usePayments>
+
+const paymentTones: Record<PaymentStatus, Tone> = {
+  PENDING: 'warning',
+  AUTHORIZED: 'success',
+  DECLINED: 'danger',
+  VOIDED: 'neutral',
+}
+
+/**
+ * The Order's Payments, newest first, each with its Payment transactions. An Order can have none,
+ * when the payment gateway never answered, so nothing was recorded.
+ */
+function Payments({ payments, money }: { payments: PaymentsQuery; money: (amount: Money) => string }) {
+  if (payments.error) {
+    return (
+      <ErrorMessage
+        error={payments.error}
+        title="Couldn't load the Payments"
+        retrying={payments.isFetching}
+        onRetry={() => payments.refetch()}
+      />
+    )
+  }
+  if (!payments.data) {
+    return (
+      <div aria-busy="true">
+        <span className="skeleton heading-skeleton" />
+        <span className="visually-hidden">Loading…</span>
+      </div>
+    )
+  }
+  if (payments.data.length === 0) {
+    return (
+      <p className="muted">No Payment was recorded for this Order: the payment gateway may have failed to answer.</p>
+    )
+  }
+  return payments.data.map((payment) => <PaymentDetail key={payment.id} payment={payment} money={money} />)
+}
+
+function PaymentDetail({ payment, money }: { payment: Payment; money: (amount: Money) => string }) {
+  const transactionsId = `payment-${payment.id}-transactions`
+  return (
+    <article className="payment" aria-label={`Payment ${payment.id}`}>
+      <dl className="facts">
+        <div>
+          <dt>Status</dt>
+          <dd>
+            <Badge tone={paymentTones[payment.status]} dot>
+              {paymentStatusLabel(payment.status)}
+            </Badge>
+            {payment.declineReason && <small className="hint">Declined: {payment.declineReason}</small>}
+          </dd>
+        </div>
+        <div>
+          <dt>Amount</dt>
+          <dd>{money(payment.amount)}</dd>
+        </div>
+        <div>
+          <dt>Gateway reference</dt>
+          <dd>
+            <code>{payment.gatewayReference ?? '—'}</code>
+          </dd>
+        </div>
+        <div>
+          <dt>Payment ID</dt>
+          <dd>
+            <code>{payment.id}</code>
+          </dd>
+        </div>
+      </dl>
+      <h3 id={transactionsId} className="visually-hidden">
+        Transactions
+      </h3>
+      <div className="table-scroll">
+        <table className="table" aria-labelledby={transactionsId}>
+          <thead>
+            <tr>
+              <th scope="col">Kind</th>
+              <th scope="col">Outcome</th>
+              <th scope="col" className="num">
+                Amount
+              </th>
+              <th scope="col">Reference</th>
+              <th scope="col">Decline reason</th>
+              <th scope="col">When</th>
+            </tr>
+          </thead>
+          <tbody>
+            {transactionRowsOf(payment).map((row, i) => (
+              <tr key={i}>
+                <th scope="row">{row.kind}</th>
+                <td>{row.outcome}</td>
+                <td className="num">{money(row.amount)}</td>
+                <td>
+                  <code>{row.reference}</code>
+                </td>
+                <td>{row.declineReason ?? <span className="muted">—</span>}</td>
+                <td>
+                  <time dateTime={row.at}>{row.time}</time>
+                  {row.note && <small className="hint">{row.note}</small>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </article>
   )
 }

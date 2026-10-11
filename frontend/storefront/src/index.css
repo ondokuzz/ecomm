@@ -2184,6 +2184,22 @@ main {
 .order-heading h2 {
   margin: 0;
 }
+.order-payments {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-4);
+}
+.order-payment-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.order-payment p {
+  margin: var(--space-2) 0 0;
+}
 .order-id {
   margin: var(--space-3) 0 0;
   font-size: var(--text-xs);

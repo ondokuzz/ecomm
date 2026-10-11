@@ -13,7 +13,7 @@ import type { SearchResults } from '../src/domain/search'
  * as Orders are never deleted.
  *
  * - Browse seeded Products, pick a Variant, add them to the Cart, check out with the mock payment,
- *   and see the Order confirmation and its Order Status. Checkout holds the Cart in a Checkout
+ *   and see the Order confirmation, its Order Status and its Payment. Checkout holds the Cart in a Checkout
  *   Session first, and paying takes the held Stock off on-hand. A declined test card says so, and
  *   the held session can then be paid with one that approves.
  * - Find an audio Product by searching and filtering, check out with the seeded Audio week Campaign
@@ -166,6 +166,14 @@ test('a Customer checks out a picked Variant and another Product, and on-hand St
   for (const entry of order.statusHistory) {
     await expect(progress.locator(`time[datetime="${entry.at}"]`)).toBeVisible()
   }
+  // Its Payment, as Payment recorded it: authorized for the Order's total.
+  const payments = page.getByRole('list', { name: 'Payments' }).getByRole('listitem')
+  await expect(payments).toHaveCount(1)
+  await expect(payments.locator('.payment-authorized')).toHaveText('Authorized')
+  await expect(payments).toContainText(formatMoney(order.total, currencies, 'en-US'))
+  await expect(payments).toContainText('The amount is held on your card.')
+  const [payment] = await paymentsOf(request, token, orderId)
+  expect(payment.status).toBe('AUTHORIZED')
   const orderLines = page.getByRole('list', { name: 'Order lines' })
   for (const line of bought) {
     await expect(orderLines.getByRole('link', { name: lineName(line), exact: true })).toBeVisible()

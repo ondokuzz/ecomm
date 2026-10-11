@@ -1,18 +1,22 @@
 import { type APIRequestContext, type Page, expect, test } from '@playwright/test'
 import type { Order } from '../src/domain/order'
+import type { Payment } from '../src/domain/payment'
 
 /**
  * Staff find a Customer's Order in the Admin Console by its Order reference and by its Customer and
- * Status, open it and read its Status history with each change's time and caller.
+ * Status, open it and read its Status history with each change's time and caller, and its Payments
+ * with their transactions.
  *
- * The test places its own Order for a Customer of its own, straight at Order Management as the
- * checkout Saga does, since the gateway never routes placement. Orders are never deleted, so it ends the Order
- * as Cancelled: the history the test reads.
+ * Each test places its own Order for a Customer of its own, straight at Order Management and
+ * Payment as the checkout Saga does, since the gateway routes neither placing nor authorizing.
+ * Orders are never deleted, so the first ends its Order as Cancelled: the history the test reads.
  */
 
 const keycloakUrl = process.env.KEYCLOAK_URL ?? 'http://localhost:8180'
 /** Order Management's compose host port, which bypasses the gateway, for the checkout Saga's commands. */
 const orderManagementUrl = process.env.ORDER_MANAGEMENT_URL ?? 'http://localhost:8085'
+/** Payment's compose host port, likewise. */
+const paymentUrl = process.env.PAYMENT_URL ?? 'http://localhost:8084'
 const staff = { email: 'staff@ecomm.local', password: 'staff' }
 
 test('Staff find a Customer’s Order and see its Status history', async ({ page, request }) => {
@@ -70,6 +74,31 @@ test('Staff find a Customer’s Order and see its Status history', async ({ page
   expect(filters.get('status')).toBe('CANCELLED')
 })
 
+test('Staff open a paid Order and see its Payment’s authorization transaction', async ({ page, request }) => {
+  const customerId = `e2e-customer-${Date.now().toString(36)}${test.info().workerIndex}`
+  const { order, payment } = await placeAndPayOrder(request, customerId)
+  const reference = order.id.slice(0, 8).toUpperCase()
+
+  await page.goto(`/orders/${order.id}`)
+  await signInOnKeycloak(page)
+  await expect(page.getByRole('heading', { name: `Order #${reference}` })).toBeVisible()
+
+  const payments = page.getByRole('region', { name: 'Payments' })
+  const shown = payments.getByRole('article', { name: `Payment ${payment.id}` })
+  await expect(shown).toContainText('Authorized')
+  await expect(shown).toContainText('€799.00')
+  await expect(shown).toContainText(payment.gatewayReference!)
+  const transactions = shown.getByRole('table', { name: 'Transactions' }).getByRole('row')
+  await expect(transactions).toHaveCount(2)
+  const authorization = payment.transactions[0]
+  await expect(transactions.nth(1)).toContainText('Authorization')
+  await expect(transactions.nth(1)).toContainText('Approved')
+  await expect(transactions.nth(1)).toContainText(authorization.gatewayReference!)
+  await expect(transactions.nth(1).locator('time')).toHaveAttribute('datetime', authorization.at)
+  // Read only: nothing on the page changes the Order or its Payment.
+  await expect(page.getByRole('main').getByRole('button')).toHaveCount(0)
+})
+
 async function signInOnKeycloak(page: Page) {
   await page.locator('#username').fill(staff.email)
   await page.locator('#password').fill(staff.password)
@@ -114,6 +143,54 @@ async function placePaidThenCancelledOrder(request: APIRequestContext, customerI
   const read = await request.get(`/api/order-management/staff/orders/${id}`, { headers: staffHeaders })
   expect(read.ok()).toBeTruthy()
   return (await read.json()) as Order
+}
+
+/**
+ * Places an Order for `customerId`, authorizes its Payment with the approving test card and marks
+ * it paid, as the checkout Saga does, and returns the Payment as Staff read it through the gateway.
+ */
+async function placeAndPayOrder(
+  request: APIRequestContext,
+  customerId: string,
+): Promise<{ order: { id: string }; payment: Payment }> {
+  const headers = await tokenHeaders(request, {
+    grant_type: 'client_credentials',
+    client_id: 'orchestration',
+    client_secret: 'orchestration-dev-secret',
+  })
+  const key = (step: string) => `e2e-${customerId}:run-1:${step}`
+  const total = { amountMinor: 79900, currency: 'EUR' }
+  const placed = await request.post(`${orderManagementUrl}/orders`, {
+    headers: { ...headers, 'Idempotency-Key': key('placeOrder') },
+    data: {
+      customerId,
+      lines: [{ variantId: 'PHN-PIXEL-9', quantity: 1, unitPrice: total }],
+      tax: { amountMinor: 0, currency: 'EUR' },
+    },
+  })
+  expect(placed.status()).toBe(201)
+  const { id } = (await placed.json()) as Order
+  const authorized = await request.post(`${paymentUrl}/payments`, {
+    headers: { ...headers, 'Idempotency-Key': key('authorizePayment') },
+    data: { customerId, orderId: id, paymentMethod: 'tok_approve', amount: total },
+  })
+  expect(authorized.status()).toBe(201)
+  const paid = await request.patch(`${orderManagementUrl}/orders/${id}/status`, {
+    headers: { ...headers, 'Idempotency-Key': key('PAID') },
+    data: { customerId, status: 'PAID' },
+  })
+  expect(paid.ok()).toBeTruthy()
+  const staffHeaders = await tokenHeaders(request, {
+    grant_type: 'password',
+    client_id: 'dev-cli',
+    username: staff.email,
+    password: staff.password,
+  })
+  const read = await request.get(`/api/payment/staff/payments?orderId=${id}`, { headers: staffHeaders })
+  expect(read.ok()).toBeTruthy()
+  const payments = (await read.json()) as Payment[]
+  expect(payments.map((p) => p.status)).toEqual(['AUTHORIZED'])
+  return { order: { id }, payment: payments[0] }
 }
 
 async function tokenHeaders(request: APIRequestContext, form: Record<string, string>) {

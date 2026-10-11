@@ -12,7 +12,7 @@ React, TypeScript, React Router and TanStack Query.
 | `/products/{sku}?variant=` | A Product with a Variant picker, and the chosen Variant's image, Price, Stock and specs, laid out by its Category's attribute definitions; add it to the Cart. Below, its ratings and reviews: see [Reviews](#reviews) | no (adding and reviewing need it) |
 | `/cart` | The Cart, priced from Catalog's current Prices; change quantities, remove lines or empty it | yes |
 | `/checkout` | Starts or resumes a Checkout Session: its lines, price breakdown, a Coupon field and a countdown to when it expires, a test-card picker and a "Pay" button | yes |
-| `/orders/{id}` | An Order: its Order Status timeline, drawn from its Order Status history with times, its lines and summary; after checkout, the confirmation first | yes |
+| `/orders/{id}` | An Order: its Order Status timeline, drawn from its Order Status history with times, its Payment, its lines and summary; after checkout, the confirmation first | yes |
 | `/orders?page=` | My Orders as cards, newest first, 12 to a page; `page` counts from 1 | yes |
 
 ## Design
@@ -146,6 +146,17 @@ recorded. Its lines name their Products and Variants and show their thumbnails, 
 and fall back to the Variant ID when Catalog no longer has the Variant. Its summary shows what it comes to, as
 Order Management worked it out: the subtotal, a Discount line naming its Coupon when there is one,
 the tax and the total.
+
+The Order page shows its Payment from Payment's `GET /payments?orderId=`, which answers the
+Customer's own Payments for the Order, newest first. Each shows its status as a badge (Being
+confirmed, Authorized, Declined or Released, for `PENDING`, `AUTHORIZED`, `DECLINED` and `VOIDED`),
+its amount, and what that means for the Customer's money: still being confirmed by the bank, held
+on the card, why it was declined, or released with nothing charged (`paymentStatusLabel` and
+`paymentStatusNote` in [`src/domain/payment.ts`](./src/domain/payment.ts)). A cancelled Order says
+why above its timeline, by its latest Payment: "Payment declined" or "Card authorization released"
+(`cancellationReason`). An Order with no Payment, such as one whose payment gateway failed to
+answer, says none was recorded, and a failed read shows its error beside the rest of the page, with
+a way to try again. The section is read only.
 
 My Orders lists them as cards: reference, date, the first three Products' thumbnails (and how many
 more), item count, total and Order Status badge, and "Saved with Audio week, WELCOME10" naming each
@@ -369,7 +380,7 @@ Sign in as `demo@ecomm.local` / `demo`, or register a new Customer.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: failed responses as messages and support references, Money formatting by Catalog's Minor units, Cart pricing, checkout problems, the session countdown and the price breakdown with each Discount, Coupon rejections, test cards and payment failures, quantities, Stock levels and Cart lines' availability, toasts, the search's URL and its Facets as chips and filters, rating stars and summaries and the review form's validation, Product specs by their Category's definitions, Customer initials, Orders and their timeline from the Order Status history, the Orders list's paging, Order Status colours, seed Product images, the Keycloak theme's and the Admin Console's copies of the tokens
+npm test          # Vitest: failed responses as messages and support references, Money formatting by Catalog's Minor units, Cart pricing, checkout problems, the session countdown and the price breakdown with each Discount, Coupon rejections, test cards and payment failures, an Order's Payment statuses and why a cancelled Order was cancelled, quantities, Stock levels and Cart lines' availability, toasts, the search's URL and its Facets as chips and filters, rating stars and summaries and the review form's validation, Product specs by their Category's definitions, Customer initials, Orders and their timeline from the Order Status history, the Orders list's paging, Order Status colours, seed Product images, the Keycloak theme's and the Admin Console's copies of the tokens
 npm run test:e2e  # Playwright smoke, search and error-states tests against the running compose stack (`make up`)
 ```
 
@@ -381,7 +392,8 @@ signs in on Keycloak for real as a Customer made for it through Keycloak's admin
 deleted again afterwards with any review, so a failed run leaves no Cart or Checkout Session for the
 next. It checks out two Products with the Approve test card (the "held until" notice and its countdown, their Stock reserved but
 still on hand, then the confirmation, the confetti gone under reduced motion, the Order's lines by
-Product name, its timeline with Placed then Paid at the times Order Management recorded, its card on
+Product name, its timeline with Placed then Paid at the times Order Management recorded, its Payment
+Authorized for the Order's total, its card on
 My Orders with no pager, and on-hand Stock down by one), pays with the
 Decline card and sees the decline inline with the session kept, then pays the same session with
 Approve and sees `PAID`, applies `WELCOME10`, gets Audio week and `WELCOME10` together on an audio

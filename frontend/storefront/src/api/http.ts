@@ -39,6 +39,7 @@ export type Service =
   | 'cart'
   | 'checkout-pricing'
   | 'order-management'
+  | 'payment'
   | 'search-discovery'
   | 'reviews-ratings'
   | 'recommendations'

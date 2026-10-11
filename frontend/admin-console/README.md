@@ -22,7 +22,7 @@ Vite, React, TypeScript, React Router and TanStack Query, with `oidc-client-ts`.
 | `/promotions/campaigns/new` | A new Campaign |
 | `/promotions/campaigns/{id}` | A Campaign |
 | `/orders` | Every Customer's Orders, newest first, 20 to a page: Order reference, when placed, Customer ID, items, total and Order Status. Filter by Status, Customer ID, the days placed and Order reference |
-| `/orders/{id}` | An Order: its ID, Customer ID, lines, each Discount by its Campaign or Coupon, tax and total, and its Order Status history |
+| `/orders/{id}` | An Order: its ID, Customer ID, lines, each Discount by its Campaign or Coupon, tax and total, its Payments with their transactions, and its Order Status history |
 
 `/` opens the Products. Every page needs a Staff sign-in.
 
@@ -139,6 +139,16 @@ that made it, such as Checkout. A change backfilled for an Order placed before h
 has no time to show, and says so. `filtersOf`, `searchOf`, `ordersQueryOf` and `historyRowsOf` in
 [`src/domain/order.ts`](./src/domain/order.ts) do this.
 
+The Order page lists the Order's Payments from Payment's `GET /staff/payments?orderId=`, Staff
+only, newest first (see the [Payment README](../../services/payment/README.md)). Each shows its
+status (Pending, Authorized, Declined with the gateway's decline reason, or Voided), amount,
+gateway reference and ID, and its Payment transactions oldest first: kind (Authorization or Void),
+outcome (Approved, Declined or Pending), amount, the gateway's reference, decline reason and time.
+A transaction backfilled from a Payment recorded before the ledger says its time is approximate.
+`transactionRowsOf` in [`src/domain/payment.ts`](./src/domain/payment.ts) does this. An Order with
+no Payment, such as one whose payment gateway failed to answer, says none was recorded. Like the
+rest of the page, Payments are read only.
+
 ## Validation errors
 
 Catalog and Promotions check every write. A 400 names each offending field in its problem detail's `errors`,
@@ -190,7 +200,7 @@ squarer corners. Dark mode follows `prefers-color-scheme`, as in the Storefront.
 ## Calling the services
 
 The browser reaches Catalog at `/api/catalog/…`, Inventory at `/api/inventory/…`, Order Management
-at `/api/order-management/…` and Promotions at `/api/promotions/…` on the console's own origin. Everything under
+at `/api/order-management/…`, Payment at `/api/payment/…` and Promotions at `/api/promotions/…` on the console's own origin. Everything under
 `/api/` goes to the [API gateway](../../platform/api-gateway/README.md), which checks the token and
 routes it. In development the Vite dev proxy forwards `/api` to the gateway's compose host port,
 8000 ([`vite.config.ts`](./vite.config.ts)). In compose, nginx does it
@@ -225,7 +235,7 @@ how to apply the client to an existing realm.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: failed requests as messages and references, field errors from problem details, the STAFF role in an access token, a Category, a Product, a Coupon and a Campaign to and from their editor's form, decimals to and from Money, the Order list's filters to Order Management's query, and an Order's Status history
+npm test          # Vitest: failed requests as messages and references, field errors from problem details, the STAFF role in an access token, a Category, a Product, a Coupon and a Campaign to and from their editor's form, decimals to and from Money, the Order list's filters to Order Management's query, an Order's Status history, and Payment statuses and transactions
 npm run build
 npm run test:e2e  # Playwright against the running compose stack (`make up`)
 ```
@@ -257,7 +267,10 @@ does, straight at Order Management on its host port (`ORDER_MANAGEMENT_URL`, def
 `http://localhost:8085`), since the gateway never routes placement. It pays and cancels the Order,
 then finds it in the console by its Order reference and by its Customer and Status, opens it and
 reads its history, each change with its time and caller. Orders are never deleted, so the test's
-Order stays, Cancelled.
+Order stays, Cancelled. A second test places an Order the same way, authorizes its Payment with
+`tok_approve` straight at Payment on its host port (`PAYMENT_URL`, default `http://localhost:8084`)
+and marks it paid, then opens it in the console and sees the Payment Authorized with its
+authorization transaction: Approved, with the gateway's reference and time.
 
 Each test removes its Product and Stock, Coupon, Campaign or Customer through the services' and
 Keycloak's APIs if it failed before doing so itself, so the stack is left as it was, but for the

@@ -1,3 +1,6 @@
+import type { Money } from './money'
+import type { OrderStatus } from './order'
+
 /**
  * A test card the mock payment gateway answers in a set way. Its `token` is the payment method paying
  * a Checkout Session sends; there is no card number to type.
@@ -44,11 +47,11 @@ export const testCards: readonly TestCard[] = [
 export const defaultTestCard = testCards[0]
 
 /** How an attempt to pay a Checkout Session stands: the checkout Saga is still going, or how it ended. */
-export type PaymentStatus = 'PROCESSING' | 'PAID' | 'DECLINED' | 'HOLD_EXPIRED' | 'FAILED'
+export type PaymentAttemptStatus = 'PROCESSING' | 'PAID' | 'DECLINED' | 'HOLD_EXPIRED' | 'FAILED'
 
 /** The latest attempt to pay a Checkout Session, as Checkout reports it. */
 export interface PaymentAttempt {
-  status: PaymentStatus
+  status: PaymentAttemptStatus
   orderId: string | null
   declineReason: string | null
 }
@@ -154,4 +157,73 @@ export function confirmation(
   const failure = attempt && attemptFailure(attempt)
   if (failure) return { kind: 'failed', failure }
   return now - since < pollFor ? { kind: 'confirming' } : { kind: 'stillConfirming' }
+}
+
+/**
+ * A Payment's status, worked out from its Payment transactions: its authorization awaits the bank,
+ * the amount is held, the gateway declined it, or the hold was released by a Void.
+ */
+export type PaymentStatus = 'PENDING' | 'AUTHORIZED' | 'DECLINED' | 'VOIDED'
+
+export const paymentStatuses: readonly PaymentStatus[] = ['PENDING', 'AUTHORIZED', 'DECLINED', 'VOIDED']
+
+/** An Order's Payment as the Customer reads it from Payment; `declineReason` is null unless it was declined. */
+export interface Payment {
+  id: string
+  orderId: string
+  amount: Money
+  status: PaymentStatus
+  declineReason: string | null
+}
+
+const paymentStatusLabels: Record<PaymentStatus, string> = {
+  PENDING: 'Being confirmed',
+  AUTHORIZED: 'Authorized',
+  DECLINED: 'Declined',
+  VOIDED: 'Released',
+}
+
+/** A Payment status as the Customer reads it. */
+export function paymentStatusLabel(status: PaymentStatus): string {
+  return paymentStatusLabels[status]
+}
+
+const declineReasons: Record<string, string> = {
+  card_declined: 'Your bank declined the card.',
+  insufficient_funds: "The card didn't have enough funds.",
+  unknown_payment_method: "The payment provider didn't know the card.",
+}
+
+/** What a Payment's status means for the Customer's money; for a declined one, why it was declined. */
+export function paymentStatusNote({ status, declineReason }: Pick<Payment, 'status' | 'declineReason'>): string {
+  switch (status) {
+    case 'PENDING':
+      return 'Your bank is still confirming this payment.'
+    case 'AUTHORIZED':
+      return 'The amount is held on your card.'
+    case 'VOIDED':
+      return 'The hold on your card was released. Nothing was charged.'
+    case 'DECLINED':
+      if (!declineReason) return 'The payment was declined.'
+      return Object.hasOwn(declineReasons, declineReason)
+        ? declineReasons[declineReason]
+        : `The payment was declined (${declineReason}).`
+  }
+}
+
+/**
+ * Why a cancelled Order was cancelled, by its latest Payment (Payment lists them newest first): the
+ * payment was declined, or the card authorization was released. Undefined for an Order that isn't
+ * cancelled, or whose Payment doesn't say, such as one the gateway never answered for.
+ */
+export function cancellationReason(status: OrderStatus, payments: readonly Payment[]): string | undefined {
+  if (status !== 'CANCELLED') return undefined
+  switch (payments[0]?.status) {
+    case 'DECLINED':
+      return 'Payment declined'
+    case 'VOIDED':
+      return 'Card authorization released'
+    default:
+      return undefined
+  }
 }

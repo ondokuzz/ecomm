@@ -1,11 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import {
+  type Payment,
+  type PaymentStatus,
   attemptFailure,
+  cancellationReason,
   confirmation,
   confirmingAfter,
   defaultTestCard,
   isConfirmingPayment,
   paymentFailure,
+  paymentStatusLabel,
+  paymentStatusNote,
+  paymentStatuses,
   pollFor,
   testCards,
 } from './payment'
@@ -159,3 +165,58 @@ describe('confirmation', () => {
     })
   })
 })
+
+describe('paymentStatusLabel', () => {
+  it('names each Payment status as the Customer reads it', () => {
+    expect(paymentStatuses.map(paymentStatusLabel)).toEqual(['Being confirmed', 'Authorized', 'Declined', 'Released'])
+  })
+})
+
+describe('paymentStatusNote', () => {
+  it('says what each Payment status means for the Customer’s money', () => {
+    expect(paymentStatusNote(payment('PENDING'))).toBe('Your bank is still confirming this payment.')
+    expect(paymentStatusNote(payment('AUTHORIZED'))).toBe('The amount is held on your card.')
+    expect(paymentStatusNote(payment('VOIDED'))).toBe('The hold on your card was released. Nothing was charged.')
+  })
+
+  it('says why a declined Payment was declined, in words for the reasons it knows', () => {
+    expect(paymentStatusNote(payment('DECLINED', 'card_declined'))).toBe('Your bank declined the card.')
+    expect(paymentStatusNote(payment('DECLINED', 'insufficient_funds'))).toBe("The card didn't have enough funds.")
+    expect(paymentStatusNote(payment('DECLINED', 'unknown_payment_method'))).toBe(
+      "The payment provider didn't know the card.",
+    )
+  })
+
+  it('still gives the reason of a decline it has no words for, or says none was given', () => {
+    expect(paymentStatusNote(payment('DECLINED', 'lost_card'))).toBe('The payment was declined (lost_card).')
+    expect(paymentStatusNote(payment('DECLINED'))).toBe('The payment was declined.')
+  })
+})
+
+describe('cancellationReason', () => {
+  it('says a cancelled Order’s payment was declined, or its authorization released, by its latest Payment', () => {
+    expect(cancellationReason('CANCELLED', [payment('DECLINED', 'card_declined')])).toBe('Payment declined')
+    expect(cancellationReason('CANCELLED', [payment('VOIDED')])).toBe('Card authorization released')
+    // Newest first, as Payment lists them.
+    expect(cancellationReason('CANCELLED', [payment('VOIDED'), payment('DECLINED', 'card_declined')])).toBe(
+      'Card authorization released',
+    )
+  })
+
+  it('gives no reason for an Order that isn’t cancelled, or whose Payment doesn’t explain it', () => {
+    expect(cancellationReason('PAID', [payment('AUTHORIZED')])).toBeUndefined()
+    expect(cancellationReason('PLACED', [payment('DECLINED', 'card_declined')])).toBeUndefined()
+    expect(cancellationReason('CANCELLED', [])).toBeUndefined()
+    expect(cancellationReason('CANCELLED', [payment('AUTHORIZED')])).toBeUndefined()
+  })
+})
+
+function payment(status: PaymentStatus, declineReason: string | null = null): Payment {
+  return {
+    id: 'p-1',
+    orderId: 'o-1',
+    amount: { amountMinor: 79900, currency: 'EUR' },
+    status,
+    declineReason,
+  }
+}

@@ -4,23 +4,31 @@ import { useVariants } from '../api/catalog'
 import { useFormatMoney } from '../api/currencies'
 import { isNotFound } from '../api/failure'
 import { useOrder } from '../api/orders'
+import { usePayments } from '../api/payments'
 import { CheckoutSteps } from '../components/CheckoutSteps'
 import { OrderConfirmation } from '../components/OrderConfirmation'
+import { OrderPayments } from '../components/OrderPayments'
 import { OrderStatusBadge } from '../components/OrderStatusBadge'
 import { OrderTimeline } from '../components/OrderTimeline'
 import { OrderSkeleton } from '../components/PageSkeletons'
 import { ProductLines } from '../components/ProductLines'
 import { NotFound } from '../components/NotFound'
-import { ErrorState, LookupError } from '../components/Status'
+import { ErrorMessage, ErrorState, LookupError } from '../components/Status'
 import { Card } from '../components/ui/Card'
 import { Icon } from '../components/ui/Icon'
+import { Skeleton } from '../components/ui/Skeleton'
 import { type Order, nameOrderLines, orderItemCountLabel, orderReference, orderSummaryRows } from '../domain/order'
+import { cancellationReason } from '../domain/payment'
 
-/** An Order, its Order Status and its lines, read from Order Management; after checkout, the confirmation first. */
+/**
+ * An Order, its Order Status, its Payments and its lines, read from Order Management and Payment;
+ * after checkout, the confirmation first. A cancelled Order says why, when its Payment does.
+ */
 export function OrderPage() {
   const { id = '' } = useParams()
   const [params] = useSearchParams()
   const query = useOrder(id)
+  const payments = usePayments(id)
   const { variants, failure: variantsFailure } = useVariants(query.data?.lines.map((line) => line.variantId) ?? [])
 
   if (query.isPending) return <OrderSkeleton />
@@ -45,6 +53,7 @@ export function OrderPage() {
   const order = query.data
   const placed = params.has('placed')
   const Heading = placed ? 'h2' : 'h1'
+  const cancelledBecause = payments.data && cancellationReason(order.status, payments.data)
 
   return (
     <section>
@@ -60,11 +69,32 @@ export function OrderPage() {
         <Heading>Order #{orderReference(order)}</Heading>
         <OrderStatusBadge status={order.status} />
       </div>
+      {cancelledBecause && (
+        <p className="alert alert-info">
+          <Icon name="alert" size={18} />
+          <span>Cancelled: {cancelledBecause}</span>
+        </p>
+      )}
       <div className="cart-layout">
         <div className="cart-main stack">
           <Card>
             <h2 className="card-title">Order progress</h2>
             <OrderTimeline order={order} />
+          </Card>
+          <Card>
+            <h2 className="card-title">Payment</h2>
+            {payments.error ? (
+              <ErrorMessage
+                error={payments.error}
+                title="We couldn't load the payment"
+                retrying={payments.isFetching}
+                onRetry={() => payments.refetch()}
+              />
+            ) : payments.data ? (
+              <OrderPayments payments={payments.data} />
+            ) : (
+              <Skeleton height="2.5rem" />
+            )}
           </Card>
           <Card>
             <h2 className="card-title">Products</h2>
