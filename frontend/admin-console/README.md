@@ -12,6 +12,7 @@ Vite, React, TypeScript, React Router and TanStack Query, with `oidc-client-ts`.
 | `/products` | Every Product in a table: name, SKU, Category, Variant count and lowest Price. Filter by Category (`?category=`) and search names and SKUs (`?q=`). Edit or delete each |
 | `/products/new` | A new Product, in the Category `?category=` names if any |
 | `/products/{sku}` | A Product, its Variants and their Stock. The SKU and Category can't change here |
+| `/products/{sku}/stock/{variantId}` | A Variant's Stock movements, newest first, 20 to a page, and whether its On-hand equals their sum. Read only |
 | `/categories` | Every Category in a table: name, slug, attribute definitions (Variant axes highlighted), Product count. Edit or delete each |
 | `/categories/new` | A new Category: name, slug and attribute definitions |
 | `/categories/{slug}` | A Category's name and attribute definitions. The slug can't change, since Products name their Category by it |
@@ -87,6 +88,19 @@ Deleting a Product goes through a ConfirmDialog. It takes the Variants with it, 
 stop stocking each (`DELETE /stock/{variantId}`, Staff only). Catalog goes first, so nothing more
 can be bought. A Variant Inventory doesn't stock is skipped. Inventory keeps the Stock of a Variant
 that Reservations still hold, and the list names each such Variant with Inventory's reason.
+
+## Stock movements
+
+A stocked Variant's row in the editor has a **Movements** link to
+`/products/{sku}/stock/{variantId}`, which pages through Inventory's
+`GET /stock/{variantId}/movements`, Staff only, newest first (see the
+[Inventory README](../../services/inventory/README.md#stock-movements)). The page lives in the URL
+as `?page=`. Each movement shows its kind (Adjusted, Reserved, Released, Committed, Received or
+Restocked), its On-hand change and reserved change, signed as `+3` or `−2`, the Reservation that
+made it, Staff's reason and its time to the second. Above them are the Variant's On-hand, the
+On-hand its movements add up to, and whether the two balance. `movementRowsOf` and `balanceOf` in
+[`src/domain/stock.ts`](./src/domain/stock.ts) do this. The page is read only: Staff still change
+only On-hand, in the editor, and each change shows here as an Adjusted movement with no reason.
 
 ## Promotions
 
@@ -235,7 +249,7 @@ how to apply the client to an existing realm.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: failed requests as messages and references, field errors from problem details, the STAFF role in an access token, a Category, a Product, a Coupon and a Campaign to and from their editor's form, decimals to and from Money, the Order list's filters to Order Management's query, an Order's Status history, and Payment statuses and transactions
+npm test          # Vitest: failed requests as messages and references, field errors from problem details, the STAFF role in an access token, a Category, a Product, a Coupon and a Campaign to and from their editor's form, decimals to and from Money, the Order list's filters to Order Management's query, an Order's Status history, Payment statuses and transactions, and Stock movements and their balance
 npm run build
 npm run test:e2e  # Playwright against the running compose stack (`make up`)
 ```
@@ -258,6 +272,8 @@ their Stock.
 - **A refused count** has Inventory refuse one Variant's count. The test stands in for Inventory
   there, since a new Variant has no Reservations. It checks that the new Product opens on its own
   page with the refusal beside that count, then sets the count by saving again.
+- **Stock movements** opens the new Product, sets the first Variant's On-hand from 5 to 8, and
+  opens its movements: balanced at 8, the Adjusted movement of `+3` above the opening `+5`.
 - **A Price in search** waits for the new Product to reach Search & Discovery, changes its first
   Variant's Price in the editor, and sees search give the new "from" Price within 10 seconds, on its
   API and on the Storefront's listing.

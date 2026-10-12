@@ -203,6 +203,46 @@ test('a Price Staff change shows in search within seconds, on the Storefront too
   await storefront.close()
 })
 
+test("Staff set a Variant's Stock and see its movements, balanced, with the Adjusted movement", async ({
+  page,
+  request,
+}) => {
+  const { sku, name, variants } = phone
+  const first = variants[0]!
+  await createInConsole(page)
+  await expect(page.getByRole('status')).toHaveText(`Saved ${name}.`)
+
+  await page.getByLabel('Search').fill(sku)
+  await page.getByRole('row').filter({ hasText: sku }).getByRole('link', { name, exact: true }).click()
+  await page.getByLabel('Variant 1 on hand').fill('8')
+  await page.getByRole('button', { name: 'Save changes' }).click()
+  await expect(page.getByRole('status')).toHaveText(`Saved ${name}.`)
+  expect(await stockOf(request, first.id)).toMatchObject({ onHand: 8 })
+
+  await page.getByLabel('Search').fill(sku)
+  await page.getByRole('row').filter({ hasText: sku }).getByRole('link', { name, exact: true }).click()
+  await expect(page.getByLabel('Variant 1 on hand')).toHaveValue('8')
+  await page.getByRole('link', { name: 'Variant 1 Stock movements' }).click()
+
+  await expect(page).toHaveURL(new RegExp(`/products/${sku}/stock/${first.id}$`))
+  await expect(page.getByRole('heading', { name: `Stock movements of ${first.id}` })).toBeVisible()
+  await expect(page.getByText('On-hand, 8, equals the sum of every movement.')).toBeVisible()
+  const rows = page.getByRole('table', { name: 'Stock movements' }).locator('tbody tr')
+  // Newest first: the Adjusted movement from 5 to 8, then the one setting the new Variant's 5.
+  await expect(rows).toHaveCount(2)
+  await expect(rows.nth(0).locator('th, td').first()).toHaveText('Adjusted')
+  await expect(rows.nth(0).locator('td').nth(0)).toHaveText('+3')
+  await expect(rows.nth(0).locator('td').nth(1)).toHaveText('0')
+  await expect(rows.nth(1).locator('th, td').first()).toHaveText('Adjusted')
+  await expect(rows.nth(1).locator('td').nth(0)).toHaveText(`+${first.onHand}`)
+  await expect(page.getByText('Page 1 of 1 · 2 movements')).toBeVisible()
+
+  // Nothing here changes Stock; the back link returns to the editor.
+  await expect(page.getByRole('textbox')).toHaveCount(0)
+  await page.getByRole('link', { name: `Product ${sku}` }).click()
+  await expect(page.getByRole('heading', { name, exact: true })).toBeVisible()
+})
+
 /** Signs in as Staff on a new Product's page and creates `phone` with its Variants and Stock. */
 async function createInConsole(page: Page) {
   await page.goto('/products/new')

@@ -14,6 +14,7 @@ import { OrderListPage } from './pages/OrderListPage'
 import { OrderPage } from './pages/OrderPage'
 import { ProductEditorPage } from './pages/ProductEditorPage'
 import { ProductListPage } from './pages/ProductListPage'
+import { StockMovementsPage } from './pages/StockMovementsPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -36,6 +37,7 @@ export function App() {
                 <Route path="products" element={<ProductListPage />} />
                 <Route path="products/new" element={<ProductEditorPage />} />
                 <Route path="products/:sku" element={<ProductEditorPage />} />
+                <Route path="products/:sku/stock/:variantId" element={<StockMovementsPage />} />
                 <Route path="categories" element={<CategoryListPage />} />
                 <Route path="categories/new" element={<CategoryEditorPage />} />
                 <Route path="categories/:slug" element={<CategoryEditorPage />} />

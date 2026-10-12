@@ -579,6 +579,16 @@ function ProductEditor({
                         <td className="num">{stock ? stock.reserved : <Dash />}</td>
                         <td className="num">{stock ? stock.quantity : <Dash />}</td>
                         <td className="actions">
+                          {stock && savedSku && (
+                            <ButtonLink
+                              variant="ghost"
+                              size="sm"
+                              to={`/products/${encodeURIComponent(savedSku)}/stock/${encodeURIComponent(variant.id)}`}
+                              aria-label={`${label} Stock movements`}
+                            >
+                              Movements
+                            </ButtonLink>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"
@@ -601,7 +611,7 @@ function ProductEditor({
               Each Variant needs a value for every Variant axis, and no two alike. A saved Variant's ID never changes,
               and Catalog keeps every saved Variant until its Product is deleted, since Carts, Orders and Stock name it.
               On hand is what Inventory physically holds; Reservations hold some of it for checkouts, and the rest is
-              available to sell.
+              available to sell. Movements lists how a stocked Variant's On-hand got there.
             </p>
           </section>
         </>

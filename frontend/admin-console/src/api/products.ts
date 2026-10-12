@@ -1,6 +1,7 @@
-import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from 'react-oidc-context'
 import type { Product, ProductRequest, Stock, StockChange } from '../domain/product'
+import type { StockMovementPage } from '../domain/stock'
 import { isNotFound } from './failure'
 import { api } from './http'
 
@@ -37,6 +38,24 @@ export function useStocks(variantIds: string[]) {
           throw error
         }),
     })),
+  })
+}
+
+/**
+ * A page of a Variant's Stock movements, newest first, with whether its On-hand equals their sum.
+ * The page on show stays until the next arrives. Staff only.
+ */
+export function useStockMovements(variantId: string, page: number, size: number) {
+  const token = useAuth().user?.access_token
+  return useQuery({
+    queryKey: [...stockKey, variantId, 'movements', { page, size }],
+    queryFn: () =>
+      api<StockMovementPage>(
+        'inventory',
+        `/stock/${encodeURIComponent(variantId)}/movements?page=${page}&size=${size}`,
+        { token },
+      ),
+    placeholderData: keepPreviousData,
   })
 }
 
