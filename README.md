@@ -1,8 +1,8 @@
 # Ecomm Platform
 
-A from-scratch e-commerce platform, architected as fifteen bounded contexts across five parallel team tracks, planned over nine two-week sprints for a small (4-5 person) engineering team. Sprint 3 has added the event backbone and the first features on it, and it all runs locally: search the Catalog with Facets, pick a Variant, keep a Cart, check out with a Checkout Session that reserves its Stock, gets the running Campaigns by itself and a Coupon on top, and pays through a mock payment that can decline, then follow the Order's Status history and review what you bought. Staff manage the Catalog, Coupons and Campaigns, and look up Orders, in an Admin Console.
+A from-scratch e-commerce platform, architected as fifteen bounded contexts across five parallel team tracks, planned over nine two-week sprints for a small (4-5 person) engineering team. Sprint 4 has put paying on a Saga, and it all runs locally: search the Catalog with Facets, pick a Variant, keep a Cart, check out with a Checkout Session that reserves its Stock, gets the running Campaigns by itself and a Coupon on top, and pay through a mock payment that can decline or wait for the bank, which the checkout Saga on Temporal either completes or undoes whole. Then follow the Order's Status history and its Payment, review what you bought, and see what others bought with it. Staff manage the Catalog, Coupons and Campaigns, and look up Orders with their Payments and each Variant's Stock movements, in an Admin Console. Grafana shows the services, the event consumers and checkout.
 
-## Run Sprint 3
+## Run Sprint 4
 
 You need Docker with about 8 GB of memory, `make`, and Node 24 for the smoke tests.
 
@@ -18,7 +18,8 @@ The first build takes several minutes. Then open the Storefront on http://localh
    MacBook Air 13 (M3) come in several Variants: pick one by its color and storage, each with its
    own Price and Stock. One iPhone Variant starts sold out;
 2. sign in as `demo@ecomm.local` / `demo`, or register a new Customer on Keycloak's page;
-3. add Products to the Cart and go to checkout, which holds them and their Prices for 15 minutes
+3. add Products to the Cart, which warns of a line that asks for more than is in Stock, and go to
+   checkout, which holds them and their Prices for 15 minutes
    and shows the time left. An `audio` Product gets the "Audio week" Campaign's 15% off by itself.
    Enter the Coupon `WELCOME10` for 10% off what is left, then pick a test card and press **Pay**.
    Paying starts the checkout Saga in [Orchestration](./services/orchestration/README.md), which
@@ -26,8 +27,9 @@ The first build takes several minutes. Then open the Storefront on http://localh
    than a few seconds shows "Confirming your payment…" until it is done. Paying again with another
    card works while the Checkout Session lasts;
 4. see the Order confirmation with its Order Status, **Paid**, its timeline drawn from the Order
-   Status history (Placed, then Paid, each with its time) and each of its Discounts, and find the
-   Order under **My Orders**;
+   Status history (Placed, then Paid, each with its time), each of its Discounts and its Payment,
+   **Authorized**, and find the Order under **My Orders**. A cancelled Order says why: its payment
+   was declined, or its Payment voided, releasing the hold on the card;
 5. go back to a Product you paid for and review it: rate it, and give it a title and a few words.
    Its stars show on its card and its page, and you can edit or delete your review there. On a
    Product you haven't bought, the page says why you can't review it;
@@ -49,20 +51,25 @@ A checkout left unpaid expires after 15 minutes, and the Storefront offers to st
 Reservation stops holding the Stock 2 minutes later, and Inventory's sweeper marks it `RELEASED`
 within 30 seconds of that ([Checkout ADR 0001](./services/checkout-pricing/docs/adr/0001-checkout-sessions-hold-stock-through-reservations.md)).
 `GET http://localhost:8000/api/inventory/stock/{variantId}` shows the Stock held and given back.
+If the hold runs out while the bank is still confirming a payment, the Saga voids the authorization
+and cancels the Order, and the Storefront says the hold ran out and nothing was charged.
 
 Staff work in the [Admin Console](./frontend/admin-console/README.md) on http://localhost:8090,
 signed in as `staff@ecomm.local` / `staff`; the demo Customer is refused there. Staff can:
 
 1. find a Customer's Order under **Orders**, by its Order reference (`#3F2A9C1B`), Customer ID,
    Status or when it was placed, and open it to see its lines, Discounts, tax and total, and its
-   Status history with each change's time and caller. Nothing there changes an Order;
+   Status history with each change's time and caller, and its Payments with their Payment
+   transactions: each authorization and void, with its outcome, amount, gateway reference and time.
+   Nothing there changes an Order or a Payment;
 2. under **Promotions**, manage Coupons, and Campaigns with their state (running, scheduled, over
    or off). A Campaign created there, say 20% off `laptops`, applies to the next Checkout Session
    with a laptop in it;
 3. create and edit Products with their Variants, Prices and Stock, and Categories with their
    attribute definitions. A new Product, or a changed Price, shows in the Storefront's listing within
    a second or two, once [Search & Discovery](./services/search-discovery/README.md) has the event,
-   and on its own page at once.
+   and on its own page at once. A Product's editor shows each Variant's On-hand, reserved and
+   available Stock, and its Stock movements, newest first, with whether they balance.
 
 Every failed request on a Storefront page shows a support reference: the request's
 [Correlation ID](./GLOSSARY.md). The services log JSON lines carrying it, and the events a request
@@ -100,7 +107,7 @@ Orchestration, which serves nothing but its health:
 | 9092 | Kafka |
 | 7233 | Temporal, for workers and clients run from the host ([Orchestration](./services/orchestration/README.md#temporal)) |
 | 8233 | Temporal's web UI: every workflow, its history and its retries |
-| 3000 | Grafana: the Services and Event consumers dashboards, open for viewing ([below](#metrics-and-dashboards)) |
+| 3000 | Grafana: the Services, Event consumers and Checkout Saga dashboards, open for viewing ([below](#metrics-and-dashboards)) |
 | 9090 | Prometheus: every service's metrics, for 2 days |
 | 27017 | Mongo |
 | 5050 | pgAdmin, once started (below) |
@@ -158,15 +165,20 @@ How a service publishes and consumes events is in the [service template's README
 ### Smoke tests
 
 The Storefront's smoke test walks the Customer's path in Chromium against the running stack, each
-test as a Customer it makes in Keycloak and deletes afterwards. It adds two Products, checks out with the approving test card, expects `PAID` on the confirmation page and checks through the
-Inventory API that the Checkout Session reserved their Stock and paying took it off on-hand. It
-also pays with a declining card, sees the decline, then pays the same session with the approving
-one, applies `WELCOME10` and sees its discount on the `PAID` Order, gets Audio week and `WELCOME10`
-together on an audio Product, pages through My Orders (stood in for), and registers a new Customer.
-Then it walks Sprint 3's definition of done: it filters Audio by type and to what is in stock,
-searches, checks out with Audio week and `WELCOME10`, pays, sees Placed then Paid on the Order's
-timeline, reviews the Product and sees its Rating summary on its card and page. Another Customer is told they
-can't review a Product they never bought:
+test as a Customer it makes in Keycloak and deletes afterwards. It adds two Products, checks out
+with the approving test card, expects `PAID` and an authorized Payment on the confirmation page, and
+checks through the Inventory API that the Checkout Session reserved their Stock and paying took it
+off on-hand. It also pays with a declining card, sees the decline, then pays the same session with
+the approving one, applies `WELCOME10` and sees its discount on the `PAID` Order, gets Audio week
+and `WELCOME10` together on an audio Product, pages through My Orders (stood in for), and registers
+a new Customer. Then it walks Sprint 3's definition of done: it filters Audio by type and to what is
+in stock, searches, checks out with Audio week and `WELCOME10`, pays, sees Placed then Paid on the
+Order's timeline, reviews the Product and sees its Rating summary on its card and page. Another
+Customer is told they can't review a Product they never bought. Then Sprint 4's: a Customer buys two
+new Products together and sees each under "Customers also bought" on the other's page, and pays with
+each card the bank confirms, seeing "Confirming your payment…" and then the paid Order, its Payment
+approved by the gateway's webhook, or the decline's reason, after which the same session is paid
+with the approving card:
 
 ```sh
 cd frontend/storefront
@@ -175,7 +187,9 @@ npm run test:e2e
 ```
 
 The Admin Console has its own: Staff create a Product with two Variants and their Stock, and a
-Customer picks either on the Storefront; Staff find a Customer's Order and see its history; Staff
+Customer picks either on the Storefront; Staff set a Variant's Stock and see its Stock movements,
+balanced; Staff find a Customer's Order and see its history, and open a paid Order and see its
+Payment's authorization; Staff
 manage Coupons and Campaigns, and a Campaign they create applies to a Customer's next checkout,
 whose Order Staff then find. Run it with `npm run test:e2e` in `frontend/admin-console`, after the
 Storefront's rather than beside it, since both check out. Both suites make their own Customers
@@ -199,37 +213,46 @@ take, stay.
 Every checkout takes Stock, so after many smoke-test runs `make seed-reset` refills it. To wipe
 everything, Keycloak's users included, run `docker compose down -v`.
 
-### A stack from Sprint 2
+### A stack from Sprint 3
 
-`make up` on a stack from Sprint 2 brings it into Sprint 3 with nothing done by hand; the first
-build takes about ten minutes. It adds Kafka, Mongo, the schema registry, Search & Discovery and
-Reviews & Ratings, and creates their databases (`search` and `reviews` in Mongo, `apicurio` in
-Postgres) ([The event backbone](#the-event-backbone)). Then:
+`make up` on a stack from Sprint 3 brings it into Sprint 4 with nothing done by hand; the first
+build takes about half an hour. It adds Temporal and its UI, Orchestration, Recommendations,
+Prometheus and Grafana, and creates their databases in Postgres (`temporal`,
+`temporal_visibility` and `recommendations`), Temporal's schema and its `default` namespace. The
+topics init adds `payment.payment` and every consumer group's dead-letter and redrive topics
+([The event backbone](#the-event-backbone)). Then:
 
-- **Orders get a history.** A migration gives each Order its placement, and its current Order
-  Status if it has moved on, marked `backfilled` and timed at its placement, since Sprint 2 never
-  recorded when it changed. An Order's single Discount becomes its first `COUPON` Discount.
-- **Stock gets a ledger.** A migration opens each Variant's Stock movements with an adjustment equal
-  to its On-hand, and a reservation for each line of every Reservation still active, so
-  `GET /stock/{variantId}/movements` balances from the start.
-- **Search and Reviews start complete.** On their first start, Order Management, Inventory and
-  Catalog each publish everything they hold once (`change: BACKFILLED`), so Search lists every
-  Product with its Stock, and a Customer who paid for something under Sprint 2 may review it.
+- **The realm gains Orchestration.** The `keycloak-realm` step adds the `orchestration` client and
+  the `ORCHESTRATION` role the realm file has and the running realm lacks, and changes nothing that
+  is already there ([Identity & Access README](./services/identity-access/README.md#adding-to-a-running-realm)).
+- **Payments get a ledger.** A migration turns each Payment into one backfilled `AUTHORIZATION`
+  Payment transaction, approved or declined with its reason as the Payment was, and Payment
+  publishes each once as `payment.payment` (`change: BACKFILLED`) when it starts.
+- **Recommendations starts complete.** Its consumer groups read `order-management.order` and
+  `catalog.product` from the start, so Orders placed before the upgrade count towards "Customers
+  also bought".
+- **Checkouts carry on.** A Checkout Session started before the upgrade can still be paid while it
+  lasts: paying it starts the checkout Saga like any other.
 
-The Keycloak realm is unchanged since Sprint 2. A stack from Sprint 1 needs Sprint 2's steps
-first: `make seed-reset` once for the multi-Variant Products, and the realm's `admin-console`
-client, or the Admin Console's sign-in fails with "Invalid parameter: redirect_uri" ([Identity &
-Access README](./services/identity-access/README.md#the-admin-console-client)).
+A stack from Sprint 2 should need only `make up` too, since Sprint 3's migrations and backfills run
+first, but only the upgrade from Sprint 3 was checked. A stack from Sprint 1 also needs `make seed-reset` once for the multi-Variant Products, and
+the realm's `admin-console` client, or the Admin Console's sign-in fails with "Invalid parameter:
+redirect_uri" ([Identity & Access README](./services/identity-access/README.md#the-admin-console-client)).
 
 ### Memory
 
 Each Spring service is capped at 384 MB, with 60% of it for the heap, Keycloak at 768 MB with 40%
-for the heap, and each nginx at 64 MB. Kafka and Mongo are capped at 512 MB each, with a 256 MB heap for Kafka and a
-256 MB cache for Mongo, Apicurio and pgAdmin at 384 MB each, the Temporal server at 384 MB, its UI at
-64 MB, Prometheus and Grafana at 256 MB each, and Temporal's and Keycloak's init steps at 128 MB or
-less. The default stack fits in about 8 GB of Docker memory; `docker stats` shows what it uses
-([Sprint 4's reading](./docs/roadmap.md#sprint-4-weeks-78--checkout-saga--payment-ledger)).
-Couchbase, Postgres and Redis are uncapped.
+for the heap, and each nginx at 64 MB. Kafka is capped at 640 MB with a 256 MB heap, and Mongo at
+512 MB with a 256 MB cache, Apicurio and pgAdmin at 384 MB each, the Temporal server at 384 MB, its
+UI at 64 MB, Prometheus and Grafana at 256 MB each, and the init steps at 256 MB or less. The
+default stack fits in about 8 GB of Docker memory, with some of it in swap; `docker stats` shows
+what it uses ([Sprint 4's
+reading](./docs/roadmap.md#sprint-4-weeks-78--checkout-saga--payment-ledger)).
+Couchbase, Postgres and Redis are uncapped. Building the images takes about 1.3 GB more while it
+runs, so on 8 GB, `make down` before a `make up` that rebuilds many of them: built beside the
+running stack, they can run Docker out of memory, and the kernel then kills a container, often
+Kafka or Keycloak. `make status` names it as killed for memory under its cap, since Docker doesn't
+say which ran out, and `make up` starts it again.
 
 ## CI
 

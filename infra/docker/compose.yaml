@@ -497,7 +497,9 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_HEAP_OPTS: -Xms256m -Xmx256m
-    mem_limit: 512m
+    # The broker takes about 400 MB with the dead-letter and redrive topics, and each
+    # healthcheck starts a JVM of about 100 MB beside it; at 512 MB that was killed for memory.
+    mem_limit: 640m
     ports: ["${KAFKA_PORT:-9092}:9092"]
     volumes:
       - kafka-data:/var/lib/kafka/data

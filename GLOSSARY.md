@@ -9,7 +9,7 @@ A person who browses, buys, and manages Orders on the platform. Keycloak holds a
 _Avoid_: User, Account, Buyer
 
 **Staff**:
-A back-office person with the `STAFF` role. In the Admin Console, which turns away anyone without the role, Staff manage the Catalog, Coupons and Campaigns, and look up every Customer's Orders without changing them.
+A back-office person with the `STAFF` role. In the Admin Console, which turns away anyone without the role, Staff manage the Catalog, Coupons and Campaigns, look up every Customer's Orders with their Payments without changing them, and read each Variant's Stock movements.
 _Avoid_: Admin, Operator
 
 **Storefront**:
@@ -17,7 +17,7 @@ The web app where Customers browse the Catalog, keep a Cart, check out and follo
 _Avoid_: Shop, Site, Frontend (there are two)
 
 **Admin Console**:
-The web app where Staff manage the Catalog (Products with their Variants, Prices and Stock, and Categories with their Attribute definitions) and Promotions' Coupons and Campaigns, and read every Customer's Orders with their Order Status history. Only Staff get in; a Customer who signs in is told it is for Staff. Like the Storefront it is a UI over the contexts, and each service still checks the Staff role on every change.
+The web app where Staff manage the Catalog (Products with their Variants, Prices and Stock, and Categories with their Attribute definitions) and Promotions' Coupons and Campaigns, and read every Customer's Orders with their Order Status history and their Payments' Payment transactions, and each Variant's Stock movements. Only Staff get in; a Customer who signs in is told it is for Staff. Like the Storefront it is a UI over the contexts, and each service still checks the Staff role on every change.
 _Avoid_: Admin panel, Back office, Dashboard
 
 **Product**:
@@ -105,7 +105,7 @@ A Customer's Cart held for checkout for 15 minutes: its lines at the Prices capt
 _Avoid_: Checkout (the whole two-step process), Hold, Basket
 
 **Reservation**:
-A temporary, all-or-nothing hold on the Stock of several Variants for one Customer, created when a Checkout Session starts and lasting 2 minutes longer than the session. It is `ACTIVE` until it is committed, which takes its units off On-hand for good on payment success, or released, which gives them back on abandonment. It holds Stock only while `ACTIVE` and before its `expiresAt`: from that moment it holds nothing, even before a sweep marks it `RELEASED`, and it can no longer be committed. Only its Customer's checkout can commit or release it.
+A temporary, all-or-nothing hold on the Stock of several Variants for one Customer, created when a Checkout Session starts and lasting 2 minutes longer than the session. It is `ACTIVE` until it is committed, which takes its units off On-hand for good on payment success, or released, which gives them back on abandonment. It holds Stock only while `ACTIVE` and before its `expiresAt`: from that moment it holds nothing, even before a sweep marks it `RELEASED`, and it can no longer be committed. Only Checkout, for its Customer, can release it early, and only the checkout Saga can commit it.
 _Avoid_: Lock, Hold
 
 **Order**:
