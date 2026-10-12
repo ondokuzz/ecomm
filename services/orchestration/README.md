@@ -111,8 +111,12 @@ with the task queue, workflow and activity type):
 - `checkout_step_failures_total{step}`: failed attempts of each step, before Temporal retries it;
 - `checkout_compensations_total{kind}`: `cancelOrder` and `voidPayment`.
 
-Temporal's Spring Boot starter reports them to Micrometer every 10 seconds, its fixed interval. Grafana's **Checkout Saga** dashboard shows
-them ([infra/docker/grafana](../../infra/docker/grafana)).
+Temporal's Spring Boot starter reports them to Micrometer every 10 seconds, its fixed interval, but
+only once it has counted something. So that Prometheus has each at 0 before its first count, which
+`increase()` would otherwise miss, `CheckoutMetrics` registers every outcome, step and
+compensation at 0 when Orchestration starts, with the tags Temporal's scopes give them. It reads
+the steps from the activity interfaces, but a compensation added to the Saga is added there by hand. Grafana's **Checkout Saga** dashboard shows them
+([infra/docker/grafana](../../infra/docker/grafana)).
 
 ## Temporal
 
@@ -159,6 +163,8 @@ Orchestration calls:
   retried with the same key, a refused placement, a gateway that keeps failing, a failing
   compensation and a failing mark-paid retried, a Cart that can't be cleared, two runs for one
   session with keys of their own, and the counters on `/actuator/prometheus`;
+- `CheckoutMetricsTest`: every counter at 0 before any checkout, and a run counting on those same
+  series;
 - `ServiceTokenTest`: the token's caching, renewal and retry on a 401;
 - `HealthApiTest`: health is public, and there is no API;
 - `ArchitectureTest`: the shared `HexagonalRules`, and workflow code reaching other contexts only

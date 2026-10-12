@@ -140,6 +140,15 @@ dashboards, under **ecomm**, are files in [`infra/docker/grafana`](./infra/docke
   failures by step, compensations by kind, and Temporal's own activity failures and workflow
   durations.
 
+A panel plotting `rate()` or `increase()` counts a series only from its second sample, so a
+counter has to be on `/actuator/prometheus` at 0 before its first count, or that count is missed.
+Orchestration's checkout counters and Inventory's Stock cache counters are. Some can't be, since
+what they are tagged with is known only when they count, so their panels miss the first count of
+each new series after a service starts: **Retries** (per group and topic), the **5xx rate** and
+**request rate per route** (per route and status), and Temporal's own **activity failures** and
+**workflow durations**. The dead-lettered and redriven events are plotted as counters since each
+service started for the same reason.
+
 A dashboard changed in Grafana can't be saved there: export its JSON and replace the file.
 
 ### The event backbone
