@@ -1,6 +1,6 @@
 # Scrapes every Spring service's /actuator/prometheus over the Compose network; service-commons
 # exposes it, tagged with the service's name (platform/service-template/README.md#metrics). A new
-# service is added to the targets here.
+# service is added to the targets here. Consumer lag comes from the Kafka exporter, below.
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
@@ -22,3 +22,18 @@ scrape_configs:
           - reviews-ratings:8080
           - recommendations:8080
           - orchestration:8080
+
+  # Consumer lag from the broker's committed offsets (compose.yaml's kafka-exporter). Only its lag
+  # and each partition's oldest and newest offsets are kept, the lag's consumergroup label renamed
+  # group, as the consumers' own metrics name it.
+  - job_name: kafka-exporter
+    static_configs:
+      - targets: [kafka-exporter:9308]
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: kafka_consumergroup_lag|kafka_topic_partition_(current|oldest)_offset
+        action: keep
+      - source_labels: [consumergroup]
+        target_label: group
+      - regex: consumergroup
+        action: labeldrop

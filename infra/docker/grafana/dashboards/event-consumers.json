@@ -25,10 +25,10 @@
           "uid": "prometheus"
         },
         "query": {
-          "query": "label_values(kafka_consumer_fetch_manager_records_lag, group)",
+          "query": "label_values(kafka_consumergroup_lag, group)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
-        "definition": "label_values(kafka_consumer_fetch_manager_records_lag, group)",
+        "definition": "label_values(kafka_consumergroup_lag, group)",
         "refresh": 2,
         "includeAll": true,
         "multi": true,
@@ -54,7 +54,7 @@
       "id": 1,
       "type": "timeseries",
       "title": "Lag per group",
-      "description": "Events on a group's topics not yet consumed, over all its partitions.",
+      "description": "Events on a group's topics it hasn't committed yet, over all its partitions: each partition's end offset less the group's committed offset, as the broker reports it. It keeps showing while the group is stopped, or stuck retrying an event. On a partition the group has never committed on, for which the exporter reports -1, it is every event the partition holds, since the group reads from the start.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -100,7 +100,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (group) (kafka_consumer_fetch_manager_records_lag{group=~\"$group\"})",
+          "expr": "sum by (group) ((kafka_consumergroup_lag{group=~\"$group\"} >= 0) or on (group, topic, partition) (0 * (kafka_consumergroup_lag{group=~\"$group\"} == -1) + on (topic, partition) group_left () (kafka_topic_partition_current_offset - kafka_topic_partition_oldest_offset)))",
           "legendFormat": "{{group}}"
         }
       ]
@@ -164,7 +164,7 @@
       "id": 3,
       "type": "timeseries",
       "title": "Lag per group, topic and partition",
-      "description": "Events not yet consumed on each partition a group is assigned.",
+      "description": "Events each group hasn't committed yet on each partition of its topics, from the broker's committed offsets.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -210,7 +210,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (group, topic, partition) (kafka_consumer_fetch_manager_records_lag{group=~\"$group\"})",
+          "expr": "sum by (group, topic, partition) ((kafka_consumergroup_lag{group=~\"$group\"} >= 0) or on (group, topic, partition) (0 * (kafka_consumergroup_lag{group=~\"$group\"} == -1) + on (topic, partition) group_left () (kafka_topic_partition_current_offset - kafka_topic_partition_oldest_offset)))",
           "legendFormat": "{{group}} {{topic}} [{{partition}}]"
         }
       ]

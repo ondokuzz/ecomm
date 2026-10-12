@@ -236,10 +236,12 @@ exports:
   refused before it reaches a controller, such as a 401, has the `uri` `UNKNOWN`.
 - **Kafka consumers:** the consumer client's metrics, `kafka_consumer_*`, each tagged with its
   consumer `group`, among them `kafka_consumer_fetch_manager_records_lag` per `topic` and
-  `partition`, and `kafka_consumer_fetch_manager_records_consumed_total` per `topic`. A
-  partition's metrics show up within a minute of it being assigned. The `group` tag comes from
-  Kafka's default client ID, so don't set `spring.kafka.client-id` or a listener's
-  `clientIdPrefix`.
+  `partition`, and `kafka_consumer_fetch_manager_records_consumed_total` per `topic`. A partition's
+  metrics show up within a minute of it being assigned. The client's lag counts from what it has
+  fetched, so it misses an event held in retries, and a stopped consumer reports none: the
+  dashboards take lag from the Kafka exporter instead, which reads the broker's committed offsets.
+  The `group` tag comes from Kafka's default client ID, so don't set `spring.kafka.client-id` or a
+  listener's `clientIdPrefix`.
 - **Retries and dead letters:** per `group` and `topic`, the topic an event was first read from:
   - `ecomm_events_retried_total`, each retry of an event a listener failed on;
   - `ecomm_events_dead_lettered_total`, each event sent to its group's dead-letter topic;

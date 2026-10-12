@@ -580,8 +580,24 @@ services:
       timeout: 5s
       retries: 20
 
-  # Scrapes every Spring service's metrics (prometheus/prometheus.yml) and keeps 2 days of them, on
-  # http://localhost:9090.
+  # Each consumer group's lag as the broker sees it: a partition's end offset less the group's
+  # committed offset. Unlike the consumers' own metrics, it shows a group stopped, or stuck retrying
+  # an event, since neither commits. The redrive tool's own groups (<group>.dlt-redrive) are left
+  # out. Prometheus scrapes it; nothing else calls it, so it publishes no host port.
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:v1.9.0
+    command: ["--kafka.server=kafka:19092", "--group.exclude=\\.dlt-redrive$"]
+    mem_limit: 32m
+    depends_on:
+      kafka: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:9308/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  # Scrapes every Spring service's metrics, and the Kafka exporter's (prometheus/prometheus.yml),
+  # and keeps 2 days of them, on http://localhost:9090.
   prometheus:
     image: prom/prometheus:v3.15.0
     command:
@@ -602,9 +618,9 @@ services:
       timeout: 3s
       retries: 10
 
-  # The Services and Event consumers dashboards on http://localhost:3000, open to anyone for viewing;
-  # sign in as admin / admin to explore. Its data source and dashboards are provisioned from
-  # grafana/, and it keeps nothing else between restarts.
+  # The Services, Event consumers and Checkout Saga dashboards on http://localhost:3000, open to
+  # anyone for viewing; sign in as admin / admin to explore. Its data source and dashboards are
+  # provisioned from grafana/, and it keeps nothing else between restarts.
   grafana:
     image: grafana/grafana:13.2.3
     environment:

@@ -108,7 +108,7 @@ Orchestration, which serves nothing but its health:
 | 7233 | Temporal, for workers and clients run from the host ([Orchestration](./services/orchestration/README.md#temporal)) |
 | 8233 | Temporal's web UI: every workflow, its history and its retries |
 | 3000 | Grafana: the Services, Event consumers and Checkout Saga dashboards, open for viewing ([below](#metrics-and-dashboards)) |
-| 9090 | Prometheus: every service's metrics, for 2 days |
+| 9090 | Prometheus: every service's metrics, and Kafka's consumer lag, for 2 days |
 | 27017 | Mongo |
 | 5050 | pgAdmin, once started (below) |
 
@@ -135,7 +135,10 @@ dashboards, under **ecomm**, are files in [`infra/docker/grafana`](./infra/docke
   each Postgres service's outbox events not yet sent to Kafka (Catalog's Couchbase outbox isn't
   measured), and Inventory's Stock cache: its hit ratio, and its hits, misses and Redis errors.
 - **Event consumers:** lag per consumer group, and per group, topic and partition; consumption
-  rate; retries; dead-lettered and redriven events.
+  rate; retries; dead-lettered and redriven events. Lag comes from a Kafka exporter, which reads
+  each group's committed offsets from the broker, so it keeps showing while a group is stopped or
+  stuck retrying an event. The consumers' own lag, which counts only from what they have fetched,
+  isn't plotted.
 - **Checkout Saga:** checkouts by outcome (`PAID`, `DECLINED`, `HOLD_EXPIRED`, `FAILED`), step
   failures by step, compensations by kind, and Temporal's own activity failures and workflow
   durations.
@@ -253,9 +256,9 @@ redirect_uri" ([Identity & Access README](./services/identity-access/README.md#t
 Each Spring service is capped at 384 MB, with 60% of it for the heap, Keycloak at 768 MB with 40%
 for the heap, and each nginx at 64 MB. Kafka is capped at 640 MB with a 256 MB heap, and Mongo at
 512 MB with a 256 MB cache, Apicurio and pgAdmin at 384 MB each, the Temporal server at 384 MB, its
-UI at 64 MB, Prometheus and Grafana at 256 MB each, and the init steps at 256 MB or less. The
-default stack fits in about 8 GB of Docker memory, with some of it in swap; `docker stats` shows
-what it uses ([Sprint 4's
+UI at 64 MB, Prometheus and Grafana at 256 MB each, the Kafka exporter at 32 MB, and the init steps
+at 256 MB or less. The default stack fits in about 8 GB of Docker memory, with some of it in swap;
+`docker stats` shows what it uses ([Sprint 4's
 reading](./docs/roadmap.md#sprint-4-weeks-78--checkout-saga--payment-ledger)).
 Couchbase, Postgres and Redis are uncapped. Building the images takes about 1.3 GB more while it
 runs, so on 8 GB, `make down` before a `make up` that rebuilds many of them: built beside the
