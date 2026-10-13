@@ -7,19 +7,22 @@ import java.util.List;
 /**
  * Where a Payment stands with the gateway, worked out from its Payment transactions: {@code
  * PENDING} while its authorization awaits the gateway's answer; {@code AUTHORIZED} once approved
- * and not voided; {@code DECLINED}, final, with the gateway's reason; {@code VOIDED}, an
- * authorization released before capture, final. Capture and refund come later.
+ * and neither voided nor captured; {@code DECLINED}, final, with the gateway's reason; {@code
+ * VOIDED}, an authorization released before capture, final; {@code CAPTURED}, the authorized amount
+ * charged, final until refunds come. A declined capture leaves a Payment {@code AUTHORIZED}.
  */
 public enum PaymentStatus {
   PENDING,
   AUTHORIZED,
   DECLINED,
-  VOIDED;
+  VOIDED,
+  CAPTURED;
 
   /**
    * The status {@code transactions}, oldest first, leave a Payment in. The first is its
    * authorization; a pending one may be settled by one more authorization, approved or declined; an
-   * authorized or pending Payment may be voided.
+   * authorized or pending Payment may be voided; an authorized one may be captured, approved or
+   * declined, and a declined capture leaves it authorized.
    *
    * @throws IllegalStateException for any other sequence, which no Payment can have
    */
@@ -47,6 +50,11 @@ public enum PaymentStatus {
         && transaction.outcome() == Outcome.APPROVED
         && (status == AUTHORIZED || status == PENDING)) {
       return VOIDED;
+    }
+    if (transaction.kind() == Kind.CAPTURE
+        && status == AUTHORIZED
+        && transaction.outcome() != Outcome.PENDING) {
+      return transaction.outcome() == Outcome.APPROVED ? CAPTURED : AUTHORIZED;
     }
     throw new IllegalStateException(
         "A Payment that is "

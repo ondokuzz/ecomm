@@ -3,6 +3,7 @@ package com.ecomm.payment.application;
 import com.ecomm.commons.events.IntegrationEventPublisher;
 import com.ecomm.payment.application.port.in.AuthorizePaymentUseCase;
 import com.ecomm.payment.application.port.in.BrowsePaymentsUseCase;
+import com.ecomm.payment.application.port.in.CapturePaymentUseCase;
 import com.ecomm.payment.application.port.in.FindPaymentUseCase;
 import com.ecomm.payment.application.port.in.PublishBackfillUseCase;
 import com.ecomm.payment.application.port.in.SettleAuthorizationUseCase;
@@ -14,8 +15,10 @@ import com.ecomm.payment.application.port.out.PaymentRepository;
 import com.ecomm.payment.application.port.out.TimeSource;
 import com.ecomm.payment.application.port.out.Transactions;
 import com.ecomm.payment.domain.AuthorizationRequest;
+import com.ecomm.payment.domain.GatewayCapture;
 import com.ecomm.payment.domain.GatewaySettlement;
 import com.ecomm.payment.domain.Payment;
+import com.ecomm.payment.domain.PaymentNotCapturableException;
 import com.ecomm.payment.domain.PaymentNotVoidableException;
 import com.ecomm.payment.domain.PaymentStatus;
 import java.util.List;
@@ -25,6 +28,7 @@ import java.util.UUID;
 public class PaymentService
     implements AuthorizePaymentUseCase,
         VoidPaymentUseCase,
+        CapturePaymentUseCase,
         FindPaymentUseCase,
         BrowsePaymentsUseCase,
         PublishBackfillUseCase,
@@ -89,6 +93,54 @@ public class PaymentService
                       payments.recordLatestTransaction(voided);
                       events.publish(PaymentEvent.of(voided, Change.VOIDED));
                       return voided;
+                    }));
+  }
+
+  /**
+   * The Payment stays locked while the gateway is asked, so two captures of one Payment ask it
+   * once. A declined capture is recorded and published, and the Payment stays authorized; asked
+   * again with the same key, the gateway gives the same answer, which is recorded again.
+   */
+  @Override
+  public Optional<Capture> capture(String customerId, UUID id, String idempotencyKey) {
+    return transactions.inTransaction(
+        () ->
+            payments
+                .lockToChange(id)
+                .filter(payment -> payment.belongsTo(customerId))
+                .map(
+                    payment -> {
+                      if (payment.status() == PaymentStatus.CAPTURED) {
+                        return new Capture(payment, CaptureOutcome.CAPTURED, null);
+                      }
+                      if (payment.status() != PaymentStatus.AUTHORIZED) {
+                        throw new PaymentNotCapturableException(id, payment.status());
+                      }
+                      var answer =
+                          gateway.capture(
+                              payment.gatewayReference(), payment.amount(), idempotencyKey);
+                      var capture =
+                          switch (answer) {
+                            case GatewayCapture.Approved approved ->
+                                new Capture(
+                                    payment.captured(approved.reference(), time.now()),
+                                    CaptureOutcome.CAPTURED,
+                                    null);
+                            case GatewayCapture.Declined declined ->
+                                new Capture(
+                                    payment.captureDeclined(
+                                        declined.reference(), declined.reason(), time.now()),
+                                    CaptureOutcome.DECLINED,
+                                    declined.reason());
+                          };
+                      payments.recordLatestTransaction(capture.payment());
+                      events.publish(
+                          PaymentEvent.of(
+                              capture.payment(),
+                              capture.outcome() == CaptureOutcome.CAPTURED
+                                  ? Change.CAPTURED
+                                  : Change.CAPTURE_DECLINED));
+                      return capture;
                     }));
   }
 
@@ -160,7 +212,8 @@ public class PaymentService
       case AUTHORIZED -> Change.AUTHORIZED;
       case DECLINED -> Change.DECLINED;
       case PENDING -> Change.PENDING;
-      case VOIDED -> throw new IllegalStateException("An authorization can't void a Payment");
+      case VOIDED, CAPTURED ->
+          throw new IllegalStateException("An authorization can't void or capture a Payment");
     };
   }
 }
