@@ -293,6 +293,25 @@ them as a `customerId` in the body. Take the Customer from the body only on endp
 way; everywhere else the Customer is the token's `sub`, via `CurrentCustomer`. Test the allowed
 caller with `FakeKeycloak.token("checkout", "CHECKOUT")`, and test that a `CUSTOMER` token gets 403.
 
+## Secrets
+
+A secret is an ordinary property with no value in `application.yml`, such as
+`spring.datasource.password`. `application.yml` imports `/run/secrets` as a config tree, where
+Compose mounts a container's secrets as files, each named after the property it sets
+([ADR 0011](../../docs/adr/0011-secrets-as-generated-files.md)):
+
+```yaml
+spring:
+  config:
+    import: optional:configtree:${ecomm.secrets-dir:/run/secrets/}
+```
+
+A service's entry in `infra/docker/compose.yaml` lists the secrets it needs, with the property as
+the target, e.g. `{ source: postgres-password, target: spring.datasource.password }`; a new secret
+is also added to `infra/docker/secrets.sh` and to the file's `secrets:`. No code knows where a
+secret comes from, so a test sets it as a property like any other. `SecretFilesApiTest` shows a
+secret set only as a file, in a directory named by `ecomm.secrets-dir`, reaching its property.
+
 ## Tests
 
 Test from the outside, at the HTTP seam: start the app (`@SpringBootTest(webEnvironment =
@@ -327,7 +346,7 @@ a change publishes there, and on what a consumer makes of the events sent to it 
 ```sh
 docker compose up -d --wait keycloak kafka apicurio   # from the repo root
 docker compose exec postgres createdb -U ecomm service_template
-./gradlew :platform:service-template:bootRun
+SPRING_DATASOURCE_PASSWORD="$(cat .secrets/ecomm/postgres-password)" ./gradlew :platform:service-template:bootRun
 TOKEN=$(curl -s http://localhost:8180/realms/ecomm/protocol/openid-connect/token \
   -d grant_type=password -d client_id=dev-cli \
   -d username=demo@ecomm.local -d password=demo | jq -r .access_token)
