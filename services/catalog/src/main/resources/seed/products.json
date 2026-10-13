@@ -47,7 +47,12 @@
           "/images/products/phn-pixel-9/porcelain.svg"
         ]
       }
-    ]
+    ],
+    "warranty": {
+      "months": 24,
+      "manufacturer": "Google"
+    },
+    "serialTracking": "IMEI"
   },
   {
     "sku": "PHN-PIXEL-9-PRO",
@@ -72,7 +77,12 @@
           "currency": "EUR"
         }
       }
-    ]
+    ],
+    "warranty": {
+      "months": 24,
+      "manufacturer": "Google"
+    },
+    "serialTracking": "IMEI"
   },
   {
     "sku": "PHN-IPHONE-16",
@@ -136,7 +146,12 @@
           "/images/products/phn-iphone-16/ultramarine.svg"
         ]
       }
-    ]
+    ],
+    "warranty": {
+      "months": 24,
+      "manufacturer": "Apple"
+    },
+    "serialTracking": "IMEI"
   },
   {
     "sku": "PHN-IPHONE-16-PRO",
@@ -161,7 +176,12 @@
           "currency": "EUR"
         }
       }
-    ]
+    ],
+    "warranty": {
+      "months": 24,
+      "manufacturer": "Apple"
+    },
+    "serialTracking": "IMEI"
   },
   {
     "sku": "PHN-GALAXY-S24",
@@ -186,7 +206,12 @@
           "currency": "EUR"
         }
       }
-    ]
+    ],
+    "warranty": {
+      "months": 24,
+      "manufacturer": "Samsung"
+    },
+    "serialTracking": "IMEI"
   },
   {
     "sku": "PHN-GALAXY-A55",
@@ -211,7 +236,12 @@
           "currency": "EUR"
         }
       }
-    ]
+    ],
+    "warranty": {
+      "months": 24,
+      "manufacturer": "Samsung"
+    },
+    "serialTracking": "IMEI"
   },
   {
     "sku": "PHN-NOTHING-2A",
@@ -236,7 +266,12 @@
           "currency": "EUR"
         }
       }
-    ]
+    ],
+    "warranty": {
+      "months": 24,
+      "manufacturer": "Nothing"
+    },
+    "serialTracking": "IMEI"
   },
   {
     "sku": "LPT-MBA-13-M3",
@@ -284,7 +319,12 @@
           "currency": "EUR"
         }
       }
-    ]
+    ],
+    "warranty": {
+      "months": 24,
+      "manufacturer": "Apple"
+    },
+    "serialTracking": "SERIAL"
   },
   {
     "sku": "LPT-MBP-14-M4",
@@ -310,7 +350,12 @@
           "currency": "EUR"
         }
       }
-    ]
+    ],
+    "warranty": {
+      "months": 24,
+      "manufacturer": "Apple"
+    },
+    "serialTracking": "SERIAL"
   },
   {
     "sku": "LPT-XPS-13",
@@ -336,7 +381,12 @@
           "currency": "EUR"
         }
       }
-    ]
+    ],
+    "warranty": {
+      "months": 24,
+      "manufacturer": "Dell"
+    },
+    "serialTracking": "SERIAL"
   },
   {
     "sku": "LPT-THINKPAD-X1",
@@ -362,7 +412,12 @@
           "currency": "EUR"
         }
       }
-    ]
+    ],
+    "warranty": {
+      "months": 24,
+      "manufacturer": "Lenovo"
+    },
+    "serialTracking": "SERIAL"
   },
   {
     "sku": "LPT-ZENBOOK-14",
@@ -388,7 +443,12 @@
           "currency": "EUR"
         }
       }
-    ]
+    ],
+    "warranty": {
+      "months": 24,
+      "manufacturer": "ASUS"
+    },
+    "serialTracking": "SERIAL"
   },
   {
     "sku": "LPT-FRAMEWORK-13",
@@ -414,7 +474,12 @@
           "currency": "EUR"
         }
       }
-    ]
+    ],
+    "warranty": {
+      "months": 24,
+      "manufacturer": "Framework"
+    },
+    "serialTracking": "SERIAL"
   },
   {
     "sku": "LPT-SURFACE-7",
@@ -440,7 +505,12 @@
           "currency": "EUR"
         }
       }
-    ]
+    ],
+    "warranty": {
+      "months": 24,
+      "manufacturer": "Microsoft"
+    },
+    "serialTracking": "SERIAL"
   },
   {
     "sku": "AUD-AIRPODS-PRO-2",
@@ -464,7 +534,12 @@
           "currency": "EUR"
         }
       }
-    ]
+    ],
+    "warranty": {
+      "months": 12,
+      "manufacturer": "Apple"
+    },
+    "serialTracking": "SERIAL"
   },
   {
     "sku": "AUD-SONY-WH1000XM5",
@@ -488,7 +563,12 @@
           "currency": "EUR"
         }
       }
-    ]
+    ],
+    "warranty": {
+      "months": 12,
+      "manufacturer": "Sony"
+    },
+    "serialTracking": "SERIAL"
   },
   {
     "sku": "AUD-BOSE-QC-ULTRA",
@@ -512,7 +592,12 @@
           "currency": "EUR"
         }
       }
-    ]
+    ],
+    "warranty": {
+      "months": 12,
+      "manufacturer": "Bose"
+    },
+    "serialTracking": "SERIAL"
   },
   {
     "sku": "AUD-SENNHEISER-MTW4",
@@ -536,7 +621,12 @@
           "currency": "EUR"
         }
       }
-    ]
+    ],
+    "warranty": {
+      "months": 12,
+      "manufacturer": "Sennheiser"
+    },
+    "serialTracking": "SERIAL"
   },
   {
     "sku": "AUD-JBL-FLIP-6",
@@ -560,7 +650,12 @@
           "currency": "EUR"
         }
       }
-    ]
+    ],
+    "warranty": {
+      "months": 12,
+      "manufacturer": "JBL"
+    },
+    "serialTracking": "SERIAL"
   },
   {
     "sku": "AUD-SONOS-ERA-100",
@@ -583,6 +678,11 @@
           "currency": "EUR"
         }
       }
-    ]
+    ],
+    "warranty": {
+      "months": 12,
+      "manufacturer": "Sonos"
+    },
+    "serialTracking": "SERIAL"
   }
 ]

@@ -15,6 +15,21 @@ export interface Variant {
   images: string[]
 }
 
+/** A manufacturer's warranty on all of a Product's Variants: from 1 to 120 months. */
+export interface WarrantyTerms {
+  months: number
+  manufacturer: string
+}
+
+/** How each unit of a Product's Variants is told apart when it ships: not at all, by serial number, or by IMEI. */
+export type SerialTracking = 'NONE' | 'SERIAL' | 'IMEI'
+
+export const SERIAL_TRACKINGS: { value: SerialTracking; label: string }[] = [
+  { value: 'NONE', label: 'None' },
+  { value: 'SERIAL', label: 'Serial number' },
+  { value: 'IMEI', label: 'IMEI' },
+]
+
 /** A Product as Catalog answers it. */
 export interface Product {
   sku: string
@@ -27,13 +42,19 @@ export interface Product {
   /** The lowest of its Variants' Prices. */
   priceFrom: Money
   variants: Variant[]
+  /** Its Warranty terms; null when it has none. */
+  warranty: WarrantyTerms | null
+  serialTracking: SerialTracking
 }
 
 /**
- * A Product as Staff send it: no `priceFrom`, which Catalog works out, and no `description` when it
- * has none. Saving replaces the whole Product, so a description left out is removed.
+ * A Product as Staff send it: no `priceFrom`, which Catalog works out, and no `description` or
+ * `warranty` when it has none. Saving replaces the whole Product, so either left out is removed.
  */
-export type ProductRequest = Omit<Product, 'priceFrom' | 'description'> & { description?: string }
+export type ProductRequest = Omit<Product, 'priceFrom' | 'description' | 'warranty'> & {
+  description?: string
+  warranty?: WarrantyTerms
+}
 
 /** A Variant's Stock as Inventory answers it: `quantity` is what's left to sell. */
 export interface Stock {
@@ -73,6 +94,10 @@ export interface ProductForm {
   /** One per line. */
   images: string
   currency: string
+  /** Its Warranty terms' months and manufacturer; both blank when it has none. */
+  warrantyMonths: string
+  warrantyManufacturer: string
+  serialTracking: SerialTracking
   variants: VariantForm[]
 }
 
@@ -117,6 +142,9 @@ export function formOf(
       attributes: {},
       images: '',
       currency: 'EUR',
+      warrantyMonths: '',
+      warrantyManufacturer: '',
+      serialTracking: 'NONE',
       variants: [blankVariant(category)],
     }
   }
@@ -128,6 +156,9 @@ export function formOf(
     attributes: { ...product.attributes },
     images: product.images.join('\n'),
     currency: product.variants[0]?.price.currency ?? 'EUR',
+    warrantyMonths: product.warranty?.months.toString() ?? '',
+    warrantyManufacturer: product.warranty?.manufacturer ?? '',
+    serialTracking: product.serialTracking,
     variants: product.variants.map((variant) => ({
       id: variant.id,
       saved: true,
@@ -144,7 +175,9 @@ export function formOf(
  * description, attribute or axis value is left out, for Catalog to name if they are required. Only what `category`
  * defines is sent. The currency must be one of Catalog's `currencies`, a Price must read as Money
  * in it, and an on-hand count must be a whole number or blank; these are named as `currency`,
- * `variants[i].price` and `variants[i].onHand`.
+ * `variants[i].price` and `variants[i].onHand`. Warranty terms are sent when either of their fields
+ * is filled in: their months must be a whole number from 1 to 120, named `warranty.months`, and their
+ * manufacturer is required, named `warranty.manufacturer`.
  */
 export function productRequest(
   form: ProductForm,
@@ -168,6 +201,7 @@ export function productRequest(
       images: splitList(variant.images),
     }
   })
+  const warranty = warrantyOf(form, errors)
   if (Object.keys(errors).length > 0) return { errors }
 
   const description = form.description.trim()
@@ -180,6 +214,8 @@ export function productRequest(
       attributes: valuesFor(attributesOf(category), form.attributes),
       images: splitList(form.images),
       variants,
+      ...(warranty === undefined ? {} : { warranty }),
+      serialTracking: form.serialTracking,
     },
     errors,
   }
@@ -219,6 +255,19 @@ export function stockChanges(form: ProductForm, loaded: OnHandByVariant): StockC
 export function matchesSearch(product: Pick<Product, 'sku' | 'name'>, query: string): boolean {
   const needle = query.trim().toLowerCase()
   return product.name.toLowerCase().includes(needle) || product.sku.toLowerCase().includes(needle)
+}
+
+/** The form's Warranty terms, undefined when both fields are blank; names what is wrong in `errors`. */
+function warrantyOf(form: ProductForm, errors: FieldErrors): WarrantyTerms | undefined {
+  const monthsText = form.warrantyMonths.trim()
+  const manufacturer = form.warrantyManufacturer.trim()
+  if (monthsText === '' && manufacturer === '') return undefined
+  const months = Number(monthsText)
+  if (!/^\d+$/.test(monthsText) || months < 1 || months > 120) {
+    errors['warranty.months'] = 'must be a whole number of months from 1 to 120'
+  }
+  if (manufacturer === '') errors['warranty.manufacturer'] = 'is required with a warranty'
+  return { months, manufacturer }
 }
 
 function onHandOf(variant: VariantForm): number | undefined {

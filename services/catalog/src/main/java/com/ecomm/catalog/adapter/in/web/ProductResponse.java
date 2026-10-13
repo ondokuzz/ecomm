@@ -1,14 +1,17 @@
 package com.ecomm.catalog.adapter.in.web;
 
 import com.ecomm.catalog.domain.Product;
+import com.ecomm.catalog.domain.SerialTracking;
 import com.ecomm.catalog.domain.Variant;
+import com.ecomm.catalog.domain.WarrantyTerms;
 import java.util.List;
 import java.util.Map;
 
 /**
  * A Product as clients see it: its purchasable Variants, and {@code priceFrom}, the lowest of their
- * Prices. {@code description} is null when it has none. Clients add Variant IDs, not SKUs, to a
- * Cart.
+ * Prices. {@code description} is null when it has none, and so is {@code warranty}, its Warranty
+ * terms. {@code serialTracking} is {@code NONE}, {@code SERIAL} or {@code IMEI}. Clients add
+ * Variant IDs, not SKUs, to a Cart.
  */
 record ProductResponse(
     String sku,
@@ -18,7 +21,9 @@ record ProductResponse(
     Map<String, String> attributes,
     PriceResponse priceFrom,
     List<String> images,
-    List<VariantResponse> variants) {
+    List<VariantResponse> variants,
+    WarrantyTerms warranty,
+    SerialTracking serialTracking) {
 
   /** A Variant; {@code images} is empty unless it has its own, which replace its Product's. */
   record VariantResponse(
@@ -39,6 +44,8 @@ record ProductResponse(
         product.attributes(),
         PriceResponse.of(product.priceFrom()),
         product.images(),
-        product.variants().stream().map(VariantResponse::of).toList());
+        product.variants().stream().map(VariantResponse::of).toList(),
+        product.warranty(),
+        product.serialTracking());
   }
 }

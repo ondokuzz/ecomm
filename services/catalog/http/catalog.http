@@ -66,7 +66,26 @@ Content-Type: application/json
   "images": ["/images/products/aud-demo-buds/front.svg"],
   "variants": [
     {"id": "AUD-DEMO-BUDS", "axisValues": {}, "price": {"amountMinor": 4999, "currency": "EUR"}}
-  ]
+  ],
+  "warranty": {"months": 12, "manufacturer": "Demo"},
+  "serialTracking": "SERIAL"
+}
+
+### Warranty terms out of range, without a manufacturer, and an unknown Serial tracking: 400 naming each field
+POST {{catalog}}/products
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{
+  "sku": "AUD-DEMO-WARRANTY",
+  "name": "Demo Buds",
+  "category": "audio",
+  "attributes": {"brand": "Demo", "type": "In-ear", "wireless": "true"},
+  "variants": [
+    {"id": "AUD-DEMO-WARRANTY", "axisValues": {}, "price": {"amountMinor": 4999, "currency": "EUR"}}
+  ],
+  "warranty": {"months": 200},
+  "serialTracking": "BARCODE"
 }
 
 ### Staff create a Product with two Variants along the phones' axes: 201
@@ -190,7 +209,8 @@ Content-Type: application/json
 }
 
 ### Staff update it: 200
-# Published with change UPDATED and a higher version. It sends no description, so it has none.
+# Published with change UPDATED and a higher version. It sends no description and no warranty, so
+# it has neither, and no serialTracking, so it is NONE.
 PUT {{catalog}}/products/AUD-DEMO-BUDS
 Authorization: Bearer {{staffToken}}
 Content-Type: application/json
