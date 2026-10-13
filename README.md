@@ -46,6 +46,7 @@ The payment gateway is mocked, and each test card stands for a Payment method:
 | Gateway error | `tok_gateway_error` | fails at the gateway, and no Payment is recorded; the Saga tries 4 times over about 10 seconds, then says the payment didn't go through |
 | Bank confirms, approves | `tok_async_approve` | shows "Confirming your payment…" until the mock gateway's webhook approves it about 3 seconds later, then pays |
 | Bank confirms, declines | `tok_async_decline` | shows "Confirming your payment…", then "Your card was declined" once the webhook declines it |
+| Charge refused | `tok_capture_decline` | pays: the Order is **Paid**, but the mock gateway refuses to capture the Payment, as `authorization_expired` |
 
 A checkout left unpaid expires after 15 minutes, and the Storefront offers to start again. Its
 Reservation stops holding the Stock 2 minutes later, and Inventory's sweeper marks it `RELEASED`

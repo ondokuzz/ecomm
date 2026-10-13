@@ -71,6 +71,8 @@ class RoutingApiTest extends GatewayApiTest {
     "POST, /api/payment/payments/",
     "POST, /api/payment/payments/p-1/void",
     "POST, /api/payment/payments/p-1/void/",
+    "POST, /api/payment/payments/p-1/capture",
+    "POST, /api/payment/payments/p-1/capture/",
     "GET, /api/payment/actuator/prometheus",
     "POST, /api/cart/carts/clear",
     "POST, /api/cart/carts/clear/",
@@ -104,6 +106,7 @@ class RoutingApiTest extends GatewayApiTest {
     "POST, /api/order-management/orders",
     "POST, /api/payment/payments",
     "POST, /api/payment/payments/p-1/void",
+    "POST, /api/payment/payments/p-1/capture",
     "POST, /api/cart/carts/clear",
     "POST, /api/checkout-pricing/checkout/sessions/s-1/end",
     "POST, /api/promotions/discounts/evaluate"
