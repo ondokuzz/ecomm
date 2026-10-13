@@ -26,7 +26,9 @@ class SeedCategoriesApiTest extends CatalogApiTest {
       String category,
       Map<String, String> attributes,
       List<String> images,
-      List<Map<String, Object>> variants) {}
+      List<Map<String, Object>> variants,
+      Map<String, Object> warranty,
+      String serialTracking) {}
 
   @ParameterizedTest
   @CsvSource({

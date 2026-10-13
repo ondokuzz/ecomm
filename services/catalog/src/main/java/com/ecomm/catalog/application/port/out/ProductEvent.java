@@ -25,7 +25,10 @@ public record ProductEvent(String sku, long version, Change change, Snapshot pro
     BACKFILLED
   }
 
-  /** {@code description} is null, and left out of the event, when the Product has none. */
+  /**
+   * {@code description} and {@code warranty}, the Warranty terms, are null, and left out of the
+   * event, when the Product has none.
+   */
   public record Snapshot(
       String name,
       String description,
@@ -33,7 +36,11 @@ public record ProductEvent(String sku, long version, Change change, Snapshot pro
       Map<String, String> attributes,
       List<String> images,
       List<VariantSnapshot> variants,
-      boolean removed) {}
+      boolean removed,
+      Warranty warranty,
+      String serialTracking) {}
+
+  public record Warranty(int months, String manufacturer) {}
 
   public record VariantSnapshot(
       String variantId, Map<String, String> axisValues, Price price, List<String> images) {}
@@ -52,7 +59,11 @@ public record ProductEvent(String sku, long version, Change change, Snapshot pro
             product.attributes(),
             product.images(),
             product.variants().stream().map(ProductEvent::snapshotOf).toList(),
-            change == Change.REMOVED));
+            change == Change.REMOVED,
+            product.warranty() == null
+                ? null
+                : new Warranty(product.warranty().months(), product.warranty().manufacturer()),
+            product.serialTracking().name()));
   }
 
   private static VariantSnapshot snapshotOf(Variant variant) {

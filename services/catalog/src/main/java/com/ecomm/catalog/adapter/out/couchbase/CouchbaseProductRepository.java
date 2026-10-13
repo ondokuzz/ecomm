@@ -13,7 +13,9 @@ import com.couchbase.client.java.query.QueryOptions;
 import com.couchbase.client.java.query.QueryScanConsistency;
 import com.ecomm.catalog.application.port.out.ProductRepository;
 import com.ecomm.catalog.domain.Product;
+import com.ecomm.catalog.domain.SerialTracking;
 import com.ecomm.catalog.domain.Variant;
+import com.ecomm.catalog.domain.WarrantyTerms;
 import com.ecomm.commons.money.Money;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -150,6 +152,19 @@ class CouchbaseProductRepository implements ProductRepository {
   }
 
   @Override
+  public Optional<Product> findStoredBeforeWarrantyTerms(String sku) {
+    var context = transactions.required("Read a Product stored before Warranty terms");
+    try {
+      var document = context.get(collection, sku).contentAsObject();
+      return document.containsKey("serialTracking")
+          ? Optional.empty()
+          : Optional.of(fromDocument(document));
+    } catch (DocumentNotFoundException e) {
+      return Optional.empty();
+    }
+  }
+
+  @Override
   public boolean insert(Product product) {
     try {
       transactions
@@ -216,7 +231,18 @@ class CouchbaseProductRepository implements ProductRepository {
         .put(
             "variants",
             JsonArray.from(
-                product.variants().stream().map(CouchbaseProductRepository::toDocument).toList()));
+                product.variants().stream().map(CouchbaseProductRepository::toDocument).toList()))
+        .put("warranty", toDocument(product.warranty()))
+        .put("serialTracking", product.serialTracking().name());
+  }
+
+  /** Null, stored as such, when the Product has no Warranty terms. */
+  private static JsonObject toDocument(WarrantyTerms warranty) {
+    return warranty == null
+        ? null
+        : JsonObject.create()
+            .put("months", warranty.months())
+            .put("manufacturer", warranty.manufacturer());
   }
 
   /** Axis values are stored as a list of name-value pairs, since a JSON object keeps no order. */
@@ -253,7 +279,21 @@ class CouchbaseProductRepository implements ProductRepository {
         document.getString("category"),
         attributes,
         strings(document.getArray("images")),
-        variants);
+        variants,
+        warrantyFrom(document.getObject("warranty")),
+        serialTrackingFrom(document.getString("serialTracking")));
+  }
+
+  /** A document stored before Warranty terms has none. */
+  private static WarrantyTerms warrantyFrom(JsonObject document) {
+    return document == null
+        ? null
+        : new WarrantyTerms(document.getInt("months"), document.getString("manufacturer"));
+  }
+
+  /** A document stored before Serial tracking has {@code NONE}. */
+  private static SerialTracking serialTrackingFrom(String value) {
+    return value == null ? SerialTracking.NONE : SerialTracking.valueOf(value);
   }
 
   private static Variant variantFrom(JsonObject document) {
