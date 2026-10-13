@@ -148,7 +148,85 @@
           "$ref": "#/definitions/Money"
         },
         "total": {
-          "$ref": "#/definitions/Money"
+          "$ref": "#/definitions/Money",
+          "description": "The subtotal, less every Discount, plus the tax, plus the Shipping cost when the Order has Shipping."
+        },
+        "shippingAddress": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Where the Order goes: the Shipping address Checkout validated. Absent on an Order placed before Shipping (Sprint 5).",
+          "required": [
+            "recipientName",
+            "line1",
+            "postcode",
+            "city",
+            "country"
+          ],
+          "properties": {
+            "recipientName": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "line1": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "line2": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "postcode": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 16
+            },
+            "city": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "region": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "country": {
+              "type": "string",
+              "pattern": "^[A-Z]{2}$",
+              "description": "An ISO 3166-1 alpha-2 code."
+            },
+            "phone": {
+              "type": "string",
+              "maxLength": 32
+            }
+          }
+        },
+        "shippingOption": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "How the Order goes: the Shipping option chosen at checkout, with its Carrier and Shipping cost. Absent on an Order placed before Shipping (Sprint 5).",
+          "required": [
+            "id",
+            "carrier",
+            "cost"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 32,
+              "description": "Such as STANDARD or EXPRESS."
+            },
+            "carrier": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "cost": {
+              "$ref": "#/definitions/Money"
+            }
+          }
         },
         "statusHistory": {
           "type": "array",

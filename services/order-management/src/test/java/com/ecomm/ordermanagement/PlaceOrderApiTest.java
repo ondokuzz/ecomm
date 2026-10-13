@@ -20,7 +20,9 @@ class PlaceOrderApiTest extends OrderApiTest {
         .containsExactly(
             new LineView("PHN-PIXEL-9", 2, new AmountView(79900, "EUR")),
             new LineView("AUD-AIRPODS-PRO-2", 1, new AmountView(14950, "EUR")));
-    assertThat(order.total()).isEqualTo(new AmountView(174750, "EUR"));
+    assertThat(order.subtotal()).isEqualTo(new AmountView(174750, "EUR"));
+    // With Express shipping at 9.99.
+    assertThat(order.total()).isEqualTo(new AmountView(175749, "EUR"));
     assertThat(order.placedAt()).isNotBlank();
   }
 
@@ -34,15 +36,16 @@ class PlaceOrderApiTest extends OrderApiTest {
                    "unitPrice": {"amountMinor": 79900, "currency": "EUR"}},
                   {"variantId": "ACC-CASE", "quantity": 3,
                    "unitPrice": {"amountMinor": 0, "currency": "EUR"}}
-                ]}
-                """)
+                ], %s}
+                """
+                    .formatted(SHIPPING))
             .expectStatus()
             .isCreated()
             .expectBody(OrderView.class)
             .returnResult()
             .getResponseBody();
 
-    assertThat(order.total()).isEqualTo(new AmountView(79900, "EUR"));
+    assertThat(order.subtotal()).isEqualTo(new AmountView(79900, "EUR"));
   }
 
   @ParameterizedTest
@@ -144,7 +147,8 @@ class PlaceOrderApiTest extends OrderApiTest {
         "not json"
       })
   void anInvalidOrderIsABadRequest(String body) {
-    place(body)
+    // With valid Shipping, so that only what the body gets wrong refuses it.
+    place(body.strip().startsWith("{") ? body.replaceFirst("\\{", "{" + SHIPPING + ", ") : body)
         .expectStatus()
         .isBadRequest()
         .expectHeader()

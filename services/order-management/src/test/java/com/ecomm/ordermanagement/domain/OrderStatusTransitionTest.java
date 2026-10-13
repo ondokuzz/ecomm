@@ -53,6 +53,12 @@ class OrderStatusTransitionTest {
   private static final Instant PLACED_AT = Instant.parse("2026-09-27T10:00:00Z");
   private static final Instant LATER = Instant.parse("2026-09-27T10:05:00Z");
 
+  private static final Shipping SHIPPING =
+      new Shipping(
+          new Shipping.Address(
+              "Erika Mustermann", "Hauptstraße 5", null, "10115", "Berlin", null, "DE", null),
+          new Shipping.Option("STANDARD", "Mock Carrier", Money.of(499, "EUR")));
+
   @Test
   void aNewOrderIsPlacedWithItsPlacementAsItsOnlyHistoryAtVersionOne() {
     var order =
@@ -62,6 +68,7 @@ class OrderStatusTransitionTest {
             List.of(new OrderLine("PHN-PIXEL-9", 1, Money.of(79900, "EUR"))),
             List.of(),
             Money.of(0, "EUR"),
+            SHIPPING,
             Caller.CHECKOUT,
             PLACED_AT);
 
@@ -139,6 +146,7 @@ class OrderStatusTransitionTest {
         List.of(new OrderLine("PHN-PIXEL-9", 1, Money.of(79900, "EUR"))),
         List.of(),
         Money.of(0, "EUR"),
+        SHIPPING,
         history,
         history.size());
   }

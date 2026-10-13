@@ -12,6 +12,7 @@ import com.ecomm.ordermanagement.domain.Discount;
 import com.ecomm.ordermanagement.domain.Order;
 import com.ecomm.ordermanagement.domain.OrderLine;
 import com.ecomm.ordermanagement.domain.OrderStatus;
+import com.ecomm.ordermanagement.domain.Shipping;
 import com.ecomm.ordermanagement.domain.StatusHistoryEntry;
 import java.sql.Timestamp;
 import java.util.ArrayList;
@@ -34,13 +35,26 @@ import org.springframework.transaction.annotation.Transactional;
 @Component
 class PostgresOrderRepository implements OrderRepository {
 
-  private static final String ORDER_COLUMNS = "id, customer_id, tax_minor, version";
+  private static final String ORDER_COLUMNS =
+      """
+      id, customer_id, tax_minor, version, shipping_recipient_name, shipping_line1, shipping_line2,
+      shipping_postcode, shipping_city, shipping_region, shipping_country, shipping_phone,
+      shipping_option_id, shipping_carrier, shipping_cost_minor""";
 
   /**
-   * An Order's own row, before its lines, Discounts and history are attached. Its Discounts and tax
-   * take their currency from the lines.
+   * An Order's own row, before its lines, Discounts and history are attached. Its Discounts, tax
+   * and Shipping cost take their currency from the lines. {@code shipping} is null for an Order
+   * placed before Shipping, whose cost is then null too.
    */
-  private record OrderRow(UUID id, String customerId, long taxMinor, long version) {
+  private record OrderRow(
+      UUID id,
+      String customerId,
+      long taxMinor,
+      long version,
+      Shipping.Address shippingAddress,
+      String shippingOptionId,
+      String shippingCarrier,
+      Long shippingCostMinor) {
 
     Order with(
         List<OrderLine> lines, List<DiscountRow> discounts, List<StatusHistoryEntry> history) {
@@ -51,6 +65,12 @@ class PostgresOrderRepository implements OrderRepository {
           lines,
           discounts.stream().map(d -> d.toDiscount(currency)).toList(),
           new Money(taxMinor, currency),
+          shippingAddress == null
+              ? null
+              : new Shipping(
+                  shippingAddress,
+                  new Shipping.Option(
+                      shippingOptionId, shippingCarrier, new Money(shippingCostMinor, currency))),
           history,
           version);
     }
@@ -84,7 +104,21 @@ class PostgresOrderRepository implements OrderRepository {
               rs.getObject("id", UUID.class),
               rs.getString("customer_id"),
               rs.getLong("tax_minor"),
-              rs.getLong("version"));
+              rs.getLong("version"),
+              rs.getString("shipping_recipient_name") == null
+                  ? null
+                  : new Shipping.Address(
+                      rs.getString("shipping_recipient_name"),
+                      rs.getString("shipping_line1"),
+                      rs.getString("shipping_line2"),
+                      rs.getString("shipping_postcode"),
+                      rs.getString("shipping_city"),
+                      rs.getString("shipping_region"),
+                      rs.getString("shipping_country"),
+                      rs.getString("shipping_phone")),
+              rs.getString("shipping_option_id"),
+              rs.getString("shipping_carrier"),
+              rs.getObject("shipping_cost_minor", Long.class));
 
   private static final RowMapper<LineRow> LINE =
       (rs, row) ->
@@ -127,10 +161,16 @@ class PostgresOrderRepository implements OrderRepository {
     jdbc.sql(
             """
             INSERT INTO customer_order
-              (id, customer_id, tax_minor, status, placed_at, version)
+              (id, customer_id, tax_minor, status, placed_at, version, shipping_recipient_name,
+               shipping_line1, shipping_line2, shipping_postcode, shipping_city, shipping_region,
+               shipping_country, shipping_phone, shipping_option_id, shipping_carrier,
+               shipping_cost_minor)
             VALUES
-              (:id, :customerId, :taxMinor, :status, :placedAt, :version)
+              (:id, :customerId, :taxMinor, :status, :placedAt, :version, :recipientName,
+               :line1, :line2, :postcode, :city, :region, :country, :phone, :optionId, :carrier,
+               :costMinor)
             """)
+        .params(shippingParams(order.shipping()))
         .param("id", order.id())
         .param("customerId", order.customerId())
         .param("taxMinor", order.tax().amountMinor())
@@ -328,6 +368,25 @@ class PostgresOrderRepository implements OrderRepository {
           .param("ids", ids)
           .update();
     }
+  }
+
+  /** The Shipping columns' parameters, every one null for an Order without Shipping. */
+  private static Map<String, Object> shippingParams(Shipping shipping) {
+    var params = new HashMap<String, Object>();
+    var address = shipping == null ? null : shipping.address();
+    var option = shipping == null ? null : shipping.option();
+    params.put("recipientName", address == null ? null : address.recipientName());
+    params.put("line1", address == null ? null : address.line1());
+    params.put("line2", address == null ? null : address.line2());
+    params.put("postcode", address == null ? null : address.postcode());
+    params.put("city", address == null ? null : address.city());
+    params.put("region", address == null ? null : address.region());
+    params.put("country", address == null ? null : address.country());
+    params.put("phone", address == null ? null : address.phone());
+    params.put("optionId", option == null ? null : option.id());
+    params.put("carrier", option == null ? null : option.carrier());
+    params.put("costMinor", option == null ? null : option.cost().amountMinor());
+    return params;
   }
 
   private void appendHistory(Order order, int position) {
