@@ -13,11 +13,17 @@ set -eu
 project=${COMPOSE_PROJECT_NAME:-ecomm}
 dir=.secrets/$project
 
-# Only the owner can open the directory, and so reach any secret in it. The files themselves are
-# readable by all, since Compose bind-mounts each one as it is, and a container's user is not the
-# owner on Linux.
+# Only the owner can open the directory, and so reach any secret in it. On macOS the files are
+# owner-only too: Docker Desktop lets a container's user read a bind-mounted file whatever its mode.
+# On Linux they are readable by all, since Compose bind-mounts each one as it is, and a container's
+# user is not the file's owner there.
 mkdir -p "$dir"
 chmod 700 .secrets "$dir"
+if [ "$(uname)" = Darwin ]; then
+  umask_files=077
+else
+  umask_files=022
+fi
 
 # Whether the project has this volume. Docker has to answer: a stack's volumes can't be told
 # apart from no volumes while it is down.
@@ -38,7 +44,7 @@ write() {
   if [ -e "$dir/$1" ]; then
     return
   fi
-  (umask 022 && printf '%s' "$2" >"$dir/$1.new")
+  (umask "$umask_files" && printf '%s' "$2" >"$dir/$1.new")
   mv "$dir/$1.new" "$dir/$1"
   echo "Wrote $dir/$1"
 }
@@ -70,3 +76,10 @@ infrastructure pgadmin-password postgres-data admin
 write checkout-client-secret "$(random)"
 write orchestration-client-secret "$(random)"
 write payment-webhook-secret "$(random)"
+
+# On macOS, a file written before secrets were owner-only there is made so, its content unchanged.
+if [ "$umask_files" = 077 ]; then
+  for file in "$dir"/*; do
+    if [ -f "$file" ]; then chmod 600 "$file"; fi
+  done
+fi

@@ -19,7 +19,7 @@ This is the shape a secrets manager takes on in Sprint 8: in AWS, a secret is mo
 
 ## Consequences
 
-- `.secrets/` is git-ignored and excluded from every image's build context. Only the owner can open the directory. The files in it are readable by others, since Compose bind-mounts each file as it is and the container's user is not the file's owner on Linux; the directory's permissions are what keep other local users out.
+- `.secrets/` is git-ignored and excluded from every image's build context. Only the owner can open the directory. On macOS each file is owner-only too (0600), since Docker Desktop lets a container's user read a bind-mounted file whatever its mode; `make secrets` also tightens a file an earlier run left at 0644, its content unchanged. On Linux the files are readable by others (0644), since Compose bind-mounts each file as it is and a container's user (Keycloak's, Temporal's, Grafana's, pgAdmin's) is not the file's owner there; the directory's permissions are what keep other local users out.
 - The demo Customer's and the Staff user's passwords and the public `dev-cli` client stay in the realm file as demo data for trying the stack and for the tests. They are not secrets.
 - Deleting an infrastructure password's file while the stack's volumes exist would give it the old dev value, which a stack made since doesn't have; the README warns against it.
 - Every Postgres service still shares the `ecomm` login, and so `postgres-password`, until Sprint 9 gives each its own.
