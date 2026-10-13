@@ -1,6 +1,10 @@
 spring:
   application:
     name: orchestration
+  config:
+    # Secrets are files, one per property and named after it: the ones Compose mounts in
+    # /run/secrets (docs/adr/0011-secrets-as-generated-files.md). There are none outside a container.
+    import: optional:configtree:${ecomm.secrets-dir:/run/secrets/}
   temporal:
     namespace: default
     connection:
@@ -20,13 +24,12 @@ spring:
   security:
     oauth2:
       client:
-        # Orchestration's own identity for the Saga steps' calls (Identity & Access ADR 0002). The
-        # secret has no default: set ORCHESTRATION_CLIENT_SECRET, which compose does.
+        # Orchestration's own identity for the Saga steps' calls (Identity & Access ADR 0002). Its
+        # client-secret has no default; compose gives it as a secret.
         registration:
           orchestration:
             provider: keycloak
             client-id: orchestration
-            client-secret: ${ORCHESTRATION_CLIENT_SECRET}
             authorization-grant-type: client_credentials
         provider:
           keycloak:

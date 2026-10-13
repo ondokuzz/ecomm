@@ -90,8 +90,8 @@ arrives, is recorded, and changes nothing.
 `declineReason` comes with a decline only. The gateway calls from outside, with no token: the
 webhook is authenticated by its `Gateway-Signature` header instead, `sha256=` and the hex
 HMAC-SHA256 of the body's bytes, keyed with the secret Payment shares with the gateway,
-`payment.webhooks.secret`. It has no default: set `PAYMENT_WEBHOOK_SECRET`, which compose does with
-a dev-only value. The API gateway routes it as `POST /api/payment/webhooks/gateway` without a token.
+`payment.webhooks.secret`. It has no default. Compose mounts it as a file of that name from the
+stack's generated `payment-webhook-secret` (see the root README's "Secrets"). The API gateway routes it as `POST /api/payment/webhooks/gateway` without a token.
 
 | Webhook | Answer | |
 |---|---|---|
@@ -246,4 +246,9 @@ only.
 
 Or run Postgres, Kafka, Apicurio and Keycloak in compose (`docker compose up -d keycloak kafka
 apicurio`) and start the service with `./gradlew :services:payment:bootRun` on port 8080. Set
-`POSTGRES_PORT` for both when something else holds 5432.
+`POSTGRES_PORT` for both when something else holds 5432, and give it the stack's secrets as
+`SPRING_DATASOURCE_PASSWORD="$(cat .secrets/ecomm/postgres-password)"` and
+`PAYMENT_WEBHOOKS_SECRET="$(cat .secrets/ecomm/payment-webhook-secret)"`.
+
+Since Sprint 5 both are Compose secrets, mounted as files named after their properties;
+`PAYMENT_WEBHOOK_SECRET` is gone, and `application.yml` holds neither.

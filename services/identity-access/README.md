@@ -34,9 +34,22 @@ what it did: `docker compose logs keycloak-realm`.
 | `storefront` | public client, Authorization Code + PKCE S256, redirects `http://localhost:8080/*` and `http://localhost:5173/*` (and their `127.0.0.1` equivalents) |
 | `admin-console` | public client for the [Admin Console](../../frontend/admin-console/README.md), Authorization Code + PKCE S256, redirects `http://localhost:8090/*` and `http://localhost:5174/*` (and their `127.0.0.1` equivalents) |
 | `dev-cli` | public client with the password grant, **for local development and tests only** |
-| `checkout` | confidential client with client credentials only; its service account holds `CHECKOUT`. Secret `checkout-dev-secret`, **for local development only** |
-| `orchestration` | confidential client with client credentials only, for the Sagas' calls; its service account holds `ORCHESTRATION`. Secret `orchestration-dev-secret`, **for local development only** |
+| `checkout` | confidential client with client credentials only; its service account holds `CHECKOUT`. Its secret is the stack's own, below |
+| `orchestration` | confidential client with client credentials only, for the Sagas' calls; its service account holds `ORCHESTRATION`. Its secret is the stack's own, below |
 | Seeded users | `demo@ecomm.local` / `demo` (CUSTOMER), `staff@ecomm.local` / `staff` (STAFF) |
+
+## Client secrets
+
+The realm file holds no secret. `make secrets` generates each confidential client's secret for the
+stack, as `.secrets/<project>/<clientId>-client-secret`, and on every start realm sync
+(`keycloak-realm` in compose, [`infra/docker/keycloak-realm-sync.py`](../../infra/docker/keycloak-realm-sync.py))
+sets the client's secret in the running realm from that file. The service that uses the client
+gets the same file, so the two agree, on a stack upgraded from an earlier sprint too. Realm sync
+changes nothing else that already exists. Rotating a client's secret is deleting its file and
+running `make up` (the root README's "Secrets").
+
+The seeded users' passwords and the public `dev-cli` client are demo data for local development and
+the tests, not secrets, and stay in the realm file.
 
 ## The Admin Console client
 
@@ -55,7 +68,7 @@ the realm file to the running realm. From the repo root:
 
 ```sh
 kc() { docker compose exec -T keycloak /opt/keycloak/bin/kcadm.sh "$@" \
-  --no-config --server http://localhost:8080 --realm master --user admin --password admin; }
+  --no-config --server http://localhost:8080 --realm master --user admin --password "$(cat .secrets/ecomm/keycloak-admin-password)"; }
 id=$(kc get clients -r ecomm -q clientId=admin-console --fields id --format csv --noquotes)
 jq '.clients[] | select(.clientId == "admin-console")' services/identity-access/realm/realm-ecomm.json \
   | kc update "clients/$id" -r ecomm -f - --merge
@@ -93,7 +106,7 @@ theme → `ecomm`) or with:
 
 ```sh
 docker compose exec keycloak /opt/keycloak/bin/kcadm.sh update realms/ecomm -s loginTheme=ecomm \
-  --no-config --server http://localhost:8080 --realm master --user admin --password admin
+  --no-config --server http://localhost:8080 --realm master --user admin --password "$(cat .secrets/ecomm/keycloak-admin-password)"
 ```
 
 ## Get a token by hand
@@ -112,7 +125,7 @@ Checkout calls other services' internal endpoints with a token of its own
 ```sh
 curl -s http://localhost:8180/realms/ecomm/protocol/openid-connect/token \
   -d grant_type=client_credentials -d client_id=checkout \
-  -d client_secret=checkout-dev-secret | jq -r .access_token
+  -d client_secret="$(cat .secrets/ecomm/checkout-client-secret)" | jq -r .access_token
 ```
 
 Its `sub` is the `checkout` service account, not a Customer, and `realm_access.roles` is `["CHECKOUT"]`.
@@ -122,7 +135,7 @@ Orchestration's works the same way:
 ```sh
 curl -s http://localhost:8180/realms/ecomm/protocol/openid-connect/token \
   -d grant_type=client_credentials -d client_id=orchestration \
-  -d client_secret=orchestration-dev-secret | jq -r .access_token
+  -d client_secret="$(cat .secrets/ecomm/orchestration-client-secret)" | jq -r .access_token
 ```
 
 Its `realm_access.roles` is `["ORCHESTRATION"]`.

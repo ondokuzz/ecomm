@@ -202,3 +202,7 @@ That host port bypasses the API gateway, for development only. Through the gatew
 `/api/promotions/coupons` and `/api/promotions/campaigns`, and `/api/promotions/discounts/evaluate`
 is a 404. Outside Docker, Promotions finds Catalog on its host port, 8081
 (`ecomm.promotions.catalog-url`).
+
+Since Sprint 5 its database password is a Compose secret, mounted as the file
+`spring.datasource.password` (see the root README's "Secrets"); `application.yml` has none. Outside
+Docker, give it as `SPRING_DATASOURCE_PASSWORD="$(cat .secrets/ecomm/postgres-password)"`.

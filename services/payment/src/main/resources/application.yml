@@ -1,11 +1,15 @@
 spring:
   application:
     name: payment
+  config:
+    # Secrets are files, one per property and named after it: the ones Compose mounts in
+    # /run/secrets (docs/adr/0011-secrets-as-generated-files.md). There are none outside a container.
+    import: optional:configtree:${ecomm.secrets-dir:/run/secrets/}
   datasource:
     # POSTGRES_PORT matches the compose override, for when something else holds 5432.
     url: jdbc:postgresql://localhost:${POSTGRES_PORT:5432}/payment
+    # The password is a secret: spring.datasource.password.
     username: ecomm
-    password: ecomm
   kafka:
     bootstrap-servers: localhost:${KAFKA_PORT:9092}
   modulith:
@@ -20,10 +24,8 @@ ecomm:
 payment:
   # The PaymentGatewayPort adapter; only mock so far. A value with no adapter fails at startup.
   gateway: mock
-  webhooks:
-    # The secret Gateway webhooks are signed with, shared with the gateway. It has no default: set
-    # PAYMENT_WEBHOOK_SECRET, which compose does.
-    secret: ${PAYMENT_WEBHOOK_SECRET}
+  # The secret Gateway webhooks are signed with, shared with the gateway, is payment.webhooks.secret.
+  # It has no default; compose gives it as a secret.
   mock-gateway:
     # How long after answering tok_async_approve or tok_async_decline as pending the mock settles it.
     webhook-delay: 3s

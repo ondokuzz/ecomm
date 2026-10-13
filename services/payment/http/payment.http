@@ -2,6 +2,8 @@
 # Run the requests top to bottom in the IntelliJ HTTP client; the token requests store tokens for
 # the ones after them. Each change also publishes a payment.payment event; the README shows how to
 # watch the topic.
+# Its client and webhook secrets are the stack's own: run it in the `dev` environment, whose
+# http-client.private.env.json holds them (the root README's "Secrets" says how to write it).
 
 @payment = http://localhost:8084
 @keycloak = http://localhost:8180/realms/ecomm/protocol/openid-connect/token
@@ -26,7 +28,7 @@ Authorization: Bearer {{customerToken}}
 POST {{keycloak}}
 Content-Type: application/x-www-form-urlencoded
 
-grant_type=client_credentials&client_id=orchestration&client_secret=orchestration-dev-secret
+grant_type=client_credentials&client_id=orchestration&client_secret={{orchestrationClientSecret}}
 
 > {% client.global.set("orchestrationToken", response.body.access_token); %}
 
@@ -243,12 +245,12 @@ Content-Type: application/json
 GET {{payment}}/payments/{{asyncPaymentId}}?customerId={{customerId}}
 Authorization: Bearer {{orchestrationToken}}
 
-### The gateway's webhook, signed as the mock signs it with compose's dev secret, through the API
+### The gateway's webhook, signed as the mock signs it, with the stack's webhook secret, through the API
 ### gateway without a token: 200, and nothing changes, since the Payment is settled already
 < {%
   const body = JSON.stringify({eventId: "evt-http-" + $random.uuid, reference: client.global.get("asyncReference"), outcome: "DECLINED", declineReason: "card_declined"});
   request.variables.set("webhookBody", body);
-  request.variables.set("webhookSignature", "sha256=" + crypto.hmac.sha256().withTextSecret("payment-webhook-dev-secret").updateWithText(body).digest().toHex());
+  request.variables.set("webhookSignature", "sha256=" + crypto.hmac.sha256().withTextSecret(request.environment.get("paymentWebhookSecret")).updateWithText(body).digest().toHex());
 %}
 POST {{gateway}}/webhooks/gateway
 Gateway-Signature: {{webhookSignature}}
