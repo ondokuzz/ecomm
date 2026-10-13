@@ -1,4 +1,7 @@
-# Local infrastructure for the whole platform. Credentials here are for local development only.
+# Local infrastructure for the whole platform. It holds no secret: `make secrets` writes each one
+# to .secrets/<project>/, and each container is given, under secrets:, only the ones it needs
+# (docs/adr/0011-secrets-as-generated-files.md). A Spring service reads one through its config tree,
+# so its target there is the property it sets.
 # Host ports can be overridden (e.g. POSTGRES_PORT=5433) when something else already holds them.
 # Couchbase is the exception: its SDK bootstraps from the ports the cluster advertises, so they
 # stay fixed.
@@ -42,7 +45,9 @@ services:
     command: ["postgres", "-c", "max_connections=200"]
     environment:
       POSTGRES_USER: ecomm
-      POSTGRES_PASSWORD: ecomm
+      # Only read when the volume is first initialised; the login keeps it after that.
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres-password
+    secrets: [postgres-password]
     ports: ["${POSTGRES_PORT:-5432}:5432"]
     volumes:
       - postgres-data:/var/lib/postgresql/data
@@ -59,14 +64,22 @@ services:
   pgadmin:
     image: dpage/pgadmin4:9.18
     profiles: [tools]
+    # The connection's password file, written from the secret before pgAdmin starts.
+    entrypoint:
+      - sh
+      - -c
+      - >-
+        printf 'postgres:5432:*:ecomm:%s\n' "$$(cat /run/secrets/postgres-password)" >/tmp/pgpass &&
+        exec /entrypoint.sh
     environment:
       PGADMIN_CONFIG_SERVER_MODE: "False"
       PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
       # Required by the image even in desktop mode, where nobody signs in with them.
       PGADMIN_DEFAULT_EMAIL: admin@ecomm.dev
-      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_DEFAULT_PASSWORD_FILE: /run/secrets/pgadmin-password
       PGADMIN_SERVER_JSON_FILE: /pgadmin/servers.json
-      PGPASS_FILE: /pgadmin/pgpass
+      PGPASS_FILE: /tmp/pgpass
+    secrets: [postgres-password, pgadmin-password]
     mem_limit: 384m
     ports: ["${PGADMIN_PORT:-5050}:80"]
     volumes:
@@ -81,8 +94,8 @@ services:
     environment:
       PGHOST: postgres
       PGUSER: ecomm
-      PGPASSWORD: ecomm
       PGDATABASE: postgres
+    secrets: [postgres-password]
     volumes:
       - ./postgres-databases.sh:/init/postgres-databases.sh:ro
     depends_on:
@@ -103,21 +116,31 @@ services:
     # Imports the ecomm realm on first start; an existing realm is left alone, so after changing
     # the realm file, delete the realm (or the postgres-data volume) to re-import it.
     command: ["start-dev", "--import-realm"]
+    # Keycloak reads no secret from a file, so its database and bootstrap admin passwords are read
+    # from theirs into its environment as it starts. The bootstrap admin is only made on the first
+    # start, and keeps its password after that.
+    entrypoint:
+      - bash
+      - -c
+      - >-
+        KC_DB_PASSWORD="$$(</run/secrets/postgres-password)"
+        KC_BOOTSTRAP_ADMIN_PASSWORD="$$(</run/secrets/keycloak-admin-password)"
+        exec /opt/keycloak/bin/kc.sh "$$@"
+      - kc.sh
     environment:
       # Tokens carry this browser-facing issuer; services fetch keys from keycloak:8080 instead.
       KC_HOSTNAME: http://localhost:8180
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
       KC_DB_USERNAME: ecomm
-      KC_DB_PASSWORD: ecomm
       KC_HEALTH_ENABLED: "true"
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
-      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
       # Keycloak's heap stays near the 300 MB it had in 512 MB, and the rest of the cap is room for
       # what isn't heap. At 512 MB it sat at the limit from start, and was killed after a day of
       # e2e runs (2026-10-06).
       JAVA_OPTS_KC_HEAP: -XX:MaxRAMPercentage=40 -XX:InitialRAMPercentage=20
     mem_limit: 768m
+    secrets: [postgres-password, keycloak-admin-password]
     ports: ["${KEYCLOAK_PORT:-8180}:8080"]
     volumes:
       - ../../services/identity-access/realm:/opt/keycloak/data/import:ro
@@ -138,8 +161,9 @@ services:
       retries: 30
       start_period: 30s
 
-  # Adds the realm file's roles and clients that the running ecomm realm lacks, then exits; see the
-  # script. The import above only covers a realm's first start.
+  # Adds the realm file's roles and clients that the running ecomm realm lacks, and sets each
+  # confidential client's secret from its file, then exits; see the script. The import above only
+  # covers a realm's first start.
   keycloak-realm:
     image: python:3.13-alpine
     entrypoint: ["python", "/init/keycloak-realm-sync.py"]
@@ -147,8 +171,8 @@ services:
     environment:
       KEYCLOAK_URL: http://keycloak:8080
       KEYCLOAK_ADMIN_USERNAME: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
       REALM_FILE: /realm/realm-ecomm.json
+    secrets: [keycloak-admin-password, checkout-client-secret, orchestration-client-secret]
     volumes:
       - ./keycloak-realm-sync.py:/init/keycloak-realm-sync.py:ro
       - ../../services/identity-access/realm:/realm:ro
@@ -163,6 +187,8 @@ services:
       - "11210:11210"
     volumes:
       - couchbase-data:/opt/couchbase/var
+    # Not used by the server; `make seed-reset` signs couchbase-cli in with it here.
+    secrets: [couchbase-password]
     healthcheck:
       test: ["CMD", "curl", "-fs", "http://localhost:8091/ui/index.html"]
       interval: 5s
@@ -174,8 +200,8 @@ services:
     entrypoint: ["/init/couchbase-init.sh"]
     environment:
       COUCHBASE_USERNAME: admin
-      COUCHBASE_PASSWORD: password
       COUCHBASE_BUCKET: catalog
+    secrets: [couchbase-password]
     volumes:
       - ./couchbase-init.sh:/init/couchbase-init.sh:ro
     depends_on:
@@ -189,6 +215,7 @@ services:
       dockerfile: services/catalog/Dockerfile
     image: ${IMAGE_PREFIX:-ecomm}/catalog:${IMAGE_TAG:-latest}
     ports: ["${CATALOG_PORT:-8081}:8080"]
+    secrets: [{ source: couchbase-password, target: spring.couchbase.password }]
     depends_on:
       <<: *event-backbone
       couchbase-init: { condition: service_completed_successfully }
@@ -201,6 +228,7 @@ services:
       dockerfile: services/inventory/Dockerfile
     image: ${IMAGE_PREFIX:-ecomm}/inventory:${IMAGE_TAG:-latest}
     ports: ["${INVENTORY_PORT:-8082}:8080"]
+    secrets: [{ source: postgres-password, target: spring.datasource.password }]
     depends_on:
       <<: *event-backbone
       postgres-databases: { condition: service_completed_successfully }
@@ -224,9 +252,10 @@ services:
       dockerfile: services/payment/Dockerfile
     image: ${IMAGE_PREFIX:-ecomm}/payment:${IMAGE_TAG:-latest}
     ports: ["${PAYMENT_PORT:-8084}:8080"]
-    environment:
-      # The secret the mock gateway signs its webhooks with and Payment checks them by; dev-only.
-      PAYMENT_WEBHOOK_SECRET: payment-webhook-dev-secret
+    secrets:
+      - { source: postgres-password, target: spring.datasource.password }
+      # The secret the mock gateway signs its webhooks with and Payment checks them by.
+      - { source: payment-webhook-secret, target: payment.webhooks.secret }
     depends_on:
       <<: *event-backbone
       postgres-databases: { condition: service_completed_successfully }
@@ -239,6 +268,7 @@ services:
       dockerfile: services/order-management/Dockerfile
     image: ${IMAGE_PREFIX:-ecomm}/order-management:${IMAGE_TAG:-latest}
     ports: ["${ORDER_MANAGEMENT_PORT:-8085}:8080"]
+    secrets: [{ source: postgres-password, target: spring.datasource.password }]
     depends_on:
       <<: *event-backbone
       postgres-databases: { condition: service_completed_successfully }
@@ -251,6 +281,7 @@ services:
       dockerfile: services/promotions/Dockerfile
     image: ${IMAGE_PREFIX:-ecomm}/promotions:${IMAGE_TAG:-latest}
     ports: ["${PROMOTIONS_PORT:-8087}:8080"]
+    secrets: [{ source: postgres-password, target: spring.datasource.password }]
     depends_on:
       postgres-databases: { condition: service_completed_successfully }
       keycloak: { condition: service_healthy }
@@ -294,6 +325,7 @@ services:
       dockerfile: services/recommendations/Dockerfile
     image: ${IMAGE_PREFIX:-ecomm}/recommendations:${IMAGE_TAG:-latest}
     ports: ["${RECOMMENDATIONS_PORT:-8098}:8080"]
+    secrets: [{ source: postgres-password, target: spring.datasource.password }]
     depends_on:
       kafka-topics: { condition: service_completed_successfully }
       postgres-databases: { condition: service_completed_successfully }
@@ -308,6 +340,7 @@ services:
       dockerfile: services/fulfillment-shipping/Dockerfile
     image: ${IMAGE_PREFIX:-ecomm}/fulfillment-shipping:${IMAGE_TAG:-latest}
     ports: ["${FULFILLMENT_SHIPPING_PORT:-8099}:8080"]
+    secrets: [{ source: postgres-password, target: spring.datasource.password }]
     depends_on:
       postgres-databases: { condition: service_completed_successfully }
       keycloak: { condition: service_healthy }
@@ -319,14 +352,16 @@ services:
       dockerfile: services/checkout-pricing/Dockerfile
     image: ${IMAGE_PREFIX:-ecomm}/checkout-pricing:${IMAGE_TAG:-latest}
     ports: ["${CHECKOUT_PRICING_PORT:-8086}:8080"]
-    environment:
-      # Checkout's own client in the ecomm realm (Identity & Access ADR 0002); dev-only, like the
-      # value in the realm file.
-      CHECKOUT_CLIENT_SECRET: checkout-dev-secret
+    secrets:
+      # Checkout's own client in the ecomm realm (Identity & Access ADR 0002), whose secret realm
+      # sync sets from the same file.
+      - source: checkout-client-secret
+        target: spring.security.oauth2.client.registration.checkout.client-secret
     # Paying starts the checkout Saga on Temporal, which Orchestration runs.
     depends_on:
       redis: { condition: service_healthy }
       keycloak: { condition: service_healthy }
+      keycloak-realm: { condition: service_completed_successfully }
       catalog: { condition: service_healthy }
       inventory: { condition: service_healthy }
       cart: { condition: service_healthy }
@@ -344,7 +379,7 @@ services:
       SQL_HOST: postgres
       SQL_PORT: 5432
       SQL_USER: ecomm
-      SQL_PASSWORD: ecomm
+    secrets: [postgres-password]
     volumes:
       - ./temporal-schema.sh:/init/temporal-schema.sh:ro
     depends_on:
@@ -356,12 +391,17 @@ services:
   # localhost:7233.
   temporal:
     image: temporalio/server:1.32.0
+    # The server reads its database password from its environment, so it is read from the secret's
+    # file into it as the server starts.
+    command:
+      - sh
+      - -c
+      - POSTGRES_PWD="$$(cat /run/secrets/postgres-password)" exec /etc/temporal/entrypoint.sh
     environment:
       DB: postgres12
       POSTGRES_SEEDS: postgres
       DB_PORT: 5432
       POSTGRES_USER: ecomm
-      POSTGRES_PWD: ecomm
       # Listen on every interface, so the health check can use localhost.
       BIND_ON_IP: 0.0.0.0
       DYNAMIC_CONFIG_FILE_PATH: /etc/temporal/dynamicconfig.yaml
@@ -374,6 +414,7 @@ services:
       # The Go runtime collects harder as it nears this, staying under the cap.
       GOMEMLIMIT: 300MiB
     mem_limit: 384m
+    secrets: [postgres-password]
     ports: ["${TEMPORAL_PORT:-7233}:7233"]
     volumes:
       - ./temporal-dynamicconfig.yaml:/etc/temporal/dynamicconfig.yaml:ro
@@ -423,10 +464,11 @@ services:
       context: ../..
       dockerfile: services/orchestration/Dockerfile
     image: ${IMAGE_PREFIX:-ecomm}/orchestration:${IMAGE_TAG:-latest}
-    environment:
-      # Orchestration's own client in the ecomm realm (Identity & Access ADR 0002); dev-only, like
-      # the value in the realm file.
-      ORCHESTRATION_CLIENT_SECRET: orchestration-dev-secret
+    secrets:
+      # Orchestration's own client in the ecomm realm (Identity & Access ADR 0002), whose secret
+      # realm sync sets from the same file.
+      - source: orchestration-client-secret
+        target: spring.security.oauth2.client.registration.orchestration.client-secret
     depends_on:
       temporal-namespace: { condition: service_completed_successfully }
       keycloak-realm: { condition: service_completed_successfully }
@@ -544,15 +586,21 @@ services:
   # part of the stack; browse the API at http://localhost:8088/apis/registry/v3.
   apicurio:
     image: apicurio/apicurio-registry:3.3.3
+    # The registry reads its database password from its environment, so it is read from the
+    # secret's file into it as the registry starts.
+    command:
+      - sh
+      - -c
+      - APICURIO_DATASOURCE_PASSWORD="$$(cat /run/secrets/postgres-password)" exec /opt/jboss/container/java/run/run-java.sh
     environment:
       APICURIO_STORAGE_KIND: sql
       APICURIO_STORAGE_SQL_KIND: postgresql
       APICURIO_DATASOURCE_URL: jdbc:postgresql://postgres:5432/apicurio
       APICURIO_DATASOURCE_USERNAME: ecomm
-      APICURIO_DATASOURCE_PASSWORD: ecomm
       # The image gives the heap 80%; leave the same headroom as the Spring services.
       JAVA_OPTS_APPEND: -XX:MaxRAMPercentage=60
     mem_limit: 384m
+    secrets: [postgres-password]
     ports: ["${APICURIO_PORT:-8088}:8080"]
     depends_on:
       postgres-databases: { condition: service_completed_successfully }
@@ -633,7 +681,8 @@ services:
       retries: 10
 
   # The Services, Event consumers and Checkout Saga dashboards on http://localhost:3000, open to
-  # anyone for viewing; sign in as admin / admin to explore. Its data source and dashboards are
+  # anyone for viewing; sign in as admin, with the password in
+  # .secrets/<project>/grafana-admin-password, to explore. Its data source and dashboards are
   # provisioned from grafana/, and it keeps nothing else between restarts.
   grafana:
     image: grafana/grafana:13.2.3
@@ -641,7 +690,7 @@ services:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
       GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana-admin-password
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/services.json
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
@@ -649,6 +698,7 @@ services:
       GF_NEWS_NEWS_FEED_ENABLED: "false"
       GOMEMLIMIT: 200MiB
     mem_limit: 256m
+    secrets: [grafana-admin-password]
     ports: ["${GRAFANA_PORT:-3000}:3000"]
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
@@ -661,6 +711,25 @@ services:
       timeout: 3s
       retries: 10
       start_period: 20s
+
+# Each one a file that `make secrets` writes (infra/docker/secrets.sh), under the project's name.
+secrets:
+  postgres-password:
+    file: ../../.secrets/${COMPOSE_PROJECT_NAME}/postgres-password
+  couchbase-password:
+    file: ../../.secrets/${COMPOSE_PROJECT_NAME}/couchbase-password
+  keycloak-admin-password:
+    file: ../../.secrets/${COMPOSE_PROJECT_NAME}/keycloak-admin-password
+  grafana-admin-password:
+    file: ../../.secrets/${COMPOSE_PROJECT_NAME}/grafana-admin-password
+  pgadmin-password:
+    file: ../../.secrets/${COMPOSE_PROJECT_NAME}/pgadmin-password
+  checkout-client-secret:
+    file: ../../.secrets/${COMPOSE_PROJECT_NAME}/checkout-client-secret
+  orchestration-client-secret:
+    file: ../../.secrets/${COMPOSE_PROJECT_NAME}/orchestration-client-secret
+  payment-webhook-secret:
+    file: ../../.secrets/${COMPOSE_PROJECT_NAME}/payment-webhook-secret
 
 volumes:
   postgres-data:

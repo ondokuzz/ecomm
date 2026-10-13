@@ -88,6 +88,10 @@ Or run Postgres, Keycloak and the event backbone in compose (`docker compose up 
 keycloak kafka-topics`) and start the service with `./gradlew :services:recommendations:bootRun` on
 port 8080.
 
+Since Sprint 5 its database password is a Compose secret, mounted as the file
+`spring.datasource.password` (see the root README's "Secrets"); `application.yml` has none. Outside
+Docker, give it as `SPRING_DATASOURCE_PASSWORD="$(cat .secrets/ecomm/postgres-password)"`.
+
 ## Tests
 
 - `AlsoBoughtApiTest` and `ProjectionApiTest` publish Order and Product events as Order Management

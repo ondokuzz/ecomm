@@ -1,5 +1,5 @@
 # Checks every pull request and every push to main: the backend, the event schemas' compatibility,
-# each frontend app, every image, and the Playwright suite against the compose stack. On main it also publishes the images to GHCR.
+# the secret scan, each frontend app, every image, and the Playwright suite against the compose stack. On main it also publishes the images to GHCR.
 name: CI
 
 # Pushes to other branches aren't checked on their own, so a pull request's commits run once.
@@ -64,6 +64,30 @@ jobs:
           fi
       - name: Register this change's schemas
         run: platform/event-schemas/register.sh
+
+  # No secret in the repo, its history included, and none in Compose's resolved configuration
+  # (docs/adr/0011-secrets-as-generated-files.md). The scan's rules are .gitleaks.toml's, and the
+  # known dev placeholders it finds are allow-listed by fingerprint in .gitleaksignore.
+  secrets:
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: 8.28.0
+      GITLEAKS_SHA256: a65b5253807a68ac0cafa4414031fd740aeb55f54fb7e55f386acb52e6a840eb
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Scan the repo and its history for secrets
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/gitleaks.tgz" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "$GITLEAKS_SHA256  $RUNNER_TEMP/gitleaks.tgz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/gitleaks.tgz" -C "$RUNNER_TEMP" gitleaks
+          # The history of what is checked out, not of every branch the checkout fetched.
+          "$RUNNER_TEMP/gitleaks" git --no-banner --redact --verbose --log-opts=HEAD .
+      - run: make secrets
+      - name: Check that Compose's resolved configuration holds none of the generated secrets
+        run: infra/docker/compose-secrets-check.sh
 
   frontend:
     strategy:

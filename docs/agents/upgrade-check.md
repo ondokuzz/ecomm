@@ -36,13 +36,15 @@ alone: its data migrated, its projections complete, nothing reset. This is how t
    Add whatever the coming upgrade migrates or backfills that this doesn't cover. Upgrade within 15
    minutes, while the Reservation is still active.
 3. `make upgrade-to` brings the same project up to this tree, keeping its data, and runs
-   `make status` against it.
+   `make status` against it. First it writes the project's secrets to `.secrets/ecomm-upgrade/`
+   (the root README's "Secrets"): from a stack made before Sprint 5, the dev passwords its volumes
+   were made with, and new client and webhook secrets.
 4. Check, against what the upgrade promises, that the data came through: each migrated aggregate
    read back through its API, each projection complete (Search lists every Product; Reviews counts
    the Orders placed before), each ledger balanced. Run both Playwright suites against it too, one
    after the other, with `COMPOSE_PROJECT_NAME=ecomm-upgrade` set: their first step runs
    `make status`, which otherwise checks the default project and finds it stopped.
-5. `make upgrade-clean` removes the project, its volumes, the worktree and the `upgrade-from`
+5. `make upgrade-clean` removes the project, its volumes and secrets, the worktree and the `upgrade-from`
    images. `make up` then brings the default stack back.
 
 Record what was checked, and how, in the roadmap's note for the sprint.

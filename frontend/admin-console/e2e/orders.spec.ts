@@ -1,6 +1,7 @@
 import { type APIRequestContext, type Page, expect, test } from '@playwright/test'
 import type { Order } from '../src/domain/order'
 import type { Payment } from '../src/domain/payment'
+import { stackSecret } from './secrets'
 
 /**
  * Staff find a Customer's Order in the Admin Console by its Order reference and by its Customer and
@@ -18,6 +19,7 @@ const orderManagementUrl = process.env.ORDER_MANAGEMENT_URL ?? 'http://localhost
 /** Payment's compose host port, likewise. */
 const paymentUrl = process.env.PAYMENT_URL ?? 'http://localhost:8084'
 const staff = { email: 'staff@ecomm.local', password: 'staff' }
+const orchestrationClientSecret = stackSecret('orchestration-client-secret')
 
 test('Staff find a Customer’s Order and see its Status history', async ({ page, request }) => {
   const customerId = `e2e-customer-${Date.now().toString(36)}${test.info().workerIndex}`
@@ -114,7 +116,7 @@ async function placePaidThenCancelledOrder(request: APIRequestContext, customerI
   const headers = await tokenHeaders(request, {
     grant_type: 'client_credentials',
     client_id: 'orchestration',
-    client_secret: 'orchestration-dev-secret',
+    client_secret: orchestrationClientSecret,
   })
   const key = (step: string) => `e2e-${customerId}:run-1:${step}`
   const placed = await request.post(`${orderManagementUrl}/orders`, {
@@ -156,7 +158,7 @@ async function placeAndPayOrder(
   const headers = await tokenHeaders(request, {
     grant_type: 'client_credentials',
     client_id: 'orchestration',
-    client_secret: 'orchestration-dev-secret',
+    client_secret: orchestrationClientSecret,
   })
   const key = (step: string) => `e2e-${customerId}:run-1:${step}`
   const total = { amountMinor: 79900, currency: 'EUR' }

@@ -1,0 +1,27 @@
+# The dev placeholders committed before secrets became generated files (docs/adr/0011-secrets-as-
+# generated-files.md): Postgres', Couchbase's, Keycloak's, Grafana's and pgAdmin's dev passwords and
+# the dev client and webhook secrets, each where a commit added it. Each is allow-listed by its
+# fingerprint (commit:file:rule:line), so the same value committed again is still a finding.
+1c8458d7e103df82e51b264d9b0330ac45349bec:services/order-management/src/main/resources/application.yml:password-or-secret-literal:8
+3718ab89cafb8986287568ba2d9c452faae47f37:services/inventory/src/main/resources/application.yml:password-or-secret-literal:8
+38b0922c5e7a6d25b31c5a193c01aa63f48c03f6:services/catalog/src/main/resources/application.yml:password-or-secret-literal:7
+505ee76d945ef90bbff490e3c187c15d858674cd:infra/docker/compose.yaml:password-or-secret-literal:64
+98947514be4e5648a34094da07d266829d11faae:infra/docker/compose.yaml:password-or-secret-literal:589
+99e5eef39ee591ab3a364ed9b1655b7a2da43c75:infra/docker/compose.yaml:password-or-secret-literal:229
+a709b1a8351ea4eda09bc3b45d5e8d6ce980a69d:infra/docker/compose.yaml:password-or-secret-literal:55
+a709b1a8351ea4eda09bc3b45d5e8d6ce980a69d:services/promotions/src/main/resources/application.yml:password-or-secret-literal:8
+b1acbe5a12ef830d1622d4e5992b96693dd5f835:services/identity-access/realm/realm-ecomm.json:password-or-secret-literal:77
+b5df4a7d212264173478ab28b0138356d28925f4:infra/docker/compose.yaml:password-or-secret-literal:340
+b5df4a7d212264173478ab28b0138356d28925f4:platform/service-template/src/main/resources/application.yml:password-or-secret-literal:8
+b960f316d8af4ae9d90a030bde3013bea92fe3d0:infra/docker/compose.yaml:password-or-secret-literal:150
+b960f316d8af4ae9d90a030bde3013bea92fe3d0:infra/docker/compose.yaml:password-or-secret-literal:315
+b960f316d8af4ae9d90a030bde3013bea92fe3d0:infra/docker/compose.yaml:password-or-secret-literal:332
+b960f316d8af4ae9d90a030bde3013bea92fe3d0:infra/docker/compose.yaml:password-or-secret-literal:397
+b960f316d8af4ae9d90a030bde3013bea92fe3d0:services/identity-access/realm/realm-ecomm.json:password-or-secret-literal:99
+cfe58b862fd595d733f777f2df98ae6a881ebb67:infra/docker/compose.yaml:password-or-secret-literal:224
+d928e1b0c6e7d1f191249579b80d147f4287a6a0:services/recommendations/src/main/resources/application.yml:password-or-secret-literal:8
+e747779cba379863f6d471334051e9bc9c26e749:services/payment/src/main/resources/application.yml:password-or-secret-literal:8
+ef987565285b35b1fbae8ba1792c06cd498546c4:infra/docker/compose.yaml:password-or-secret-literal:16
+ef987565285b35b1fbae8ba1792c06cd498546c4:infra/docker/compose.yaml:password-or-secret-literal:43
+ef987565285b35b1fbae8ba1792c06cd498546c4:infra/docker/compose.yaml:password-or-secret-literal:46
+ef987565285b35b1fbae8ba1792c06cd498546c4:infra/docker/compose.yaml:password-or-secret-literal:81

@@ -100,6 +100,10 @@ only. Staff reach `GET /warehouses` through the gateway, at `/api/fulfillment-sh
 Or run Postgres and Keycloak in compose (`docker compose up -d postgres-databases keycloak`) and
 start the service with `./gradlew :services:fulfillment-shipping:bootRun` on port 8080.
 
+Its database password is a Compose secret, mounted as the file `spring.datasource.password` (see
+the root README's "Secrets"); `application.yml` has none. Outside Docker, give it as
+`SPRING_DATASOURCE_PASSWORD="$(cat .secrets/ecomm/postgres-password)"`.
+
 ## Tests
 
 - `WarehouseApiTest` and `ShippingQuoteApiTest` call the API over HTTP with

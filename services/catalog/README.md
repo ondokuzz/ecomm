@@ -242,3 +242,7 @@ only. Browsers reach the service through the gateway, at `/api/catalog/`.
 Or run Couchbase, Keycloak and the event backbone in compose (`docker compose up -d couchbase-init
 keycloak kafka-topics schema-registry-init`) and start the service with
 `./gradlew :services:catalog:bootRun` on port 8080.
+
+Since Sprint 5 the Couchbase password is a Compose secret, mounted as the file
+`spring.couchbase.password` (see the root README's "Secrets"); `application.yml` has none. Outside
+Docker, give it as `SPRING_COUCHBASE_PASSWORD="$(cat .secrets/ecomm/couchbase-password)"`.

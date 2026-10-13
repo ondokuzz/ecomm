@@ -6,6 +6,7 @@ import type { Page as ListPage } from '../src/domain/paging'
 import type { AlsoBought } from '../src/domain/recommendations'
 import type { Eligibility, RatingSummary } from '../src/domain/reviews'
 import type { SearchResults } from '../src/domain/search'
+import { stackSecret } from './secrets'
 
 /**
  * The smoke test: the definitions of done of Sprints 1 to 4, end to end, each test as a Customer of
@@ -839,7 +840,12 @@ function escape(text: string): string {
 /** A token for Keycloak's own admin API, from the master realm's bootstrap admin. */
 async function keycloakAdminHeaders(request: APIRequestContext) {
   const response = await request.post(`${keycloakUrl}/realms/master/protocol/openid-connect/token`, {
-    form: { grant_type: 'password', client_id: 'admin-cli', username: 'admin', password: 'admin' },
+    form: {
+      grant_type: 'password',
+      client_id: 'admin-cli',
+      username: 'admin',
+      password: stackSecret('keycloak-admin-password'),
+    },
   })
   expect(response.ok()).toBeTruthy()
   return { Authorization: `Bearer ${((await response.json()) as { access_token: string }).access_token}` }

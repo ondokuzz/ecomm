@@ -2,6 +2,8 @@
 # two steps: a Checkout Session holds the Cart with every running Campaign's Discount, and may take a
 # Coupon, then paying it buys it. Run the requests top to
 # bottom in the IntelliJ HTTP client; the token request stores a token for the ones after it.
+# Its client and webhook secrets are the stack's own: run it in the `dev` environment, whose
+# http-client.private.env.json holds them (the root README's "Secrets" says how to write it).
 
 @checkout = http://localhost:8086
 @cart = http://localhost:8083
@@ -169,7 +171,7 @@ POST {{checkout}}/checkout/sessions
 POST {{keycloak}}
 Content-Type: application/x-www-form-urlencoded
 
-grant_type=client_credentials&client_id=orchestration&client_secret=orchestration-dev-secret
+grant_type=client_credentials&client_id=orchestration&client_secret={{orchestrationClientSecret}}
 
 > {% client.global.set("orchestrationToken", response.body.access_token); %}
 

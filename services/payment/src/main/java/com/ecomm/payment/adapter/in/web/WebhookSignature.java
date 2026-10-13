@@ -24,7 +24,7 @@ final class WebhookSignature {
   WebhookSignature(String secret) {
     if (secret == null || secret.isBlank()) {
       throw new IllegalStateException(
-          "payment.webhooks.secret is required: set PAYMENT_WEBHOOK_SECRET");
+          "payment.webhooks.secret is required: compose gives it as a secret");
     }
     this.secret = secret.getBytes(StandardCharsets.UTF_8);
   }

@@ -215,7 +215,10 @@ Checkout calls each service with the identity that service expects
 Order Management, Payment, Inventory's commit, Cart's clear and Checkout's own end-session command
 are the checkout Saga's, called with Orchestration's token.
 
-The client secret comes from `CHECKOUT_CLIENT_SECRET`, which compose sets; there is no default.
+The client secret has no default. Since Sprint 5 Compose mounts it as the file
+`spring.security.oauth2.client.registration.checkout.client-secret`, from the stack's generated
+`checkout-client-secret`, which realm sync also sets on the `checkout` client (see the root README's
+"Secrets"). `CHECKOUT_CLIENT_SECRET` is gone.
 
 Every call, to every service, also carries the Correlation ID of the request it serves in
 `X-Correlation-Id`, and Checkout logs each one with its status and duration. So each step of a
@@ -243,8 +246,8 @@ That host port bypasses the [API gateway](../../platform/api-gateway/README.md),
 only. Browsers reach the service through the gateway, at `/api/checkout-pricing/`.
 
 Or run the rest of the stack in compose, Redis and Temporal included, and start the service with
-`CHECKOUT_CLIENT_SECRET=checkout-dev-secret ./gradlew :services:checkout-pricing:bootRun` on port
-8080. It finds the other services on their compose host ports, and Temporal on `localhost:7233`.
+`SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_CHECKOUT_CLIENTSECRET="$(cat .secrets/ecomm/checkout-client-secret)" ./gradlew :services:checkout-pricing:bootRun`
+on port 8080. It finds the other services on their compose host ports, and Temporal on `localhost:7233`.
 
 ## Tests
 
