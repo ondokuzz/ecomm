@@ -16,6 +16,8 @@ import {
   type OnHandByVariant,
   type Product,
   type ProductForm,
+  SERIAL_TRACKINGS,
+  type SerialTracking,
   type Stock,
   type VariantForm,
   attributesOf,
@@ -440,6 +442,65 @@ function ProductEditor({
               </span>
               <FieldError id={errorId('images')} message={errors.images} />
             </label>
+          </section>
+
+          <section className="panel" aria-labelledby={`${id}-warranty`}>
+            <h2 id={`${id}-warranty`}>Warranty and Serial tracking</h2>
+            <div className="form-grid">
+              <label className="field">
+                <span>
+                  Warranty months <span className="hint">(optional)</span>
+                </span>
+                <Input
+                  value={form.warrantyMonths}
+                  onChange={(e) => {
+                    setForm({ ...form, warrantyMonths: e.target.value })
+                    clearErrors('warranty.months', 'warranty.manufacturer')
+                  }}
+                  inputMode="numeric"
+                  placeholder="e.g. 24"
+                  {...field('warranty.months')}
+                />
+                <span className="hint">From 1 to 120. Leave both blank for no manufacturer's warranty.</span>
+                <FieldError id={errorId('warranty.months')} message={errors['warranty.months']} />
+              </label>
+              <label className="field">
+                <span>
+                  Warranty manufacturer <span className="hint">(optional)</span>
+                </span>
+                <Input
+                  value={form.warrantyManufacturer}
+                  onChange={(e) => {
+                    setForm({ ...form, warrantyManufacturer: e.target.value })
+                    clearErrors('warranty.months', 'warranty.manufacturer')
+                  }}
+                  placeholder="e.g. Samsung"
+                  {...field('warranty.manufacturer')}
+                />
+                <span className="hint">Who gives the warranty, usually the brand.</span>
+                <FieldError id={errorId('warranty.manufacturer')} message={errors['warranty.manufacturer']} />
+              </label>
+              <label className="field">
+                Serial tracking
+                <select
+                  className="input"
+                  value={form.serialTracking}
+                  onChange={(e) => {
+                    setForm({ ...form, serialTracking: e.target.value as SerialTracking })
+                    clearErrors('serialTracking')
+                  }}
+                  {...field('serialTracking')}
+                >
+                  {SERIAL_TRACKINGS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <span className="hint">What packing records for each unit of every Variant.</span>
+                <FieldError id={errorId('serialTracking')} message={errors.serialTracking} />
+              </label>
+            </div>
           </section>
 
           <section className="panel" aria-labelledby={`${id}-variants`}>
