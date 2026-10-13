@@ -120,6 +120,8 @@ class CheckoutMetricsTest extends OrchestrationTest {
             List.of(new Line("PHN-PIXEL-9", 1, eur(79900))),
             List.of(),
             eur(0),
+            CheckoutWorkflowTest.ADDRESS,
+            CheckoutWorkflowTest.EXPRESS,
             RESERVATION_ID,
             "tok_approve",
             CORRELATION_ID));

@@ -41,6 +41,13 @@ public class CheckoutSaga implements CheckoutWorkflow {
   /** The memo key under which a run keeps its outcome once it is {@code PAID}. */
   public static final String OUTCOME_MEMO = "outcome";
 
+  /**
+   * The change ID of placing the Order with its Shipping (Sprint 5), through Temporal's versioning
+   * API. A run that placed its Order before the change replays the old path, {@link
+   * Workflow#DEFAULT_VERSION}; every other run records version 1 and takes the new one.
+   */
+  static final String SHIPPING_ON_ORDERS = "shipping-on-orders";
+
   private static final Logger log = Workflow.getLogger(CheckoutSaga.class);
 
   /** Placing the Order and committing its Stock: transient failures for up to about a minute. */
@@ -129,11 +136,21 @@ public class CheckoutSaga implements CheckoutWorkflow {
     MDC.put("correlationId", request.correlationId());
     var customerId = request.customerId();
 
+    // A run started before Sprint 5 has no Shipping in its input, so on either path Order
+    // Management refuses its Order, and it fails with nothing to undo.
+    var withShipping =
+        Workflow.getVersion(SHIPPING_ON_ORDERS, Workflow.DEFAULT_VERSION, 1)
+            != Workflow.DEFAULT_VERSION;
     PlacedOrder order;
     try {
       order =
           ordersForAMinute.placeOrder(
-              customerId, request.lines(), request.discounts(), request.tax());
+              customerId,
+              request.lines(),
+              request.discounts(),
+              request.tax(),
+              withShipping ? request.shippingAddress() : null,
+              withShipping ? request.shippingOption() : null);
     } catch (ActivityFailure e) {
       log.error("The Order couldn't be placed; nothing to undo", e);
       return ended(new CheckoutOutcome(Status.FAILED, null, null));

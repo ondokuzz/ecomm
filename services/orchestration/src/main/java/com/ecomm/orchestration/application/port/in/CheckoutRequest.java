@@ -4,8 +4,12 @@ import java.util.List;
 
 /**
  * What the checkout Saga is started with: the Checkout Session as it stood when the Customer paid
- * it, the Payment method they paid with, and the Correlation ID of their Pay request. Checkout
- * sends it as JSON, in this shape; the two services share no code.
+ * it, with its Shipping address and chosen Shipping option, the Payment method they paid with, and
+ * the Correlation ID of their Pay request. Checkout sends it as JSON, in this shape; the two
+ * services share no code.
+ *
+ * <p>A run started before Sprint 5 has no Shipping: {@code shippingAddress} and {@code
+ * shippingOption} are null in its input.
  *
  * <p>The Payment method is the gateway's opaque token for the Customer's card, never a card number,
  * so it may sit in the workflow's history.
@@ -16,6 +20,8 @@ public record CheckoutRequest(
     List<Line> lines,
     List<Discount> discounts,
     Amount tax,
+    ShippingAddress shippingAddress,
+    ShippingOption shippingOption,
     String reservationId,
     String paymentMethod,
     String correlationId) {
@@ -29,6 +35,23 @@ public record CheckoutRequest(
    */
   public record Discount(
       String source, String couponCode, String campaignId, String campaignName, Amount amount) {}
+
+  /**
+   * Where the Order goes, as Checkout validated it; {@code line2}, {@code region} and {@code phone}
+   * are null when it has none.
+   */
+  public record ShippingAddress(
+      String recipientName,
+      String line1,
+      String line2,
+      String postcode,
+      String city,
+      String region,
+      String country,
+      String phone) {}
+
+  /** The Shipping option chosen, with its Carrier and the Shipping cost quoted for it. */
+  public record ShippingOption(String id, String carrier, Amount cost) {}
 
   /** Money: an integer in the currency's minor unit, and its ISO 4217 code. */
   public record Amount(long amountMinor, String currency) {}

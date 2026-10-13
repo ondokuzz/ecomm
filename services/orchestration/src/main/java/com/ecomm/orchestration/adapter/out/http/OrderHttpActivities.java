@@ -3,6 +3,8 @@ package com.ecomm.orchestration.adapter.out.http;
 import com.ecomm.orchestration.application.port.in.CheckoutRequest.Amount;
 import com.ecomm.orchestration.application.port.in.CheckoutRequest.Discount;
 import com.ecomm.orchestration.application.port.in.CheckoutRequest.Line;
+import com.ecomm.orchestration.application.port.in.CheckoutRequest.ShippingAddress;
+import com.ecomm.orchestration.application.port.in.CheckoutRequest.ShippingOption;
 import com.ecomm.orchestration.application.port.out.OrderActivities;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import java.util.List;
@@ -19,8 +21,42 @@ class OrderHttpActivities implements OrderActivities {
     this.http = clients.forService(urls.orderManagementUrl());
   }
 
+  /** Without Shipping, its fields are left out, and Order Management refuses the Order. */
+  @JsonInclude(JsonInclude.Include.NON_NULL)
   private record PlaceOrderBody(
-      String customerId, List<Line> lines, List<DiscountBody> discounts, Amount tax) {}
+      String customerId,
+      List<Line> lines,
+      List<DiscountBody> discounts,
+      Amount tax,
+      AddressBody shippingAddress,
+      ShippingOption shippingOption) {}
+
+  /** An address's optional fields are left out when it has none. */
+  @JsonInclude(JsonInclude.Include.NON_NULL)
+  private record AddressBody(
+      String recipientName,
+      String line1,
+      String line2,
+      String postcode,
+      String city,
+      String region,
+      String country,
+      String phone) {
+
+    static AddressBody of(ShippingAddress a) {
+      return a == null
+          ? null
+          : new AddressBody(
+              a.recipientName(),
+              a.line1(),
+              a.line2(),
+              a.postcode(),
+              a.city(),
+              a.region(),
+              a.country(),
+              a.phone());
+    }
+  }
 
   /** A Campaign's names it by ID and name, a Coupon's by its code; the rest is left out. */
   @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -39,10 +75,20 @@ class OrderHttpActivities implements OrderActivities {
 
   @Override
   public PlacedOrder placeOrder(
-      String customerId, List<Line> lines, List<Discount> discounts, Amount tax) {
+      String customerId,
+      List<Line> lines,
+      List<Discount> discounts,
+      Amount tax,
+      ShippingAddress shippingAddress,
+      ShippingOption shippingOption) {
     var body =
         new PlaceOrderBody(
-            customerId, lines, discounts.stream().map(DiscountBody::of).toList(), tax);
+            customerId,
+            lines,
+            discounts.stream().map(DiscountBody::of).toList(),
+            tax,
+            AddressBody.of(shippingAddress),
+            shippingOption);
     var order =
         Steps.call(
             "placeOrder",
