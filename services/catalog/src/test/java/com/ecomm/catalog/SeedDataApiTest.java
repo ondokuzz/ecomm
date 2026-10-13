@@ -111,7 +111,9 @@ class SeedDataApiTest extends CatalogApiTest {
   private static void storeAsBeforeWarrantyTerms(String sku, String name) {
     var cluster = connect();
     try {
-      var documents = cluster.bucket("catalog").defaultCollection();
+      var bucket = cluster.bucket("catalog");
+      bucket.waitUntilReady(Duration.ofSeconds(60));
+      var documents = bucket.defaultCollection();
       var document = documents.get(sku).contentAsObject();
       document.removeKey("warranty");
       document.removeKey("serialTracking");
