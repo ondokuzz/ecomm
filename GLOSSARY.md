@@ -21,7 +21,7 @@ The web app where Staff manage the Catalog (Products with their Variants, Prices
 _Avoid_: Admin panel, Back office, Dashboard
 
 **Product**:
-A sellable item in the Catalog, identified by SKU, with an optional description, category-specific attributes and one or more Variants.
+A sellable item in the Catalog, identified by SKU, with an optional description, category-specific attributes, one or more Variants, optional Warranty terms, and its Serial tracking.
 _Avoid_: Item, SKU (SKU is an identifier, not the concept)
 
 **Category**:
@@ -166,6 +166,14 @@ _Avoid_: Callback, notification (on their own), Payment event (what Payment publ
 **Payment attempt**:
 One try at paying a Checkout Session: one run of the checkout Saga, named by the session's ID. It is `PROCESSING` while the Saga runs, and ends `PAID`; `DECLINED`, with the gateway's reason; `HOLD_EXPIRED`, when the Reservation stopped holding the Stock before it could be committed, so the Payment was voided and the Order cancelled; or `FAILED`, when a step failed for good and what came before it was undone. A declined or failed attempt leaves the session to be paid again, as a new attempt with its own Order; paying while one runs joins it, and a session already paid is never paid again. The latest attempt can be read after the session has ended, for as long as Temporal keeps its history.
 _Avoid_: Payment (what Payment records for an Order), Transaction, Checkout (the whole two-step process)
+
+**Warranty terms**:
+A Product's manufacturer's warranty: how many months it lasts, from 1 to 120, and which manufacturer gives it, such as "24 months, manufacturer's warranty (Samsung)". They apply to all of the Product's Variants. A Product may have none, which the Storefront shows as "No manufacturer's warranty"; a Product stored before they existed has none. Staff set them in the Admin Console.
+_Avoid_: Guarantee, Warranty period (the Warranty Window is the dates a warranty claim is open, worked out from these)
+
+**Serial tracking**:
+How each unit of a Product's Variants is told apart when it ships: `NONE`, `SERIAL` (a serial number) or `IMEI` (a phone's IMEI). It applies to all of the Product's Variants, and is `NONE` unless Staff set it. Seeded phones use `IMEI`, and laptops and audio `SERIAL`.
+_Avoid_: Serialization, Serialized inventory
 
 **Fulfillment**:
 The physical pick/pack/ship process that turns a Paid Order into a Shipped Order.
