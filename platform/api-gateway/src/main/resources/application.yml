@@ -48,7 +48,7 @@ ecomm:
         uri: http://localhost:8098
         public-reads: [/products/*/also-bought]
       fulfillment-shipping:
-        uri: http://localhost:8091
+        uri: http://localhost:8099
         # Only Checkout asks for Shipping quotes, for a Checkout Session's address.
         internal: [/shipping/**]
 

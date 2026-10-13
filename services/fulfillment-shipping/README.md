@@ -91,7 +91,7 @@ compose stack.
 ## Run it
 
 ```sh
-docker compose up -d --build fulfillment-shipping   # from the repo root; listens on localhost:8091
+docker compose up -d --build fulfillment-shipping   # from the repo root; listens on localhost:8099
 ```
 
 That host port bypasses the [API gateway](../../platform/api-gateway/README.md), for development

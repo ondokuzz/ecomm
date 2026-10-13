@@ -307,7 +307,7 @@ services:
       context: ../..
       dockerfile: services/fulfillment-shipping/Dockerfile
     image: ${IMAGE_PREFIX:-ecomm}/fulfillment-shipping:${IMAGE_TAG:-latest}
-    ports: ["${FULFILLMENT_SHIPPING_PORT:-8091}:8080"]
+    ports: ["${FULFILLMENT_SHIPPING_PORT:-8099}:8080"]
     depends_on:
       postgres-databases: { condition: service_completed_successfully }
       keycloak: { condition: service_healthy }

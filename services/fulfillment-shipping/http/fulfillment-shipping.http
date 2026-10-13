@@ -2,7 +2,7 @@
 # and Checkout asks for Shipping quotes. Run the requests top to bottom in the IntelliJ HTTP client;
 # the token requests store tokens for the ones after them.
 
-@fulfillment = http://localhost:8091
+@fulfillment = http://localhost:8099
 @gateway = http://localhost:8000
 @keycloak = http://localhost:8180/realms/ecomm/protocol/openid-connect/token
 
