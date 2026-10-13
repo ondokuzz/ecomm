@@ -31,10 +31,10 @@ status:
 ## dropped, or their consumers would take the new events for stale ones. Kafka deletes topics in the background, and one can't be created again until it has gone.
 seed-reset:
 	$(COMPOSE) up -d --wait couchbase postgres redis kafka mongo
-	$(COMPOSE) stop storefront checkout-pricing catalog inventory cart payment order-management promotions search-discovery reviews-ratings recommendations
+	$(COMPOSE) stop storefront checkout-pricing catalog inventory cart payment order-management promotions search-discovery reviews-ratings recommendations fulfillment-shipping
 	$(COMPOSE) exec -T couchbase couchbase-cli bucket-delete -c localhost:8091 -u admin -p password --bucket catalog
 	$(COMPOSE) run --rm --no-deps couchbase-init
-	for db in inventory payment orders promotions recommendations; do \
+	for db in inventory payment orders promotions recommendations fulfillment_shipping; do \
 	  $(COMPOSE) exec -T postgres psql -U ecomm -d postgres -v ON_ERROR_STOP=1 \
 	    -c "DROP DATABASE IF EXISTS $$db WITH (FORCE)" -c "CREATE DATABASE $$db" || exit 1; \
 	done

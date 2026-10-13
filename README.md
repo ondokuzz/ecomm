@@ -103,6 +103,7 @@ Orchestration, which serves nothing but its health:
 | 8089 | Search & Discovery |
 | 8097 | Reviews & Ratings |
 | 8098 | Recommendations |
+| 8091 | Fulfillment & Shipping |
 | 8088 | Apicurio schema registry: the event schemas, under `/apis/registry/v3` |
 | 9092 | Kafka |
 | 7233 | Temporal, for workers and clients run from the host ([Orchestration](./services/orchestration/README.md#temporal)) |

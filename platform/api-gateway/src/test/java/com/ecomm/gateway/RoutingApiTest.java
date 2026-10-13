@@ -34,7 +34,8 @@ class RoutingApiTest extends GatewayApiTest {
     "/api/promotions/campaigns/7f1c, /campaigns/7f1c",
     "/api/search-discovery/search?category=phones&sort=newest, /search?category=phones&sort=newest",
     "/api/reviews-ratings/products/PHN-PIXEL-9/reviews?page=1, /products/PHN-PIXEL-9/reviews?page=1",
-    "/api/recommendations/products/PHN-PIXEL-9/also-bought?limit=4, /products/PHN-PIXEL-9/also-bought?limit=4"
+    "/api/recommendations/products/PHN-PIXEL-9/also-bought?limit=4, /products/PHN-PIXEL-9/also-bought?limit=4",
+    "/api/fulfillment-shipping/warehouses, /warehouses"
   })
   void eachServiceIsReachedWithThePrefixStripped(String path, String downstreamPath) {
     http.get()
@@ -79,6 +80,8 @@ class RoutingApiTest extends GatewayApiTest {
     "POST, /api/promotions/discounts/evaluate",
     "POST, /api/promotions/discounts/evaluate/",
     "GET, /api/promotions/discounts/evaluate",
+    "POST, /api/fulfillment-shipping/shipping/quotes",
+    "POST, /api/fulfillment-shipping/shipping/quotes/",
     "GET, /api/catalog/actuator/prometheus",
     "GET, /api/catalog/actuator/health",
     "GET, /api/order-management/actuator",
@@ -106,7 +109,8 @@ class RoutingApiTest extends GatewayApiTest {
     "POST, /api/payment/payments/p-1/void",
     "POST, /api/cart/carts/clear",
     "POST, /api/checkout-pricing/checkout/sessions/s-1/end",
-    "POST, /api/promotions/discounts/evaluate"
+    "POST, /api/promotions/discounts/evaluate",
+    "POST, /api/fulfillment-shipping/shipping/quotes"
   })
   void internalEndpointsAreNotFoundWithoutAToken(String method, String path) {
     http.method(HttpMethod.valueOf(method)).uri(path).exchange().expectStatus().isNotFound();

@@ -47,6 +47,10 @@ ecomm:
       recommendations:
         uri: http://localhost:8098
         public-reads: [/products/*/also-bought]
+      fulfillment-shipping:
+        uri: http://localhost:8091
+        # Only Checkout asks for Shipping quotes, for a Checkout Session's address.
+        internal: [/shipping/**]
 
 # Plain-text logs name the Correlation ID too, so the access log reads the same outside Docker.
 logging:
