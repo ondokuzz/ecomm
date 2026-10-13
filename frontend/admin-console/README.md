@@ -155,9 +155,11 @@ has no time to show, and says so. `filtersOf`, `searchOf`, `ordersQueryOf` and `
 
 The Order page lists the Order's Payments from Payment's `GET /staff/payments?orderId=`, Staff
 only, newest first (see the [Payment README](../../services/payment/README.md)). Each shows its
-status (Pending, Authorized, Declined with the gateway's decline reason, or Voided), amount,
-gateway reference and ID, and its Payment transactions oldest first: kind (Authorization or Void),
-outcome (Approved, Declined or Pending), amount, the gateway's reference, decline reason and time.
+status (Pending, Authorized, Declined with the gateway's decline reason, Voided, or Charged for
+`CAPTURED`), amount, gateway reference and ID, and its Payment transactions oldest first: kind
+(Authorization, Void or Capture), outcome (Approved, Declined or Pending), amount, the gateway's
+reference, decline reason and time. A capture the gateway refused is listed as a declined Capture
+with its reason, such as `authorization_expired`, and the Payment stays Authorized.
 A transaction backfilled from a Payment recorded before the ledger says its time is approximate.
 `transactionRowsOf` in [`src/domain/payment.ts`](./src/domain/payment.ts) does this. An Order with
 no Payment, such as one whose payment gateway failed to answer, says none was recorded. Like the

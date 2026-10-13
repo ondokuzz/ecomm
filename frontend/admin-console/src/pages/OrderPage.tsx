@@ -209,6 +209,7 @@ const paymentTones: Record<PaymentStatus, Tone> = {
   AUTHORIZED: 'success',
   DECLINED: 'danger',
   VOIDED: 'neutral',
+  CAPTURED: 'success',
 }
 
 /**

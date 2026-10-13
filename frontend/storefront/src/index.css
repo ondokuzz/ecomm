@@ -2200,6 +2200,22 @@ main {
 .order-payment p {
   margin: var(--space-2) 0 0;
 }
+.order-payment-transactions {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+}
+.order-payment-transactions li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+}
+.order-payment-transactions time {
+  margin-left: auto;
+}
 .order-id {
   margin: var(--space-3) 0 0;
   font-size: var(--text-xs);

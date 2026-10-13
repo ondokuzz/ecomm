@@ -3,11 +3,12 @@ import { formatTime } from './order'
 
 /**
  * A Payment's status, worked out from its Payment transactions: its authorization awaits the
- * gateway, the amount is authorized, the gateway declined it, or a Void released it.
+ * gateway, the amount is authorized, the gateway declined it, a Void released it, or a Capture
+ * charged it.
  */
-export type PaymentStatus = 'PENDING' | 'AUTHORIZED' | 'DECLINED' | 'VOIDED'
+export type PaymentStatus = 'PENDING' | 'AUTHORIZED' | 'DECLINED' | 'VOIDED' | 'CAPTURED'
 
-export const paymentStatuses: readonly PaymentStatus[] = ['PENDING', 'AUTHORIZED', 'DECLINED', 'VOIDED']
+export const paymentStatuses: readonly PaymentStatus[] = ['PENDING', 'AUTHORIZED', 'DECLINED', 'VOIDED', 'CAPTURED']
 
 /**
  * One interaction with the payment gateway, recorded for good. `declineReason` and `gatewayEventId`
@@ -15,7 +16,7 @@ export const paymentStatuses: readonly PaymentStatus[] = ['PENDING', 'AUTHORIZED
  * reconstructed from a Payment recorded before the ledger, and its `at` is approximate.
  */
 export interface PaymentTransaction {
-  kind: 'AUTHORIZATION' | 'VOID'
+  kind: 'AUTHORIZATION' | 'VOID' | 'CAPTURE'
   amount: Money
   outcome: 'APPROVED' | 'DECLINED' | 'PENDING'
   gatewayReference: string | null
@@ -43,8 +44,9 @@ function labelOf(code: string): string {
   return code.charAt(0) + code.slice(1).toLowerCase()
 }
 
+/** A Payment status as Staff read it; a captured Payment is "Charged", as the Customer sees it. */
 export function paymentStatusLabel(status: PaymentStatus): string {
-  return labelOf(status)
+  return status === 'CAPTURED' ? 'Charged' : labelOf(status)
 }
 
 /** One Payment transaction as the Order page lists it. */
