@@ -1,0 +1,37 @@
+spring:
+  application:
+    name: fulfillment-shipping
+  datasource:
+    # POSTGRES_PORT matches the compose override, for when something else holds 5432.
+    url: jdbc:postgresql://localhost:${POSTGRES_PORT:5432}/fulfillment_shipping
+    username: ecomm
+    password: ecomm
+
+ecomm:
+  fulfillment-shipping:
+    # Exactly one is the default; at most one per country. A Shipment ships from the Warehouse in
+    # its destination's country, or else from the default.
+    warehouses:
+      - id: WH-BER
+        name: Berlin
+        address: { line1: Lagerstraße 1, postcode: "10115", city: Berlin, country: DE }
+        is-default: true
+      - id: WH-AMS
+        name: Amsterdam
+        address: { line1: Magazijnweg 1, postcode: 1011 AB, city: Amsterdam, country: NL }
+        is-default: false
+    # The mock carrier behind the ShippingProvider port (ADR 0005). It ships to the EU's countries,
+    # priced per Currency by zone: domestic when the destination is in the origin Warehouse's
+    # country, eu otherwise. Options are quoted in the order listed; days are estimated days.
+    mock-carrier:
+      name: Mock Carrier
+      countries: [AT, BE, BG, CY, CZ, DE, DK, EE, ES, FI, FR, GR, HR, HU, IE, IT, LT, LU, LV, MT,
+                  NL, PL, PT, RO, SE, SI, SK]
+      prices:
+        EUR:
+          STANDARD:
+            domestic: { cost-minor: 499, days: 2 }
+            eu: { cost-minor: 999, days: 4 }
+          EXPRESS:
+            domestic: { cost-minor: 999, days: 1 }
+            eu: { cost-minor: 1999, days: 2 }
