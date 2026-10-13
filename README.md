@@ -215,9 +215,11 @@ take, stay.
 
 No secret is in the repo, an image or the Compose file. `make secrets`, which `make up` runs first,
 writes each secret the stack lacks to `.secrets/<project>/` (`.secrets/ecomm/` for the default
-stack), which is git-ignored and which only you can open. Compose mounts each container only the
-ones it needs, as files in `/run/secrets`; a Spring service reads them as properties, through its
-config tree ([ADR 0011](./docs/adr/0011-secrets-as-generated-files.md)).
+stack), which is git-ignored and which only you can open (0700). On macOS each file is 0600 as
+well, and `make secrets` tightens one an earlier run left at 0644; on Linux the files stay 0644,
+since a container's user isn't their owner there and couldn't read them otherwise. Compose mounts
+each container only the ones it needs, as files in `/run/secrets`; a Spring service reads them as
+properties, through its config tree ([ADR 0011](./docs/adr/0011-secrets-as-generated-files.md)).
 
 | Secret | Used by |
 |---|---|
