@@ -171,6 +171,18 @@ _Avoid_: Payment (what Payment records for an Order), Transaction, Checkout (the
 The physical pick/pack/ship process that turns a Paid Order into a Shipped Order.
 _Avoid_: Shipping — that's the carrier hand-off specifically, one step inside Fulfillment
 
+**Warehouse**:
+A place Orders ship from, such as `WH-BER` in Berlin: an ID, a name and an address with its country. Warehouses are configuration in Fulfillment & Shipping, not data Staff edit. Exactly one is the default, and a country has at most one. An Order ships from the Warehouse in its destination's country, or else from the default, and a Shipping quote uses the same rule, so what was quoted is what ships. Stock is one pool per Variant, not held per Warehouse.
+_Avoid_: Depot, Fulfillment center, Location
+
+**Carrier**:
+The company that takes a parcel from a Warehouse to the Customer: it quotes Shipping options, books a Shipment and reports its progress. Fulfillment & Shipping reaches it through its `ShippingProvider` port (ADR 0005); only the mock carrier exists, which ships within the EU.
+_Avoid_: Courier, Shipping provider (the port, not the company)
+
+**Shipping option**:
+A way a Carrier offers to ship an Order from its Warehouse to a destination, as a quote answers it: an ID such as `STANDARD` or `EXPRESS`, the Carrier, its cost as Money and its estimated days. The mock carrier prices each option per Currency by zone: domestic when the destination is in the Warehouse's country, EU otherwise. A destination or Currency the Carrier doesn't serve gets none. Only Checkout asks for them.
+_Avoid_: Shipping method, Delivery option, Rate
+
 **RMA (Return Case)**:
 A Customer-initiated request to return or exchange a Variant from a delivered Order, tracked through its own approve/inspect/resolve lifecycle, distinct from the original Order's lifecycle.
 _Avoid_: Return, Refund — those are possible outcomes of an RMA, not the RMA itself

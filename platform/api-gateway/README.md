@@ -27,6 +27,7 @@ stay with the services, which still check every token themselves.
 | `search-discovery` | `/search` | |
 | `reviews-ratings` | `/products/*/reviews`, `/products/*/rating-summary`, `/rating-summaries` | |
 | `recommendations` | `/products/*/also-bought` | |
+| `fulfillment-shipping` | | `/shipping/**`: Shipping quotes, which only Checkout calls |
 
 Payment's `POST /webhooks/gateway` is its one webhook: routed without a token, since the payment
 gateway calls it from outside and Payment checks the webhook's signature itself.
