@@ -4,6 +4,9 @@
 # exist are left alone. Runs once per `docker compose up`, before anything that uses them.
 set -eu
 
+PGPASSWORD=$(cat /run/secrets/postgres-password)
+export PGPASSWORD
+
 for db in keycloak inventory payment orders promotions recommendations apicurio temporal temporal_visibility; do
   if ! psql -tAc "SELECT 1 FROM pg_database WHERE datname = '$db'" | grep -q 1; then
     psql -v ON_ERROR_STOP=1 -c "CREATE DATABASE $db"

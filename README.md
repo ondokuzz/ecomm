@@ -120,7 +120,8 @@ Storefront's 8080 and the Admin Console's 8090 are fixed.
 `docker compose up -d pgadmin` starts pgAdmin on http://localhost:5050. It isn't part of `make up`.
 It opens without a login and is already connected to the shared Postgres as `ecomm`, so every
 service's database (`orders`, `inventory`, `payment`, `promotions`, …) is under **ecomm** in its
-tree. Its connection is in [`infra/docker/pgadmin`](./infra/docker/pgadmin). It keeps nothing
+tree. Its connection is in [`infra/docker/pgadmin`](./infra/docker/pgadmin), and its password file
+is written from the stack's Postgres password as it starts ([Secrets](#secrets)). It keeps nothing
 between restarts, so saved queries and layout are lost when the container is recreated.
 
 ### Metrics and dashboards
@@ -128,7 +129,8 @@ between restarts, so saved queries and layout are lost when the container is rec
 Every Spring service, the gateway included, serves its metrics on `/actuator/prometheus`
 ([service template](./platform/service-template/README.md#metrics)). Prometheus scrapes them every
 15 seconds and keeps 2 days of them, and Grafana shows them on http://localhost:3000, open to
-anyone for viewing (sign in as `admin` / `admin` to explore). Its data source and its three
+anyone for viewing (sign in as `admin`, with the password in
+`.secrets/ecomm/grafana-admin-password`, to explore). Its data source and its three
 dashboards, under **ecomm**, are files in [`infra/docker/grafana`](./infra/docker/grafana):
 
 - **Services:** request rate, 5xx rate and p95 latency per service, request rate per route,
@@ -208,11 +210,71 @@ Storefront's rather than beside it, since both check out. Both suites make their
 through Keycloak's admin API and delete them again; the Orders they place, and the Stock those
 take, stay.
 
+### Secrets
+
+No secret is in the repo, an image or the Compose file. `make secrets`, which `make up` runs first,
+writes each secret the stack lacks to `.secrets/<project>/` (`.secrets/ecomm/` for the default
+stack), which is git-ignored and which only you can open. Compose mounts each container only the
+ones it needs, as files in `/run/secrets`; a Spring service reads them as properties, through its
+config tree ([ADR 0011](./docs/adr/0011-secrets-as-generated-files.md)).
+
+| Secret | Used by |
+|---|---|
+| `postgres-password` | Postgres's `ecomm` login: every Postgres service, Keycloak, Temporal, Apicurio, pgAdmin |
+| `couchbase-password` | Couchbase's `admin`: Catalog, and `make seed-reset` |
+| `keycloak-admin-password` | Keycloak's bootstrap `admin` in the `master` realm, and realm sync |
+| `grafana-admin-password`, `pgadmin-password` | Grafana's and pgAdmin's `admin` |
+| `checkout-client-secret`, `orchestration-client-secret` | The confidential Keycloak clients and the services that use them; realm sync sets each client's secret from its file on every start ([Identity & Access](./services/identity-access/README.md#client-secrets)) |
+| `payment-webhook-secret` | Payment, and its mock gateway, which signs its webhooks with it |
+
+A new secret is 32 random bytes, URL-safe. An existing file is never overwritten. On a stack whose
+volumes were made before Sprint 5, the infrastructure passwords are written with the dev values
+they were made with (`ecomm`, `password` and `admin`), since Postgres, Couchbase and Keycloak keep
+the password they started with; the client and webhook secrets are new on every stack. So never
+delete an infrastructure password's file while the stack's volumes exist: `make secrets` would write
+the old dev value back, which a stack made since doesn't have. `docker compose down -v` removes the
+volumes but not `.secrets/`, and a fresh stack starts with the passwords that are there.
+
+The demo Customer's and the Staff user's passwords and the public `dev-cli` client stay in the
+realm file: they are demo data for trying the stack and for the tests, not secrets.
+
+Rotation is by hand. A client or webhook secret: delete its file, run `make secrets`, and recreate
+what reads it, e.g. for Checkout's client:
+
+```sh
+rm .secrets/ecomm/checkout-client-secret && make secrets
+docker compose up -d --force-recreate --wait keycloak-realm checkout-pricing
+```
+
+An infrastructure password: change it where it lives first, then write the same value to its file,
+then recreate everything, e.g. for Postgres:
+
+```sh
+new=$(head -c 32 /dev/urandom | base64 | tr '+/' '-_' | tr -d '=\n')
+docker compose exec -T postgres psql -U ecomm -d postgres -c "ALTER ROLE ecomm PASSWORD '$new'"
+printf '%s' "$new" > .secrets/ecomm/postgres-password
+docker compose up -d --force-recreate --wait
+```
+
+Couchbase's is changed with `couchbase-cli setting-cluster --cluster-password` and Keycloak's admin
+with `kcadm.sh set-password`, both run in their containers. Grafana and pgAdmin keep no data, so
+deleting their file and recreating them is enough.
+
+The `.http` files' client and webhook secrets come from the IntelliJ HTTP client's `dev`
+environment. Write it, git-ignored, at the repo root:
+
+```sh
+d=.secrets/ecomm; printf '{"dev": {"checkoutClientSecret": "%s", "orchestrationClientSecret": "%s", "paymentWebhookSecret": "%s"}}\n' \
+  "$(cat $d/checkout-client-secret)" "$(cat $d/orchestration-client-secret)" "$(cat $d/payment-webhook-secret)" \
+  > http-client.private.env.json
+```
+
 ### Commands
 
 | Command | |
 |---|---|
-| `make up` | Build and start the stack, and wait until it is healthy |
+| `make up` | Write the secrets the stack lacks, build and start the stack, and wait until it is healthy |
+| `make secrets` | Write each secret the stack lacks to `.secrets/<project>/`, never overwriting one ([Secrets](#secrets)) |
 | `make down` | Stop the stack, keeping its data |
 | `make status` | Say whether every service is running and healthy, naming any that isn't with its exit code and whether it was killed for its memory cap. Both Playwright suites run it first |
 | `make seed-reset` | Put the seed Categories, Products, Stock, Coupons and Campaigns back and drop every Cart, Checkout Session, Reservation, Order, Payment and review; registered Customers stay. It also empties the event topics, dead-letter and redrive topics included, and Search's, Reviews' and Recommendations' projections, since the reset stores count their events' versions from 1 again |
@@ -269,12 +331,13 @@ say which ran out, and `make up` starts it again.
 ## CI
 
 [`.github/workflows/ci.yml`](./.github/workflows/ci.yml) checks every pull request and every push
-to `main`, with five jobs:
+to `main`, with six jobs:
 
 | Job | What it checks |
 |---|---|
 | `backend` | `./gradlew check` on JDK 21: Spotless, unit and Testcontainers tests, and `HexagonalRules` |
 | `event-schemas` | Registers the event schemas from before the change in a throwaway Apicurio, then the change's own, so a schema change that isn't backward compatible, such as a field made required or removed, fails |
+| `secrets` | Scans the repo and its history with [Gitleaks](https://github.com/gitleaks/gitleaks), by its own rules and [`.gitleaks.toml`](./.gitleaks.toml)'s, which adds any literal password or secret in a configuration file, and fails on a finding. The known dev placeholders of earlier sprints are allow-listed one by one, by fingerprint, in [`.gitleaksignore`](./.gitleaksignore). Then `make secrets` and a check that Compose's resolved configuration holds none of the generated values |
 | `frontend (<app>)` | `npm ci`, `lint`, `typecheck`, `test` and `build` for each app in its matrix: the Storefront and the Admin Console |
 | `images` | `docker compose build` of every service and frontend image. On a push to `main` it also pushes them to GHCR as `ghcr.io/ondokuzz/ecomm/<service>`, tagged with the commit SHA and `main` |
 | `e2e` | `make up`, then the Storefront's and the Admin Console's Playwright suites in Chromium. When it fails, the `e2e-failure` artifact keeps the Playwright reports, traces and `docker compose logs` |
@@ -290,7 +353,7 @@ A new frontend app joins the `frontend` job by adding its directory name to `mat
 Making the checks block a merge is a manual step, done once, since a workflow cannot require
 itself. In the repository's **Settings → Branches**, add a branch protection rule (or ruleset) for
 `main`, turn on **Require status checks to pass before merging**, and choose `backend`,
-`event-schemas`, `frontend (storefront)`, `frontend (admin-console)`, `images` and `e2e`. A check appears in that list only after it has run
+`event-schemas`, `secrets`, `frontend (storefront)`, `frontend (admin-console)`, `images` and `e2e`. A check appears in that list only after it has run
 once. On a private repository, branch protection needs a paid GitHub plan.
 
 ## Layout

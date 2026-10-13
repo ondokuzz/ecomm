@@ -1,6 +1,10 @@
 spring:
   application:
     name: checkout-pricing
+  config:
+    # Secrets are files, one per property and named after it: the ones Compose mounts in
+    # /run/secrets (docs/adr/0011-secrets-as-generated-files.md). There are none outside a container.
+    import: optional:configtree:${ecomm.secrets-dir:/run/secrets/}
   data:
     redis:
       host: localhost
@@ -14,13 +18,12 @@ spring:
   security:
     oauth2:
       client:
-        # Checkout's own identity for Inventory and Promotions (Identity & Access ADR 0002). The
-        # secret has no default: set CHECKOUT_CLIENT_SECRET, which compose does.
+        # Checkout's own identity for Inventory and Promotions (Identity & Access ADR 0002). Its
+        # client-secret has no default; compose gives it as a secret.
         registration:
           checkout:
             provider: keycloak
             client-id: checkout
-            client-secret: ${CHECKOUT_CLIENT_SECRET}
             authorization-grant-type: client_credentials
         provider:
           keycloak:

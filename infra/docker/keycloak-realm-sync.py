@@ -1,8 +1,12 @@
 """Adds what the realm file has and the running ecomm realm lacks: realm roles, and clients with their
 service accounts' realm roles. Keycloak's import skips a realm that already exists, so without this a
-stack from an earlier sprint never gets a client or role added since. Anything that already exists is
-left as it is, so it is safe on every `docker compose up`. Talks to Keycloak's admin API as the
-bootstrap admin.
+stack from an earlier sprint never gets a client or role added since. Anything else that already
+exists is left as it is, so it is safe on every `docker compose up`.
+
+The one thing it changes is each confidential client's secret, set on every run from the secret
+`make secrets` wrote for it, <clientId>-client-secret (the realm file holds none). That way the realm
+and the services that read the same secret agree, an upgraded realm included. Talks to Keycloak's
+admin API as the bootstrap admin.
 """
 
 import json
@@ -14,6 +18,12 @@ import urllib.request
 
 KEYCLOAK = os.environ["KEYCLOAK_URL"]
 REALM_FILE = os.environ["REALM_FILE"]
+SECRETS = "/run/secrets"
+
+
+def secret(name):
+    with open(os.path.join(SECRETS, name)) as f:
+        return f.read().strip()
 
 
 def request(method, path, token=None, body=None, form=None):
@@ -46,7 +56,7 @@ def admin_token():
             "grant_type": "password",
             "client_id": "admin-cli",
             "username": os.environ["KEYCLOAK_ADMIN_USERNAME"],
-            "password": os.environ["KEYCLOAK_ADMIN_PASSWORD"],
+            "password": secret("keycloak-admin-password"),
         },
     )["access_token"]
 
@@ -105,6 +115,15 @@ def main():
             print(f"Added client {client_id}; its service account holds {', '.join(roles)} only")
         else:
             print(f"Added client {client_id}")
+
+    for confidential in realm.get("clients", []):
+        if confidential.get("publicClient", False) or confidential.get("bearerOnly", False):
+            continue
+        client_id = confidential["clientId"]
+        existing = client(client_id)
+        existing["secret"] = secret(f"{client_id}-client-secret")
+        request("PUT", f"{base}/clients/{existing['id']}", token, existing)
+        print(f"Set client {client_id}'s secret from its file")
 
 
 def give_only(base, token, client, roles, role):

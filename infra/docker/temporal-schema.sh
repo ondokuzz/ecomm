@@ -4,6 +4,9 @@
 # runs on every `docker compose up`, before the server starts.
 set -eu
 
+SQL_PASSWORD=$(cat /run/secrets/postgres-password)
+export SQL_PASSWORD
+
 for db in temporal:temporal temporal_visibility:visibility; do
   name=${db%%:*}
   schema=/etc/temporal/schema/postgresql/v12/${db##*:}/versioned

@@ -4,7 +4,7 @@ set -euo pipefail
 
 HOST=couchbase:8091
 USER=${COUCHBASE_USERNAME}
-PASS=${COUCHBASE_PASSWORD}
+PASS=$(cat /run/secrets/couchbase-password)
 BUCKET=${COUCHBASE_BUCKET}
 
 if couchbase-cli server-list -c "$HOST" -u "$USER" -p "$PASS" >/dev/null 2>&1; then

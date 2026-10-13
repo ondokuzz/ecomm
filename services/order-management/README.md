@@ -203,3 +203,7 @@ only. Browsers reach the service through the gateway, at `/api/order-management/
 Or run Postgres and Keycloak in compose (`docker compose up -d keycloak`) and start the service
 with `./gradlew :services:order-management:bootRun` on port 8080. Set `POSTGRES_PORT` for both when
 something else holds 5432.
+
+Since Sprint 5 its database password is a Compose secret, mounted as the file
+`spring.datasource.password` (see the root README's "Secrets"); `application.yml` has none. Outside
+Docker, give it as `SPRING_DATASOURCE_PASSWORD="$(cat .secrets/ecomm/postgres-password)"`.

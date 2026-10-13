@@ -9,10 +9,15 @@ REVIEWS_GROUPS := $(filter reviews-ratings.%,$(GROUPS))
 RECOMMENDATIONS_GROUPS := $(filter recommendations.%,$(GROUPS))
 DEAD_LETTER_TOPICS := $(foreach group,$(GROUPS),$(group).dlt $(group).redrive)
 
-.PHONY: up down status seed-reset search-rebuild reviews-rebuild recommendations-rebuild dlt-redrive upgrade-from upgrade-to upgrade-clean
+.PHONY: secrets up down status seed-reset search-rebuild reviews-rebuild recommendations-rebuild dlt-redrive upgrade-from upgrade-to upgrade-clean
+
+## Write each of the stack's secrets that is missing to .secrets/<project>/, never overwriting one
+## (infra/docker/secrets.sh). `make up` runs it first.
+secrets:
+	@infra/docker/secrets.sh
 
 ## Build and start the default stack, and wait until every service is healthy.
-up:
+up: secrets
 	$(COMPOSE) up -d --build --wait
 
 ## Stop the stack, keeping its data.
@@ -32,7 +37,8 @@ status:
 seed-reset:
 	$(COMPOSE) up -d --wait couchbase postgres redis kafka mongo
 	$(COMPOSE) stop storefront checkout-pricing catalog inventory cart payment order-management promotions search-discovery reviews-ratings recommendations
-	$(COMPOSE) exec -T couchbase couchbase-cli bucket-delete -c localhost:8091 -u admin -p password --bucket catalog
+	$(COMPOSE) exec -T couchbase sh -c \
+	  'couchbase-cli bucket-delete -c localhost:8091 -u admin -p "$$(cat /run/secrets/couchbase-password)" --bucket catalog'
 	$(COMPOSE) run --rm --no-deps couchbase-init
 	for db in inventory payment orders promotions recommendations; do \
 	  $(COMPOSE) exec -T postgres psql -U ecomm -d postgres -v ON_ERROR_STOP=1 \
@@ -114,13 +120,16 @@ upgrade-from:
 	if [ -f .env ]; then cp .env $(UPGRADE_DIR)/.env; fi
 	cd $(UPGRADE_DIR) && $(UPGRADE) IMAGE_TAG=upgrade-from $(COMPOSE) up -d --build --wait
 
-## Bring the upgrade-from stack up to this tree, keeping its data, and check it is healthy.
+## Bring the upgrade-from stack up to this tree, keeping its data, and check it is healthy. Its
+## secrets are its own, in .secrets/ecomm-upgrade/.
 upgrade-to:
+	$(UPGRADE) infra/docker/secrets.sh
 	$(UPGRADE) $(COMPOSE) up -d --build --wait --remove-orphans
 	@$(UPGRADE) infra/docker/stack-status.sh
 
-## Remove the upgrade stack, its data, its worktree and its images.
+## Remove the upgrade stack, its data, its secrets, its worktree and its images.
 upgrade-clean:
 	$(UPGRADE) $(COMPOSE) down -v --remove-orphans
+	rm -rf .secrets/ecomm-upgrade
 	if [ -d $(UPGRADE_DIR) ]; then git worktree remove --force $(UPGRADE_DIR); fi
 	docker image ls --format '{{.Repository}}:{{.Tag}}' | grep ':upgrade-from$$' | xargs -r docker image rm
