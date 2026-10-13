@@ -14,6 +14,12 @@ export interface Variant {
   images: string[]
 }
 
+/** A manufacturer's warranty on all of a Product's Variants, from delivery. */
+export interface WarrantyTerms {
+  months: number
+  manufacturer: string
+}
+
 export interface Product {
   sku: string
   name: string
@@ -23,6 +29,10 @@ export interface Product {
   priceFrom: Money
   images: string[]
   variants: Variant[]
+  /** Its Warranty terms; null when it has none. */
+  warranty: WarrantyTerms | null
+  /** How each unit is told apart when it ships. */
+  serialTracking: 'NONE' | 'SERIAL' | 'IMEI'
 }
 
 /** A Variant looked up by its ID, with enough of its Product to show it, as a Cart or an Order line needs. */
@@ -174,6 +184,13 @@ export function specs(attributes: Record<string, string>, definitions: Attribute
 function display(value: string, definition: AttributeDefinition): string {
   if (definition.type !== 'BOOLEAN') return value
   return value === 'true' ? 'Yes' : value === 'false' ? 'No' : value
+}
+
+/** A Product's Warranty terms in words, e.g. "24 months, manufacturer's warranty (Samsung)", or that it has none. */
+export function warrantyLabel(warranty: WarrantyTerms | null): string {
+  if (!warranty) return "No manufacturer's warranty"
+  const length = warranty.months === 1 ? '1 month' : `${warranty.months} months`
+  return `${length}, manufacturer's warranty (${warranty.manufacturer})`
 }
 
 /** How many Products a list holds, in words. */

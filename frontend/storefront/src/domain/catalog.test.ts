@@ -10,6 +10,7 @@ import {
   specs,
   variantAxes,
   variantName,
+  warrantyLabel,
 } from './catalog'
 
 const eur = (amountMinor: number) => ({ amountMinor, currency: 'EUR' })
@@ -29,6 +30,8 @@ const product = (images: string[], variants: Variant[] = [variant('PHN-PIXEL-9',
   priceFrom: eur(79900),
   images,
   variants,
+  warranty: null,
+  serialTracking: 'NONE',
 })
 
 describe('productImage', () => {
@@ -147,6 +150,20 @@ describe('variantName', () => {
         product: { sku: 'AUD-JBL-FLIP-6', name: 'JBL Flip 6', images: [] },
       }),
     ).toBe('JBL Flip 6')
+  })
+})
+
+describe('warrantyLabel', () => {
+  it("names a warranty's length and its manufacturer", () => {
+    expect(warrantyLabel({ months: 24, manufacturer: 'Samsung' })).toBe("24 months, manufacturer's warranty (Samsung)")
+  })
+
+  it('says one month in the singular', () => {
+    expect(warrantyLabel({ months: 1, manufacturer: 'Acme' })).toBe("1 month, manufacturer's warranty (Acme)")
+  })
+
+  it('says when a Product has none', () => {
+    expect(warrantyLabel(null)).toBe("No manufacturer's warranty")
   })
 })
 
