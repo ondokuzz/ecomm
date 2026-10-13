@@ -1,6 +1,8 @@
 # Exercises every Cart endpoint against the compose stack (`docker compose up -d --build`).
 # Run the requests top to bottom in the IntelliJ HTTP client; the token request stores a token for
 # the ones after it.
+# Its client and webhook secrets are the stack's own: run it in the `dev` environment, whose
+# http-client.private.env.json holds them (the root README's "Secrets" says how to write it).
 
 @cart = http://localhost:8083
 @keycloak = http://localhost:8180/realms/ecomm/protocol/openid-connect/token
@@ -72,7 +74,7 @@ Authorization: Bearer {{staffToken}}
 POST {{keycloak}}
 Content-Type: application/x-www-form-urlencoded
 
-grant_type=client_credentials&client_id=orchestration&client_secret=orchestration-dev-secret
+grant_type=client_credentials&client_id=orchestration&client_secret={{orchestrationClientSecret}}
 
 > {% client.global.set("orchestrationToken", response.body.access_token); %}
 

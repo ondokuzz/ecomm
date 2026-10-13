@@ -1,0 +1,19 @@
+# The secret scan CI runs (docs/adr/0011-secrets-as-generated-files.md). Gitleaks' own rules find
+# keys and tokens with the shapes and entropy real ones have; a dev password like the ones this
+# repo used to hold has neither, so one more rule catches any literal value given to a password or
+# secret in configuration. The known dev placeholders it finds in the history are allow-listed one
+# by one, by fingerprint, in .gitleaksignore, never by pattern, so a new value is a finding however
+# much it looks like them.
+[extend]
+useDefault = true
+
+[[rules]]
+id = "password-or-secret-literal"
+description = "A literal value given to a password or secret in configuration"
+# A line whose key ends in password or secret, then = or :, then on the same line a value that
+# isn't a placeholder such as ${VAR}.
+regex = '''(?im)^[ \t-]*["']?[a-z0-9_.-]*(?:password|passwd|pwd|secret)["']?[ \t]*[:=][ \t]*["']?([^\s"'$`{}(),;<>#]{3,})'''
+secretGroup = 1
+# Configuration only, where a secret would be set; code and tests name such keys too often.
+path = '''(?i)(\.ya?ml|\.json|\.properties|\.env|\.conf)$'''
+keywords = ["password", "passwd", "pwd", "secret"]

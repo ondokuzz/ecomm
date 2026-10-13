@@ -1,6 +1,8 @@
 # Exercises Promotions against the compose stack (`make up`): Staff manage Coupons and Campaigns,
 # and Checkout evaluates what a Checkout Session's lines are due. Run the requests top to bottom in the IntelliJ HTTP client; the token requests
 # store tokens for the ones after them.
+# Its client and webhook secrets are the stack's own: run it in the `dev` environment, whose
+# http-client.private.env.json holds them (the root README's "Secrets" says how to write it).
 
 @promotions = http://localhost:8087
 @gateway = http://localhost:8000
@@ -18,7 +20,7 @@ grant_type=password&client_id=dev-cli&username=staff@ecomm.local&password=staff
 POST {{keycloak}}
 Content-Type: application/x-www-form-urlencoded
 
-grant_type=client_credentials&client_id=checkout&client_secret=checkout-dev-secret
+grant_type=client_credentials&client_id=checkout&client_secret={{checkoutClientSecret}}
 
 > {% client.global.set("checkoutToken", response.body.access_token); %}
 

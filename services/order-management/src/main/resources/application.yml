@@ -1,11 +1,15 @@
 spring:
   application:
     name: order-management
+  config:
+    # Secrets are files, one per property and named after it: the ones Compose mounts in
+    # /run/secrets (docs/adr/0011-secrets-as-generated-files.md). There are none outside a container.
+    import: optional:configtree:${ecomm.secrets-dir:/run/secrets/}
   datasource:
     # POSTGRES_PORT matches the compose override, for when something else holds 5432.
     url: jdbc:postgresql://localhost:${POSTGRES_PORT:5432}/orders
+    # The password is a secret: spring.datasource.password.
     username: ecomm
-    password: ecomm
   kafka:
     bootstrap-servers: localhost:${KAFKA_PORT:9092}
   modulith:

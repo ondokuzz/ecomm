@@ -34,11 +34,20 @@ final class TestInfrastructure {
   private TestInfrastructure() {}
 
   static void registerWith(DynamicPropertyRegistry registry) {
+    registerAllButTheDatabasePasswordWith(registry);
+    registry.add("spring.datasource.password", POSTGRES::getPassword);
+  }
+
+  /** As {@link #registerWith}, for a test that gives the application the password another way. */
+  static void registerAllButTheDatabasePasswordWith(DynamicPropertyRegistry registry) {
     FakeKeycloak.registerWith(registry);
     EventBackbone.registerWith(registry);
     registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
     registry.add("spring.datasource.username", POSTGRES::getUsername);
-    registry.add("spring.datasource.password", POSTGRES::getPassword);
     registry.add("spring.flyway.locations", () -> "classpath:db/migration,classpath:db/testdata");
+  }
+
+  static String databasePassword() {
+    return POSTGRES.getPassword();
   }
 }

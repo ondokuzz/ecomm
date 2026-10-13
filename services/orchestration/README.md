@@ -148,8 +148,10 @@ Checkout's:
 - a 401 drops it, and the call is retried once with a fresh one. No other status is retried here;
   retrying a failed step is Temporal's job.
 
-The secret comes from `ORCHESTRATION_CLIENT_SECRET`, which has no default; Compose sets the dev-only
-`orchestration-dev-secret`, matching the realm file.
+The secret has no default. Since Sprint 5 Compose mounts it as the file
+`spring.security.oauth2.client.registration.orchestration.client-secret`, from the stack's generated
+`orchestration-client-secret`, which realm sync also sets on the `orchestration` client (see the root
+README's "Secrets"). `ORCHESTRATION_CLIENT_SECRET` is gone.
 
 ## Tests
 

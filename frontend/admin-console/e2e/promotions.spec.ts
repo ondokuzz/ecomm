@@ -3,6 +3,7 @@ import type { Campaign } from '../src/domain/campaign'
 import type { Coupon } from '../src/domain/coupon'
 import { type Currencies, type Currency, type Money, currenciesOf, formatMoney } from '../src/domain/money'
 import type { Order } from '../src/domain/order'
+import { stackSecret } from './secrets'
 
 /**
  * Staff list, create, edit, switch off and delete Coupons and Campaigns in the Admin Console, and
@@ -319,7 +320,12 @@ async function tokenFor(request: APIRequestContext, user: Credentials) {
 /** A token for Keycloak's own admin API, from the master realm's bootstrap admin. */
 async function keycloakAdminHeaders(request: APIRequestContext) {
   const response = await request.post(`${keycloakUrl}/realms/master/protocol/openid-connect/token`, {
-    form: { grant_type: 'password', client_id: 'admin-cli', username: 'admin', password: 'admin' },
+    form: {
+      grant_type: 'password',
+      client_id: 'admin-cli',
+      username: 'admin',
+      password: stackSecret('keycloak-admin-password'),
+    },
   })
   expect(response.ok()).toBeTruthy()
   return { Authorization: `Bearer ${((await response.json()) as { access_token: string }).access_token}` }
