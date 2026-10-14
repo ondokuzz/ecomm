@@ -1,21 +1,39 @@
 package com.ecomm.orchestration;
 
 import static com.ecomm.orchestration.CheckoutWorkflowTest.downstreamRequests;
+import static com.ecomm.orchestration.CheckoutWorkflowTest.stubInSequence;
 import static com.ecomm.orchestration.CheckoutWorkflowTest.stubToken;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalToJson;
+import static com.github.tomakehurst.wiremock.client.WireMock.get;
+import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
+import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
+import static com.github.tomakehurst.wiremock.client.WireMock.patch;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
+import com.ecomm.commons.events.EventBackbone;
+import com.ecomm.orchestration.application.port.in.FulfillmentOutcome;
+import com.ecomm.orchestration.application.port.in.FulfillmentOutcome.Status;
+import com.github.tomakehurst.wiremock.client.MappingBuilder;
+import com.github.tomakehurst.wiremock.client.WireMock;
+import com.github.tomakehurst.wiremock.verification.LoggedRequest;
+import io.grpc.StatusRuntimeException;
 import io.temporal.api.common.v1.WorkflowExecution;
 import io.temporal.api.workflowservice.v1.DescribeWorkflowExecutionRequest;
 import io.temporal.client.WorkflowClient;
+import io.temporal.client.WorkflowException;
 import java.time.Duration;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.regex.Pattern;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,12 +47,20 @@ import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
  *
  * <p>Time skipping is locked while each test runs, so the Saga's 30-day wait for delivery doesn't
  * end before the test's Shipment events arrive; a test that wants the wait over skips it.
+ *
+ * <p>Each topic has one partition, consumed in order, so once a later event has visibly been
+ * handled, every event sent before it has been too: that is how a test sees that an event started
+ * or woke nothing.
  */
 class FulfillmentWorkflowTest extends OrchestrationTest {
 
   static final String CUSTOMER_ID = "customer-42";
   static final String SHIPMENT_ID = "0b8e6f2a-1c3d-4e5f-a6b7-c8d9e0f1a2b3";
   static final String PAYMENT_ID = "9a8b7c6d-0000-4000-8000-000000000002";
+
+  static final String DISPATCH = "/shipments/" + SHIPMENT_ID + "/dispatch";
+  static final String HOLD = "/shipments/" + SHIPMENT_ID + "/hold";
+  static final String CAPTURE = "/payments/" + PAYMENT_ID + "/capture";
 
   @Autowired WorkflowClient temporal;
   @Autowired KafkaListenerEndpointRegistry listeners;
@@ -61,26 +87,28 @@ class FulfillmentWorkflowTest extends OrchestrationTest {
                                 && !c.getAssignedPartitions().isEmpty()));
   }
 
+  /** Ends a run the test left waiting, so it can't call the next test's stubs. */
   @AfterEach
-  void unlockTime() {
+  void endTheRun() {
+    try {
+      temporal.newUntypedWorkflowStub(workflowId()).terminate("the test is over");
+    } catch (WorkflowException | StatusRuntimeException e) {
+      // It ended, or never started.
+    }
     TimeSkipping.unlock();
   }
 
   @Test
   void aPaidOrderWithAnAddressStartsItsSagaWhichCreatesTheShipment() {
-    stubCreateShipment();
+    stubEveryStep();
 
     paid();
 
-    await()
-        .atMost(Duration.ofSeconds(30))
-        .untilAsserted(() -> DOWNSTREAM.verify(postRequestedFor(urlEqualTo("/shipments"))));
+    awaitCalls(1);
     DOWNSTREAM.verify(
         postRequestedFor(urlEqualTo("/shipments"))
             .withHeader("Authorization", equalTo("Bearer orchestration-token"))
-            .withHeader(
-                "Idempotency-Key",
-                equalTo(workflowId() + ":" + runIdOf(workflowId()) + ":createShipment"))
+            .withHeader("Idempotency-Key", equalTo(keyOf("createShipment")))
             .withHeader("X-Correlation-Id", equalTo(correlationId))
             .withRequestBody(
                 equalToJson(
@@ -95,7 +123,248 @@ class FulfillmentWorkflowTest extends OrchestrationTest {
                                         "cost": {"amountMinor": 999, "currency": "EUR"}}}
                     """
                         .formatted(orderId))));
-    assertThat(downstreamRequests()).hasSize(1);
+    assertThat(calls()).containsExactly("POST /shipments");
+  }
+
+  @Test
+  void thePackedShipmentIsCapturedFulfilledDispatchedAndShippedThenDeliveredInOrder() {
+    stubEveryStep();
+    paid();
+    awaitCalls(1);
+
+    shipment(1, "AWAITING_PICK");
+    shipment(2, "PICKED");
+    shipment(3, "PACKED");
+    awaitCalls(6);
+    shipment(4, "SHIPPED");
+    shipment(5, "DELIVERED");
+
+    assertThat(outcome()).isEqualTo(new FulfillmentOutcome(Status.DELIVERED, SHIPMENT_ID, null));
+    assertThat(calls())
+        .containsExactly(
+            "POST /shipments",
+            "GET " + readPayments(),
+            "POST " + CAPTURE,
+            "PATCH " + status() + " FULFILLED",
+            "POST " + DISPATCH,
+            "PATCH " + status() + " SHIPPED",
+            "PATCH " + status() + " DELIVERED");
+    assertThat(keys())
+        .containsExactly(
+            keyOf("createShipment"),
+            null,
+            keyOf("capturePayment"),
+            keyOf("markOrderFulfilled"),
+            keyOf("dispatchShipment"),
+            keyOf("markOrderShipped"),
+            keyOf("markOrderDelivered"));
+    assertThat(downstreamRequests())
+        .allSatisfy(r -> assertThat(r.getHeader("X-Correlation-Id")).isEqualTo(correlationId));
+    DOWNSTREAM.verify(
+        postRequestedFor(urlEqualTo(CAPTURE))
+            .withRequestBody(equalToJson("{\"customerId\": \"customer-42\"}")));
+  }
+
+  @Test
+  void theSameEventTwiceAndAReplayAfterTheSagaClosedStartNothingMore() {
+    stubEveryStep();
+    stubCaptureDeclined();
+    paid();
+    paid();
+    awaitCalls(1);
+    var firstRun = runIdOf(workflowId());
+    shipment(3, "PACKED");
+    assertThat(outcome().status()).isEqualTo(Status.CAPTURE_REFUSED);
+
+    paid();
+    var marker = anotherPaidOrder();
+
+    await()
+        .atMost(Duration.ofSeconds(30))
+        .untilAsserted(() -> assertThat(shipmentsCreatedFor(marker)).isEqualTo(1));
+    assertThat(shipmentsCreatedFor(orderId)).isEqualTo(1);
+    assertThat(runIdOf(workflowId())).isEqualTo(firstRun);
+  }
+
+  @Test
+  void anOrderPaidWithoutAnAddressAsBeforeSprint5StartsNothing() {
+    stubEveryStep();
+    FulfillmentEvents.order(orderId, CUSTOMER_ID, 2, "PAID", false, correlationId);
+    var marker = anotherPaidOrder();
+
+    await()
+        .atMost(Duration.ofSeconds(30))
+        .untilAsserted(() -> assertThat(shipmentsCreatedFor(marker)).isEqualTo(1));
+    assertThat(shipmentsCreatedFor(orderId)).isZero();
+    assertThat(isStarted(workflowId())).isFalse();
+  }
+
+  @Test
+  void anOrderNotYetPaidStartsNothing() {
+    stubEveryStep();
+    FulfillmentEvents.order(orderId, CUSTOMER_ID, 1, "PLACED", true, correlationId);
+    var marker = anotherPaidOrder();
+
+    await()
+        .atMost(Duration.ofSeconds(30))
+        .untilAsserted(() -> assertThat(shipmentsCreatedFor(marker)).isEqualTo(1));
+    assertThat(isStarted(workflowId())).isFalse();
+  }
+
+  @Test
+  void aShipmentThatExistsAlreadyIsReadByOrderAndTakenAsCreated() {
+    stubEveryStep();
+    DOWNSTREAM.stubFor(
+        post("/shipments")
+            .atPriority(1)
+            .willReturn(
+                aResponse()
+                    .withStatus(409)
+                    .withHeader("Content-Type", "application/problem+json")
+                    .withBody("{\"reason\": \"shipmentExists\"}")));
+    DOWNSTREAM.stubFor(
+        get(urlEqualTo("/shipments?orderId=" + orderId))
+            .willReturn(okJson("{\"id\": \"%s\"}".formatted(SHIPMENT_ID))));
+    paid();
+    awaitCalls(2);
+
+    shipment(3, "PACKED");
+
+    awaitCalls(7);
+    assertThat(calls()).contains("POST " + DISPATCH);
+  }
+
+  @Test
+  void aShipmentWhoseProductsAreNotKnownYetIsCreatedOnceTheyAre() {
+    stubEveryStep();
+    stubInSequence(
+        () -> post(urlEqualTo("/shipments")),
+        aResponse()
+            .withStatus(503)
+            .withHeader("Retry-After", "1")
+            .withBody("{\"reason\": \"productsNotKnownYet\"}"),
+        shipmentCreated());
+
+    paid();
+
+    awaitCalls(2);
+    assertThat(keys()).containsExactly(keyOf("createShipment"), keyOf("createShipment"));
+  }
+
+  @Test
+  void duplicateAndStaleShipmentEventsAreIgnored() {
+    stubEveryStep();
+    // Creating the Shipment takes a while, so the events below are all waiting for the Saga
+    // when it is done: if it took the stale PICKED after PACKED, it would wait for packing still.
+    DOWNSTREAM.stubFor(
+        post("/shipments").atPriority(1).willReturn(shipmentCreated().withFixedDelay(3000)));
+    paid();
+    await().atMost(Duration.ofSeconds(30)).until(() -> isStarted(workflowId()));
+
+    shipment(3, "PACKED");
+    shipment(3, "PACKED");
+    shipment(2, "PICKED");
+
+    awaitCalls(6);
+    shipment(5, "DELIVERED");
+    shipment(5, "DELIVERED");
+    assertThat(outcome().status()).isEqualTo(Status.DELIVERED);
+    assertThat(calls()).filteredOn(c -> c.startsWith("POST " + CAPTURE)).hasSize(1);
+  }
+
+  @Test
+  void aDeclinedCaptureHoldsTheShipmentAndLeavesTheOrderPaid() {
+    stubEveryStep();
+    stubCaptureDeclined();
+    paid();
+    awaitCalls(1);
+
+    shipment(3, "PACKED");
+
+    assertThat(outcome())
+        .isEqualTo(
+            new FulfillmentOutcome(
+                Status.CAPTURE_REFUSED, SHIPMENT_ID, "Capture declined: authorization_expired"));
+    assertThat(calls())
+        .containsExactly(
+            "POST /shipments", "GET " + readPayments(), "POST " + CAPTURE, "POST " + HOLD);
+    DOWNSTREAM.verify(
+        postRequestedFor(urlEqualTo(HOLD))
+            .withHeader("Idempotency-Key", equalTo(keyOf("holdShipment")))
+            .withRequestBody(
+                equalToJson("{\"reason\": \"Capture declined: authorization_expired\"}")));
+  }
+
+  @Test
+  void anOrderWithNoAuthorizedPaymentHasItsShipmentHeld() {
+    stubEveryStep();
+    DOWNSTREAM.stubFor(
+        readPaymentsRequest()
+            .atPriority(1)
+            .willReturn(
+                okJson("[{\"id\": \"%s\", \"status\": \"VOIDED\"}]".formatted(PAYMENT_ID))));
+    paid();
+    awaitCalls(1);
+
+    shipment(3, "PACKED");
+
+    assertThat(outcome().status()).isEqualTo(Status.CAPTURE_REFUSED);
+    assertThat(calls()).containsExactly("POST /shipments", "GET " + readPayments(), "POST " + HOLD);
+  }
+
+  @Test
+  void anOrderManagementThatAnswers503OnFulfilledIsRetriedUntilItSucceeds() {
+    stubEveryStep();
+    stubInSequence(
+        () -> statusChangeTo("FULFILLED"),
+        aResponse().withStatus(503),
+        okJson("{\"id\": \"%s\"}".formatted(orderId)));
+    paid();
+    awaitCalls(1);
+
+    shipment(3, "PACKED");
+
+    awaitCalls(7);
+    assertThat(calls())
+        .containsSubsequence(
+            "PATCH " + status() + " FULFILLED",
+            "PATCH " + status() + " FULFILLED",
+            "POST " + DISPATCH,
+            "PATCH " + status() + " SHIPPED");
+    assertThat(keys().get(3)).isEqualTo(keys().get(4)).isEqualTo(keyOf("markOrderFulfilled"));
+  }
+
+  @Test
+  void aDeliveryNeverConfirmedEndsTheSagaAfter30Days() {
+    stubEveryStep();
+    paid();
+    awaitCalls(1);
+    shipment(3, "PACKED");
+    awaitCalls(6);
+
+    TimeSkipping.skip(Duration.ofDays(29));
+    assertThat(isRunning(workflowId())).isTrue();
+    TimeSkipping.skip(Duration.ofDays(2));
+
+    assertThat(outcome())
+        .isEqualTo(new FulfillmentOutcome(Status.DELIVERY_UNCONFIRMED, SHIPMENT_ID, null));
+    assertThat(calls()).doesNotContain("PATCH " + status() + " DELIVERED");
+  }
+
+  @Test
+  void aShipmentEventForNoRunningSagaIsSkippedNotDeadLettered() {
+    stubEveryStep();
+    var unknownShipment = UUID.randomUUID().toString();
+    FulfillmentEvents.shipment(unknownShipment, orderId, CUSTOMER_ID, 3, "PACKED");
+    paid();
+    awaitCalls(1);
+
+    // Shipment events after the skipped one still wake their Saga.
+    shipment(3, "PACKED");
+
+    awaitCalls(6);
+    assertThat(EventBackbone.recordsKeyed("orchestration.shipments.dlt", unknownShipment))
+        .isEmpty();
   }
 
   // --- events ---
@@ -105,13 +374,57 @@ class FulfillmentWorkflowTest extends OrchestrationTest {
     FulfillmentEvents.order(orderId, CUSTOMER_ID, 2, "PAID", true, correlationId);
   }
 
+  /** Another Order, paid: once its Shipment is created, every event before it has been handled. */
+  static String anotherPaidOrder() {
+    var other = UUID.randomUUID().toString();
+    FulfillmentEvents.order(other, CUSTOMER_ID, 2, "PAID", true, "corr-" + other);
+    return other;
+  }
+
+  void shipment(long version, String status) {
+    FulfillmentEvents.shipment(SHIPMENT_ID, orderId, CUSTOMER_ID, version, status);
+  }
+
   // --- the run ---
 
   String workflowId() {
     return "fulfillment:" + orderId;
   }
 
+  FulfillmentOutcome outcome() {
+    try {
+      return temporal
+          .newUntypedWorkflowStub(workflowId())
+          .getResult(30, TimeUnit.SECONDS, FulfillmentOutcome.class);
+    } catch (TimeoutException e) {
+      throw new AssertionError("The Saga hadn't ended after 30 seconds", e);
+    }
+  }
+
+  /** The {@code Idempotency-Key} the step {@code step} of this Order's run sends. */
+  String keyOf(String step) {
+    return workflowId() + ":" + runIdOf(workflowId()) + ":" + step;
+  }
+
   String runIdOf(String workflowId) {
+    return describe(workflowId).getWorkflowExecutionInfo().getExecution().getRunId();
+  }
+
+  boolean isRunning(String workflowId) {
+    return describe(workflowId).getWorkflowExecutionInfo().getStatusValue() == 1;
+  }
+
+  boolean isStarted(String workflowId) {
+    try {
+      describe(workflowId);
+      return true;
+    } catch (StatusRuntimeException e) {
+      return false;
+    }
+  }
+
+  private io.temporal.api.workflowservice.v1.DescribeWorkflowExecutionResponse describe(
+      String workflowId) {
     return temporal
         .getWorkflowServiceStubs()
         .blockingStub()
@@ -119,25 +432,121 @@ class FulfillmentWorkflowTest extends OrchestrationTest {
             DescribeWorkflowExecutionRequest.newBuilder()
                 .setNamespace(temporal.getOptions().getNamespace())
                 .setExecution(WorkflowExecution.newBuilder().setWorkflowId(workflowId))
-                .build())
-        .getWorkflowExecutionInfo()
-        .getExecution()
-        .getRunId();
+                .build());
   }
 
   // --- stubs ---
 
-  static void stubCreateShipment() {
+  /** Every step succeeds: the Shipment is created, the Payment captured, each change made. */
+  void stubEveryStep() {
+    DOWNSTREAM.stubFor(post("/shipments").willReturn(shipmentCreated()));
     DOWNSTREAM.stubFor(
-        post("/shipments")
+        readPaymentsRequest()
+            .willReturn(
+                okJson(
+                    "[{\"id\": \"%s\", \"orderId\": \"%s\", \"status\": \"AUTHORIZED\"}]"
+                        .formatted(PAYMENT_ID, orderId))));
+    DOWNSTREAM.stubFor(
+        post(CAPTURE)
+            .willReturn(
+                okJson("{\"id\": \"%s\", \"status\": \"CAPTURED\"}".formatted(PAYMENT_ID))));
+    DOWNSTREAM.stubFor(
+        patch(WireMock.urlPathMatching("/orders/[^/]+/status"))
+            .willReturn(okJson("{\"id\": \"%s\"}".formatted(orderId))));
+    DOWNSTREAM.stubFor(
+        post(DISPATCH).willReturn(okJson("{\"id\": \"%s\"}".formatted(SHIPMENT_ID))));
+    DOWNSTREAM.stubFor(post(HOLD).willReturn(okJson("{\"id\": \"%s\"}".formatted(SHIPMENT_ID))));
+  }
+
+  static com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder shipmentCreated() {
+    return aResponse()
+        .withStatus(201)
+        .withHeader("Content-Type", "application/json")
+        .withBody(
+            """
+            {"id": "%s", "status": "AWAITING_PICK"}
+            """
+                .formatted(SHIPMENT_ID));
+  }
+
+  /** The gateway declines the capture, as it does for {@code tok_capture_decline}. */
+  static void stubCaptureDeclined() {
+    DOWNSTREAM.stubFor(
+        post(CAPTURE)
+            .atPriority(1)
             .willReturn(
                 aResponse()
-                    .withStatus(201)
-                    .withHeader("Content-Type", "application/json")
+                    .withStatus(402)
+                    .withHeader("Content-Type", "application/problem+json")
                     .withBody(
                         """
-                        {"id": "%s", "status": "AWAITING_PICK"}
-                        """
-                            .formatted(SHIPMENT_ID))));
+                        {"status": 402, "reason": "captureDeclined",
+                         "declineReason": "authorization_expired"}
+                        """)));
+  }
+
+  MappingBuilder readPaymentsRequest() {
+    return get(urlPathEqualTo("/payments"))
+        .withQueryParam("orderId", equalTo(orderId))
+        .withQueryParam("customerId", equalTo(CUSTOMER_ID));
+  }
+
+  MappingBuilder statusChangeTo(String status) {
+    return patch(urlEqualTo(status()))
+        .withRequestBody(matchingJsonPath("$.status", equalTo(status)));
+  }
+
+  // --- what the stubs were called with ---
+
+  String status() {
+    return "/orders/" + orderId + "/status";
+  }
+
+  String readPayments() {
+    return "/payments?orderId=" + orderId + "&customerId=" + CUSTOMER_ID;
+  }
+
+  /** This Order's calls, oldest first; a status change shows the status it asked for. */
+  List<String> calls() {
+    return ofThisOrder().stream()
+        .map(
+            r ->
+                r.getMethod()
+                    + " "
+                    + r.getUrl()
+                    + (r.getMethod().getName().equals("PATCH")
+                        ? " " + statusIn(r.getBodyAsString())
+                        : ""))
+        .toList();
+  }
+
+  List<String> keys() {
+    return ofThisOrder().stream().map(r -> r.getHeader("Idempotency-Key")).toList();
+  }
+
+  /** Every call made for this Order: those of a marker Order are left out. */
+  List<LoggedRequest> ofThisOrder() {
+    return downstreamRequests().stream()
+        .filter(r -> !r.getUrl().equals("/shipments") || r.getBodyAsString().contains(orderId))
+        .toList();
+  }
+
+  void awaitCalls(int count) {
+    await()
+        .atMost(Duration.ofSeconds(30))
+        .untilAsserted(() -> assertThat(calls()).hasSizeGreaterThanOrEqualTo(count));
+  }
+
+  static long shipmentsCreatedFor(String orderId) {
+    return downstreamRequests().stream()
+        .filter(r -> r.getUrl().equals("/shipments") && r.getBodyAsString().contains(orderId))
+        .count();
+  }
+
+  private static final Pattern STATUS = Pattern.compile("\"status\"\\s*:\\s*\"([A-Z_]+)\"");
+
+  private static String statusIn(String body) {
+    var matcher = STATUS.matcher(body);
+    return matcher.find() ? matcher.group(1) : "?";
   }
 }
