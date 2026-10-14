@@ -195,6 +195,22 @@ _Avoid_: Courier, Shipping provider (the port, not the company)
 A way a Carrier offers to ship an Order from its Warehouse to a destination, as a quote answers it: an ID such as `STANDARD` or `EXPRESS`, the Carrier, its cost as Money and its estimated days. The mock carrier prices each option per Currency by zone: domestic when the destination is in the Warehouse's country, EU otherwise. A destination or Currency the Carrier doesn't serve gets none. Only Checkout asks for them.
 _Avoid_: Shipping method, Delivery option, Rate
 
+**Shipment**:
+One Order's parcel, in Fulfillment & Shipping: its Warehouse, its Shipping address and Shipping option, its lines (Variant, Product name, quantity, Serial tracking, and the Serial numbers once packed), its Carrier and tracking number once booked, and its Tracking events. One Order has one Shipment. Its status moves `AWAITING_PICK → PICKED → PACKED → SHIPPED → DELIVERED`, or `PACKED → ON_HOLD` when its Payment can't be captured, which is final. The fulfillment Saga creates, dispatches and holds it, Staff pick and pack it, and the Carrier's webhook delivers it. Each move appends to its status history: the status, when, and by whom (a Staff member's ID, `ORCHESTRATION` or `CARRIER`).
+_Avoid_: Parcel, Package, Consignment, Delivery
+
+**Serial number**:
+What tells one unit of a serial-tracked Variant from another, entered by Staff for each unit as they pack a Shipment. An IMEI is the kind for phones: 15 digits, the last a Luhn check digit. Any other is 4 to 40 letters, digits and hyphens, kept upper-cased. A Serial number ships on one Shipment only; Returns & Warranty checks an RMA's units against them.
+_Avoid_: Serial (on its own), Unit ID, IMEI (one kind of Serial number, not another name for it)
+
+**Tracking event**:
+Something the Carrier reports of a Shipment it has booked: `IN_TRANSIT`, `OUT_FOR_DELIVERY` or `DELIVERED`, with when it happened and the Carrier's own event ID. A Shipment keeps every one, oldest first, however late each arrives; only `DELIVERED` moves it on, to `DELIVERED`, so its status never goes back.
+_Avoid_: Tracking update, Scan, Shipment event (what Fulfillment & Shipping publishes)
+
+**Carrier webhook**:
+The Carrier's notice of a Tracking event, posted to Fulfillment & Shipping's `POST /webhooks/carrier`. It names the Shipment by its tracking number and is signed with a secret the two share, since the Carrier calls from outside with no token. Each event ID is recorded once; a repeat changes nothing. The mock carrier sends one for each Tracking event after a set delay (10, 20 and 30 seconds after booking on the stack).
+_Avoid_: Callback, notification (on their own), Gateway webhook (the payment gateway's)
+
 **RMA (Return Case)**:
 A Customer-initiated request to return or exchange a Variant from a delivered Order, tracked through its own approve/inspect/resolve lifecycle, distinct from the original Order's lifecycle.
 _Avoid_: Return, Refund — those are possible outcomes of an RMA, not the RMA itself

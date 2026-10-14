@@ -1,11 +1,15 @@
 # Fulfillment & Shipping
 
-Where an Order ships from, and what shipping it costs. Fulfillment & Shipping holds the
-**Warehouses** as configuration, and quotes **Shipping options** from a **Carrier** behind its
-`ShippingProvider` port ([ADR 0005](../../docs/adr/0005-localization-compliance-abstracted.md)),
-for Checkout only. Shipments, from pick to delivery, come later in Sprint 5. It has its own Postgres
-database, `fulfillment_shipping`, which `postgres-databases` creates on start when it is missing; it
-holds no tables yet. Built from
+Where an Order ships from, what shipping it costs, and its parcel from pick to delivery.
+Fulfillment & Shipping holds the **Warehouses** as configuration, quotes **Shipping options** from a
+**Carrier** behind its `ShippingProvider` port
+([ADR 0005](../../docs/adr/0005-localization-compliance-abstracted.md)) for Checkout, and keeps
+each paid Order's **Shipment**: the fulfillment Saga creates, dispatches and holds it, Staff pick
+and pack it, entering each unit's **Serial number**, and the Carrier reports its **Tracking events**
+by **Carrier webhook** until it is delivered. Each change publishes a
+`fulfillment-shipping.shipment` event through the outbox. It has its own Postgres database,
+`fulfillment_shipping`, which `postgres-databases` creates on start when it is missing, and Flyway
+migrates. Built from
 [`platform/service-template`](../../platform/service-template/README.md), so its layout, security and
 testing conventions apply here.
 
@@ -21,10 +25,13 @@ name, an address with its country (ISO 3166-1 alpha-2), and whether it is the de
 | `WH-AMS` | Amsterdam | NL | |
 
 A destination is assigned the Warehouse in its country, or else the default: a Dutch address ships
-from Amsterdam, a German or a French one from Berlin. Quotes use this rule, and Shipments will too,
-so what was quoted is what ships. The service doesn't start unless exactly one Warehouse is the
-default, no ID is used twice, no two Warehouses share a country, and each has an ID, a name and a
-valid country. Stock stays one pool per Variant; Inventory knows nothing of Warehouses.
+from Amsterdam, a German or a French one from Berlin. Quotes and Shipments use this rule, so what
+was quoted is what ships. The service doesn't start unless exactly one Warehouse is the default, no
+ID is used twice, no two Warehouses share a country, and each has an ID, a name and a valid
+country. Nor does it start when a Shipment names a Warehouse the configuration no longer has: it
+fails listing those Shipments (the first 20) and their Warehouses, so that removing or renaming a
+Warehouse can't strand them out of every queue. Stock stays one pool per Variant; Inventory knows
+nothing of Warehouses.
 
 ## The mock carrier
 
@@ -41,15 +48,70 @@ country, **EU** otherwise. The lines don't change the price.
 A destination outside those countries, or a Currency without a table, gets no options. The service
 doesn't start if an option lacks a price for either zone.
 
+It books every Shipment it is handed, with a fresh `MC` and ten digits as its tracking number, and
+answers a repeated idempotency key with its first booking (the latest 10,000 keys, until a
+restart). It then sends a Carrier webhook for each Tracking event, `IN_TRANSIT`,
+`OUT_FOR_DELIVERY` and `DELIVERED`, each its delay after booking (`tracking-delays`: 10, 20 and 30
+seconds) and saying it happened then. It signs them with the `carrier-webhook-secret` it shares
+with the service and hands them to a `CarrierWebhookDelivery`, which posts them to the service's own
+`/webhooks/carrier` (or `webhook-url`); tests put a recorder in its place to deliver, repeat,
+reorder or withhold them. A webhook still waiting when the service stops is lost.
+
+## Shipments
+
+A Shipment is one Order's parcel: its Warehouse, Shipping address and Shipping option, its lines
+(Variant, Product name, quantity, Serial tracking, and the Serial numbers once packed), its status
+and status history, its Carrier and tracking number once booked, its Tracking events and
+`deliveredAt`. One Order has one.
+
+```
+AWAITING_PICK → PICKED → PACKED → SHIPPED → DELIVERED
+                          PACKED → ON_HOLD            (its capture was refused; final)
+```
+
+Any other move is a 409 `illegalTransition` that changes nothing. Each move appends a status
+history entry, the status, when and by whom (a Staff member's ID, `ORCHESTRATION` or `CARRIER`),
+and publishes the Shipment, in one transaction under the Shipment's row lock.
+
+- **Product names and Serial tracking** come from a projection of Catalog's `catalog.product`
+  events (group `fulfillment-shipping.products`), keeping the newest version of each Product and
+  every Variant it has had. A Shipment's lines take them when it is created and keep them. Until
+  the projection knows every Variant, creating is a 503 `productsNotKnownYet` with `Retry-After:
+  5`, which the fulfillment Saga retries. `make fulfillment-rebuild` empties the projection and
+  replays the topic.
+- **Packing** takes one Serial number per unit of each serial-tracked line, by Variant ID. An IMEI
+  is 15 digits whose last is a Luhn check digit; a serial number is 4 to 40 of `[A-Za-z0-9-]`, kept
+  upper-cased. A malformed one, the wrong count, one entered twice in the Shipment, or one for a
+  Variant that isn't tracked (or isn't shipped here) is a 422 naming each field, such as
+  `serialNumbers.PHN-PIXEL-9-OBSIDIAN-128[0]`. One another Shipment carries is a 409
+  `serialAlreadyShipped` with the `serialNumber`; a unit ships on one Shipment only, until returns
+  (Sprint 6) say otherwise.
+- **Dispatching** books the Shipment with the Carrier, passing the request's `Idempotency-Key` on,
+  so a retried dispatch books once.
+- **Tracking events** are kept oldest first, however late each arrives. Only `DELIVERED` moves the
+  Shipment on, from `SHIPPED` to `DELIVERED`, with `deliveredAt` the event's time and `CARRIER` in
+  the history; a late `IN_TRANSIT` is recorded but never takes the status back.
+
 ## API
 
 | Endpoint | Who | |
 |---|---|---|
 | `GET /warehouses` | Staff | Every Warehouse, in configuration order |
 | `POST /shipping/quotes` | `CHECKOUT` | The Warehouse and Shipping options for a destination |
+| `POST /shipments` | `ORCHESTRATION`, `Idempotency-Key` | 201: the Order's Shipment, awaiting pick; 409 `shipmentExists`; 503 `productsNotKnownYet` |
+| `POST /shipments/{id}/dispatch` | `ORCHESTRATION`, `Idempotency-Key` | `PACKED` → `SHIPPED`, booked with the Carrier |
+| `POST /shipments/{id}/hold` | `ORCHESTRATION`, `Idempotency-Key` | `PACKED` → `ON_HOLD`, with `{"reason"}` (1 to 255 characters) |
+| `POST /shipments/{id}/pick` | Staff | `AWAITING_PICK` → `PICKED` |
+| `POST /shipments/{id}/pack` | Staff | `PICKED` → `PACKED`, with `{"serialNumbers": {"<variantId>": [...]}}` |
+| `GET /shipments/{id}` | Staff, `ORCHESTRATION` | One Shipment |
+| `GET /shipments?orderId=` | Customer (their own), Staff, `ORCHESTRATION` | The Order's Shipment; 404 for none, or another Customer's |
+| `GET /shipments?status=&warehouseId=&page=&size=` | Staff, `ORCHESTRATION` | The fulfillment queue: a page (`items`, `page`, `size`, `total`), oldest first; `size` 1 to 100, 20 unless given |
+| `POST /webhooks/carrier` | The Carrier, no token | A signed Carrier webhook |
 
-The gateway routes `/api/fulfillment-shipping/`, except `/shipping/**`, which only Checkout calls
-over the Compose network ([API gateway](../../platform/api-gateway/README.md)).
+The gateway routes `/api/fulfillment-shipping/`, except `/shipping/**`, which only Checkout calls,
+and `POST /shipments`, `/dispatch` and `/hold`, which only the fulfillment Saga calls, over the
+Compose network. It routes `POST /webhooks/carrier` without a token
+([API gateway](../../platform/api-gateway/README.md)).
 
 ```json
 GET /warehouses
@@ -85,8 +147,54 @@ POST /shipping/quotes
   `reason: shippingUnavailable`.
 - Each quote logs a line: `Quoted 2 Shipping options to FR from WH-BER`.
 
-[`http/fulfillment-shipping.http`](./http/fulfillment-shipping.http) exercises both against the
-compose stack.
+```json
+POST /shipments                                   (ORCHESTRATION, Idempotency-Key)
+{"orderId": "5d2a9c1e-...", "customerId": "c0ffee00-...",
+ "lines": [{"variantId": "PHN-PIXEL-9-OBSIDIAN-128", "quantity": 1}],
+ "shippingAddress": {"recipientName": "Erika Mustermann", "line1": "Hauptstraße 5", "line2": null,
+                     "postcode": "10115", "city": "Berlin", "region": null, "country": "DE",
+                     "phone": null},
+ "shippingOption": {"id": "EXPRESS", "carrier": "Mock Carrier",
+                    "cost": {"amountMinor": 999, "currency": "EUR"}, "estimatedDays": 1}}
+
+201, Location: /shipments/0b8e6f2a-...
+{"id": "0b8e6f2a-...", "orderId": "5d2a9c1e-...", "customerId": "c0ffee00-...",
+ "warehouseId": "WH-BER", "status": "AWAITING_PICK",
+ "shippingAddress": {...}, "shippingOption": {...},
+ "lines": [{"variantId": "PHN-PIXEL-9-OBSIDIAN-128", "productName": "Pixel 9", "quantity": 1,
+            "serialTracking": "IMEI", "serialNumbers": []}],
+ "carrier": null, "trackingNumber": null, "trackingEvents": [], "deliveredAt": null,
+ "holdReason": null,
+ "statusHistory": [{"status": "AWAITING_PICK", "at": "2026-10-13T09:00:00Z", "by": "ORCHESTRATION"}],
+ "createdAt": "2026-10-13T09:00:00Z"}
+```
+
+A missing or malformed field of `POST /shipments` is a 400 naming it in `errors`, as for quotes;
+`estimatedDays`, `line2`, `region` and `phone` may be left out. Every other answer is the Shipment
+in the same shape.
+
+```json
+POST /webhooks/carrier                            (Carrier-Signature: sha256=<hex HMAC-SHA256 of the body>)
+{"eventId": "trk_6f1c...", "trackingNumber": "MC0012345678", "status": "DELIVERED",
+ "occurredAt": "2026-10-13T10:15:10Z"}
+```
+
+A Carrier webhook is answered 200 once recorded, and for a repeat of an event ID, which changes
+nothing; 401 when the signature is missing or wrong; 400 when malformed; 404 when no Shipment has
+the tracking number, so the Carrier sends it again.
+
+[`http/fulfillment-shipping.http`](./http/fulfillment-shipping.http) exercises all of these against
+the compose stack.
+
+## Events
+
+Each change publishes the Shipment to `fulfillment-shipping.shipment`, keyed by its ID
+([schema](../../platform/event-schemas/schemas/fulfillment-shipping.shipment.json)): its version,
+one more per change; the `change`, `CREATED`, the status moved to, or `TRACKED` for a Tracking
+event that left the status as it was; and a snapshot with the Order and Customer, Warehouse,
+status, lines with Serial numbers, Carrier, tracking number, Tracking events, `deliveredAt`,
+`holdReason` and status history. The Shipping address stays out of it. Nothing consumes it yet;
+the fulfillment Saga and Returns & Warranty will.
 
 ## Run it
 
@@ -100,9 +208,12 @@ only. Staff reach `GET /warehouses` through the gateway, at `/api/fulfillment-sh
 Or run Postgres and Keycloak in compose (`docker compose up -d postgres-databases keycloak`) and
 start the service with `./gradlew :services:fulfillment-shipping:bootRun` on port 8080.
 
-Its database password is a Compose secret, mounted as the file `spring.datasource.password` (see
-the root README's "Secrets"); `application.yml` has none. Outside Docker, give it as
-`SPRING_DATASOURCE_PASSWORD="$(cat .secrets/ecomm/postgres-password)"`.
+Its database password and the Carrier webhook secret are Compose secrets, mounted as the files
+`spring.datasource.password` and `ecomm.fulfillment-shipping.carrier-webhooks.secret` (see the
+root README's "Secrets"); `application.yml` has neither, and the service doesn't start without the
+webhook secret. Outside Docker, give them as
+`SPRING_DATASOURCE_PASSWORD="$(cat .secrets/ecomm/postgres-password)"` and
+`ECOMM_FULFILLMENTSHIPPING_CARRIERWEBHOOKS_SECRET="$(cat .secrets/ecomm/carrier-webhook-secret)"`.
 
 ## Tests
 
@@ -111,6 +222,19 @@ the root README's "Secrets"); `application.yml` has none. Outside Docker, give i
   tokens, with the service's own configuration: the Warehouses for Staff only, assignment by
   country and default, domestic and EU prices, `shippingUnavailable` for an unserved country or
   Currency, quotes for `CHECKOUT` only, and each malformed field. Postgres runs in Testcontainers.
+- The Shipment tests run the same way, against Kafka and the schema registry too
+  (`EventBackbone`), with the mock carrier's webhooks recorded by `RecordedCarrierWebhooks` in
+  place of HTTP delivery: `CreateShipmentApiTest` (Warehouse assignment, Product names, once per
+  Order, idempotent replay, `productsNotKnownYet`, `ORCHESTRATION` only, malformed fields),
+  `ShipmentTransitionApiTest` (every allowed and refused move, the history, the roles and keys),
+  `PackShipmentApiTest` (IMEI and serial forms, counts, repeats, `serialAlreadyShipped`),
+  `ReadShipmentsApiTest` (the Customer's own, Staff's queue by status and Warehouse, paging),
+  `CarrierWebhookApiTest` (delivery, a repeat recorded once, reordering, bad signatures),
+  `ShipmentEventsApiTest` (an event per change, valid against the schema),
+  `ProductProjectionApiTest` (the newest version wins) and `UnconfiguredWarehouseApiTest`
+  (starting the service against a Shipment from a Warehouse no longer configured fails).
+- `SerialNumberTest` and `ShipmentStatusTest` are pure JUnit for the Serial number forms and the
+  state machine.
 - `WarehouseConfigurationTest` starts the Warehouse configuration alone and checks the service
   refuses to start on none or two defaults, an ID twice, two Warehouses in one country, or a
   country that isn't an ISO code.
