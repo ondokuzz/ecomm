@@ -49,7 +49,8 @@ abstract class GatewayApiTest {
             "search-discovery",
             "reviews-ratings",
             "recommendations",
-            "fulfillment-shipping")) {
+            "fulfillment-shipping",
+            "returns-warranty")) {
       registry.add("ecomm.gateway.services." + service + ".uri", DOWNSTREAM::baseUrl);
     }
   }

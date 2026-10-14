@@ -351,6 +351,21 @@ services:
       postgres-databases: { condition: service_completed_successfully }
       keycloak: { condition: service_healthy }
 
+  # RMAs, from a Customer's request to Staff's RMA decision, checked against projections of
+  # delivered Shipments and of Products, in Postgres's returns_warranty database.
+  returns-warranty:
+    <<: *spring-service
+    build:
+      context: ../..
+      dockerfile: services/returns-warranty/Dockerfile
+    image: ${IMAGE_PREFIX:-ecomm}/returns-warranty:${IMAGE_TAG:-latest}
+    ports: ["${RETURNS_WARRANTY_PORT:-8100}:8080"]
+    secrets: [{ source: postgres-password, target: spring.datasource.password }]
+    depends_on:
+      <<: *event-backbone
+      postgres-databases: { condition: service_completed_successfully }
+      keycloak: { condition: service_healthy }
+
   checkout-pricing:
     <<: *spring-service
     build:
@@ -501,6 +516,7 @@ services:
       reviews-ratings: { condition: service_healthy }
       recommendations: { condition: service_healthy }
       fulfillment-shipping: { condition: service_healthy }
+      returns-warranty: { condition: service_healthy }
 
   storefront:
     build:

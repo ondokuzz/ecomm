@@ -55,6 +55,9 @@ ecomm:
         internal: [/shipping/**, POST /shipments, POST /shipments/*/dispatch, POST /shipments/*/hold]
         # The Carrier reports Tracking events from outside; the service checks the signature.
         webhooks: [POST /webhooks/carrier]
+      returns-warranty:
+        uri: http://localhost:8100
+        # Customers request and read their own RMAs; Staff decide and read any. Nothing is internal.
 
 # Plain-text logs name the Correlation ID too, so the access log reads the same outside Docker.
 logging:
