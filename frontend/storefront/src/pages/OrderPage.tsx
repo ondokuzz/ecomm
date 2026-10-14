@@ -19,9 +19,11 @@ import { Icon } from '../components/ui/Icon'
 import { Skeleton } from '../components/ui/Skeleton'
 import { type Order, nameOrderLines, orderItemCountLabel, orderReference, orderSummaryRows } from '../domain/order'
 import { cancellationReason } from '../domain/payment'
+import { addressLines, shippingOptionName } from '../domain/shipping'
 
 /**
- * An Order, its Order Status, its Payments and its lines, read from Order Management and Payment;
+ * An Order, its Order Status, its Payments, where it ships and how, and its lines, read from Order
+ * Management and Payment; an Order placed before Shipping shows no Shipping card;
  * after checkout, the confirmation first. A cancelled Order says why, when its Payment does.
  */
 export function OrderPage() {
@@ -29,6 +31,7 @@ export function OrderPage() {
   const [params] = useSearchParams()
   const query = useOrder(id)
   const payments = usePayments(id)
+  const formatMoney = useFormatMoney()
   const { variants, failure: variantsFailure } = useVariants(query.data?.lines.map((line) => line.variantId) ?? [])
 
   if (query.isPending) return <OrderSkeleton />
@@ -96,6 +99,20 @@ export function OrderPage() {
               <Skeleton height="2.5rem" />
             )}
           </Card>
+          {order.shippingAddress && order.shippingOption && (
+            <Card className="order-shipping">
+              <h2 className="card-title">Shipping</h2>
+              <address aria-label="Shipping address">
+                {addressLines(order.shippingAddress).map((line) => (
+                  <span key={line}>{line}</span>
+                ))}
+              </address>
+              <p className="order-shipping-option">
+                {shippingOptionName(order.shippingOption.id)} by {order.shippingOption.carrier},{' '}
+                {formatMoney(order.shippingOption.cost)}
+              </p>
+            </Card>
+          )}
           <Card>
             <h2 className="card-title">Products</h2>
             <LookupError failure={variantsFailure} title="We couldn't load the products' names and pictures" />

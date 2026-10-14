@@ -1,6 +1,7 @@
 import type { Cart, CartLine } from './cart'
 import type { Money } from './money'
 import { type Discount, type OrderSummaryRow, summaryRows } from './order'
+import type { ShippingAddress, ShippingOption } from './shipping'
 
 /** One line of a Checkout Session, at the Price captured when it started. */
 export interface CheckoutSessionLine {
@@ -22,7 +23,15 @@ export interface CheckoutSession {
   /** Every Discount, in the order they apply; empty when none. */
   discounts: Discount[]
   tax: Money
-  /** The subtotal, less every Discount, plus the tax. */
+  /** Where it goes, normalised; null until the Customer gives one. */
+  shippingAddress: ShippingAddress | null
+  /** The Shipping options quoted for its address; empty without one. */
+  shippingOptions: ShippingOption[]
+  /** The option chosen, whose cost the session keeps; null until one is. */
+  shippingOption: ShippingOption | null
+  /** The chosen option's cost; zero until one is chosen. */
+  shippingCost: Money
+  /** The subtotal, less every Discount, plus the tax, plus the Shipping cost. */
   total: Money
   /** An ISO 8601 instant. */
   expiresAt: string
@@ -36,9 +45,14 @@ export function sessionCountdown(expiresAt: string, now: number): { expired: boo
   return { expired: secondsLeft === 0, label: `${minutes}:${String(seconds).padStart(2, '0')}` }
 }
 
-/** What a Checkout Session comes to: subtotal, each Discount, tax (even when zero) and total. */
+/** What a Checkout Session comes to: subtotal, each Discount, Shipping once chosen, tax (even when zero) and total. */
 export function sessionSummaryRows(session: CheckoutSession): OrderSummaryRow[] {
   return summaryRows(session)
+}
+
+/** Whether a Checkout Session can be paid: Checkout refuses one without an address and a chosen option. */
+export function hasShipping(session: Pick<CheckoutSession, 'shippingAddress' | 'shippingOption'>): boolean {
+  return session.shippingAddress !== null && session.shippingOption !== null
 }
 
 /** Whether a Checkout Session holds exactly this Cart; one changed since would buy the wrong things. */

@@ -366,6 +366,7 @@ services:
       inventory: { condition: service_healthy }
       cart: { condition: service_healthy }
       promotions: { condition: service_healthy }
+      fulfillment-shipping: { condition: service_healthy }
       temporal-namespace: { condition: service_completed_successfully }
 
   # Sets up or migrates Temporal's schema in its databases on the shared Postgres, then exits; see

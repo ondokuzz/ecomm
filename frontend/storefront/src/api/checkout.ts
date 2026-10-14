@@ -3,6 +3,7 @@ import { useAuth } from 'react-oidc-context'
 import type { Cart } from '../domain/cart'
 import { type CheckoutSession, sessionHoldsCart } from '../domain/checkout'
 import { type CouponRejection, couponRejection } from '../domain/coupon'
+import { type AddressForm, type AddressProblem, addressProblem, shippingRequest } from '../domain/shipping'
 import { type PaymentAttempt, type PaymentFailure, confirmation, paymentFailure, pollEvery } from '../domain/payment'
 import { cartKey } from './cart'
 import { stockKey } from './catalog'
@@ -58,6 +59,45 @@ export function useSessionCoupon() {
         method: code === null ? 'DELETE' : 'PUT',
         token,
         body: code === null ? undefined : { code },
+      }),
+    onSuccess: (session) => queryClient.setQueriesData({ queryKey: sessionKey }, session),
+  })
+}
+
+/**
+ * Sends a Checkout Session to a Shipping address. Checkout validates and normalises it, quotes the
+ * Shipping options for it, and the session it answers replaces the one shown; a refusal changes
+ * nothing, and {@link addressProblemOf} reads why.
+ */
+export function useSessionShippingAddress() {
+  const token = useAuth().user?.access_token
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ sessionId, form }: { sessionId: string; form: AddressForm }) =>
+      api<CheckoutSession>('checkout-pricing', `/checkout/sessions/${encodeURIComponent(sessionId)}/shipping-address`, {
+        method: 'PUT',
+        token,
+        body: shippingRequest(form),
+      }),
+    onSuccess: (session) => queryClient.setQueriesData({ queryKey: sessionKey }, session),
+  })
+}
+
+/** Why an address was refused, when that is why setting it failed. */
+export function addressProblemOf(error: unknown): AddressProblem | undefined {
+  return error instanceof ApiError ? addressProblem(error.status, error.problem) : undefined
+}
+
+/** Chooses one of the Shipping options quoted for a Checkout Session; its cost joins the total. */
+export function useSessionShippingOption() {
+  const token = useAuth().user?.access_token
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ sessionId, optionId }: { sessionId: string; optionId: string }) =>
+      api<CheckoutSession>('checkout-pricing', `/checkout/sessions/${encodeURIComponent(sessionId)}/shipping-option`, {
+        method: 'PUT',
+        token,
+        body: { optionId },
       }),
     onSuccess: (session) => queryClient.setQueriesData({ queryKey: sessionKey }, session),
   })

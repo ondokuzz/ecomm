@@ -238,7 +238,16 @@ test.describe('Campaigns', () => {
       await expect(summary).toContainText(
         formatMoney({ ...discount, amountMinor: -discount.amountMinor }, currencies, 'en-US'),
       )
-      const total = { ...price, amountMinor: price.amountMinor - discount.amountMinor }
+      // Shipped to Berlin, Standard, at 4.99, which the Discount leaves alone.
+      const shippingForm = storefront.getByRole('form', { name: 'Shipping address' })
+      await shippingForm.getByLabel('Full name', { exact: true }).fill('Erika Mustermann')
+      await shippingForm.getByLabel('Address', { exact: true }).fill('Hauptstraße 5')
+      await shippingForm.getByLabel('Postcode', { exact: true }).fill('10115')
+      await shippingForm.getByLabel('City', { exact: true }).fill('Berlin')
+      await shippingForm.getByRole('button', { name: 'Use this address' }).click()
+      await storefront.getByRole('radio', { name: /^Standard/ }).check()
+      await expect(summary.getByText('Shipping (Standard)')).toBeVisible()
+      const total = { ...price, amountMinor: price.amountMinor - discount.amountMinor + 499 }
 
       // Paying ends the Checkout Session rather than leaving its Stock held, and the Order keeps the Discount.
       await storefront

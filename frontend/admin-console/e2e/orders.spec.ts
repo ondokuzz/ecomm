@@ -88,7 +88,8 @@ test('Staff open a paid Order and see its Payment’s authorization transaction'
   const payments = page.getByRole('region', { name: 'Payments' })
   const shown = payments.getByRole('article', { name: `Payment ${payment.id}` })
   await expect(shown).toContainText('Authorized')
-  await expect(shown).toContainText('€799.00')
+  // 799.00 and Standard shipping at 4.99.
+  await expect(shown).toContainText('€803.99')
   await expect(shown).toContainText(payment.gatewayReference!)
   const transactions = shown.getByRole('table', { name: 'Transactions' }).getByRole('row')
   await expect(transactions).toHaveCount(2)
@@ -105,6 +106,18 @@ async function signInOnKeycloak(page: Page) {
   await page.locator('#username').fill(staff.email)
   await page.locator('#password').fill(staff.password)
   await page.locator('#kc-login').click()
+}
+
+/** The Shipping every Order is placed with since Sprint 5: Berlin, Standard at 4.99. */
+const shipping = {
+  shippingAddress: {
+    recipientName: 'Erika Mustermann',
+    line1: 'Hauptstraße 5',
+    postcode: '10115',
+    city: 'Berlin',
+    country: 'DE',
+  },
+  shippingOption: { id: 'STANDARD', carrier: 'Mock Carrier', cost: { amountMinor: 499, currency: 'EUR' } },
 }
 
 /**
@@ -125,6 +138,7 @@ async function placePaidThenCancelledOrder(request: APIRequestContext, customerI
       customerId,
       lines: [{ variantId: 'PHN-PIXEL-9', quantity: 1, unitPrice: { amountMinor: 79900, currency: 'EUR' } }],
       tax: { amountMinor: 0, currency: 'EUR' },
+      ...shipping,
     },
   })
   expect(placed.status()).toBe(201)
@@ -161,13 +175,15 @@ async function placeAndPayOrder(
     client_secret: orchestrationClientSecret,
   })
   const key = (step: string) => `e2e-${customerId}:run-1:${step}`
-  const total = { amountMinor: 79900, currency: 'EUR' }
+  const price = { amountMinor: 79900, currency: 'EUR' }
+  const total = { amountMinor: 79900 + shipping.shippingOption.cost.amountMinor, currency: 'EUR' }
   const placed = await request.post(`${orderManagementUrl}/orders`, {
     headers: { ...headers, 'Idempotency-Key': key('placeOrder') },
     data: {
       customerId,
-      lines: [{ variantId: 'PHN-PIXEL-9', quantity: 1, unitPrice: total }],
+      lines: [{ variantId: 'PHN-PIXEL-9', quantity: 1, unitPrice: price }],
       tax: { amountMinor: 0, currency: 'EUR' },
+      ...shipping,
     },
   })
   expect(placed.status()).toBe(201)

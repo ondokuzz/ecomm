@@ -17,6 +17,7 @@ import {
 import { useFormatMoney } from '../api/currencies'
 import { failureOf } from '../api/failure'
 import { ApiError } from '../api/http'
+import { CheckoutShipping } from '../components/CheckoutShipping'
 import { CheckoutSteps } from '../components/CheckoutSteps'
 import { EmptyCart } from '../components/EmptyCart'
 import { ProductLines } from '../components/ProductLines'
@@ -28,7 +29,13 @@ import { Icon } from '../components/ui/Icon'
 import { Input } from '../components/ui/Input'
 import { type CartLine, itemCountLabel } from '../domain/cart'
 import { variantName } from '../domain/catalog'
-import { type CheckoutSession, checkoutProblem, sessionCountdown, sessionSummaryRows } from '../domain/checkout'
+import {
+  type CheckoutSession,
+  checkoutProblem,
+  hasShipping,
+  sessionCountdown,
+  sessionSummaryRows,
+} from '../domain/checkout'
 import { appliedCoupon } from '../domain/order'
 import {
   type PaymentFailure,
@@ -41,7 +48,8 @@ import {
 
 /**
  * Starts a Checkout Session for the Cart, or resumes the one that already holds it, and shows its
- * lines at their held Prices with a countdown to when the hold ends. Paying it with the chosen test
+ * lines at their held Prices with a countdown to when the hold ends. The Customer gives a Shipping
+ * address and chooses a Shipping option, whose cost joins the total; Pay waits for both. Paying it with the chosen test
  * card starts the checkout Saga. A Pay still unanswered after 2 seconds, as one the bank confirms
  * later is, shows "Confirming your payment…". When it hasn't finished within Checkout's wait (a
  * 202), the page goes on showing it and asks how it stands every 1.5 seconds, for up to 2 minutes;
@@ -59,6 +67,7 @@ export function CheckoutPage() {
   const [card, setCard] = useState(defaultTestCard)
   const now = useNow()
   const navigate = useNavigate()
+  const shippingHintId = useId()
   // When the payment being confirmed was made: null when there is none, undefined until the session's
   // latest payment has been read, in case one was still being confirmed when the page was left.
   const [confirmingSince, setConfirmingSince] = useState<number | null>()
@@ -127,6 +136,7 @@ export function CheckoutPage() {
   const confirmingPayment =
     (pay.isPending && isConfirmingPayment(payingSince, now)) || confirming?.kind === 'confirming'
   const payFailure = payFailureOf(pay.error)
+  const shippable = hasShipping(session.data)
 
   return (
     <section>
@@ -134,7 +144,15 @@ export function CheckoutPage() {
       <h1>Checkout</h1>
       <HeldUntilNotice expiresAt={session.data.expiresAt} left={countdown.label} />
       <div className="cart-layout">
-        <div className="cart-main">
+        <div className="cart-main stack">
+          <CheckoutShipping
+            session={session.data}
+            disabled={busy}
+            onChange={() => {
+              pay.reset()
+              setConfirmingSince(null)
+            }}
+          />
           <Card className="payment">
             <h2>Payment</h2>
             <MockCard card={card} />
@@ -184,13 +202,19 @@ export function CheckoutPage() {
               ) : (
                 <ErrorMessage error={pay.error} />
               ))}
+            {!shippable && (
+              <p id={shippingHintId} className="muted shipping-hint">
+                Enter your address and choose a shipping option to pay.
+              </p>
+            )}
             <Button
               variant="primary"
               size="lg"
               className="pay-button"
               onClick={payNow}
               loading={busy}
-              disabled={coupon.isPending}
+              disabled={coupon.isPending || !shippable}
+              aria-describedby={shippable ? undefined : shippingHintId}
             >
               {confirmingPayment
                 ? 'Confirming your payment…'

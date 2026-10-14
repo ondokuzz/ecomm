@@ -147,6 +147,14 @@ function OrderDetail({ order, currencies }: { order: Order; currencies: Currenci
                   <td className="num">−{money(discount.amount)}</td>
                 </tr>
               ))}
+              {order.shippingOption && (
+                <tr>
+                  <th scope="row" colSpan={3}>
+                    Shipping ({order.shippingOption.id.toLowerCase()}, {order.shippingOption.carrier})
+                  </th>
+                  <td className="num">{money(order.shippingOption.cost)}</td>
+                </tr>
+              )}
               <tr>
                 <th scope="row" colSpan={3}>
                   Tax

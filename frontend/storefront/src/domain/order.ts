@@ -1,5 +1,6 @@
 import { type VariantDetail, variantName } from './catalog'
 import { type Money, timesMoney } from './money'
+import { type OrderShippingOption, type ShippingAddress, shippingOptionName } from './shipping'
 
 export type OrderStatus = 'PLACED' | 'PAID' | 'FULFILLED' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED' | 'RETURNED'
 
@@ -62,7 +63,11 @@ export interface Order {
   /** Every Discount it got, in the order they applied; empty when none. */
   discounts: Discount[]
   tax: Money
-  /** The subtotal, less every Discount, plus the tax: what the Customer paid. */
+  /** Where it goes; absent on an Order placed before Shipping. */
+  shippingAddress?: ShippingAddress
+  /** How it goes, with its Shipping cost; absent on an Order placed before Shipping. */
+  shippingOption?: OrderShippingOption
+  /** The subtotal, less every Discount, plus the tax, plus the Shipping cost: what the Customer paid. */
   total: Money
   placedAt: string
   /** Every Order Status the Order has been in, oldest first. */
@@ -97,27 +102,35 @@ export interface OrderSummaryRow {
 
 /**
  * What an Order, or a Checkout Session, comes to: subtotal, each Discount in the order it applied,
- * by its Campaign's name or Coupon's code, tax and total.
+ * by its Campaign's name or Coupon's code, the Shipping option's cost once there is one, tax and
+ * total.
  */
 export function summaryRows({
   subtotal,
   discounts,
   tax,
+  shippingOption,
   total,
-}: Pick<Order, 'subtotal' | 'discounts' | 'tax' | 'total'>): OrderSummaryRow[] {
+}: Pick<Order, 'subtotal' | 'discounts' | 'tax' | 'total'> & {
+  shippingOption?: OrderShippingOption | null
+}): OrderSummaryRow[] {
   const discountRows: OrderSummaryRow[] = discounts.map((discount) => ({
     label: discountLabel(discount),
     amount: { ...discount.amount, amountMinor: -discount.amount.amountMinor },
   }))
+  const shippingRows: OrderSummaryRow[] = shippingOption
+    ? [{ label: `Shipping (${shippingOptionName(shippingOption.id)})`, amount: shippingOption.cost }]
+    : []
   return [
     { label: 'Subtotal', amount: subtotal },
     ...discountRows,
+    ...shippingRows,
     { label: 'Tax', amount: tax },
     { label: 'Total', amount: total, isTotal: true },
   ]
 }
 
-/** What an Order comes to, as Order Management worked it out: subtotal, each Discount, tax and total. */
+/** What an Order comes to, as Order Management worked it out: subtotal, each Discount, Shipping, tax and total. */
 export function orderSummaryRows(order: Order): OrderSummaryRow[] {
   return summaryRows(order)
 }
