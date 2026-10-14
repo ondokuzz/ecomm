@@ -290,6 +290,34 @@ class CheckoutWorkflowTest extends OrchestrationTest {
   }
 
   @Test
+  void aPlacementSlowerThanTenSecondsAsOnAColdStackIsPlacedOnce() {
+    stubEveryStep();
+    // Order Management's first answer after the stack sat idle took 13.5 seconds on 2026-10-14.
+    DOWNSTREAM.stubFor(post("/orders").willReturn(placedOrder().withFixedDelay(12_000)));
+
+    assertThat(checkout().status()).isEqualTo(CheckoutOutcome.Status.PAID);
+    assertThat(calls()).filteredOn("POST /orders"::equals).hasSize(1);
+  }
+
+  @Test
+  void aCallThatOutlastsTheReadTimeoutFailsInTheWorkerAndIsRetriedWithTheSameKey() {
+    stubEveryStep();
+    stubInSequence(
+        () -> post(urlEqualTo("/orders")),
+        placedOrder().withFixedDelay((int) READ_TIMEOUT.plusSeconds(2).toMillis()),
+        placedOrder());
+
+    assertThat(checkout().status()).isEqualTo(CheckoutOutcome.Status.PAID);
+    var keys =
+        downstreamRequests().stream()
+            .filter(r -> r.getUrl().equals("/orders"))
+            .map(r -> r.getHeader("Idempotency-Key"))
+            .toList();
+    assertThat(keys).hasSize(2).doesNotContainNull();
+    assertThat(keys.get(0)).isEqualTo(keys.get(1));
+  }
+
+  @Test
   void aPlacementOrderManagementRefusesFailsWithNothingToUndo() {
     stubEveryStep();
     DOWNSTREAM.stubFor(post("/orders").willReturn(aResponse().withStatus(400)));

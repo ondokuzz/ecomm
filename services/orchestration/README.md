@@ -79,6 +79,12 @@ Steps 5 and 6 are retried for up to an hour, then logged and given up: the Custo
 Order either way. The compensations, cancelling the Order and voiding the Payment, are retried until
 they succeed, with backoff up to a minute.
 
+Each attempt at a step may take 30 seconds (`CheckoutSaga.ATTEMPT`). A context that has sat idle can
+take more than 10 seconds to answer its first call: Order Management took 13.5 on 2026-10-14. The
+call itself gives up sooner, after `ecomm.orchestration.read-timeout` (25 seconds; 5 to connect,
+`connect-timeout`), so a slow attempt fails in the worker and its retry replays with the same key,
+rather than Temporal abandoning it while its call still waits.
+
 Each command that takes one carries the `Idempotency-Key` `<workflowId>:<runId>:<step>`: `placeOrder`,
 `authorizePayment`, `markOrderPaid` and `cancelOrder`. A retry of a step sends the same key, so it
 replays; paying the session again after a decline is a new run, with keys of its own. Committing,
