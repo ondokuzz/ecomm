@@ -156,11 +156,20 @@ abstract class ShipmentsApiTest extends FulfillmentShippingApiTest {
   }
 
   RestTestClient.ResponseSpec dispatch(String id) {
+    return dispatchWithKey(id, UUID.randomUUID().toString());
+  }
+
+  RestTestClient.ResponseSpec dispatchWithKey(String id, String key) {
     return http.post()
         .uri("/shipments/{id}/dispatch", id)
         .headers(h -> h.setBearerAuth(ORCHESTRATION))
-        .header("Idempotency-Key", UUID.randomUUID().toString())
+        .header("Idempotency-Key", key)
         .exchange();
+  }
+
+  /** The Shipment a successful answer carries. */
+  static ShipmentView body(RestTestClient.ResponseSpec response) {
+    return response.expectBody(ShipmentView.class).returnResult().getResponseBody();
   }
 
   RestTestClient.ResponseSpec hold(String id, String reason) {
