@@ -1,0 +1,25 @@
+spring:
+  application:
+    name: returns-warranty
+  config:
+    # Secrets are files, one per property and named after it: the ones Compose mounts in
+    # /run/secrets (docs/adr/0011-secrets-as-generated-files.md). There are none outside a container.
+    import: optional:configtree:${ecomm.secrets-dir:/run/secrets/}
+  datasource:
+    # POSTGRES_PORT matches the compose override, for when something else holds 5432.
+    url: jdbc:postgresql://localhost:${POSTGRES_PORT:5432}/returns_warranty
+    # The password is a secret: spring.datasource.password.
+    username: ecomm
+  kafka:
+    bootstrap-servers: localhost:${KAFKA_PORT:9092}
+  modulith:
+    events:
+      # Send again, on startup, what the outbox holds unsent: a send cut short by a crash or restart.
+      republish-outstanding-events-on-restart: true
+
+ecomm:
+  events:
+    schema-registry-url: http://localhost:${APICURIO_PORT:8088}/apis/registry/v3
+  returns-warranty:
+    # The Return Period: how long after delivery a Customer may request a return. One for the store.
+    return-period: 14d

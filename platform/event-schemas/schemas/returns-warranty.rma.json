@@ -1,0 +1,210 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "returns-warranty.rma",
+  "description": "A snapshot of an RMA, a Customer's request to return units of a Variant from a delivered Order or to claim their warranty, published when it is requested and with each RMA decision. Keyed by rmaId.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "eventId",
+    "occurredAt",
+    "rmaId",
+    "version",
+    "change",
+    "rma"
+  ],
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique per event; the same event delivered twice has the same eventId."
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the change was published, in the transaction that made it."
+    },
+    "rmaId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "The RMA's ID: the message key."
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "The RMA's version, which goes up by one with every change. Apply an event only if it is newer than what you hold."
+    },
+    "change": {
+      "type": "string",
+      "enum": [
+        "REQUESTED",
+        "APPROVED",
+        "REJECTED"
+      ],
+      "description": "Why the event was published: REQUESTED for a new RMA, or the RMA decision that moved it."
+    },
+    "rma": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reference",
+        "orderId",
+        "customerId",
+        "variantId",
+        "productName",
+        "quantity",
+        "serialNumbers",
+        "kind",
+        "reason",
+        "window",
+        "status",
+        "requestedAt",
+        "decisions"
+      ],
+      "properties": {
+        "reference": {
+          "type": "string",
+          "pattern": "^RMA-[0-9A-F]{8}$",
+          "description": "The RMA reference: RMA- and the first eight characters of its ID, upper-cased."
+        },
+        "orderId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "customerId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "variantId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "productName": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The Product's name, as it was shipped."
+        },
+        "quantity": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "serialNumbers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "One per unit for a serial-tracked Variant, as shipped; empty for any other."
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "RETURN",
+            "WARRANTY_CLAIM"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000,
+          "description": "The Customer's reason."
+        },
+        "window": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "The window the request was checked against, kept as it was then.",
+          "required": [
+            "kind",
+            "startsAt",
+            "endsAt"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "RETURN_PERIOD",
+                "WARRANTY_WINDOW"
+              ]
+            },
+            "startsAt": {
+              "type": "string",
+              "format": "date-time",
+              "description": "When the Shipment was delivered."
+            },
+            "endsAt": {
+              "type": "string",
+              "format": "date-time",
+              "description": "The first moment after it."
+            },
+            "warranty": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "The Warranty terms a Warranty Window was worked out from; left out for a Return Period.",
+              "required": [
+                "months",
+                "manufacturer"
+              ],
+              "properties": {
+                "months": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "manufacturer": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "REQUESTED",
+            "APPROVED",
+            "REJECTED"
+          ]
+        },
+        "requestedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "decisions": {
+          "type": "array",
+          "description": "The RMA's decision history, oldest first.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "status",
+              "decidedBy",
+              "decidedAt"
+            ],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "APPROVED",
+                  "REJECTED"
+                ]
+              },
+              "decidedBy": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The Staff member's ID."
+              },
+              "decidedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "note": {
+                "type": "string",
+                "minLength": 1,
+                "description": "An approval's note, left out when it has none, or a rejection's reason."
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
