@@ -1,0 +1,45 @@
+{
+  "eventId": "6f1c2b9e-3d4a-4c5b-8e7f-9a0b1c2d3e4f",
+  "occurredAt": "2026-10-13T10:15:30Z",
+  "shipmentId": "0b8e6f2a-1c3d-4e5f-a6b7-c8d9e0f1a2b3",
+  "version": 6,
+  "change": "DELIVERED",
+  "shipment": {
+    "orderId": "5d2a9c1e-7b3f-4a6d-9e8c-1f2a3b4c5d6e",
+    "customerId": "c0ffee00-0000-4000-8000-000000000042",
+    "warehouseId": "WH-BER",
+    "status": "DELIVERED",
+    "lines": [
+      {
+        "variantId": "PHN-PIXEL-9-BLK-128",
+        "productName": "Pixel 9",
+        "quantity": 1,
+        "serialTracking": "IMEI",
+        "serialNumbers": ["490154203237518"]
+      },
+      {
+        "variantId": "ACC-CASE-PIXEL-9",
+        "productName": "Pixel 9 Case",
+        "quantity": 2,
+        "serialTracking": "NONE",
+        "serialNumbers": []
+      }
+    ],
+    "carrier": "Mock Carrier",
+    "trackingNumber": "MC0012345678",
+    "trackingEvents": [
+      {"eventId": "trk_1", "status": "IN_TRANSIT", "occurredAt": "2026-10-13T10:14:50Z"},
+      {"eventId": "trk_2", "status": "OUT_FOR_DELIVERY", "occurredAt": "2026-10-13T10:15:00Z"},
+      {"eventId": "trk_3", "status": "DELIVERED", "occurredAt": "2026-10-13T10:15:10Z"}
+    ],
+    "deliveredAt": "2026-10-13T10:15:10Z",
+    "statusHistory": [
+      {"status": "AWAITING_PICK", "at": "2026-10-13T09:00:00Z", "by": "ORCHESTRATION"},
+      {"status": "PICKED", "at": "2026-10-13T09:30:00Z", "by": "f6b1d1c2-staff"},
+      {"status": "PACKED", "at": "2026-10-13T09:45:00Z", "by": "f6b1d1c2-staff"},
+      {"status": "SHIPPED", "at": "2026-10-13T10:14:40Z", "by": "ORCHESTRATION"},
+      {"status": "DELIVERED", "at": "2026-10-13T10:15:10Z", "by": "CARRIER"}
+    ],
+    "createdAt": "2026-10-13T09:00:00Z"
+  }
+}

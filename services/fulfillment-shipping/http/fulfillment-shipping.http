@@ -1,8 +1,10 @@
 # Exercises Fulfillment & Shipping against the compose stack (`make up`): Staff read the Warehouses,
-# and Checkout asks for Shipping quotes. Run the requests top to bottom in the IntelliJ HTTP client;
-# the token requests store tokens for the ones after them.
-# Checkout's client secret is the stack's own: run it in the `dev` environment, whose
-# http-client.private.env.json holds it (the root README's "Secrets" says how to write it).
+# Checkout asks for Shipping quotes, and a Shipment goes from creation through pick and pack to
+# delivery by the mock carrier's webhooks. Run the requests top to bottom in the IntelliJ HTTP
+# client; the token requests store tokens for the ones after them.
+# Checkout's and Orchestration's client secrets and the carrier webhook secret are the stack's own:
+# run it in the `dev` environment, whose http-client.private.env.json holds them (the root README's
+# "Secrets" says how to write it).
 
 @fulfillment = http://localhost:8099
 @gateway = http://localhost:8000
@@ -97,3 +99,137 @@ Content-Type: application/json
 
 {"destination": {"country": "DE"}, "lines": [{"variantId": "PHN-PIXEL-9-OBSIDIAN-128", "quantity": 1}],
  "currency": "EUR"}
+
+### Orchestration's own token (client credentials), for the fulfillment Saga's commands
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&client_id=orchestration&client_secret={{orchestrationClientSecret}}
+
+> {% client.global.set("orchestrationToken", response.body.access_token); %}
+
+### Shipments. As the fulfillment Saga: create a Shipment for a new Order of the demo phone, to Germany.
+### 201, AWAITING_PICK from WH-BER, the line named and IMEI-tracked from Catalog's Product
+< {%
+  request.variables.set("orderId", $random.uuid);
+%}
+POST {{fulfillment}}/shipments
+Authorization: Bearer {{orchestrationToken}}
+Idempotency-Key: {{$random.uuid}}
+Content-Type: application/json
+
+{"orderId": "{{orderId}}", "customerId": "http-demo-customer",
+ "lines": [{"variantId": "PHN-PIXEL-9-OBSIDIAN-128", "quantity": 1}],
+ "shippingAddress": {"recipientName": "Erika Mustermann", "line1": "Hauptstraße 5", "postcode": "10115",
+                     "city": "Berlin", "country": "DE"},
+ "shippingOption": {"id": "EXPRESS", "carrier": "Mock Carrier", "cost": {"amountMinor": 999, "currency": "EUR"},
+                    "estimatedDays": 1}}
+
+> {%
+  client.global.set("shipmentId", response.body.id);
+  client.global.set("shipmentOrderId", response.body.orderId);
+%}
+
+### A second Shipment for the same Order: 409, reason shipmentExists
+POST {{fulfillment}}/shipments
+Authorization: Bearer {{orchestrationToken}}
+Idempotency-Key: {{$random.uuid}}
+Content-Type: application/json
+
+{"orderId": "{{shipmentOrderId}}", "customerId": "http-demo-customer",
+ "lines": [{"variantId": "PHN-PIXEL-9-OBSIDIAN-128", "quantity": 1}],
+ "shippingAddress": {"recipientName": "Erika Mustermann", "line1": "Hauptstraße 5", "postcode": "10115",
+                     "city": "Berlin", "country": "DE"},
+ "shippingOption": {"id": "EXPRESS", "carrier": "Mock Carrier", "cost": {"amountMinor": 999, "currency": "EUR"}}}
+
+### Through the gateway: 404, only the fulfillment Saga creates Shipments
+POST {{gateway}}/api/fulfillment-shipping/shipments
+Authorization: Bearer {{orchestrationToken}}
+Idempotency-Key: {{$random.uuid}}
+Content-Type: application/json
+
+{}
+
+### Staff's fulfillment queue under Berlin, through the gateway: awaiting pick, oldest first
+GET {{gateway}}/api/fulfillment-shipping/shipments?status=AWAITING_PICK&warehouseId=WH-BER
+Authorization: Bearer {{staffToken}}
+
+### Packing before picking: 409, reason illegalTransition
+POST {{gateway}}/api/fulfillment-shipping/shipments/{{shipmentId}}/pack
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{"serialNumbers": {"PHN-PIXEL-9-OBSIDIAN-128": ["490154203237518"]}}
+
+### Staff pick it: PICKED, by the Staff user
+POST {{gateway}}/api/fulfillment-shipping/shipments/{{shipmentId}}/pick
+Authorization: Bearer {{staffToken}}
+
+### An IMEI whose check digit is wrong: 422 naming serialNumbers.PHN-PIXEL-9-OBSIDIAN-128[0]
+POST {{gateway}}/api/fulfillment-shipping/shipments/{{shipmentId}}/pack
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{"serialNumbers": {"PHN-PIXEL-9-OBSIDIAN-128": ["490154203237517"]}}
+
+### A valid IMEI, new on every run: PACKED, with the IMEI on its line
+< {%
+  const body = Array.from({length: 14}, () => Math.floor(Math.random() * 10)).join("");
+  let sum = 0;
+  for (let i = 0; i < 14; i++) {
+    let d = Number(body[13 - i]);
+    if (i % 2 === 0) { d *= 2; if (d > 9) d -= 9; }
+    sum += d;
+  }
+  request.variables.set("imei", body + ((10 - sum % 10) % 10));
+%}
+POST {{gateway}}/api/fulfillment-shipping/shipments/{{shipmentId}}/pack
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{"serialNumbers": {"PHN-PIXEL-9-OBSIDIAN-128": ["{{imei}}"]}}
+
+### As the fulfillment Saga: dispatch it. SHIPPED, with the mock carrier's tracking number; its Carrier
+### webhooks follow 10, 20 and 30 seconds later
+POST {{fulfillment}}/shipments/{{shipmentId}}/dispatch
+Authorization: Bearer {{orchestrationToken}}
+Idempotency-Key: {{$random.uuid}}
+
+> {% client.global.set("trackingNumber", response.body.trackingNumber); %}
+
+### Half a minute later: DELIVERED, with three Tracking events, deliveredAt, and CARRIER in its history
+GET {{fulfillment}}/shipments/{{shipmentId}}
+Authorization: Bearer {{orchestrationToken}}
+
+### A Carrier webhook, signed as the mock signs it with the stack's carrier secret, through the gateway
+### without a token, delivered twice: 200 both times, recorded once, and the status stays DELIVERED
+< {%
+  const body = JSON.stringify({eventId: "trk-http-" + $random.uuid, trackingNumber: client.global.get("trackingNumber"), status: "IN_TRANSIT", occurredAt: new Date().toISOString()});
+  request.variables.set("carrierBody", body);
+  request.variables.set("carrierSignature", "sha256=" + crypto.hmac.sha256().withTextSecret(request.environment.get("carrierWebhookSecret")).updateWithText(body).digest().toHex());
+%}
+POST {{gateway}}/api/fulfillment-shipping/webhooks/carrier
+Carrier-Signature: {{carrierSignature}}
+Content-Type: application/json
+
+{{carrierBody}}
+
+### A Carrier webhook with a wrong signature: 401
+POST {{gateway}}/api/fulfillment-shipping/webhooks/carrier
+Carrier-Signature: sha256=00
+Content-Type: application/json
+
+{"eventId": "trk-forged", "trackingNumber": "{{trackingNumber}}", "status": "DELIVERED",
+ "occurredAt": "2026-10-13T10:00:00Z"}
+
+### Holding a delivered Shipment: 409, reason illegalTransition
+POST {{fulfillment}}/shipments/{{shipmentId}}/hold
+Authorization: Bearer {{orchestrationToken}}
+Idempotency-Key: {{$random.uuid}}
+Content-Type: application/json
+
+{"reason": "authorization_expired"}
+
+### The Order's Shipment as Staff read it by Order
+GET {{gateway}}/api/fulfillment-shipping/shipments?orderId={{shipmentOrderId}}
+Authorization: Bearer {{staffToken}}

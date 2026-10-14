@@ -76,6 +76,7 @@ infrastructure pgadmin-password postgres-data admin
 write checkout-client-secret "$(random)"
 write orchestration-client-secret "$(random)"
 write payment-webhook-secret "$(random)"
+write carrier-webhook-secret "$(random)"
 
 # On macOS, a file written before secrets were owner-only there is made so, its content unchanged.
 if [ "$umask_files" = 077 ]; then

@@ -10,8 +10,16 @@ spring:
     url: jdbc:postgresql://localhost:${POSTGRES_PORT:5432}/fulfillment_shipping
     # The password is a secret: spring.datasource.password.
     username: ecomm
+  kafka:
+    bootstrap-servers: localhost:${KAFKA_PORT:9092}
+  modulith:
+    events:
+      # Send again, on startup, what the outbox holds unsent: a send cut short by a crash or restart.
+      republish-outstanding-events-on-restart: true
 
 ecomm:
+  events:
+    schema-registry-url: http://localhost:${APICURIO_PORT:8088}/apis/registry/v3
   fulfillment-shipping:
     # Exactly one is the default; at most one per country. A Shipment ships from the Warehouse in
     # its destination's country, or else from the default.
@@ -39,3 +47,12 @@ ecomm:
           EXPRESS:
             domestic: { cost-minor: 999, days: 1 }
             eu: { cost-minor: 1999, days: 2 }
+      # Once it books a Shipment, the mock sends a signed Carrier webhook for each Tracking event,
+      # this long after booking. It posts them to the service's own /webhooks/carrier unless
+      # webhook-url is set. The secret they are signed with, shared with the service, is
+      # ecomm.fulfillment-shipping.carrier-webhooks.secret: it has no default, and compose gives it
+      # as a secret.
+      tracking-delays:
+        in-transit: 10s
+        out-for-delivery: 20s
+        delivered: 30s

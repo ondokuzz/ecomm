@@ -36,7 +36,7 @@ class ShippingQuoteController {
     }
   }
 
-  record OptionResponse(String id, String carrier, Money cost, int estimatedDays) {}
+  record OptionResponse(String id, String carrier, Money cost, Integer estimatedDays) {}
 
   private final QuoteShippingUseCase quotes;
 
@@ -69,8 +69,8 @@ class ShippingQuoteController {
     return problem;
   }
 
-  @ExceptionHandler(InvalidQuoteRequestException.class)
-  ProblemDetail invalid(InvalidQuoteRequestException e) {
+  @ExceptionHandler(InvalidRequestException.class)
+  ProblemDetail invalid(InvalidRequestException e) {
     var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
     problem.setProperty("errors", List.of(e.violation()));
     return problem;

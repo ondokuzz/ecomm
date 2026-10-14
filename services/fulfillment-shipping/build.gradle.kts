@@ -1,11 +1,27 @@
 plugins { id("ecomm.spring-service-conventions") }
 
 dependencies {
-  // Its own fulfillment_shipping database. Quotes need no tables; Shipments bring the first ones.
+  // Shipments and the Product projection, in its own fulfillment_shipping database.
   implementation("org.springframework.boot:spring-boot-starter-jdbc")
+  implementation("org.springframework.boot:spring-boot-starter-flyway")
+  implementation("org.flywaydb:flyway-database-postgresql")
   runtimeOnly("org.postgresql:postgresql")
+  // The mock carrier posts its Carrier webhooks to the service's own endpoint, as a Carrier would.
+  implementation("org.springframework.boot:spring-boot-starter-restclient")
+
+  // Publishing Shipment events through service-commons' port, with Postgres as the outbox, and
+  // consuming Catalog's Product events.
+  implementation(platform(libs.spring.modulith.bom))
+  implementation("org.springframework.boot:spring-boot-starter-kafka")
+  implementation("org.springframework.modulith:spring-modulith-starter-jdbc")
+  implementation("org.springframework.modulith:spring-modulith-events-kafka")
+  implementation(libs.apicurio.jsonschema.serde.kafka)
 
   testImplementation("org.springframework.boot:spring-boot-testcontainers")
   testImplementation("org.testcontainers:testcontainers-postgresql")
   testImplementation("org.testcontainers:testcontainers-junit-jupiter")
+  testImplementation("org.apache.kafka:kafka-clients")
+  testImplementation("org.awaitility:awaitility")
+  testImplementation(project(":platform:event-schemas"))
+  testImplementation(libs.json.schema.validator)
 }
