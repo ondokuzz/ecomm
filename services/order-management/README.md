@@ -37,7 +37,8 @@ nothing there changes an Order. Any other token gets 403, and no token gets 401.
 | `GET /staff/orders/{id}` | Staff | Any Customer's Order; 404 for an unknown ID |
 
 An Order is placed for a Customer from the lines Checkout priced, every Discount in the order they
-applied, and the tax. A Campaign's Discount names the Campaign by ID and name, a Coupon's the code
+applied, the tax, and the Shipping address and Shipping option with its Carrier and Shipping cost.
+A Campaign's Discount names the Campaign by ID and name, a Coupon's the code
 the Customer entered:
 
 ```json
@@ -49,13 +50,19 @@ the Customer entered:
     "amount": {"amountMinor": 7990, "currency": "EUR"}},
    {"source": "COUPON", "couponCode": "WELCOME10",
     "amount": {"amountMinor": 15181, "currency": "EUR"}}],
- "tax": {"amountMinor": 0, "currency": "EUR"}}
+ "tax": {"amountMinor": 0, "currency": "EUR"},
+ "shippingAddress": {"recipientName": "Erika Mustermann", "line1": "Hauptstraße 5",
+                     "postcode": "10115", "city": "Berlin", "country": "DE"},
+ "shippingOption": {"id": "EXPRESS", "carrier": "Mock Carrier",
+                    "cost": {"amountMinor": 999, "currency": "EUR"}}}
 ```
 
 and comes back with what it comes to. The `subtotal` is the sum of each line's unit price times its
-quantity, and the `total` is the subtotal, less the sum of the Discounts, plus the tax: what Checkout
-authorizes the Payment for. **This changed in Sprint 3**: an Order held one Coupon's `discount`; it
-now holds the list, and a body that still sends `discount` is a 400.
+quantity, and the `total` is the subtotal, less the sum of the Discounts, plus the tax, plus the
+Shipping cost: what the checkout Saga authorizes the Payment for. **This changed in Sprint 3**: an
+Order held one Coupon's `discount`; it now holds the list, and a body that still sends `discount` is
+a 400. **This changed in Sprint 5**: an Order needs `shippingAddress` and `shippingOption`, and its
+total includes the Shipping cost; a body without them is a 400.
 
 ```json
 {"id": "…", "customerId": "…", "status": "PLACED",
@@ -68,7 +75,11 @@ now holds the list, and a body that still sends `discount` is a 400.
    {"source": "COUPON", "couponCode": "WELCOME10", "campaignId": null, "campaignName": null,
     "amount": {"amountMinor": 15181, "currency": "EUR"}}],
  "tax": {"amountMinor": 0, "currency": "EUR"},
- "total": {"amountMinor": 136629, "currency": "EUR"}, "placedAt": "2026-09-27T14:00:00.123456Z",
+ "shippingAddress": {"recipientName": "Erika Mustermann", "line1": "Hauptstraße 5",
+                     "postcode": "10115", "city": "Berlin", "country": "DE"},
+ "shippingOption": {"id": "EXPRESS", "carrier": "Mock Carrier",
+                    "cost": {"amountMinor": 999, "currency": "EUR"}},
+ "total": {"amountMinor": 137628, "currency": "EUR"}, "placedAt": "2026-09-27T14:00:00.123456Z",
  "statusHistory": [{"status": "PLACED", "at": "2026-09-27T14:00:00.123456Z",
                     "changedBy": "ORCHESTRATION", "backfilled": false}]}
 ```
@@ -121,8 +132,17 @@ that isn't negative. Every line must be in the same currency, and a Variant may 
 line. The `tax` is required, even when zero, and can't be negative. Each Discount needs a `source`,
 `CAMPAIGN` or `COUPON`, and exactly what names it: a `campaignId` of at most 64 characters and a
 `campaignName` of at most 100, or a `couponCode` of at most 64. Its `amount` can't be negative. The
-Discounts and the tax are in the lines' currency, and the Discounts together can bring the total to
-zero but not below. Anything else, including a
+Discounts and the tax are in the lines' currency, and the Discounts together can bring the lines
+plus the tax to zero but not below: they never touch the Shipping cost. The `shippingAddress` needs a
+`recipientName`, `line1`, `postcode`, `city` and an ISO 3166-1 alpha-2 `country`, and may have
+`line2`, `region` and `phone`; Checkout has already validated and normalised it, so Order Management
+checks only that they are there and fit (100 characters, 16 for the postcode, 32 for the phone). The
+`shippingOption` needs an `id` of at most 32 characters, a `carrier` of at most 64, and a `cost` in
+the lines' currency that isn't negative.
+
+An Order placed before Sprint 5 has no Shipping, and reads without `shippingAddress` and
+`shippingOption`; its total is what it was charged. Migration `V8__order_shipping.sql` added the
+columns, null for those Orders. Anything else, including a
 total too large to hold, is a 400. Every error is a problem detail.
 
 ## Order Status
@@ -157,7 +177,11 @@ is the definition:
                           "amount": {"amountMinor": 7990, "currency": "EUR"}}],
            "tax": {"amountMinor": 0, "currency": "EUR"},
            "subtotal": {"amountMinor": 79900, "currency": "EUR"},
-           "total": {"amountMinor": 71910, "currency": "EUR"},
+           "shippingAddress": {"recipientName": "Erika Mustermann", "line1": "Hauptstraße 5",
+                               "postcode": "10115", "city": "Berlin", "country": "DE"},
+           "shippingOption": {"id": "STANDARD", "carrier": "Mock Carrier",
+                              "cost": {"amountMinor": 499, "currency": "EUR"}},
+           "total": {"amountMinor": 72409, "currency": "EUR"},
            "statusHistory": [{"status": "PLACED", "at": "2026-10-03T12:00:00Z", "changedBy": "ORCHESTRATION"},
                              {"status": "PAID", "at": "2026-10-03T12:00:05Z", "changedBy": "ORCHESTRATION"}]}}
 ```
@@ -168,6 +192,8 @@ is the definition:
 - `discounts` lists every Discount in order, as the API does, without the fields a Discount lacks,
   and is empty for an Order without one. A history entry carries `"backfilled": true`
   only when it was reconstructed.
+- `shippingAddress` and `shippingOption` are optional properties, added in Sprint 5: an Order placed
+  before has neither, and an address leaves out the optional fields it lacks.
 
 Watch the topic on the compose stack with:
 

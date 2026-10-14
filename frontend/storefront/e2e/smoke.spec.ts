@@ -22,6 +22,9 @@ import { stackSecret } from './secrets'
  *   Product, whose rating then shows on its card and its page. A Customer who never bought a
  *   Product is told they can't review it.
  * - Buy two new Products together, and see each under "Customers also bought" on the other's page.
+ * - Every checkout gives a Shipping address and chooses a Shipping option first (Sprint 5); the
+ *   first shows a malformed postcode named, then corrected, Express's cost in the total, and the
+ *   Order with its Shipping.
  * - Pay with a card the bank confirms later: the page says the payment is being confirmed until the
  *   gateway's webhook settles it, then shows the paid Order; or, declined, shows why, and the held
  *   session is then paid with a card that approves.
@@ -141,11 +144,45 @@ test('a Customer checks out a picked Variant and another Product, and on-hand St
       onHand: line.stock.onHand,
     })
   }
+  // Pay waits for a Shipping address and option. A malformed postcode is named against its field,
+  // and nothing is quoted until the address is valid; it comes back normalised.
+  const payButton = page.getByRole('button', { name: /^Pay/ })
+  await expect(payButton).toBeDisabled()
+  const addressForm = page.getByRole('form', { name: 'Shipping address' })
+  await fillAddress(page, { ...berlin, Postcode: '1011' })
+  await addressForm.getByRole('button', { name: 'Use this address' }).click()
+  const postcode = addressForm.getByLabel('Postcode')
+  await expect(postcode).toHaveAttribute('aria-invalid', 'true')
+  await expect(addressForm).toContainText("Isn't a postcode in DE, such as 10115")
+  await postcode.fill(' 10115 ')
+  await addressForm.getByRole('button', { name: 'Use this address' }).click()
+  const shippingTo = page.locator('address[aria-label="Shipping address"]')
+  await expect(shippingTo).toContainText('10115 Berlin')
+  await expect(payButton).toBeDisabled()
+  // Express, with its cost and days, joins the total.
+  const expressOption = page.getByRole('radio', { name: /^Express/ })
+  await expressOption.click()
+  await expect(expressOption).toBeChecked()
+  const summary = page.getByRole('region', { name: 'Order summary' })
+  const express = { amountMinor: expressFromBerlin, currency: 'EUR' }
+  await expect(summary.getByText('Shipping (Express)')).toBeVisible()
+  await expect(summary).toContainText(formatMoney(express, currencies, 'en-US'))
+  const goods = bought.reduce((sum, line) => sum + line.variant.price.amountMinor, 0)
+  const shippedTotal = { amountMinor: goods + expressFromBerlin, currency: bought[0].variant.price.currency }
+  await expect(
+    page.getByRole('button', { name: `Pay ${formatMoney(shippedTotal, currencies, 'en-US')}` }),
+  ).toBeEnabled()
+
   await testCard(page, 'Approve').check()
-  await page.getByRole('button', { name: /^Pay/ }).click()
+  await payButton.click()
 
   await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/)
   await expect(page.getByText('Thank you! Your order is confirmed.')).toBeVisible()
+  // The Order shows where it goes, how, and what that cost, in its total.
+  const orderShipping = page.locator('.order-shipping')
+  await expect(orderShipping.locator('address')).toContainText('Erika Mustermann')
+  await expect(orderShipping).toContainText('Express by Mock Carrier')
+  await expect(page.getByRole('region', { name: 'Order summary' }).getByText('Shipping (Express)')).toBeVisible()
   await expect(currentStep).toContainText('Done')
   await expect(doneSteps).toHaveText([/^Cart/, /^Payment/, /^Done/])
   // The confetti falls, unless the Customer prefers reduced motion.
@@ -161,6 +198,15 @@ test('a Customer checks out a picked Variant and another Product, and on-hand St
   const orderId = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!)
   const order = await orderOf(request, token, orderId)
   expect(order.status).toBe('PAID')
+  expect(order.shippingAddress).toEqual({
+    recipientName: 'Erika Mustermann',
+    line1: 'Hauptstraße 5',
+    postcode: '10115',
+    city: 'Berlin',
+    country: 'DE',
+  })
+  expect(order.shippingOption).toEqual({ id: 'EXPRESS', carrier: 'Mock Carrier', cost: express })
+  expect(order.total).toEqual({ ...shippedTotal, amountMinor: shippedTotal.amountMinor + order.tax.amountMinor })
   // The timeline is the Order's Status history, each step with when it happened.
   expect(order.statusHistory.map((entry) => entry.status)).toEqual(['PLACED', 'PAID'])
   const progress = page.getByRole('list', { name: 'Order progress' })
@@ -168,7 +214,8 @@ test('a Customer checks out a picked Variant and another Product, and on-hand St
     await expect(progress.locator(`time[datetime="${entry.at}"]`)).toBeVisible()
   }
   // Its Payment, as Payment recorded it: authorized for the Order's total.
-  const payments = page.getByRole('list', { name: 'Payments' }).getByRole('listitem')
+  // Each Payment is a direct item; its activity is a list of its own inside it.
+  const payments = page.getByRole('list', { name: 'Payments' }).locator('> li')
   await expect(payments).toHaveCount(1)
   await expect(payments.locator('.payment-authorized')).toHaveText('Authorized')
   await expect(payments).toContainText(formatMoney(order.total, currencies, 'en-US'))
@@ -211,6 +258,7 @@ test('a declined card shows why, and the held session can then be paid with one 
   await signInOnKeycloak(page, customer)
   await expect(page.getByRole('timer', { name: 'Time left' })).toBeVisible()
   const sessionId = await currentSessionId(request, token)
+  await shipTo(page)
 
   await testCard(page, 'Decline').check()
   await page.getByRole('button', { name: /^Pay/ }).click()
@@ -244,10 +292,13 @@ test('WELCOME10 takes 10% off at checkout, and the PAID Order shows the discount
   // 10%, rounded down to the minor unit.
   const discount = { ...subtotal, amountMinor: Math.floor(subtotal.amountMinor / 10) }
   const discounted = { ...subtotal, amountMinor: subtotal.amountMinor - discount.amountMinor }
+  // Shipped Standard, whose cost the Discount never touches.
+  const shipped = (money: Money) => ({ ...money, amountMinor: money.amountMinor + standardFromBerlin })
 
   await page.goto('/checkout')
   await signInOnKeycloak(page, customer)
   await expect(page.getByRole('timer', { name: 'Time left' })).toBeVisible()
+  await shipTo(page)
   const summary = page.getByRole('region', { name: 'Order summary' })
   const couponField = summary.getByLabel('Coupon code')
 
@@ -265,18 +316,22 @@ test('WELCOME10 takes 10% off at checkout, and the PAID Order shows the discount
   await expect(summary).toContainText(
     formatMoney({ ...discount, amountMinor: -discount.amountMinor }, currencies, 'en-US'),
   )
-  await expect(page.getByRole('button', { name: `Pay ${formatMoney(discounted, currencies, 'en-US')}` })).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: `Pay ${formatMoney(shipped(discounted), currencies, 'en-US')}` }),
+  ).toBeVisible()
 
   // Removing it puts the total back; applying it again takes it off again.
   await summary.getByRole('button', { name: 'Remove coupon WELCOME10' }).click()
   await expect(summary.getByText('Coupon: WELCOME10')).toBeHidden()
-  await expect(page.getByRole('button', { name: `Pay ${formatMoney(subtotal, currencies, 'en-US')}` })).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: `Pay ${formatMoney(shipped(subtotal), currencies, 'en-US')}` }),
+  ).toBeVisible()
   await couponField.fill('WELCOME10')
   await summary.getByRole('button', { name: 'Apply' }).click()
   await expect(summary.getByText('Coupon: WELCOME10')).toBeVisible()
 
   await testCard(page, 'Approve').check()
-  await page.getByRole('button', { name: `Pay ${formatMoney(discounted, currencies, 'en-US')}` }).click()
+  await page.getByRole('button', { name: `Pay ${formatMoney(shipped(discounted), currencies, 'en-US')}` }).click()
 
   await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/)
   await expect(page.locator('.status-paid')).toHaveText('Paid')
@@ -287,7 +342,7 @@ test('WELCOME10 takes 10% off at checkout, and the PAID Order shows the discount
   expect(order.discounts).toEqual([
     { source: 'COUPON', couponCode: 'WELCOME10', campaignId: null, campaignName: null, amount: discount },
   ])
-  expect(order.total).toEqual({ ...discounted, amountMinor: discounted.amountMinor + order.tax.amountMinor })
+  expect(order.total).toEqual({ ...discounted, amountMinor: shipped(discounted).amountMinor + order.tax.amountMinor })
 })
 
 test('Audio week comes off an audio Product by itself, WELCOME10 on top, and the PAID Order lists both', async ({
@@ -304,10 +359,13 @@ test('Audio week comes off an audio Product by itself, WELCOME10 on top, and the
   const audioWeek = { ...subtotal, amountMinor: Math.floor((subtotal.amountMinor * 15) / 100) }
   const welcome10 = { ...subtotal, amountMinor: Math.floor((subtotal.amountMinor - audioWeek.amountMinor) / 10) }
   const negative = (money: typeof subtotal) => ({ ...money, amountMinor: -money.amountMinor })
-  const pay = (amountMinor: number) => `Pay ${formatMoney({ ...subtotal, amountMinor }, currencies, 'en-US')}`
+  // Shipped Standard, whose cost joins every total shown.
+  const pay = (amountMinor: number) =>
+    `Pay ${formatMoney({ ...subtotal, amountMinor: amountMinor + standardFromBerlin }, currencies, 'en-US')}`
 
   await page.goto('/checkout')
   await signInOnKeycloak(page, customer)
+  await shipTo(page)
   const summary = page.getByRole('region', { name: 'Order summary' })
   await expect(summary.getByText('Campaign: Audio week')).toBeVisible()
   await expect(summary).toContainText(formatMoney(negative(audioWeek), currencies, 'en-US'))
@@ -333,7 +391,7 @@ test('Audio week comes off an audio Product by itself, WELCOME10 on top, and the
     ['CAMPAIGN', 'Audio week', audioWeek],
     ['COUPON', 'WELCOME10', welcome10],
   ])
-  expect(order.total).toEqual({ ...subtotal, amountMinor: total + order.tax.amountMinor })
+  expect(order.total).toEqual({ ...subtotal, amountMinor: total + standardFromBerlin + order.tax.amountMinor })
 
   await page.goto('/orders')
   await expect(page.getByText('Saved with Audio week, WELCOME10').first()).toBeVisible()
@@ -403,6 +461,7 @@ test('after a Customer buys two Products together, each one’s page shows the o
 
     await page.goto('/checkout')
     await signInOnKeycloak(page, customer)
+    await shipTo(page)
     await testCard(page, 'Approve').check()
     await page.getByRole('button', { name: /^Pay/ }).click()
     await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/)
@@ -539,7 +598,12 @@ test.describe('Sprint 3', () => {
     await expect(summary.getByText('Coupon: WELCOME10')).toBeVisible()
     await expect(summary.getByText('Campaign: Audio week')).toBeVisible()
     await expect(summary).toContainText(money(negative(welcome10), currencies))
-    const total = { ...subtotal, amountMinor: subtotal.amountMinor - audioWeek.amountMinor - welcome10.amountMinor }
+    await shipTo(page)
+    // Shipped Standard, whose cost joins the total.
+    const total = {
+      ...subtotal,
+      amountMinor: subtotal.amountMinor - audioWeek.amountMinor - welcome10.amountMinor + standardFromBerlin,
+    }
 
     await testCard(page, 'Approve').check()
     await page.getByRole('button', { name: `Pay ${money(total, currencies)}` }).click()
@@ -623,6 +687,7 @@ test.describe('Sprint 4', () => {
     await page.goto('/checkout')
     await signInOnKeycloak(page, customer)
     await expect(page.getByRole('timer', { name: 'Time left' })).toBeVisible()
+    await shipTo(page)
     await testCard(page, 'Bank confirms, approves').check()
     await page.getByRole('button', { name: /^Pay/ }).click()
 
@@ -653,6 +718,7 @@ test.describe('Sprint 4', () => {
     await signInOnKeycloak(page, customer)
     await expect(page.getByRole('timer', { name: 'Time left' })).toBeVisible()
     const sessionId = await currentSessionId(request, token)
+    await shipTo(page)
     await testCard(page, 'Bank confirms, declines').check()
     await page.getByRole('button', { name: /^Pay/ }).click()
 
@@ -689,6 +755,37 @@ async function paymentsOf(request: APIRequestContext, token: string, orderId: st
   })
   expect(response.ok()).toBeTruthy()
   return (await response.json()) as PaymentRead[]
+}
+
+/** A Shipping address in Berlin, as a Customer types it. */
+const berlin = {
+  'Full name': 'Erika Mustermann',
+  Address: 'Hauptstraße 5',
+  Postcode: '10115',
+  City: 'Berlin',
+}
+
+/** The mock Carrier's domestic costs from the Berlin Warehouse, in EUR's minor unit. */
+const standardFromBerlin = 499
+const expressFromBerlin = 999
+
+/** Types an address into the checkout page's Shipping address form; the country stays Germany. */
+async function fillAddress(page: Page, fields: Record<keyof typeof berlin, string>) {
+  const form = page.getByRole('form', { name: 'Shipping address' })
+  for (const [label, value] of Object.entries(fields)) {
+    await form.getByLabel(label, { exact: true }).fill(value)
+  }
+  await expect(form.getByLabel('Country')).toHaveValue('DE')
+}
+
+/** Ships the Checkout Session to Berlin, Standard, and waits for its cost in the summary. */
+async function shipTo(page: Page) {
+  await fillAddress(page, berlin)
+  await page.getByRole('form', { name: 'Shipping address' }).getByRole('button', { name: 'Use this address' }).click()
+  const standard = page.getByRole('radio', { name: /^Standard/ })
+  await standard.click()
+  await expect(standard).toBeChecked()
+  await expect(page.getByRole('region', { name: 'Order summary' }).getByText('Shipping (Standard)')).toBeVisible()
 }
 
 /** The checkout page's test card radio, named by its card. */

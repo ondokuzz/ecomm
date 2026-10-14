@@ -6,8 +6,10 @@ import com.ecomm.checkoutpricing.domain.CheckoutSession;
 import com.ecomm.checkoutpricing.domain.Discount;
 import com.ecomm.checkoutpricing.domain.PaymentAttempt;
 import com.ecomm.checkoutpricing.domain.PaymentAttempt.Status;
+import com.ecomm.checkoutpricing.domain.ShippingAddress;
 import com.ecomm.commons.money.Money;
 import com.ecomm.commons.web.CorrelationId;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import io.temporal.api.enums.v1.WorkflowIdConflictPolicy;
 import io.temporal.api.enums.v1.WorkflowIdReusePolicy;
 import io.temporal.client.WorkflowClient;
@@ -64,6 +66,8 @@ class TemporalCheckoutSaga implements CheckoutSaga {
       List<Line> lines,
       List<DiscountBody> discounts,
       Amount tax,
+      AddressBody shippingAddress,
+      OptionBody shippingOption,
       String reservationId,
       String paymentMethod,
       String correlationId) {}
@@ -72,6 +76,34 @@ class TemporalCheckoutSaga implements CheckoutSaga {
 
   record DiscountBody(
       String source, String couponCode, String campaignId, String campaignName, Amount amount) {}
+
+  /** An address's optional fields are left out when it has none. */
+  @JsonInclude(JsonInclude.Include.NON_NULL)
+  record AddressBody(
+      String recipientName,
+      String line1,
+      String line2,
+      String postcode,
+      String city,
+      String region,
+      String country,
+      String phone) {
+
+    static AddressBody of(ShippingAddress a) {
+      return new AddressBody(
+          a.recipientName(),
+          a.line1(),
+          a.line2(),
+          a.postcode(),
+          a.city(),
+          a.region(),
+          a.country(),
+          a.phone());
+    }
+  }
+
+  /** The chosen Shipping option, with its Carrier and the Shipping cost quoted. */
+  record OptionBody(String id, String carrier, Amount cost) {}
 
   record Amount(long amountMinor, String currency) {
 
@@ -184,6 +216,11 @@ class TemporalCheckoutSaga implements CheckoutSaga {
             .toList(),
         session.discounts().stream().map(TemporalCheckoutSaga::discount).toList(),
         Amount.of(session.tax()),
+        AddressBody.of(session.shippingAddress()),
+        new OptionBody(
+            session.shippingOption().id(),
+            session.shippingOption().carrier(),
+            Amount.of(session.shippingOption().cost())),
         session.reservationId(),
         paymentMethod,
         CorrelationId.current().orElse(null));

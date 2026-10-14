@@ -57,7 +57,9 @@ export interface Order {
   /** Every Discount it got, in the order they applied; empty when none. */
   discounts: Discount[]
   tax: Money
-  /** The subtotal, less every Discount, plus the tax: what the Customer paid. */
+  /** How it ships, with its Carrier and Shipping cost; absent on an Order placed before Sprint 5. */
+  shippingOption?: { id: string; carrier: string; cost: Money }
+  /** The subtotal, less every Discount, plus the tax, plus the Shipping cost: what the Customer paid. */
   total: Money
   placedAt: string
   /** Every Order Status the Order has been in, oldest first. */

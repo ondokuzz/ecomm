@@ -1,6 +1,7 @@
 # Checks out the demo Customer's Cart against the compose stack (`docker compose up -d --build`), in
-# two steps: a Checkout Session holds the Cart with every running Campaign's Discount, and may take a
-# Coupon, then paying it buys it. Run the requests top to
+# two steps: a Checkout Session holds the Cart with every running Campaign's Discount, takes a
+# Shipping address and a Shipping option, and may take a Coupon, then paying it buys it. Run the
+# requests top to
 # bottom in the IntelliJ HTTP client; the token request stores a token for the ones after it.
 # Its client and webhook secrets are the stack's own: run it in the `dev` environment, whose
 # http-client.private.env.json holds them (the root README's "Secrets" says how to write it).
@@ -89,6 +90,52 @@ Content-Type: application/json
 
 {"code": "WELCOME10"}
 
+### Paying before the session has a Shipping address and option: 409 shippingIncomplete
+POST {{checkout}}/checkout/sessions/{{sessionId}}/pay
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"paymentMethod": "tok_approve"}
+
+### A German address with a postcode in the wrong format: 422 invalidShippingAddress, naming it
+PUT {{checkout}}/checkout/sessions/{{sessionId}}/shipping-address
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"recipientName": "Demo Customer", "line1": "Hauptstraße 5", "postcode": "1011", "city": "Berlin",
+ "country": "DE"}
+
+### A country the store doesn't ship to: 422 undeliverableCountry
+PUT {{checkout}}/checkout/sessions/{{sessionId}}/shipping-address
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"recipientName": "Demo Customer", "line1": "1 Main St", "postcode": "10001", "city": "New York",
+ "country": "US"}
+
+### A Dutch address, typed loosely: 200 with it normalised (1011 AB) and the options quoted for it,
+### at domestic prices, since a Dutch address ships from the Amsterdam Warehouse
+PUT {{checkout}}/checkout/sessions/{{sessionId}}/shipping-address
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"recipientName": "  Demo   Customer ", "line1": "Damrak 1", "postcode": "1011ab",
+ "city": "Amsterdam", "country": "nl"}
+
+### An option that wasn't quoted: 422 shippingOptionNotQuoted
+PUT {{checkout}}/checkout/sessions/{{sessionId}}/shipping-option
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"optionId": "OVERNIGHT"}
+
+### Express: 200, its cost in shippingCost and the total, which the Discounts leave alone
+PUT {{checkout}}/checkout/sessions/{{sessionId}}/shipping-option
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"optionId": "EXPRESS"}
+
 ### Pay with a declining test card: the checkout Saga's run ends DECLINED, a 402 with its
 ### declineReason; that Order is CANCELLED, and the run is in Temporal's UI (http://localhost:8233)
 ### under the session's ID
@@ -131,7 +178,8 @@ Content-Type: application/json
 > {% client.global.set("orderId", response.body.orderId); %}
 
 ### The Order, at the session's Prices, with Audio week's and WELCOME10's Discounts, its tax (zero for
-### now) and the total its Payment was for, every change by ORCHESTRATION
+### now), its Shipping address and Express option with its cost, and the total its Payment was for,
+### every change by ORCHESTRATION
 GET {{orders}}/orders/{{orderId}}
 Authorization: Bearer {{customerToken}}
 

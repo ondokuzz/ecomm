@@ -20,6 +20,7 @@ import com.ecomm.ordermanagement.domain.Discount;
 import com.ecomm.ordermanagement.domain.Order;
 import com.ecomm.ordermanagement.domain.OrderLine;
 import com.ecomm.ordermanagement.domain.OrderStatus;
+import com.ecomm.ordermanagement.domain.Shipping;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -56,9 +57,11 @@ public class OrderService
       String customerId,
       List<OrderLine> lines,
       List<Discount> discounts,
-      Money tax) {
+      Money tax,
+      Shipping shipping) {
     var order =
-        Order.place(UUID.randomUUID(), customerId, lines, discounts, tax, caller, time.now());
+        Order.place(
+            UUID.randomUUID(), customerId, lines, discounts, tax, shipping, caller, time.now());
     return transactions.inTransaction(
         () -> {
           orders.add(order);

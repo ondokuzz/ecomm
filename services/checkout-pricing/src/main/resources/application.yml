@@ -36,6 +36,7 @@ ecomm:
     inventory-url: http://localhost:8082
     cart-url: http://localhost:8083
     promotions-url: http://localhost:8087
+    fulfillment-shipping-url: http://localhost:8099
     # How long paying waits for the Saga's outcome before answering 202.
     saga:
       wait: 10s

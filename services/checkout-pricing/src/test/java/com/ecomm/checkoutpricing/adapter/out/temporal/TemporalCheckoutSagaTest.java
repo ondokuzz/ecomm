@@ -11,6 +11,8 @@ import com.ecomm.checkoutpricing.domain.PaymentAttempt;
 import com.ecomm.checkoutpricing.domain.PaymentAttempt.Status;
 import com.ecomm.checkoutpricing.domain.PricedCart;
 import com.ecomm.checkoutpricing.domain.PricedLine;
+import com.ecomm.checkoutpricing.domain.ShippingAddress;
+import com.ecomm.checkoutpricing.domain.ShippingOption;
 import com.ecomm.commons.money.Money;
 import com.ecomm.commons.web.CorrelationId;
 import io.temporal.client.WorkflowClient;
@@ -70,16 +72,21 @@ class TemporalCheckoutSagaTest {
     saga = new TemporalCheckoutSaga(temporal.getWorkflowClient(), Duration.ofMillis(500));
     session =
         new CheckoutSession(
-            UUID.randomUUID().toString(),
-            "customer-42",
-            new PricedCart(
-                List.of(new PricedLine("PHN-PIXEL-9", "PHN-PIXEL-9", "phones", 2, eur(79900)))),
-            List.of(
-                Discount.campaign("c-1", "Audio week", eur(3735)),
-                Discount.coupon("WELCOME10", eur(15980))),
-            eur(0),
-            "5e2d1c0b-0000-4000-8000-000000000001",
-            Instant.parse("2030-01-01T00:00:00Z"));
+                UUID.randomUUID().toString(),
+                "customer-42",
+                new PricedCart(
+                    List.of(new PricedLine("PHN-PIXEL-9", "PHN-PIXEL-9", "phones", 2, eur(79900)))),
+                List.of(
+                    Discount.campaign("c-1", "Audio week", eur(3735)),
+                    Discount.coupon("WELCOME10", eur(15980))),
+                eur(0),
+                "5e2d1c0b-0000-4000-8000-000000000001",
+                Instant.parse("2030-01-01T00:00:00Z"))
+            .withShippingAddress(
+                new ShippingAddress(
+                    "Erika Mustermann", "Hauptstraße 5", null, "10115", "Berlin", null, "DE", null),
+                List.of(new ShippingOption("EXPRESS", "Mock Carrier", eur(999), 1)))
+            .withShippingOption("EXPRESS");
   }
 
   @AfterEach
@@ -115,6 +122,21 @@ class TemporalCheckoutSagaTest {
                     discount("COUPON", "WELCOME10", null, null, 15980)),
                 "tax",
                 Map.of("amountMinor", 0, "currency", "EUR"),
+                "shippingAddress",
+                Map.of(
+                    "recipientName", "Erika Mustermann",
+                    "line1", "Hauptstraße 5",
+                    "postcode", "10115",
+                    "city", "Berlin",
+                    "country", "DE"),
+                "shippingOption",
+                Map.of(
+                    "id",
+                    "EXPRESS",
+                    "carrier",
+                    "Mock Carrier",
+                    "cost",
+                    Map.of("amountMinor", 999, "currency", "EUR")),
                 "reservationId",
                 "5e2d1c0b-0000-4000-8000-000000000001",
                 "paymentMethod",
@@ -218,7 +240,10 @@ class TemporalCheckoutSagaTest {
         session.discounts(),
         session.tax(),
         session.reservationId(),
-        session.expiresAt());
+        session.expiresAt(),
+        session.shippingAddress(),
+        session.shippingOptions(),
+        session.shippingOption());
   }
 
   private static Money eur(long amountMinor) {

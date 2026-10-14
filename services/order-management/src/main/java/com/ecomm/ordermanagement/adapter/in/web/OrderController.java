@@ -69,7 +69,8 @@ class OrderController {
             request.toCustomerId(),
             request.toOrderLines(),
             request.toDiscounts(),
-            request.toTax());
+            request.toTax(),
+            request.toShipping());
     log.info("Placed Order {}", order.id());
     return ResponseEntity.created(URI.create("/orders/" + order.id()))
         .body(OrderResponse.of(order));

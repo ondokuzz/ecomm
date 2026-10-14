@@ -5,6 +5,7 @@ import {
   checkoutProblem,
   sessionCountdown,
   sessionHoldsCart,
+  hasShipping,
   sessionSummaryRows,
 } from './checkout'
 
@@ -55,9 +56,24 @@ const session: CheckoutSession = {
   subtotal: eur(172700),
   discounts: [],
   tax: eur(0),
+  shippingAddress: null,
+  shippingOptions: [],
+  shippingOption: null,
+  shippingCost: eur(0),
   total: eur(172700),
   expiresAt: '2026-09-30T10:15:00Z',
 }
+
+describe('hasShipping', () => {
+  const express = { id: 'EXPRESS', carrier: 'Mock Carrier', cost: eur(999), estimatedDays: 1 }
+  const berlin = { recipientName: 'Erika', line1: 'Hauptstraße 5', postcode: '10115', city: 'Berlin', country: 'DE' }
+
+  it('needs both an address and a chosen option before the session can be paid', () => {
+    expect(hasShipping(session)).toBe(false)
+    expect(hasShipping({ ...session, shippingAddress: berlin })).toBe(false)
+    expect(hasShipping({ ...session, shippingAddress: berlin, shippingOption: express })).toBe(true)
+  })
+})
 
 describe('sessionCountdown', () => {
   const expiresAt = Date.parse(session.expiresAt)

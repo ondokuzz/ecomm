@@ -11,8 +11,11 @@ import java.util.UUID;
 /**
  * A Customer's confirmed intent to purchase one or more Variants. It belongs to the Customer who
  * placed it, and only they may see it. Its total is the sum of its lines, less each of its {@code
- * discounts} (a Campaign's or a Coupon's, in the order they applied), plus its {@code tax}, all in
- * one currency, and never below zero.
+ * discounts} (a Campaign's or a Coupon's, in the order they applied), plus its {@code tax}, plus
+ * its Shipping cost, all in one currency, and never below zero. Discounts never touch Shipping.
+ *
+ * <p>Its {@code shipping} is where it goes and how; an Order placed before Orders had Shipping has
+ * none, and is null.
  *
  * <p>Its {@code statusHistory} holds every Order Status it has been in, oldest first, starting with
  * its placement; entries are only ever appended. Its {@code version} starts at 1 and goes up by one
@@ -24,6 +27,7 @@ public record Order(
     List<OrderLine> lines,
     List<Discount> discounts,
     Money tax,
+    Shipping shipping,
     List<StatusHistoryEntry> statusHistory,
     long version) {
 
@@ -42,8 +46,9 @@ public record Order(
   /**
    * A new Order in {@link OrderStatus#PLACED}. Throws {@link InvalidOrderException} unless it names
    * a valid Customer, has at least one line, each Variant appears once, every line, Discount and
-   * the tax are in the same currency, the tax isn't negative, and the Discounts together are no
-   * larger than the lines plus the tax.
+   * the tax are in the same currency, the tax isn't negative, it has {@code shipping} whose cost is
+   * in that currency too, and the Discounts together are no larger than the lines plus the tax:
+   * they never touch the Shipping cost.
    */
   public static Order place(
       UUID id,
@@ -51,6 +56,7 @@ public record Order(
       List<OrderLine> lines,
       List<Discount> discounts,
       Money tax,
+      Shipping shipping,
       Caller placedBy,
       Instant placedAt) {
     requireValidCustomerId(customerId);
@@ -87,10 +93,17 @@ public record Order(
     if (!tax.currency().equals(currency)) {
       throw new InvalidOrderException("the tax must be in the order's currency");
     }
+    if (shipping == null) {
+      throw new InvalidOrderException("an order needs a shippingAddress and a shippingOption");
+    }
+    if (!shipping.option().cost().currency().equals(currency)) {
+      throw new InvalidOrderException("the shipping cost must be in the order's currency");
+    }
     var placement = StatusHistoryEntry.of(OrderStatus.PLACED, placedAt, placedBy);
-    var order = new Order(id, customerId, lines, discounts, tax, List.of(placement), 1);
+    var order = new Order(id, customerId, lines, discounts, tax, shipping, List.of(placement), 1);
     // Rejects a total too large to hold, or below zero, before the Order is recorded.
-    if (order.total().amountMinor() < 0) {
+    order.total();
+    if (order.goodsTotalMinor() < 0) {
       throw new InvalidOrderException("the discounts are larger than the lines plus the tax");
     }
     return order;
@@ -107,7 +120,7 @@ public record Order(
     }
     var history = new ArrayList<>(statusHistory);
     history.add(StatusHistoryEntry.of(next, at, changedBy));
-    return new Order(id, customerId, lines, discounts, tax, history, version + 1);
+    return new Order(id, customerId, lines, discounts, tax, shipping, history, version + 1);
   }
 
   /** The Order Status it is in now: the last one in its history. */
@@ -134,14 +147,25 @@ public record Order(
     return lines.get(0).unitPrice().currency();
   }
 
-  /** What the Customer pays: the {@link #subtotal()}, less every Discount, plus the tax. */
+  /**
+   * What the Customer pays: the {@link #subtotal()}, less every Discount, plus the tax, plus the
+   * Shipping cost, if the Order has Shipping.
+   */
   public Money total() {
+    var totalMinor = goodsTotalMinor();
+    if (shipping != null) {
+      totalMinor = addExact(totalMinor, shipping.option().cost().amountMinor());
+    }
+    return new Money(totalMinor, currency());
+  }
+
+  /** The {@link #subtotal()}, less every Discount, plus the tax: what the Discounts touch. */
+  private long goodsTotalMinor() {
     var discountedMinor = subtotal().amountMinor();
     for (var discount : discounts) {
       discountedMinor = addExact(discountedMinor, -discount.amount().amountMinor());
     }
-    var totalMinor = addExact(discountedMinor, tax.amountMinor());
-    return new Money(totalMinor, currency());
+    return addExact(discountedMinor, tax.amountMinor());
   }
 
   private static long addExact(long a, long b) {

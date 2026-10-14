@@ -4,13 +4,18 @@ import com.ecomm.checkoutpricing.application.port.in.CheckoutUnavailableExceptio
 import com.ecomm.checkoutpricing.application.port.in.CheckoutUseCase;
 import com.ecomm.checkoutpricing.application.port.in.DownstreamFailureException;
 import com.ecomm.checkoutpricing.application.port.in.ServiceTokenUnavailableException;
+import com.ecomm.checkoutpricing.application.port.in.ShippingUnavailableException;
 import com.ecomm.checkoutpricing.domain.CheckoutSessionExpiredException;
 import com.ecomm.checkoutpricing.domain.CheckoutSessionNotFoundException;
 import com.ecomm.checkoutpricing.domain.CouponNotApplicableException;
 import com.ecomm.checkoutpricing.domain.EmptyCartException;
+import com.ecomm.checkoutpricing.domain.InvalidShippingAddressException;
 import com.ecomm.checkoutpricing.domain.MixedCurrencyException;
 import com.ecomm.checkoutpricing.domain.NoPaymentAttemptException;
 import com.ecomm.checkoutpricing.domain.OutOfStockException;
+import com.ecomm.checkoutpricing.domain.ShippingIncompleteException;
+import com.ecomm.checkoutpricing.domain.ShippingOptionNotQuotedException;
+import com.ecomm.checkoutpricing.domain.UndeliverableCountryException;
 import com.ecomm.checkoutpricing.domain.UnknownVariantsException;
 import com.ecomm.commons.security.CurrentCustomer;
 import java.net.URI;
@@ -31,9 +36,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The calling Customer checks out their own Cart, in two steps: a Checkout Session holds it, and
- * may take a Coupon, then paying the session buys it. Needs a {@code CUSTOMER} token, which
- * Checkout also forwards to Cart.
+ * The calling Customer checks out their own Cart, in two steps: a Checkout Session holds it, takes
+ * a Shipping address and a Shipping option, and may take a Coupon, then paying the session buys it.
+ * Needs a {@code CUSTOMER} token, which Checkout also forwards to Cart.
  */
 @RestController
 @RequestMapping("/checkout/sessions")
@@ -93,11 +98,53 @@ class CheckoutSessionController {
   }
 
   /**
+   * 200 with the session sent to the address, normalised, and the Shipping options quoted for it; a
+   * chosen option no longer offered is cleared. 422 with {@code reason} {@code
+   * invalidShippingAddress} and each field's problem in {@code errors}, or {@code
+   * undeliverableCountry} with the {@code country}; 503 with {@code reason} {@code
+   * shippingUnavailable} when Fulfillment & Shipping can't quote. Those change nothing.
+   */
+  @PutMapping("/{id}/shipping-address")
+  SessionResponse setShippingAddress(
+      @PathVariable String id,
+      CurrentCustomer customer,
+      @RequestBody(required = false) ShippingAddressRequest request) {
+    var session =
+        checkout.setShippingAddress(customer.id(), id, ShippingAddressRequest.addressOf(request));
+    log.info(
+        "Checkout Session {} ships to {}, with {} Shipping options quoted",
+        id,
+        session.shippingAddress().country(),
+        session.shippingOptions().size());
+    return SessionResponse.of(session);
+  }
+
+  /**
+   * 200 with the session, the quoted Shipping option chosen and its cost in the total; 422 with
+   * {@code reason} {@code shippingOptionNotQuoted} for any other.
+   */
+  @PutMapping("/{id}/shipping-option")
+  SessionResponse chooseShippingOption(
+      @PathVariable String id,
+      CurrentCustomer customer,
+      @RequestBody(required = false) ShippingOptionRequest request) {
+    var session =
+        checkout.chooseShippingOption(customer.id(), id, ShippingOptionRequest.optionIdOf(request));
+    log.info(
+        "Checkout Session {} ships {} for {}",
+        id,
+        session.shippingOption().id(),
+        session.shippingCost());
+    return SessionResponse.of(session);
+  }
+
+  /**
    * Pays the session through the checkout Saga, waiting a while for how it ends: 200 with the paid
    * Order's ID and Order Status; 402 with the gateway's {@code declineReason}; 410 with {@code
    * reason} {@code holdExpired} when the Reservation stopped holding the Stock; 502 when the Saga
    * failed; and 202 while it is still going, with the payment's URL in {@code Location}. 410 too
-   * once the session has expired, and 503 with {@code reason} {@code checkoutUnavailable} when the
+   * once the session has expired, 409 with {@code reason} {@code shippingIncomplete} until it has a
+   * Shipping address and option, and 503 with {@code reason} {@code checkoutUnavailable} when the
    * Saga can't be started. The body is optional here only so that a caller who isn't a Customer
    * gets its 403 before a missing body gets a 400.
    */
@@ -175,6 +222,55 @@ class CheckoutSessionController {
     var problem =
         ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, e.getMessage());
     problem.setProperty("reason", e.reason());
+    return problem;
+  }
+
+  @ExceptionHandler(InvalidShippingRequestException.class)
+  ProblemDetail invalidShippingRequest(InvalidShippingRequestException e) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+  }
+
+  @ExceptionHandler(InvalidShippingAddressException.class)
+  ProblemDetail invalidShippingAddress(InvalidShippingAddressException e) {
+    var problem =
+        ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, e.getMessage());
+    problem.setProperty("reason", "invalidShippingAddress");
+    problem.setProperty("errors", e.violations());
+    return problem;
+  }
+
+  @ExceptionHandler(UndeliverableCountryException.class)
+  ProblemDetail undeliverableCountry(UndeliverableCountryException e) {
+    var problem =
+        ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, e.getMessage());
+    problem.setProperty("reason", "undeliverableCountry");
+    problem.setProperty("country", e.country());
+    return problem;
+  }
+
+  @ExceptionHandler(ShippingOptionNotQuotedException.class)
+  ProblemDetail shippingOptionNotQuoted(ShippingOptionNotQuotedException e) {
+    var problem =
+        ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, e.getMessage());
+    problem.setProperty("reason", "shippingOptionNotQuoted");
+    return problem;
+  }
+
+  @ExceptionHandler(ShippingIncompleteException.class)
+  ProblemDetail shippingIncomplete(ShippingIncompleteException e) {
+    var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
+    problem.setProperty("reason", "shippingIncomplete");
+    return problem;
+  }
+
+  @ExceptionHandler(ShippingUnavailableException.class)
+  ProblemDetail shippingUnavailable(ShippingUnavailableException e) {
+    log.warn("Fulfillment & Shipping couldn't quote", e);
+    var problem =
+        ProblemDetail.forStatusAndDetail(
+            HttpStatus.SERVICE_UNAVAILABLE,
+            "Shipping can't be quoted right now; please try again.");
+    problem.setProperty("reason", "shippingUnavailable");
     return problem;
   }
 

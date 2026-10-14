@@ -4,13 +4,16 @@ import com.ecomm.commons.money.Money;
 import com.ecomm.ordermanagement.domain.Discount;
 import com.ecomm.ordermanagement.domain.InvalidOrderException;
 import com.ecomm.ordermanagement.domain.OrderLine;
+import com.ecomm.ordermanagement.domain.Shipping;
 import java.util.List;
 
 /**
- * The Customer, the Order Lines priced at checkout, every Discount in the order they applied, and
- * the tax: {@code {"customerId", "lines": [{"variantId", "quantity", "unitPrice": {"amountMinor",
- * "currency"}}], "discounts": [{"source", "couponCode" | "campaignId" and "campaignName",
- * "amount"}], "tax": {"amountMinor", "currency"}}}. Leaving out {@code discounts} means none. The
+ * The Customer, the Order Lines priced at checkout, every Discount in the order they applied, the
+ * tax and the Shipping: {@code {"customerId", "lines": [{"variantId", "quantity", "unitPrice":
+ * {"amountMinor", "currency"}}], "discounts": [{"source", "couponCode" | "campaignId" and
+ * "campaignName", "amount"}], "tax": {"amountMinor", "currency"}, "shippingAddress":
+ * {"recipientName", "line1", "line2"?, "postcode", "city", "region"?, "country", "phone"?},
+ * "shippingOption": {"id", "carrier", "cost"}}}. Leaving out {@code discounts} means none. The
  * values are taken raw so that {@code 1.5} or {@code "2"} are rejected rather than coerced.
  */
 record PlaceOrderRequest(
@@ -18,7 +21,49 @@ record PlaceOrderRequest(
     List<Line> lines,
     Object discount,
     List<DiscountBody> discounts,
-    Amount tax) {
+    Amount tax,
+    AddressBody shippingAddress,
+    OptionBody shippingOption) {
+
+  record AddressBody(
+      Object recipientName,
+      Object line1,
+      Object line2,
+      Object postcode,
+      Object city,
+      Object region,
+      Object country,
+      Object phone) {
+
+    Shipping.Address toAddress() {
+      return new Shipping.Address(
+          text(recipientName, "shippingAddress.recipientName"),
+          text(line1, "shippingAddress.line1"),
+          text(line2, "shippingAddress.line2"),
+          text(postcode, "shippingAddress.postcode"),
+          text(city, "shippingAddress.city"),
+          text(region, "shippingAddress.region"),
+          text(country, "shippingAddress.country"),
+          text(phone, "shippingAddress.phone"));
+    }
+  }
+
+  record OptionBody(Object id, Object carrier, Amount cost) {
+
+    Shipping.Option toOption() {
+      return new Shipping.Option(
+          text(id, "shippingOption.id"),
+          text(carrier, "shippingOption.carrier"),
+          cost == null ? null : cost.toMoney());
+    }
+  }
+
+  private static String text(Object value, String field) {
+    if (value != null && !(value instanceof String)) {
+      throw new InvalidOrderException(field + " must be a string");
+    }
+    return (String) value;
+  }
 
   record Line(Object variantId, Object quantity, Amount unitPrice) {
 
@@ -109,6 +154,16 @@ record PlaceOrderRequest(
    */
   Money toTax() {
     return tax == null ? null : tax.toMoney();
+  }
+
+  /** The Shipping, which Checkout sends with every Order; the Order rejects one without. */
+  Shipping toShipping() {
+    if (shippingAddress == null && shippingOption == null) {
+      return null;
+    }
+    return new Shipping(
+        shippingAddress == null ? null : shippingAddress.toAddress(),
+        shippingOption == null ? null : shippingOption.toOption());
   }
 
   List<OrderLine> toOrderLines() {

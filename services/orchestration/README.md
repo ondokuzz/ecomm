@@ -39,14 +39,21 @@ ID. Its input is the session as it stood when the Customer paid, as JSON:
             "unitPrice": {"amountMinor": 79900, "currency": "EUR"}}],
  "discounts": [{"source": "COUPON", "couponCode": "WELCOME10", "campaignId": null,
                 "campaignName": null, "amount": {"amountMinor": 15980, "currency": "EUR"}}],
- "tax": {"amountMinor": 0, "currency": "EUR"}, "reservationId": "…",
- "paymentMethod": "tok_approve", "correlationId": "…"}
+ "tax": {"amountMinor": 0, "currency": "EUR"},
+ "shippingAddress": {"recipientName": "Erika Mustermann", "line1": "Hauptstraße 5",
+                     "postcode": "10115", "city": "Berlin", "country": "DE"},
+ "shippingOption": {"id": "EXPRESS", "carrier": "Mock Carrier",
+                    "cost": {"amountMinor": 999, "currency": "EUR"}},
+ "reservationId": "…", "paymentMethod": "tok_approve", "correlationId": "…"}
 ```
+
+`shippingAddress` and `shippingOption` joined the input in Sprint 5; a run started before has
+neither.
 
 It answers `{"status", "orderId", "declineReason"}`, `status` being `PAID`, `DECLINED`,
 `HOLD_EXPIRED` or `FAILED`. The steps, in order:
 
-1. **Place the Order** (`POST /orders`). Transient failures (a 5xx, a timeout, no answer) are
+1. **Place the Order** (`POST /orders`), with its Shipping address and option. Transient failures (a 5xx, a timeout, no answer) are
    retried with backoff, from 1 to 10 seconds, for up to a minute. A 4xx is a bug, not retried: the
    outcome is `FAILED`, with nothing to undo.
 2. **Authorize the Payment** (`POST /payments`) for the total Order Management gave the Order.
@@ -99,6 +106,14 @@ if (version == Workflow.DEFAULT_VERSION) {
 The change ID names the change, and stays in the code until no run started before it is still open
 (at most 7 days after the last such run closed). Activity inputs and outputs change the same way: a
 new field is optional, and a removed one is still read until old runs are gone.
+
+The first such change is `shipping-on-orders` (Sprint 5, #74): placing the Order sends its
+Shipping. A run that placed its Order before the change replays at `DEFAULT_VERSION`, without
+Shipping, as it ran; every run that reaches placement after it records version 1. A run started
+before Sprint 5 has no Shipping in its input, so on either path Order Management refuses its
+placement with a 400: it ends `FAILED`, with nothing to undo, and the Customer pays the session
+again once it has a Shipping address and option. The change ID can go once no run from before
+Sprint 5 is open.
 
 ## Metrics
 
@@ -164,7 +179,9 @@ Orchestration calls:
   order with their keys and the Correlation ID, a decline, a 409 on commit, a 503 on placement
   retried with the same key, a refused placement, a gateway that keeps failing, a failing
   compensation and a failing mark-paid retried, a Cart that can't be cleared, two runs for one
-  session with keys of their own, and the counters on `/actuator/prometheus`;
+  session with keys of their own, the Order placed with its Shipping, a run started with Sprint 4's
+  input (no Shipping) ending `FAILED` with nothing to undo, and the counters on
+  `/actuator/prometheus`;
 - `CheckoutMetricsTest`: every counter at 0 before any checkout, and a run counting on those same
   series;
 - `ServiceTokenTest`: the token's caching, renewal and retry on a 401;

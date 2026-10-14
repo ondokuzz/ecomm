@@ -6,6 +6,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.equalToJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
+import static com.github.tomakehurst.wiremock.client.WireMock.notContaining;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.patch;
 import static com.github.tomakehurst.wiremock.client.WireMock.patchRequestedFor;
@@ -22,6 +23,8 @@ import com.ecomm.orchestration.application.port.in.CheckoutRequest;
 import com.ecomm.orchestration.application.port.in.CheckoutRequest.Amount;
 import com.ecomm.orchestration.application.port.in.CheckoutRequest.Discount;
 import com.ecomm.orchestration.application.port.in.CheckoutRequest.Line;
+import com.ecomm.orchestration.application.port.in.CheckoutRequest.ShippingAddress;
+import com.ecomm.orchestration.application.port.in.CheckoutRequest.ShippingOption;
 import com.github.tomakehurst.wiremock.client.MappingBuilder;
 import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
 import com.github.tomakehurst.wiremock.stubbing.ServeEvent;
@@ -32,6 +35,7 @@ import io.temporal.client.WorkflowStub;
 import java.time.Duration;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.BeforeEach;
@@ -119,7 +123,12 @@ class CheckoutWorkflowTest extends OrchestrationTest {
                     ],
                      "discounts": [{"source": "COUPON", "couponCode": "WELCOME10",
                                     "amount": {"amountMinor": 15980, "currency": "EUR"}}],
-                     "tax": {"amountMinor": 0, "currency": "EUR"}}
+                     "tax": {"amountMinor": 0, "currency": "EUR"},
+                     "shippingAddress": {"recipientName": "Erika Mustermann",
+                                         "line1": "Hauptstraße 5", "postcode": "10115",
+                                         "city": "Berlin", "country": "DE"},
+                     "shippingOption": {"id": "EXPRESS", "carrier": "Mock Carrier",
+                                        "cost": {"amountMinor": 999, "currency": "EUR"}}}
                     """)));
     // For the total Order Management gave the Order, not one worked out here.
     DOWNSTREAM.verify(
@@ -292,6 +301,44 @@ class CheckoutWorkflowTest extends OrchestrationTest {
   }
 
   @Test
+  void aRunStartedWithoutShippingAsBeforeSprint5PlacesNoOrderAndFailsWithNothingToUndo() {
+    stubEveryStep();
+    // Order Management refuses an Order without Shipping.
+    DOWNSTREAM.stubFor(
+        post("/orders")
+            .atPriority(1)
+            .withRequestBody(notContaining("shippingAddress"))
+            .willReturn(aResponse().withStatus(400)));
+    // The input Checkout sent before Shipping, which a run in flight across the upgrade still has.
+    var stub =
+        temporal.newUntypedWorkflowStub(
+            "checkout",
+            WorkflowOptions.newBuilder().setTaskQueue("checkout").setWorkflowId(sessionId).build());
+    stub.start(
+        Map.of(
+            "checkoutSessionId",
+            sessionId,
+            "customerId",
+            CUSTOMER_ID,
+            "lines",
+            List.of(new Line("PHN-PIXEL-9", 2, eur(79900))),
+            "discounts",
+            List.of(),
+            "tax",
+            eur(0),
+            "reservationId",
+            RESERVATION_ID,
+            "paymentMethod",
+            "tok_approve",
+            "correlationId",
+            CORRELATION_ID));
+
+    assertThat(stub.getResult(CheckoutOutcome.class))
+        .isEqualTo(new CheckoutOutcome(CheckoutOutcome.Status.FAILED, null, null));
+    assertThat(calls()).containsExactly("POST /orders");
+  }
+
+  @Test
   void aGatewayThatKeepsFailingIsTriedFourTimesWithOneKeyThenTheOrderIsCancelled() {
     stubEveryStep();
     DOWNSTREAM.stubFor(post("/payments").willReturn(aResponse().withStatus(502)));
@@ -441,10 +488,20 @@ class CheckoutWorkflowTest extends OrchestrationTest {
         List.of(new Line("PHN-PIXEL-9", 2, eur(79900))),
         List.of(new Discount("COUPON", "WELCOME10", null, null, eur(15980))),
         eur(0),
+        ADDRESS,
+        EXPRESS,
         RESERVATION_ID,
         paymentMethod,
         CORRELATION_ID);
   }
+
+  /** A Shipping address in Berlin, as Checkout validated it. */
+  static final ShippingAddress ADDRESS =
+      new ShippingAddress(
+          "Erika Mustermann", "Hauptstraße 5", null, "10115", "Berlin", null, "DE", null);
+
+  /** Express shipping at 9.99 EUR, as Fulfillment & Shipping quoted it. */
+  static final ShippingOption EXPRESS = new ShippingOption("EXPRESS", "Mock Carrier", eur(999));
 
   static Amount eur(long amountMinor) {
     return new Amount(amountMinor, "EUR");

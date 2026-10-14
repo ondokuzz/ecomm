@@ -64,6 +64,7 @@ abstract class CheckoutApiTest {
     registry.add("ecomm.checkout.catalog-url", () -> url);
     registry.add("ecomm.checkout.inventory-url", () -> url);
     registry.add("ecomm.checkout.promotions-url", () -> url);
+    registry.add("ecomm.checkout.fulfillment-shipping-url", () -> url);
     registry.add(
         "spring.security.oauth2.client.provider.keycloak.token-uri", () -> url + TOKEN_PATH);
     registry.add("spring.security.oauth2.client.registration.checkout.client-secret", () -> "test");
@@ -205,9 +206,84 @@ abstract class CheckoutApiTest {
         .exchange();
   }
 
-  /** Both steps of checkout: starts a Checkout Session, which must succeed, then pays it. */
+  /**
+   * Both steps of checkout: starts a Checkout Session, which must succeed, gives it {@link #BERLIN}
+   * and Express shipping, then pays it.
+   */
   RestTestClient.ResponseSpec checkout() {
-    return pay(startedSessionId());
+    return pay(shippedSessionId());
+  }
+
+  // --- Shipping ---
+
+  /** A Shipping address in Berlin, as the Customer enters it. */
+  static final String BERLIN =
+      """
+      {"recipientName": "Erika Mustermann", "line1": "Hauptstraße 5", "postcode": "10115",
+       "city": "Berlin", "country": "DE"}
+      """;
+
+  RestTestClient.ResponseSpec setShippingAddress(String sessionId, String body) {
+    return setShippingAddress(customerToken(), sessionId, body);
+  }
+
+  RestTestClient.ResponseSpec setShippingAddress(String token, String sessionId, String body) {
+    return http.put()
+        .uri("/checkout/sessions/{id}/shipping-address", sessionId)
+        .headers(h -> h.setBearerAuth(token))
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(body)
+        .exchange();
+  }
+
+  RestTestClient.ResponseSpec chooseShippingOption(String sessionId, String optionId) {
+    return http.put()
+        .uri("/checkout/sessions/{id}/shipping-option", sessionId)
+        .headers(h -> h.setBearerAuth(customerToken()))
+        .contentType(MediaType.APPLICATION_JSON)
+        .body("{\"optionId\": \"%s\"}".formatted(optionId))
+        .exchange();
+  }
+
+  /** Gives the session {@link #BERLIN} and Express shipping, both of which must succeed. */
+  void ship(String sessionId) {
+    setShippingAddress(sessionId, BERLIN).expectStatus().isOk();
+    chooseShippingOption(sessionId, "EXPRESS").expectStatus().isOk();
+  }
+
+  /** Starts a Checkout Session that must succeed, ships it as {@link #ship} does: its ID. */
+  String shippedSessionId() {
+    var sessionId = startedSessionId();
+    ship(sessionId);
+    return sessionId;
+  }
+
+  // --- Fulfillment & Shipping ---
+
+  static final String QUOTES_PATH = "/shipping/quotes";
+
+  /** A Shipping option as Fulfillment & Shipping quotes it, by the mock Carrier, in EUR. */
+  static String quotedOption(String id, long costMinor, int estimatedDays) {
+    return """
+        {"id": "%s", "carrier": "Mock Carrier", "cost": {"amountMinor": %d, "currency": "EUR"},
+         "estimatedDays": %d}
+        """
+        .formatted(id, costMinor, estimatedDays);
+  }
+
+  /** Fulfillment & Shipping quotes these options, from Berlin. */
+  static void stubQuote(String... options) {
+    stubQuote(
+        okJson("{\"warehouseId\": \"WH-BER\", \"options\": [" + String.join(",", options) + "]}"));
+  }
+
+  static void stubQuote(ResponseDefinitionBuilder response) {
+    DOWNSTREAM.stubFor(post(QUOTES_PATH).willReturn(response));
+  }
+
+  /** The domestic quote from Berlin: Standard at 4.99 in 2 days, Express at 9.99 in 1. */
+  static void stubDomesticQuote() {
+    stubQuote(quotedOption("STANDARD", 499, 2), quotedOption("EXPRESS", 999, 1));
   }
 
   /** The part of a Checkout Session the tests read by type; the rest they read by JSON path. */
@@ -384,6 +460,7 @@ abstract class CheckoutApiTest {
     stubCampaigns();
     stubReserve();
     stubRelease();
+    stubDomesticQuote();
   }
 
   /** A clock that reads the real time plus however far a test has moved it. */

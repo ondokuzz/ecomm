@@ -1,12 +1,14 @@
 package com.ecomm.checkoutpricing;
 
 import com.ecomm.checkoutpricing.application.CheckoutService;
+import com.ecomm.checkoutpricing.application.port.out.AddressValidator;
 import com.ecomm.checkoutpricing.application.port.out.CartPort;
 import com.ecomm.checkoutpricing.application.port.out.CatalogPort;
 import com.ecomm.checkoutpricing.application.port.out.CheckoutSaga;
 import com.ecomm.checkoutpricing.application.port.out.CheckoutSessionRepository;
 import com.ecomm.checkoutpricing.application.port.out.InventoryPort;
 import com.ecomm.checkoutpricing.application.port.out.PromotionsPort;
+import com.ecomm.checkoutpricing.application.port.out.ShippingQuotes;
 import com.ecomm.checkoutpricing.application.port.out.TaxCalculator;
 import com.ecomm.checkoutpricing.application.port.out.TimeSource;
 import org.springframework.context.annotation.Bean;
@@ -28,7 +30,19 @@ class UseCaseConfiguration {
       PromotionsPort promotions,
       TaxCalculator taxes,
       CheckoutSessionRepository sessions,
+      AddressValidator addresses,
+      ShippingQuotes shippingQuotes,
       TimeSource time) {
-    return new CheckoutService(cart, catalog, inventory, saga, promotions, taxes, sessions, time);
+    return new CheckoutService(
+        cart,
+        catalog,
+        inventory,
+        saga,
+        promotions,
+        taxes,
+        sessions,
+        addresses,
+        shippingQuotes,
+        time);
   }
 }

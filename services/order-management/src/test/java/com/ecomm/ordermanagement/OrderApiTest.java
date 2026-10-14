@@ -48,9 +48,26 @@ abstract class OrderApiTest {
   /** The Customer every test places Orders for, unless it names another. */
   static final String CUSTOMER = "customer-42";
 
+  /** A Shipping address in Berlin, as Checkout validated it. */
+  static final String ADDRESS =
+      """
+      {"recipientName": "Erika Mustermann", "line1": "Hauptstraße 5", "line2": "2. OG",
+       "postcode": "10115", "city": "Berlin", "country": "DE", "phone": "+49 30 1234567"}
+      """;
+
+  /** Express shipping at 9.99 EUR, as Fulfillment & Shipping quoted it. */
+  static final String OPTION =
+      """
+      {"id": "EXPRESS", "carrier": "Mock Carrier", "cost": {"amountMinor": 999, "currency": "EUR"}}
+      """;
+
+  /** The body's Shipping fields: {@link #ADDRESS} and {@link #OPTION}. */
+  static final String SHIPPING =
+      "\"shippingAddress\": " + ADDRESS + ", \"shippingOption\": " + OPTION;
+
   /**
    * Two Pixel 9s at 799.00 EUR and one pair of AirPods Pro at 149.50 EUR, with no discount and no
-   * tax: 1747.50 EUR in all.
+   * tax: 1747.50 EUR, and Express shipping at 9.99 EUR: 1757.49 EUR in all.
    */
   static String twoLineOrder(String customerId) {
     return """
@@ -60,9 +77,9 @@ abstract class OrderApiTest {
           {"variantId": "AUD-AIRPODS-PRO-2", "quantity": 1,
            "unitPrice": {"amountMinor": 14950, "currency": "EUR"}}
         ],
-         "tax": {"amountMinor": 0, "currency": "EUR"}}
+         "tax": {"amountMinor": 0, "currency": "EUR"}, %s}
         """
-        .formatted(customerId);
+        .formatted(customerId, SHIPPING);
   }
 
   @Autowired RestTestClient http;

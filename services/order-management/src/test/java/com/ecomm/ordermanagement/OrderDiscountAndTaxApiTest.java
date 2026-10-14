@@ -28,7 +28,10 @@ class OrderDiscountAndTaxApiTest extends OrderApiTest {
       """
           .formatted(CAMPAIGN_ID);
 
-  /** The two-line Order (1747.50 EUR) with {@code extra} fields added to its body. */
+  /**
+   * The two-line Order (1747.50 EUR), with Express shipping at 9.99 EUR, and {@code extra} fields
+   * added to its body.
+   */
   static String twoLineOrderWith(String extra) {
     return """
         {"customerId": "%s", "lines": [
@@ -36,9 +39,9 @@ class OrderDiscountAndTaxApiTest extends OrderApiTest {
            "unitPrice": {"amountMinor": 79900, "currency": "EUR"}},
           {"variantId": "AUD-AIRPODS-PRO-2", "quantity": 1,
            "unitPrice": {"amountMinor": 14950, "currency": "EUR"}}
-        ], %s}
+        ], %s, %s}
         """
-        .formatted(CUSTOMER, extra);
+        .formatted(CUSTOMER, extra, SHIPPING);
   }
 
   OrderView placedWith(String extra) {
@@ -74,22 +77,22 @@ class OrderDiscountAndTaxApiTest extends OrderApiTest {
   }
 
   @Test
-  void theTotalIsTheLinesLessEveryDiscountPlusTheTax() {
+  void theTotalIsTheLinesLessEveryDiscountPlusTheTaxPlusTheShippingCost() {
     var order =
         placedWith(TWO_DISCOUNTS + ", \"tax\": {\"amountMinor\": 31455, \"currency\": \"EUR\"}");
 
     assertThat(order.subtotal()).isEqualTo(new AmountView(174750, "EUR"));
-    // 1747.50 − 22.42 − 172.51 + 314.55
-    assertThat(order.total()).isEqualTo(new AmountView(186712, "EUR"));
+    // 1747.50 − 22.42 − 172.51 + 314.55 + 9.99
+    assertThat(order.total()).isEqualTo(new AmountView(187711, "EUR"));
   }
 
   @Test
-  void withoutDiscountsTheTotalIsTheLinesPlusTheTax() {
+  void withoutDiscountsTheTotalIsTheLinesPlusTheTaxPlusTheShippingCost() {
     var order =
         placedWith("\"discounts\": [], \"tax\": {\"amountMinor\": 34950, \"currency\": \"EUR\"}");
 
     assertThat(order.discounts()).isEmpty();
-    assertThat(order.total()).isEqualTo(new AmountView(209700, "EUR"));
+    assertThat(order.total()).isEqualTo(new AmountView(210699, "EUR"));
   }
 
   @Test
@@ -97,11 +100,11 @@ class OrderDiscountAndTaxApiTest extends OrderApiTest {
     var order = placedWith("\"tax\": {\"amountMinor\": 34950, \"currency\": \"EUR\"}");
 
     assertThat(order.discounts()).isEmpty();
-    assertThat(order.total()).isEqualTo(new AmountView(209700, "EUR"));
+    assertThat(order.total()).isEqualTo(new AmountView(210699, "EUR"));
   }
 
   @Test
-  void discountsCanBringTheTotalToZero() {
+  void discountsCanTakeTheLinesToZeroButLeaveTheShippingCost() {
     var order =
         placedWith(
             """
@@ -113,7 +116,7 @@ class OrderDiscountAndTaxApiTest extends OrderApiTest {
             "tax": {"amountMinor": 0, "currency": "EUR"}
             """);
 
-    assertThat(order.total()).isEqualTo(new AmountView(0, "EUR"));
+    assertThat(order.total()).isEqualTo(new AmountView(999, "EUR"));
   }
 
   @ParameterizedTest

@@ -1,12 +1,14 @@
 package com.ecomm.checkoutpricing.application;
 
 import com.ecomm.checkoutpricing.application.port.in.CheckoutUseCase;
+import com.ecomm.checkoutpricing.application.port.out.AddressValidator;
 import com.ecomm.checkoutpricing.application.port.out.CartPort;
 import com.ecomm.checkoutpricing.application.port.out.CatalogPort;
 import com.ecomm.checkoutpricing.application.port.out.CheckoutSaga;
 import com.ecomm.checkoutpricing.application.port.out.CheckoutSessionRepository;
 import com.ecomm.checkoutpricing.application.port.out.InventoryPort;
 import com.ecomm.checkoutpricing.application.port.out.PromotionsPort;
+import com.ecomm.checkoutpricing.application.port.out.ShippingQuotes;
 import com.ecomm.checkoutpricing.application.port.out.TaxCalculator;
 import com.ecomm.checkoutpricing.application.port.out.TimeSource;
 import com.ecomm.checkoutpricing.domain.CartLine;
@@ -19,6 +21,9 @@ import com.ecomm.checkoutpricing.domain.NoPaymentAttemptException;
 import com.ecomm.checkoutpricing.domain.PaymentAttempt;
 import com.ecomm.checkoutpricing.domain.PricedCart;
 import com.ecomm.checkoutpricing.domain.PricedLine;
+import com.ecomm.checkoutpricing.domain.ShippingAddress;
+import com.ecomm.checkoutpricing.domain.ShippingIncompleteException;
+import com.ecomm.checkoutpricing.domain.UndeliverableCountryException;
 import com.ecomm.checkoutpricing.domain.UnknownVariantsException;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -28,8 +33,9 @@ import java.util.UUID;
 
 /**
  * Checks out in two steps. Starting prices the Cart and holds its Stock through a Reservation, in a
- * Checkout Session. Paying hands the session to the checkout Saga, which places the Order, takes
- * the Payment and the Stock, and undoes what it must when a step fails.
+ * Checkout Session, which then takes a Shipping address and a Shipping option. Paying hands the
+ * session to the checkout Saga, which places the Order, takes the Payment and the Stock, and undoes
+ * what it must when a step fails.
  */
 public class CheckoutService implements CheckoutUseCase {
 
@@ -42,6 +48,8 @@ public class CheckoutService implements CheckoutUseCase {
   private final PromotionsPort promotions;
   private final TaxCalculator taxes;
   private final CheckoutSessionRepository sessions;
+  private final AddressValidator addresses;
+  private final ShippingQuotes shippingQuotes;
   private final TimeSource time;
 
   public CheckoutService(
@@ -52,6 +60,8 @@ public class CheckoutService implements CheckoutUseCase {
       PromotionsPort promotions,
       TaxCalculator taxes,
       CheckoutSessionRepository sessions,
+      AddressValidator addresses,
+      ShippingQuotes shippingQuotes,
       TimeSource time) {
     this.cart = cart;
     this.catalog = catalog;
@@ -60,6 +70,8 @@ public class CheckoutService implements CheckoutUseCase {
     this.promotions = promotions;
     this.taxes = taxes;
     this.sessions = sessions;
+    this.addresses = addresses;
+    this.shippingQuotes = shippingQuotes;
     this.time = time;
   }
 
@@ -113,8 +125,31 @@ public class CheckoutService implements CheckoutUseCase {
   }
 
   @Override
+  public CheckoutSession setShippingAddress(
+      String customerId, String sessionId, ShippingAddress address) {
+    var session = live(customerId, sessionId);
+    var validated = addresses.validate(address);
+    var options =
+        shippingQuotes.quote(validated, session.cart().lines(), session.subtotal().currency());
+    if (options.isEmpty()) {
+      throw new UndeliverableCountryException(validated.country());
+    }
+    return replaced(session.withShippingAddress(validated, options));
+  }
+
+  @Override
+  public CheckoutSession chooseShippingOption(
+      String customerId, String sessionId, String optionId) {
+    var session = live(customerId, sessionId);
+    return replaced(session.withShippingOption(optionId));
+  }
+
+  @Override
   public PaymentAttempt pay(String customerId, String sessionId, String paymentMethod) {
     var session = live(customerId, sessionId);
+    if (!session.hasShipping()) {
+      throw new ShippingIncompleteException(sessionId);
+    }
     // Its session ends once it is paid, but until then, paying it again must not buy it twice.
     var paid = saga.latestAttempt(sessionId).filter(a -> a.status() == PaymentAttempt.Status.PAID);
     return paid.orElseGet(() -> saga.pay(session, paymentMethod));
@@ -161,10 +196,14 @@ public class CheckoutService implements CheckoutUseCase {
   private CheckoutSession discounted(CheckoutSession session, Optional<String> couponCode) {
     var discounts = promotions.evaluate(session.cart().lines(), couponCode);
     var tax = taxes.tax(session.cart(), Discount.total(discounts, session.subtotal().currency()));
-    var updated = session.withDiscounts(discounts, tax);
-    // Replaced or lapsed while the Discounts were being evaluated.
+    return replaced(session.withDiscounts(discounts, tax));
+  }
+
+  /** Keeps {@code updated} in place of the session it changes, unless that has gone meanwhile. */
+  private CheckoutSession replaced(CheckoutSession updated) {
+    // Replaced or lapsed while it was being changed.
     if (!sessions.replace(updated)) {
-      throw new CheckoutSessionNotFoundException(session.id());
+      throw new CheckoutSessionNotFoundException(updated.id());
     }
     return updated;
   }

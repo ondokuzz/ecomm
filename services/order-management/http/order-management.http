@@ -31,7 +31,7 @@ grant_type=client_credentials&client_id=orchestration&client_secret={{orchestrat
 > {% client.global.set("orchestrationToken", response.body.access_token); %}
 
 ### The checkout Saga places an Order for the Customer: 201 with the Order in PLACED, its subtotal,
-### tax, total and its Order Status history, its placement by ORCHESTRATION. Every command takes an
+### tax, Shipping address and option, total (Standard's 4.99 included) and its Order Status history, its placement by ORCHESTRATION. Every command takes an
 ### Idempotency-Key; each request here sends a new one
 POST {{orders}}/orders
 Authorization: Bearer {{orchestrationToken}}
@@ -42,7 +42,10 @@ Content-Type: application/json
   {"variantId": "PHN-PIXEL-9", "quantity": 2, "unitPrice": {"amountMinor": 79900, "currency": "EUR"}},
   {"variantId": "AUD-AIRPODS-PRO-2", "quantity": 1, "unitPrice": {"amountMinor": 14950, "currency": "EUR"}}
 ],
- "tax": {"amountMinor": 34950, "currency": "EUR"}}
+ "tax": {"amountMinor": 34950, "currency": "EUR"},
+ "shippingAddress": {"recipientName": "Demo Customer", "line1": "Hauptstraße 5", "postcode": "10115",
+                     "city": "Berlin", "country": "DE"},
+ "shippingOption": {"id": "STANDARD", "carrier": "Mock Carrier", "cost": {"amountMinor": 499, "currency": "EUR"}}}
 
 > {% client.global.set("orderId", response.body.id); %}
 
@@ -59,7 +62,10 @@ Content-Type: application/json
    {"source": "CAMPAIGN", "campaignId": "b4a50413-0000-4000-8000-000000000001",
     "campaignName": "Phone week", "amount": {"amountMinor": 3995, "currency": "EUR"}},
    {"source": "COUPON", "couponCode": "WELCOME10", "amount": {"amountMinor": 7590, "currency": "EUR"}}],
- "tax": {"amountMinor": 13663, "currency": "EUR"}}
+ "tax": {"amountMinor": 13663, "currency": "EUR"},
+ "shippingAddress": {"recipientName": "Demo Customer", "line1": "Hauptstraße 5", "postcode": "10115",
+                     "city": "Berlin", "country": "DE"},
+ "shippingOption": {"id": "STANDARD", "carrier": "Mock Carrier", "cost": {"amountMinor": 499, "currency": "EUR"}}}
 
 > {% client.global.set("discountedOrderId", response.body.id); %}
 
@@ -134,7 +140,10 @@ Content-Type: application/json
   {"variantId": "PHN-PIXEL-9", "quantity": 1, "unitPrice": {"amountMinor": 79900, "currency": "EUR"}},
   {"variantId": "AUD-AIRPODS-PRO-2", "quantity": 1, "unitPrice": {"amountMinor": 14950, "currency": "USD"}}
 ],
- "tax": {"amountMinor": 0, "currency": "EUR"}}
+ "tax": {"amountMinor": 0, "currency": "EUR"},
+ "shippingAddress": {"recipientName": "Demo Customer", "line1": "Hauptstraße 5", "postcode": "10115",
+                     "city": "Berlin", "country": "DE"},
+ "shippingOption": {"id": "STANDARD", "carrier": "Mock Carrier", "cost": {"amountMinor": 499, "currency": "EUR"}}}
 
 ### Discounts larger than the lines plus the tax: 400
 POST {{orders}}/orders
@@ -147,7 +156,10 @@ Content-Type: application/json
 ],
  "discounts": [{"source": "COUPON", "couponCode": "TOOMUCH",
                 "amount": {"amountMinor": 99999, "currency": "EUR"}}],
- "tax": {"amountMinor": 0, "currency": "EUR"}}
+ "tax": {"amountMinor": 0, "currency": "EUR"},
+ "shippingAddress": {"recipientName": "Demo Customer", "line1": "Hauptstraße 5", "postcode": "10115",
+                     "city": "Berlin", "country": "DE"},
+ "shippingOption": {"id": "STANDARD", "carrier": "Mock Carrier", "cost": {"amountMinor": 499, "currency": "EUR"}}}
 
 ### The single "discount" of before Sprint 3 is gone: 400
 POST {{orders}}/orders
@@ -159,6 +171,20 @@ Content-Type: application/json
   {"variantId": "PHN-PIXEL-9", "quantity": 1, "unitPrice": {"amountMinor": 79900, "currency": "EUR"}}
 ],
  "discount": {"couponCode": "WELCOME10", "amount": {"amountMinor": 7990, "currency": "EUR"}},
+ "tax": {"amountMinor": 0, "currency": "EUR"},
+ "shippingAddress": {"recipientName": "Demo Customer", "line1": "Hauptstraße 5", "postcode": "10115",
+                     "city": "Berlin", "country": "DE"},
+ "shippingOption": {"id": "STANDARD", "carrier": "Mock Carrier", "cost": {"amountMinor": 499, "currency": "EUR"}}}
+
+### No Shipping, as a checkout Saga run from before Sprint 5 places it: 400
+POST {{orders}}/orders
+Authorization: Bearer {{orchestrationToken}}
+Idempotency-Key: {{$uuid}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}", "lines": [
+  {"variantId": "PHN-PIXEL-9", "quantity": 1, "unitPrice": {"amountMinor": 79900, "currency": "EUR"}}
+],
  "tax": {"amountMinor": 0, "currency": "EUR"}}
 
 ### No tax: 400; the Saga always sends it, even when zero
@@ -179,7 +205,10 @@ Content-Type: application/json
 {"customerId": "{{customerId}}", "lines": [
   {"variantId": "PHN-PIXEL-9", "quantity": 1, "unitPrice": {"amountMinor": 1, "currency": "EUR"}}
 ],
- "tax": {"amountMinor": 0, "currency": "EUR"}}
+ "tax": {"amountMinor": 0, "currency": "EUR"},
+ "shippingAddress": {"recipientName": "Demo Customer", "line1": "Hauptstraße 5", "postcode": "10115",
+                     "city": "Berlin", "country": "DE"},
+ "shippingOption": {"id": "STANDARD", "carrier": "Mock Carrier", "cost": {"amountMinor": 499, "currency": "EUR"}}}
 
 ### A Customer can't change their Order's status, only Orchestration can: 403
 PATCH {{orders}}/orders/{{orderId}}/status
@@ -253,7 +282,10 @@ Content-Type: application/json
 {"customerId": "{{customerId}}", "lines": [
   {"variantId": "PHN-PIXEL-9", "quantity": 1, "unitPrice": {"amountMinor": 79900, "currency": "EUR"}}
 ],
- "tax": {"amountMinor": 0, "currency": "EUR"}}
+ "tax": {"amountMinor": 0, "currency": "EUR"},
+ "shippingAddress": {"recipientName": "Demo Customer", "line1": "Hauptstraße 5", "postcode": "10115",
+                     "city": "Berlin", "country": "DE"},
+ "shippingOption": {"id": "STANDARD", "carrier": "Mock Carrier", "cost": {"amountMinor": 499, "currency": "EUR"}}}
 
 > {% client.global.set("sagaOrderId", response.body.id); %}
 
@@ -266,7 +298,10 @@ Content-Type: application/json
 {"customerId": "{{customerId}}", "lines": [
   {"variantId": "PHN-PIXEL-9", "quantity": 1, "unitPrice": {"amountMinor": 79900, "currency": "EUR"}}
 ],
- "tax": {"amountMinor": 0, "currency": "EUR"}}
+ "tax": {"amountMinor": 0, "currency": "EUR"},
+ "shippingAddress": {"recipientName": "Demo Customer", "line1": "Hauptstraße 5", "postcode": "10115",
+                     "city": "Berlin", "country": "DE"},
+ "shippingOption": {"id": "STANDARD", "carrier": "Mock Carrier", "cost": {"amountMinor": 499, "currency": "EUR"}}}
 
 ### Orchestration marks it paid: its history gains PAID, changedBy ORCHESTRATION
 < {% client.global.set("payKey", "http-file-" + $random.uuid + ":run-1:markOrderPaid"); %}
@@ -300,4 +335,7 @@ Content-Type: application/json
 {"customerId": "{{customerId}}", "lines": [
   {"variantId": "PHN-PIXEL-9", "quantity": 1, "unitPrice": {"amountMinor": 79900, "currency": "EUR"}}
 ],
- "tax": {"amountMinor": 0, "currency": "EUR"}}
+ "tax": {"amountMinor": 0, "currency": "EUR"},
+ "shippingAddress": {"recipientName": "Demo Customer", "line1": "Hauptstraße 5", "postcode": "10115",
+                     "city": "Berlin", "country": "DE"},
+ "shippingOption": {"id": "STANDARD", "carrier": "Mock Carrier", "cost": {"amountMinor": 499, "currency": "EUR"}}}

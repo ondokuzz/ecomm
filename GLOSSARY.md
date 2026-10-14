@@ -97,11 +97,11 @@ A Customer's in-progress, unconfirmed selection of Variants and quantities. Ephe
 _Avoid_: Basket, Bag
 
 **Checkout**:
-How a Customer turns their Cart into an Order, in two steps. Starting it opens a Checkout Session: the Cart's Variants are priced and their Stock reserved, which Checkout does itself. Paying the session starts the checkout Saga, a Payment attempt, which places the Order at those Prices, authorizes its Payment, commits the Reservation, marks the Order paid, clears the Cart and ends the session. Checkout answers with the attempt's outcome, or that it is still being confirmed.
+How a Customer turns their Cart into an Order, in two steps. Starting it opens a Checkout Session: the Cart's Variants are priced and their Stock reserved, which Checkout does itself. The Customer then gives the session a Shipping address and chooses a Shipping option. Paying the session starts the checkout Saga, a Payment attempt, which places the Order at those Prices, authorizes its Payment, commits the Reservation, marks the Order paid, clears the Cart and ends the session. Checkout answers with the attempt's outcome, or that it is still being confirmed.
 _Avoid_: Purchase, Order placement
 
 **Checkout Session**:
-A Customer's Cart held for checkout for 15 minutes: its lines at the Prices captured when it started, with each line's Category; its Discounts, from the running Campaigns and the one Coupon applied to it, if any; their tax; and a Reservation of their Stock. Paying it honours those Prices even if Catalog has changed them since; paying one that has expired does nothing. A Customer has at most one: starting checkout again replaces it and releases its Reservation. Checkout owns it.
+A Customer's Cart held for checkout for 15 minutes: its lines at the Prices captured when it started, with each line's Category; its Discounts, from the running Campaigns and the one Coupon applied to it, if any; their tax; a Reservation of their Stock; and, once given, its Shipping address, the Shipping options quoted for it, and the one chosen with its Shipping cost. Its total is the subtotal, less every Discount, plus the tax, plus the Shipping cost. Paying it honours those Prices and that Shipping cost even if Catalog or the Carrier has changed them since; paying one that has expired does nothing, and paying one without a Shipping address and a chosen Shipping option is refused (`shippingIncomplete`). A Customer has at most one: starting checkout again replaces it and releases its Reservation. Checkout owns it.
 _Avoid_: Checkout (the whole two-step process), Hold, Basket
 
 **Reservation**:
@@ -109,7 +109,7 @@ A temporary, all-or-nothing hold on the Stock of several Variants for one Custom
 _Avoid_: Lock, Hold
 
 **Order**:
-A Customer's confirmed intent to purchase one or more Variants, tracked through a lifecycle from placement to delivery or return. It holds one Order Line per Variant, its Discounts in the order they applied, and its tax, all in one currency. Its total is the sum of its lines, less every Discount, plus the tax; never negative. That total is what its Payment is authorized for. It belongs to the Customer who placed it: only they and Staff can see it, and Staff can't change it.
+A Customer's confirmed intent to purchase one or more Variants, tracked through a lifecycle from placement to delivery or return. It holds one Order Line per Variant, its Discounts in the order they applied, its tax, and its Shipping address and Shipping option with the Shipping cost, all in one currency. Its total is the sum of its lines, less every Discount, plus the tax, plus the Shipping cost; Discounts never touch the Shipping cost, and the total is never negative. An Order placed before Sprint 5 has no Shipping address or option. That total is what its Payment is authorized for. It belongs to the Customer who placed it: only they and Staff can see it, and Staff can't change it.
 _Avoid_: Purchase, Transaction
 
 **Coupon**:
@@ -194,6 +194,14 @@ _Avoid_: Courier, Shipping provider (the port, not the company)
 **Shipping option**:
 A way a Carrier offers to ship an Order from its Warehouse to a destination, as a quote answers it: an ID such as `STANDARD` or `EXPRESS`, the Carrier, its cost as Money and its estimated days. The mock carrier prices each option per Currency by zone: domestic when the destination is in the Warehouse's country, EU otherwise. A destination or Currency the Carrier doesn't serve gets none. Only Checkout asks for them.
 _Avoid_: Shipping method, Delivery option, Rate
+
+**Shipping address**:
+Where a Customer's Order should be sent: the recipient's name, one or two lines, a postcode, a city and an optional region, an ISO 3166-1 alpha-2 country, and an optional phone. Checkout validates it through its `AddressValidator` port (ADR 0005) as it is entered, naming each field's problem, such as a postcode in the wrong format for its country, or refusing a country the store doesn't ship to (`undeliverableCountry`); a valid one comes back normalised: trimmed, its postcode in its country's usual form. A Checkout Session holds one, and the Order keeps it.
+_Avoid_: Delivery address, Destination (that is what a Shipping quote calls it)
+
+**Shipping cost**:
+The cost of the Shipping option chosen for a Checkout Session, as it was quoted for its Shipping address. The session keeps it for its lifetime, as it keeps Prices, until the address changes, which quotes again. It is added to the total after the Discounts, which never apply to it, and its tax is zero, as all tax is so far. The Order keeps it with its Shipping option.
+_Avoid_: Delivery fee, Postage
 
 **Shipment**:
 One Order's parcel, in Fulfillment & Shipping: its Warehouse, its Shipping address and Shipping option, its lines (Variant, Product name, quantity, Serial tracking, and the Serial numbers once packed), its Carrier and tracking number once booked, and its Tracking events. One Order has one Shipment. Its status moves `AWAITING_PICK → PICKED → PACKED → SHIPPED → DELIVERED`, or `PACKED → ON_HOLD` when its Payment can't be captured, which is final. The fulfillment Saga creates, dispatches and holds it, Staff pick and pack it, and the Carrier's webhook delivers it. Each move appends to its status history: the status, when, and by whom (a Staff member's ID, `ORCHESTRATION` or `CARRIER`).

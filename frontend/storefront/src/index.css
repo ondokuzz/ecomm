@@ -2705,3 +2705,58 @@ main {
   left: var(--space-2);
   box-shadow: var(--shadow-sm);
 }
+
+/* Checkout's Shipping: the address form, the address once validated, and the quoted options */
+.shipping {
+  display: grid;
+  gap: var(--space-4);
+}
+.address-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+.address-field {
+  display: flex;
+  min-width: 0;
+}
+.address-recipientName,
+.address-line1,
+.address-line2,
+.address-problem,
+.address-form .alert,
+.address-actions {
+  grid-column: 1 / -1;
+}
+.address-error {
+  color: var(--color-danger);
+  font-weight: 600;
+}
+.address-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+.shipping-address {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+.shipping address,
+.order-shipping address {
+  display: flex;
+  flex-direction: column;
+  font-style: normal;
+}
+.shipping-option-cost {
+  font-weight: 650;
+}
+.shipping-hint {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+@media (max-width: 40rem) {
+  .address-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

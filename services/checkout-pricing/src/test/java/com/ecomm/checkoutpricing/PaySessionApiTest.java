@@ -24,7 +24,7 @@ class PaySessionApiTest extends CheckoutApiTest {
   void payingStartsTheSagaWithTheSessionAsItStands() {
     stubSuccessfulCheckout();
     stubDiscount("WELCOME10", 15980);
-    var sessionId = startedSessionId();
+    var sessionId = shippedSessionId();
     applyCoupon(sessionId, "welcome10").expectStatus().isOk();
     stubVariant("PHN-PIXEL-9", 99900);
     DOWNSTREAM.resetRequests();
@@ -110,7 +110,7 @@ class PaySessionApiTest extends CheckoutApiTest {
   void aSagaStillRunningIsAcceptedAndThePaymentEndpointThenReportsHowItEnded() {
     stubSuccessfulCheckout();
     saga.answer(Status.PROCESSING);
-    var sessionId = startedSessionId();
+    var sessionId = shippedSessionId();
 
     pay(sessionId)
         .expectStatus()
@@ -143,7 +143,7 @@ class PaySessionApiTest extends CheckoutApiTest {
   void thePaymentEndpointGivesADeclinesReason() {
     stubSuccessfulCheckout();
     saga.answer(Status.DECLINED, "card_declined");
-    var sessionId = startedSessionId();
+    var sessionId = shippedSessionId();
     pay(sessionId).expectStatus().isEqualTo(402);
 
     payment(sessionId)
@@ -160,7 +160,7 @@ class PaySessionApiTest extends CheckoutApiTest {
   void aSecondPayWhileTheFirstRunsJoinsIt() {
     stubSuccessfulCheckout();
     saga.answer(Status.PROCESSING);
-    var sessionId = startedSessionId();
+    var sessionId = shippedSessionId();
     pay(sessionId).expectStatus().isAccepted();
 
     pay(sessionId).expectStatus().isAccepted();
@@ -172,7 +172,7 @@ class PaySessionApiTest extends CheckoutApiTest {
   void theSessionCanBePaidAgainAfterADecline() {
     stubSuccessfulCheckout();
     saga.answer(Status.DECLINED, "card_declined");
-    var sessionId = startedSessionId();
+    var sessionId = shippedSessionId();
     payWithMethod(sessionId, "tok_decline").expectStatus().isEqualTo(402);
 
     saga.answer(Status.PAID);
@@ -186,7 +186,7 @@ class PaySessionApiTest extends CheckoutApiTest {
   @Test
   void aPaidSessionIsNeverPaidTwice() {
     stubSuccessfulCheckout();
-    var sessionId = startedSessionId();
+    var sessionId = shippedSessionId();
     pay(sessionId).expectStatus().isOk();
 
     pay(sessionId).expectStatus().isOk().expectBody().jsonPath("$.orderId").isEqualTo(ORDER_ID);
@@ -197,7 +197,7 @@ class PaySessionApiTest extends CheckoutApiTest {
   @Test
   void anUnreachableSagaIsServiceUnavailableAndStartsNothing() {
     stubSuccessfulCheckout();
-    var sessionId = startedSessionId();
+    var sessionId = shippedSessionId();
     saga.unreachable();
 
     pay(sessionId)
@@ -214,7 +214,7 @@ class PaySessionApiTest extends CheckoutApiTest {
   @Test
   void thePaymentEndpointStillAnswersOnceTheSessionHasEnded() {
     stubSuccessfulCheckout();
-    var sessionId = startedSessionId();
+    var sessionId = shippedSessionId();
     pay(sessionId).expectStatus().isOk();
 
     clock.advance(Duration.ofHours(1));
@@ -226,7 +226,7 @@ class PaySessionApiTest extends CheckoutApiTest {
   void aSessionNeverPaidHasNoPayment() {
     stubSuccessfulCheckout();
 
-    payment(startedSessionId())
+    payment(shippedSessionId())
         .expectStatus()
         .isNotFound()
         .expectHeader()
@@ -236,7 +236,7 @@ class PaySessionApiTest extends CheckoutApiTest {
   @Test
   void anotherCustomersPaymentIsNotFound() {
     stubSuccessfulCheckout();
-    var sessionId = startedSessionId();
+    var sessionId = shippedSessionId();
     pay(sessionId).expectStatus().isOk();
 
     payment(FakeKeycloak.token("customer-7", "CUSTOMER"), sessionId).expectStatus().isNotFound();
@@ -245,7 +245,7 @@ class PaySessionApiTest extends CheckoutApiTest {
   @Test
   void payingAnExpiredSessionIsGoneAndStartsNothing() {
     stubSuccessfulCheckout();
-    var sessionId = startedSessionId();
+    var sessionId = shippedSessionId();
     DOWNSTREAM.resetRequests();
 
     clock.advance(Duration.ofMinutes(15));
@@ -262,7 +262,7 @@ class PaySessionApiTest extends CheckoutApiTest {
   @Test
   void aSessionJustShortOfItsExpiryCanStillBePaid() {
     stubSuccessfulCheckout();
-    var sessionId = startedSessionId();
+    var sessionId = shippedSessionId();
 
     clock.advance(Duration.ofMinutes(15).minusSeconds(5));
 
@@ -284,7 +284,7 @@ class PaySessionApiTest extends CheckoutApiTest {
   @Test
   void anotherCustomersSessionIsNotFoundAndStartsNothing() {
     stubSuccessfulCheckout();
-    var sessionId = startedSessionId();
+    var sessionId = shippedSessionId();
 
     pay(FakeKeycloak.token("customer-7", "CUSTOMER"), sessionId).expectStatus().isNotFound();
 

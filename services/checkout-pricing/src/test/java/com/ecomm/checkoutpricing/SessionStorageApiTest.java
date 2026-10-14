@@ -57,6 +57,44 @@ class SessionStorageApiTest extends CheckoutApiTest {
     startSession().expectStatus().isCreated();
   }
 
+  /**
+   * A session saved by Sprint 4, before sessions held Shipping, reads with none, and can be given
+   * an address and an option and then paid: an upgrade doesn't lose the Customer's checkout.
+   */
+  @Test
+  void aSessionSavedBeforeShippingCanBeShippedAndPaid() throws Exception {
+    stubSuccessfulCheckout();
+    var sessionId = "5e551045-0000-4000-8000-000000000001";
+    var sprint4Session =
+        """
+        {"id": "%s", "customerId": "%s",
+         "lines": [{"variantId": "PHN-PIXEL-9", "sku": "PHN-PIXEL-9", "category": "phones",
+                    "quantity": 2, "unitPrice": {"amountMinor": 79900, "currency": "EUR"}}],
+         "discounts": [], "tax": {"amountMinor": 0, "currency": "EUR"}, "reservationId": "%s",
+         "expiresAt": "2099-01-01T00:00:00Z"}
+        """
+            .formatted(sessionId, CUSTOMER_ID, RESERVATION_ID);
+    REDIS.execInContainer("redis-cli", "SET", "checkout-session:" + sessionId, sprint4Session);
+    REDIS.execInContainer("redis-cli", "SET", "checkout-customer:" + CUSTOMER_ID, sessionId);
+
+    currentSession()
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .jsonPath("$.shippingAddress")
+        .isEmpty()
+        .jsonPath("$.shippingOptions.length()")
+        .isEqualTo(0)
+        .jsonPath("$.total.amountMinor")
+        .isEqualTo(159800);
+    pay(sessionId).expectStatus().isEqualTo(409);
+
+    ship(sessionId);
+
+    pay(sessionId).expectStatus().isOk();
+    assertThat(saga.started().getFirst().session().shippingOption().id()).isEqualTo("EXPRESS");
+  }
+
   private static Duration ttlOf(String key) throws Exception {
     var millis = REDIS.execInContainer("redis-cli", "PTTL", key).getStdout().strip();
     return Duration.ofMillis(Long.parseLong(millis));

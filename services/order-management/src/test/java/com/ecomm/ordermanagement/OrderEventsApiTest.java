@@ -35,8 +35,9 @@ class OrderEventsApiTest extends OrderApiTest {
                     "campaignName": "Phone week", "amount": {"amountMinor": 7990, "currency": "EUR"}},
                    {"source": "COUPON", "couponCode": "WELCOME10",
                     "amount": {"amountMinor": 7990, "currency": "EUR"}}],
-                 "tax": {"amountMinor": 28764, "currency": "EUR"}}
-                """)
+                 "tax": {"amountMinor": 28764, "currency": "EUR"}, %s}
+                """
+                    .formatted(SHIPPING))
             .exchange()
             .expectStatus()
             .isCreated()
@@ -76,7 +77,8 @@ class OrderEventsApiTest extends OrderApiTest {
     assertThat(snapshot.at("/discounts/1/campaignId").isMissingNode()).isTrue();
     assertThat(snapshot.at("/tax/amountMinor").asLong()).isEqualTo(28764);
     assertThat(snapshot.at("/subtotal/amountMinor").asLong()).isEqualTo(159800);
-    assertThat(snapshot.at("/total/amountMinor").asLong()).isEqualTo(172584);
+    // 1598.00 − 79.90 − 79.90 + 287.64 + 9.99
+    assertThat(snapshot.at("/total/amountMinor").asLong()).isEqualTo(173583);
     assertThat(snapshot.at("/total/currency").asText()).isEqualTo("EUR");
     assertThat(snapshot.get("statusHistory")).hasSize(1);
     assertThat(snapshot.at("/statusHistory/0/status").asText()).isEqualTo("PLACED");

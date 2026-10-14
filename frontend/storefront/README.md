@@ -11,8 +11,8 @@ React, TypeScript, React Router and TanStack Query.
 | `/?q=&category=&…` | Products, searched and filtered, as Search & Discovery finds them: see [Search](#search) | no |
 | `/products/{sku}?variant=` | A Product with a Variant picker, and the chosen Variant's image, Price, Stock and specs, laid out by its Category's attribute definitions; add it to the Cart. Below, its ratings and reviews: see [Reviews](#reviews) | no (adding and reviewing need it) |
 | `/cart` | The Cart, priced from Catalog's current Prices; change quantities, remove lines or empty it | yes |
-| `/checkout` | Starts or resumes a Checkout Session: its lines, price breakdown, a Coupon field and a countdown to when it expires, a test-card picker and a "Pay" button | yes |
-| `/orders/{id}` | An Order: its Order Status timeline, drawn from its Order Status history with times, its Payment, its lines and summary; after checkout, the confirmation first | yes |
+| `/checkout` | Starts or resumes a Checkout Session: its lines, price breakdown, a Coupon field and a countdown to when it expires, a Shipping address form and Shipping options, a test-card picker and a "Pay" button | yes |
+| `/orders/{id}` | An Order: its Order Status timeline, drawn from its Order Status history with times, its Payment, its Shipping, its lines and summary; after checkout, the confirmation first | yes |
 | `/orders?page=` | My Orders as cards, newest first, 12 to a page; `page` counts from 1 | yes |
 
 ## Design
@@ -310,6 +310,22 @@ demo Coupon is `WELCOME10`, 10% off.
 When Checkout refuses to start a session for Products out of Stock or unknown to Catalog, it names
 their Variants, and the page lists their Products (`checkoutProblem`) with a link back to the Cart.
 
+Above the payment, a Shipping card asks where the Order goes. Its form takes the recipient's name,
+the address, an optional second line, postcode, city, optional region and phone, and a country from
+the EU's 27, which the store ships to. "Use this address" sends it to Checkout, which validates it
+and quotes Shipping options for it; each field's problem is shown against its field
+(`addressProblem` in [`src/domain/shipping.ts`](./src/domain/shipping.ts)), a country the store
+doesn't ship to or Shipping that can't be quoted right now is said once, and the session is
+unchanged. A valid address is shown back as Checkout normalised it (`addressLines`), with "Change
+address", and below it the Shipping options as a choice, each with its Carrier, days and cost
+(`shippingOptionLabel`). Choosing one puts "Shipping (Express)" and its cost in the breakdown, between
+the Discounts and the tax, and in the total on the Pay button. Pay stays disabled, with a hint, until
+the session has both (`hasShipping`); changing the address quotes again and clears an option no
+longer offered.
+
+The Order page shows a Shipping card, the address and "Express by Mock Carrier" with its cost, and
+the breakdown's Shipping line. An Order placed before Sprint 5 has no Shipping, and shows neither.
+
 ## Error states
 
 No page is ever left blank, and every error a service answers carries a support reference.
@@ -389,7 +405,7 @@ Sign in as `demo@ecomm.local` / `demo`, or register a new Customer.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: failed responses as messages and support references, Money formatting by Catalog's Minor units, Cart pricing, checkout problems, the session countdown and the price breakdown with each Discount, Coupon rejections, test cards and payment failures, an Order's Payment statuses and transactions and why a cancelled Order was cancelled, quantities, Stock levels and Cart lines' availability, toasts, the search's URL and its Facets as chips and filters, rating stars and summaries and the review form's validation, Product specs by their Category's definitions, Warranty terms in words, Customer initials, Orders and their timeline from the Order Status history, the Orders list's paging, Order Status colours, seed Product images, the Keycloak theme's and the Admin Console's copies of the tokens
+npm test          # Vitest: failed responses as messages and support references, Money formatting by Catalog's Minor units, Cart pricing, checkout problems, the session countdown and the price breakdown with each Discount and the Shipping cost, address violations mapped to their fields, Shipping options and addresses in words, whether a session can be paid, Coupon rejections, test cards and payment failures, an Order's Payment statuses and transactions and why a cancelled Order was cancelled, quantities, Stock levels and Cart lines' availability, toasts, the search's URL and its Facets as chips and filters, rating stars and summaries and the review form's validation, Product specs by their Category's definitions, Warranty terms in words, Customer initials, Orders and their timeline from the Order Status history, the Orders list's paging, Order Status colours, seed Product images, the Keycloak theme's and the Admin Console's copies of the tokens
 npm run test:e2e  # Playwright smoke, search, product-page and error-states tests against the running compose stack (`make up`)
 ```
 
@@ -399,8 +415,11 @@ checkout and nothing else may check out meanwhile, so every test of this suite t
 in it; the Admin Console's suite checks out too, so run the two one after the other. Each test
 signs in on Keycloak for real as a Customer made for it through Keycloak's admin API (as `admin`),
 deleted again afterwards with any review, so a failed run leaves no Cart or Checkout Session for the
-next. It checks out two Products with the Approve test card (the "held until" notice and its countdown, their Stock reserved but
-still on hand, then the confirmation, the confetti gone under reduced motion, the Order's lines by
+next. Every checkout first ships to Berlin. The first checks out two Products with the Approve
+test card (the "held until" notice and its countdown, their Stock reserved but
+still on hand, Pay disabled until Shipping is set, a malformed German postcode named against its
+field and corrected, the address shown back, Express's cost in the summary and the Pay button,
+then the confirmation, the Order's Shipping card and its total including Express, the confetti gone under reduced motion, the Order's lines by
 Product name, its timeline with Placed then Paid at the times Order Management recorded, its Payment
 Authorized for the Order's total, its card on
 My Orders with no pager, and on-hand Stock down by one), pays with the
