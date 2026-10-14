@@ -1,9 +1,11 @@
 package com.ecomm.returnswarranty.application;
 
+import com.ecomm.commons.events.IntegrationEventPublisher;
 import com.ecomm.returnswarranty.application.port.in.Page;
 import com.ecomm.returnswarranty.application.port.in.RmaFilter;
 import com.ecomm.returnswarranty.application.port.in.RmaUseCase;
 import com.ecomm.returnswarranty.application.port.out.ProductStore;
+import com.ecomm.returnswarranty.application.port.out.RmaEvent;
 import com.ecomm.returnswarranty.application.port.out.RmaRepository;
 import com.ecomm.returnswarranty.application.port.out.ShipmentStore;
 import com.ecomm.returnswarranty.application.port.out.TimeSource;
@@ -21,13 +23,15 @@ import java.util.function.UnaryOperator;
 
 /**
  * Requests RMAs against the delivered Shipments projected, one at a time per Order under the
- * Shipment's lock, and records Staff's decisions under the RMA's.
+ * Shipment's lock, and records Staff's decisions under the RMA's. Each change publishes the RMA's
+ * event in its transaction.
  */
 public class RmaService implements RmaUseCase {
 
   private final ShipmentStore shipments;
   private final ProductStore products;
   private final RmaRepository rmas;
+  private final IntegrationEventPublisher events;
   private final Transactions transactions;
   private final TimeSource time;
   private final Duration returnPeriod;
@@ -36,12 +40,14 @@ public class RmaService implements RmaUseCase {
       ShipmentStore shipments,
       ProductStore products,
       RmaRepository rmas,
+      IntegrationEventPublisher events,
       Transactions transactions,
       TimeSource time,
       Duration returnPeriod) {
     this.shipments = shipments;
     this.products = products;
     this.rmas = rmas;
+    this.events = events;
     this.transactions = transactions;
     this.time = time;
     this.returnPeriod = returnPeriod;
@@ -66,6 +72,7 @@ public class RmaService implements RmaUseCase {
                   warrantyFor(request),
                   time.now());
           rmas.insert(rma);
+          events.publish(RmaEvent.of(rma));
           return rma;
         });
   }
@@ -99,6 +106,7 @@ public class RmaService implements RmaUseCase {
                     rma -> {
                       var decided = decision.apply(rma);
                       rmas.update(decided);
+                      events.publish(RmaEvent.of(decided));
                       return decided;
                     }));
   }

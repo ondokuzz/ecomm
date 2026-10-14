@@ -1,5 +1,6 @@
 package com.ecomm.returnswarranty;
 
+import com.ecomm.commons.events.IntegrationEventPublisher;
 import com.ecomm.returnswarranty.application.ProjectionService;
 import com.ecomm.returnswarranty.application.RmaService;
 import com.ecomm.returnswarranty.application.port.in.ProjectionUseCase;
@@ -33,9 +34,10 @@ class UseCaseConfiguration {
       ShipmentStore shipments,
       ProductStore products,
       RmaRepository rmas,
+      IntegrationEventPublisher events,
       Transactions transactions,
       TimeSource time,
       @Value("${ecomm.returns-warranty.return-period}") Duration returnPeriod) {
-    return new RmaService(shipments, products, rmas, transactions, time, returnPeriod);
+    return new RmaService(shipments, products, rmas, events, transactions, time, returnPeriod);
   }
 }

@@ -16,8 +16,8 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * included, against one Postgres container shared by every test class and the shared Kafka and
  * schema registry from {@link EventBackbone}, with {@link FakeKeycloak} tokens. Fulfillment &
  * Shipping's Shipment topic and Catalog's Product topic are created as the stack creates them, with
- * the projections' dead-letter and redrive topics. The clock is fixed at {@link
- * TestTimeSource#NOW}.
+ * the projections' dead-letter and redrive topics, and so is the RMA topic, its schema registered.
+ * The clock is fixed at {@link TestTimeSource#NOW}.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureRestTestClient
@@ -27,8 +27,13 @@ abstract class ReturnsWarrantyApiTest {
   static final PostgreSQLContainer POSTGRES =
       new PostgreSQLContainer("postgres:16").withDatabaseName("returns_warranty");
 
+  /** The topic Returns & Warranty publishes each change to an RMA to. */
+  static final String RMA_TOPIC = "returns-warranty.rma";
+
   static {
     POSTGRES.start();
+    EventBackbone.createTopic(RMA_TOPIC);
+    EventBackbone.registerSchemaOf(RMA_TOPIC);
     EventBackbone.createTopic(Shipments.TOPIC);
     EventBackbone.createDeadLetterTopicsOf(Shipments.GROUP);
     EventBackbone.createTopic(Products.TOPIC);
