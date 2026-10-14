@@ -2,7 +2,8 @@
 
 Turns a Customer's Cart into a paid Order in two steps: a **Checkout Session** holds the Cart for
 15 minutes, at the Prices of the moment it started, with every running **Campaign**'s Discount it is
-due, and may take a **Coupon** on top; paying the session starts the **checkout Saga**, which
+due, and may take a **Coupon** on top; it takes a **Shipping address** and a **Shipping option**,
+whose **Shipping cost** joins its total; paying the session starts the **checkout Saga**, which
 Orchestration runs on Temporal ([ADR 0009](../../docs/adr/0009-sagas-on-temporal.md)), and buys it.
 Built from
 [`platform/service-template`](../../platform/service-template/README.md), so its layout, security
@@ -20,6 +21,8 @@ Every endpoint is the calling Customer's own and needs a `CUSTOMER` token.
 | `GET /checkout/sessions/current` | The caller's live Checkout Session, or 404 |
 | `PUT /checkout/sessions/{id}/coupon` | Applies a Coupon with `{"code": "WELCOME10"}`, in place of any it had; 200 with the session |
 | `DELETE /checkout/sessions/{id}/coupon` | Takes the Coupon off, if any; 200 with the session |
+| `PUT /checkout/sessions/{id}/shipping-address` | Validates the address and quotes Shipping options for it; 200 with the session ([below](#shipping)) |
+| `PUT /checkout/sessions/{id}/shipping-option` | Chooses a quoted option with `{"optionId": "EXPRESS"}`; 200 with the session |
 | `POST /checkout/sessions/{id}/pay` | Pays it with `{"paymentMethod": "…"}`; 200 with `{"orderId": "…", "status": "PAID"}`, or 202 while the Saga is still going ([below](#paying-a-session)) |
 | `GET /checkout/sessions/{id}/payment` | The latest attempt to pay it: `{"status", "orderId", "declineReason"}` |
 
@@ -104,6 +107,50 @@ The Discounts are Promotions' answer when the session started or its Coupon last
 paying honours them just as it honours the session's Prices, even if a Campaign or the Coupon ends
 in the meantime.
 
+### Shipping
+
+Since Sprint 5 a session needs a Shipping address and a chosen Shipping option before it can be
+paid. The session's JSON gains `shippingAddress` (null until given; its optional fields are left
+out when absent), `shippingOptions` (those quoted for it, empty until then), `shippingOption` (the
+one chosen, or null) and `shippingCost` (its cost, or zero). `total` is the subtotal, less every
+Discount, plus the tax, plus the Shipping cost: Discounts never touch Shipping, and tax on it is
+zero, as all tax is.
+
+```json
+PUT /checkout/sessions/{id}/shipping-address
+{"recipientName": "Erika Mustermann", "line1": "Hauptstraße 5", "line2": "2. OG",
+ "postcode": "10115", "city": "Berlin", "region": null, "country": "DE", "phone": "+49 30 1234567"}
+
+200 … "shippingAddress": {"recipientName": "Erika Mustermann", "line1": "Hauptstraße 5", "line2": "2. OG",
+                          "postcode": "10115", "city": "Berlin", "country": "DE", "phone": "+49 30 1234567"},
+      "shippingOptions": [
+        {"id": "STANDARD", "carrier": "Mock Carrier", "cost": {"amountMinor": 499, "currency": "EUR"}, "estimatedDays": 2},
+        {"id": "EXPRESS", "carrier": "Mock Carrier", "cost": {"amountMinor": 999, "currency": "EUR"}, "estimatedDays": 1}],
+      "shippingOption": null, "shippingCost": {"amountMinor": 0, "currency": "EUR"}, …
+```
+
+- **Validating.** The address goes through the `AddressValidator` port
+  ([ADR 0005](../../docs/adr/0005-localization-compliance-abstracted.md)). Its one adapter is a
+  mock: it serves the EU's 27 countries, the mock Carrier's, with each one's postcode format (DE
+  `10115`, NL `1011 AB`, FR `75001`, PL `00-950`, PT `1000-001`, IE `D02 X285`, …), requires the
+  recipient name, line 1, postcode, city and country, allows at most 100 characters a field and a
+  phone of digits, spaces, `+`, `-` and brackets. It trims every field, collapses inner whitespace,
+  upper-cases the country and postcode, and writes the postcode in its usual form (`1011ab` becomes
+  `1011 AB`). A field that isn't text, or any of those problems, is a 422 with `reason`
+  `invalidShippingAddress` and each field's problem in `errors`, such as
+  `[{"field": "postcode", "message": "isn't a postcode in DE, such as 10115"}]`. A country outside
+  them is a 422 with `reason` `undeliverableCountry` and the `country`, whatever else is wrong.
+- **Quoting.** A valid address goes to Fulfillment & Shipping's `POST /shipping/quotes` through the
+  `ShippingQuotes` port, with the session's lines and currency and Checkout's own token. Its 422
+  `shippingUnavailable` is a 422 `undeliverableCountry` here. Fulfillment & Shipping down, failing,
+  or answering an option that can't be right, is a 503 with `reason` `shippingUnavailable`.
+- **Changing nothing.** Every refusal leaves the session as it was. A new address re-quotes: a
+  chosen option still offered stays chosen at its new cost, and one no longer offered is cleared.
+- **Choosing.** `PUT …/shipping-option` takes an ID the session's options include; any other, or
+  one before an address, is a 422 with `reason` `shippingOptionNotQuoted`. The session keeps that
+  option's cost for its lifetime, as it keeps Prices; changing the Coupon doesn't re-quote.
+- **Paying** a session without both is a 409 with `reason` `shippingIncomplete`, and starts nothing.
+
 ### Paying a session
 
 The body names the Payment method, `{"paymentMethod": "tok_approve"}`: an opaque token from the
@@ -123,7 +170,8 @@ the Cart and ends the session, and undoes what it must when a step can't go on
   paying again starts a new run, so a Customer can pay again after a decline.
 - A session whose latest run paid it is never paid again: paying answers that run's 200.
 - Its input is the session as it stands, with the Customer, the lines at their captured Prices,
-  every Discount, the tax, the Reservation's ID and the Payment method, and the Correlation ID of
+  every Discount, the tax, the Shipping address and the chosen Shipping option with its Carrier and
+  cost (`shippingAddress`, `shippingOption`), the Reservation's ID and the Payment method, and the Correlation ID of
   the Pay request, which every call the Saga makes carries. Its memo names the Customer, so that
   only they read the attempt.
 - **The Payment method token travels in the workflow's input, and so in its history**, which
@@ -166,13 +214,13 @@ Every error is a problem detail.
 |---|---|
 | 400 | Starting: the Cart is empty. Paying: no usable `paymentMethod`. Applying a Coupon: no usable `code` |
 | 401 / 403 | No token / not a Customer (Staff and services have no Cart) |
-| 404 | No live session (`current`), paying or changing the Coupon of one the Customer doesn't have, or reading the payment of one never paid or not theirs |
-| 409 | Starting: `unknownVariants`: Catalog no longer has these Variants. `outOfStock`: Inventory can't hold these. Also a Cart priced in more than one currency |
+| 404 | No live session (`current`), paying or changing the Coupon or Shipping of one the Customer doesn't have, or reading the payment of one never paid or not theirs |
+| 409 | Starting: `unknownVariants`: Catalog no longer has these Variants. `outOfStock`: Inventory can't hold these. Also a Cart priced in more than one currency. Paying: `shippingIncomplete` |
 | 402 | Paying: the gateway declined the payment; `declineReason` gives its reason |
-| 422 | Applying a Coupon that doesn't apply; `reason` says why, as Promotions does |
+| 422 | Applying a Coupon that doesn't apply; `reason` says why, as Promotions does. Setting a Shipping address: `invalidShippingAddress` with `errors`, or `undeliverableCountry`. Choosing an option: `shippingOptionNotQuoted` |
 | 410 | Paying, or changing the Coupon of, a session that has expired. Paying, with `reason` `holdExpired`: the hold ran out during the Saga |
 | 502 | Starting or changing a Coupon: another service failed or answered unexpectedly, or Promotions answered Discounts that can't be right. Paying: the Saga failed |
-| 503 | Keycloak couldn't issue Checkout's own token, or, paying, Temporal can't be reached (`checkoutUnavailable`) |
+| 503 | Keycloak couldn't issue Checkout's own token, or, paying, Temporal can't be reached (`checkoutUnavailable`), or, setting a Shipping address, Fulfillment & Shipping can't quote (`shippingUnavailable`) |
 
 Starting a session changes nothing when it fails, except that a replaced session is gone and its
 Stock released. A payment that ends without paying leaves the Cart and the session as they were, so
@@ -191,6 +239,10 @@ meanwhile stays gone. Once Redis drops it, paying it is a 404, like a session
 that never existed. Ending a session deletes both keys, unless the pointer already names a newer
 session.
 
+A session saved before Sprint 5 has no Shipping fields, and reads with no address, no options and
+none chosen: the Customer gives it an address and an option, and pays it, so an upgrade doesn't lose
+their checkout.
+
 A session saved before sessions held their lines' Products and every Discount (Sprint 3, #49) can't
 be evaluated again, so it reads as no session: the Customer starts checkout afresh, and its
 Reservation lapses by itself.
@@ -207,10 +259,10 @@ Checkout calls each service with the identity that service expects
   the current request's security context, so the use case and its ports only ever see the
   Customer ID.
 - **Catalog**: no token; reads are public.
-- **Inventory, Promotions**: Checkout's own token, from the confidential `checkout` client (client
-  credentials, `CHECKOUT` role). The Customer goes in the body as `customerId`, on
-  `POST /reservations` and its release. `POST /discounts/evaluate` names no Customer: a Coupon
-  applies the same to everyone.
+- **Inventory, Promotions, Fulfillment & Shipping**: Checkout's own token, from the confidential
+  `checkout` client (client credentials, `CHECKOUT` role). The Customer goes in the body as
+  `customerId`, on `POST /reservations` and its release. `POST /discounts/evaluate` names no
+  Customer: a Coupon applies the same to everyone, and neither does `POST /shipping/quotes`.
 
 Order Management, Payment, Inventory's commit, Cart's clear and Checkout's own end-session command
 are the checkout Saga's, called with Orchestration's token.
@@ -231,7 +283,8 @@ service, the cached token is dropped and the call is retried exactly once with a
 is safe even for a `POST`, because a resource server rejects a bad token before any handler runs.
 No other status is retried.
 
-If Keycloak is unreachable when a session starts, or a Coupon changes, the step fails with a 503.
+If Keycloak is unreachable when a session starts, or a Coupon or Shipping address changes, the
+step fails with a 503.
 
 [`http/checkout-pricing.http`](./http/checkout-pricing.http) checks out the demo Customer's Cart
 against the compose stack.
@@ -258,4 +311,11 @@ covers each outcome's status, 202 then the payment endpoint, a second Pay joinin
 unreachable Temporal, and an expired or unknown session starting nothing; `PayRequestApiTest`, a
 missing or invalid `paymentMethod` starting nothing. `TemporalCheckoutSagaTest` runs the Temporal
 adapter itself against Temporal's test server, with a stand-in for Orchestration's workflow: start,
-join while running, start again after it closes, read the outcome.
+join while running, start again after it closes, read the outcome, and the input carrying the
+Shipping address and option. `SessionShippingApiTest` covers the address normalised and quoted,
+refused with field violations or `undeliverableCountry`, Fulfillment & Shipping's 422 and its being
+down (503, nothing changed), the request the quote sends, only quoted options chosen, the cost kept
+and untouched by Discounts, re-quoting on a new address, and Pay refused while incomplete;
+`SessionStorageApiTest` pays a session stored as Sprint 4 stored it once it is shipped.
+`MockAddressValidatorTest` is pure JUnit for the mock validator's table of countries and postcode
+formats, a deliberate exception to testing at the HTTP seam.
