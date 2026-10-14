@@ -80,11 +80,23 @@ A Cart, an Order and Inventory's Stock all name Variant IDs, never SKUs. A Produ
 its own; listings and the detail carry `priceFrom`, the lowest Variant Price. Its `description`,
 free text for Customers, is optional and `null` when it has none; a blank one is stored as none.
 
+Two more fields apply to all of a Product's Variants:
+
+- `warranty`, its Warranty terms: `{"months": 24, "manufacturer": "Google"}`, with `months` from 1
+  to 120 and a `manufacturer` of up to 100 characters, or `null` for no warranty;
+- `serialTracking`, its Serial tracking: `NONE`, `SERIAL` or `IMEI`, which says what packing
+  records for each unit. It is `NONE` when Staff leave it out.
+
+A Product stored before these fields reads as no warranty and `NONE`, so no document needs
+migrating. Months out of range, a missing manufacturer or an unknown Serial tracking is a 400
+naming `warranty.months`, `warranty.manufacturer` or `serialTracking` in `errors`.
+
 ```json
 {"sku": "PHN-PIXEL-9", "name": "Google Pixel 9", "description": null, "category": "phones",
  "attributes": {"brand": "Google", "screen": "6.3 in"},
  "images": ["/images/products/phn-pixel-9/front.svg"],
  "priceFrom": {"amountMinor": 79900, "currency": "EUR"},
+ "warranty": {"months": 24, "manufacturer": "Google"}, "serialTracking": "IMEI",
  "variants": [
    {"id": "PHN-PIXEL-9", "axisValues": {"color": "Obsidian", "storage": "128 GB"},
     "price": {"amountMinor": 79900, "currency": "EUR"}, "images": []},
@@ -94,7 +106,7 @@ free text for Customers, is optional and `null` when it has none; a blank one is
 ```
 
 Staff send the same shape without `priceFrom`; an update replaces the whole Product, so leaving
-`description` out removes it. `GET /variants/{variantId}` answers what a Cart line or a checkout
+`description` or `warranty` out removes it. `GET /variants/{variantId}` answers what a Cart line or a checkout
 needs, including the Product's Category, which decides the Campaigns that apply to it:
 
 ```json
@@ -143,6 +155,7 @@ definition:
              "variants": [{"variantId": "PHN-PIXEL-9",
                            "axisValues": {"color": "Obsidian", "storage": "128 GB"},
                            "price": {"amountMinor": 79900, "currency": "EUR"}, "images": []}],
+             "warranty": {"months": 24, "manufacturer": "Google"}, "serialTracking": "IMEI",
              "removed": false}}
 ```
 
@@ -156,8 +169,10 @@ definition:
 ```
 
 - `change` is `CREATED`, `UPDATED`, `REMOVED` or `BACKFILLED`.
-- A Product event carries the whole Product, every Variant included; `description` is left out when
-  it has none.
+- A Product event carries the whole Product, every Variant included; `description` and `warranty`
+  are left out when it has none. `warranty` and `serialTracking` were added in Sprint 5 as optional
+  properties, so a consumer reads an older event without them as no warranty and `NONE`. Search,
+  Reviews and Recommendations ignore them.
 - A removed Product or Category is published as its last state with `removed: true`, never as a
   tombstone.
 - `version` goes up by one with every change to that SKU or slug. It outlives a removal: a SKU
@@ -219,6 +234,13 @@ holds 20 Products across them. They are loaded on startup, Categories first, and
 empty bucket, so a restart never undoes Staff changes. Each seed Product is checked against its
 Category like any other write, so a seed that breaks its definitions stops the service starting.
 Seeding publishes each Category and Product as `CREATED`, as Staff writes do.
+
+Seed phones have `IMEI` Serial tracking and 24 months' warranty, laptops `SERIAL` and 24 months,
+and audio `SERIAL` and 12 months, each from its brand. On a bucket that already holds data, the seed
+step gives each seeded Product stored before Warranty terms (one whose document has no
+`serialTracking`) the seed's Warranty terms and Serial tracking, changes nothing else of it, and
+publishes it as `UPDATED`. A Product Staff have saved since has both fields, even with no warranty,
+so their edits stay; a Product they deleted stays deleted. A restart changes nothing more.
 
 Each seed Product's first Variant has the SKU as its Variant ID, so Inventory's seed Stock and
 existing Carts and Orders stay valid. The Google Pixel 9, the Apple iPhone 16 and the Apple MacBook

@@ -1,0 +1,99 @@
+# Exercises Fulfillment & Shipping against the compose stack (`make up`): Staff read the Warehouses,
+# and Checkout asks for Shipping quotes. Run the requests top to bottom in the IntelliJ HTTP client;
+# the token requests store tokens for the ones after them.
+# Checkout's client secret is the stack's own: run it in the `dev` environment, whose
+# http-client.private.env.json holds it (the root README's "Secrets" says how to write it).
+
+@fulfillment = http://localhost:8099
+@gateway = http://localhost:8000
+@keycloak = http://localhost:8180/realms/ecomm/protocol/openid-connect/token
+
+### Staff token
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=dev-cli&username=staff@ecomm.local&password=staff
+
+> {% client.global.set("staffToken", response.body.access_token); %}
+
+### Checkout's own token (client credentials)
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&client_id=checkout&client_secret={{checkoutClientSecret}}
+
+> {% client.global.set("checkoutToken", response.body.access_token); %}
+
+### The Warehouses, through the gateway as the Admin Console would: Berlin, the default, and Amsterdam
+GET {{gateway}}/api/fulfillment-shipping/warehouses
+Authorization: Bearer {{staffToken}}
+
+### A German address, as Checkout: from WH-BER at domestic prices, STANDARD €4.99 and EXPRESS €9.99
+POST {{fulfillment}}/shipping/quotes
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"destination": {"recipientName": "Erika Mustermann", "line1": "Hauptstraße 5", "postcode": "10115",
+                 "city": "Berlin", "country": "DE"},
+ "lines": [{"variantId": "PHN-PIXEL-9-OBSIDIAN-128", "quantity": 1}],
+ "currency": "EUR"}
+
+### A Dutch address: from WH-AMS, at domestic prices
+POST {{fulfillment}}/shipping/quotes
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"destination": {"recipientName": "Jan Jansen", "line1": "Damrak 1", "postcode": "1012 LG",
+                 "city": "Amsterdam", "country": "NL"},
+ "lines": [{"variantId": "PHN-PIXEL-9-OBSIDIAN-128", "quantity": 1}],
+ "currency": "EUR"}
+
+### A French address: no Warehouse in France, so from the default WH-BER at EU prices, €9.99 and €19.99
+POST {{fulfillment}}/shipping/quotes
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"destination": {"recipientName": "Marie Dupont", "line1": "1 rue de Rivoli", "postcode": "75001",
+                 "city": "Paris", "country": "FR"},
+ "lines": [{"variantId": "PHN-PIXEL-9-OBSIDIAN-128", "quantity": 1}],
+ "currency": "EUR"}
+
+### Outside the EU: 422, reason shippingUnavailable
+POST {{fulfillment}}/shipping/quotes
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"destination": {"country": "US"}, "lines": [{"variantId": "PHN-PIXEL-9-OBSIDIAN-128", "quantity": 1}],
+ "currency": "EUR"}
+
+### A Currency the mock carrier has no table for: 422, reason shippingUnavailable
+POST {{fulfillment}}/shipping/quotes
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"destination": {"country": "DE"}, "lines": [{"variantId": "PHN-PIXEL-9-OBSIDIAN-128", "quantity": 1}],
+ "currency": "USD"}
+
+### A malformed country: 400 naming destination.country
+POST {{fulfillment}}/shipping/quotes
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"destination": {"country": "Germany"}, "lines": [{"variantId": "PHN-PIXEL-9-OBSIDIAN-128", "quantity": 1}],
+ "currency": "EUR"}
+
+### As Staff: 403, only Checkout quotes
+POST {{fulfillment}}/shipping/quotes
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{"destination": {"country": "DE"}, "lines": [{"variantId": "PHN-PIXEL-9-OBSIDIAN-128", "quantity": 1}],
+ "currency": "EUR"}
+
+### Through the gateway: 404, quotes are internal
+POST {{gateway}}/api/fulfillment-shipping/shipping/quotes
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"destination": {"country": "DE"}, "lines": [{"variantId": "PHN-PIXEL-9-OBSIDIAN-128", "quantity": 1}],
+ "currency": "EUR"}

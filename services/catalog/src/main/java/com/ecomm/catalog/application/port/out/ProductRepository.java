@@ -33,6 +33,13 @@ public interface ProductRepository {
   /** Whether the Catalog holds nothing at all: no Products and no Categories. */
   boolean isEmpty();
 
+  /**
+   * The Product with SKU {@code sku} if it was stored before Warranty terms and Serial tracking
+   * existed, so has neither; empty otherwise. It reads within the transaction, so a write it is
+   * followed by fails if the Product changed in between.
+   */
+  Optional<Product> findStoredBeforeWarrantyTerms(String sku);
+
   /** Stores a new Product; returns false, storing nothing, when the SKU is already taken. */
   boolean insert(Product product);
 

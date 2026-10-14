@@ -21,7 +21,7 @@ import { QuantityStepper } from '../components/ui/QuantityStepper'
 import { Skeleton } from '../components/ui/Skeleton'
 import { useToast } from '../components/ui/toasts'
 import { quantityOf } from '../domain/cart'
-import { type Product, chosenVariant, specs, variantAxes } from '../domain/catalog'
+import { type Product, chosenVariant, specs, variantAxes, warrantyLabel } from '../domain/catalog'
 import { type StockLevel, stockLevel } from '../domain/stock'
 
 export function ProductDetailPage() {
@@ -85,6 +85,7 @@ function ProductDetail({ product }: { product: Product }) {
             )}
             {stockPending ? <Badge>Checking stock…</Badge> : <StockIndicator quantity={available} />}
             <LookupError failure={stockFailure} title="We couldn't check the stock" />
+            <p className="muted">{warrantyLabel(product.warranty)}</p>
             {/* A fresh quantity for each Variant. */}
             <AddToCart key={variant.id} productName={product.name} variantId={variant.id} available={available} />
           </Card>

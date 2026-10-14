@@ -44,6 +44,13 @@ a choice of yes or no for a `BOOLEAN` and of its values for an `ENUM`. Its Varia
 columns of the Variants table. Choosing another Category clears the attribute and axis values
 already typed. Once the Product is saved, its Category and SKU are fixed in the editor.
 
+**Warranty and Serial tracking** apply to all of the Product's Variants. Warranty months (1 to
+120) and the manufacturer give its Warranty terms; leaving both blank means no manufacturer's
+warranty, and filling in only one is refused beside the other. Serial tracking is None, Serial
+number or IMEI, which says what packing records for each unit; a new Product starts at None.
+Catalog's own refusals, `warranty.months`, `warranty.manufacturer` and `serialTracking`, show beside
+their fields.
+
 The Variants table has one row per Variant:
 
 - **Variant ID.** Typed for a new row, usually the SKU for the first. A saved Variant's ID is shown
@@ -251,7 +258,7 @@ how to apply the client to an existing realm.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: failed requests as messages and references, field errors from problem details, the STAFF role in an access token, a Category, a Product, a Coupon and a Campaign to and from their editor's form, decimals to and from Money, the Order list's filters to Order Management's query, an Order's Status history, Payment statuses and transactions, and Stock movements and their balance
+npm test          # Vitest: failed requests as messages and references, field errors from problem details, the STAFF role in an access token, a Category, a Product with its Warranty terms and Serial tracking, a Coupon and a Campaign to and from their editor's form, decimals to and from Money, the Order list's filters to Order Management's query, an Order's Status history, Payment statuses and transactions, and Stock movements and their balance
 npm run build
 npm run test:e2e  # Playwright against the running compose stack (`make up`)
 ```
@@ -274,6 +281,9 @@ their Stock.
 - **A refused count** has Inventory refuse one Variant's count. The test stands in for Inventory
   there, since a new Variant has no Reservations. It checks that the new Product opens on its own
   page with the refusal beside that count, then sets the count by saving again.
+- **Warranty terms** gives the new Product 200 months and sees them refused beside the field, then
+  24 months from Ecomm with IMEI Serial tracking, checks both through Catalog's API, and sees the
+  Storefront's Product page show "24 months, manufacturer's warranty (Ecomm)".
 - **Stock movements** opens the new Product, sets the first Variant's On-hand from 5 to 8, and
   opens its movements: balanced at 8, the Adjusted movement of `+3` above the opening `+5`.
 - **A Price in search** waits for the new Product to reach Search & Discovery, changes its first

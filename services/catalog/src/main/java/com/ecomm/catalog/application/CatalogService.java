@@ -148,6 +148,32 @@ public class CatalogService
   }
 
   @Override
+  public int fillInWarrantyTerms(List<Product> seedProducts) {
+    var filled = 0;
+    for (var seed : seedProducts) {
+      boolean changed =
+          transactions.inTransaction(
+              () ->
+                  products
+                      .findStoredBeforeWarrantyTerms(seed.sku())
+                      .map(
+                          stored -> {
+                            var product =
+                                stored.withWarrantyTermsAndSerialTracking(
+                                    seed.warranty(), seed.serialTracking());
+                            products.replace(product);
+                            publish(product, Change.UPDATED);
+                            return true;
+                          })
+                      .orElse(false));
+      if (changed) {
+        filled++;
+      }
+    }
+    return filled;
+  }
+
+  @Override
   public int publishBackfill() {
     var published = 0;
     for (var category : categories.findAll()) {

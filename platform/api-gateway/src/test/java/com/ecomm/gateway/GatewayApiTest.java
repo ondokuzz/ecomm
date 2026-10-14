@@ -48,7 +48,8 @@ abstract class GatewayApiTest {
             "promotions",
             "search-discovery",
             "reviews-ratings",
-            "recommendations")) {
+            "recommendations",
+            "fulfillment-shipping")) {
       registry.add("ecomm.gateway.services." + service + ".uri", DOWNSTREAM::baseUrl);
     }
   }

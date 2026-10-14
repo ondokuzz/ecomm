@@ -243,6 +243,37 @@ test("Staff set a Variant's Stock and see its movements, balanced, with the Adju
   await expect(page.getByRole('heading', { name, exact: true })).toBeVisible()
 })
 
+test("Staff give a Product Warranty terms and Serial tracking, and the Storefront's Product page shows the warranty", async ({
+  page,
+  request,
+}) => {
+  const { sku, name } = phone
+  await createInConsole(page)
+  await expect(page.getByRole('status')).toHaveText(`Saved ${name}.`)
+  expect(await productOf(request, sku)).toMatchObject({ warranty: null, serialTracking: 'NONE' })
+
+  await page.getByLabel('Search').fill(sku)
+  await page.getByRole('row').filter({ hasText: sku }).getByRole('link', { name, exact: true }).click()
+  await page.getByLabel('Warranty months').fill('200')
+  await page.getByLabel('Warranty manufacturer').fill('Ecomm')
+  await page.getByLabel('Serial tracking').selectOption({ label: 'IMEI' })
+  await page.getByRole('button', { name: 'Save changes' }).click()
+  await expect(page.getByText('must be a whole number of months from 1 to 120')).toBeVisible()
+
+  await page.getByLabel('Warranty months').fill('24')
+  await page.getByRole('button', { name: 'Save changes' }).click()
+  await expect(page.getByRole('status')).toHaveText(`Saved ${name}.`)
+  expect(await productOf(request, sku)).toMatchObject({
+    warranty: { months: 24, manufacturer: 'Ecomm' },
+    serialTracking: 'IMEI',
+  })
+
+  const storefront = await page.context().newPage()
+  await storefront.goto(`${storefrontUrl}/products/${encodeURIComponent(sku)}`)
+  await expect(storefront.getByText("24 months, manufacturer's warranty (Ecomm)")).toBeVisible()
+  await storefront.close()
+})
+
 /** Signs in as Staff on a new Product's page and creates `phone` with its Variants and Stock. */
 async function createInConsole(page: Page) {
   await page.goto('/products/new')
