@@ -14,7 +14,10 @@ export interface TestCard {
   last4: string
 }
 
-/** One card per outcome of the mock gateway, the approving one first, then the ones the bank confirms later. */
+/**
+ * One card per outcome of the mock gateway, the approving one first, then the ones the bank confirms
+ * later, then the one whose capture is refused.
+ */
 export const testCards: readonly TestCard[] = [
   { token: 'tok_approve', label: 'Approve', outcome: 'The payment goes through.', last4: '4242' },
   { token: 'tok_decline', label: 'Decline', outcome: 'The bank declines the card.', last4: '0002' },
@@ -41,6 +44,12 @@ export const testCards: readonly TestCard[] = [
     label: 'Bank confirms, declines',
     outcome: 'Your bank declines the payment a few seconds later.',
     last4: '3184',
+  },
+  {
+    token: 'tok_capture_decline',
+    label: 'Charge refused',
+    outcome: 'The payment goes through, but the charge is refused when the order ships.',
+    last4: '0069',
   },
 ]
 
@@ -161,19 +170,33 @@ export function confirmation(
 
 /**
  * A Payment's status, worked out from its Payment transactions: its authorization awaits the bank,
- * the amount is held, the gateway declined it, or the hold was released by a Void.
+ * the amount is held, the gateway declined it, the hold was released by a Void, or the amount was
+ * charged by a Capture.
  */
-export type PaymentStatus = 'PENDING' | 'AUTHORIZED' | 'DECLINED' | 'VOIDED'
+export type PaymentStatus = 'PENDING' | 'AUTHORIZED' | 'DECLINED' | 'VOIDED' | 'CAPTURED'
 
-export const paymentStatuses: readonly PaymentStatus[] = ['PENDING', 'AUTHORIZED', 'DECLINED', 'VOIDED']
+export const paymentStatuses: readonly PaymentStatus[] = ['PENDING', 'AUTHORIZED', 'DECLINED', 'VOIDED', 'CAPTURED']
 
-/** An Order's Payment as the Customer reads it from Payment; `declineReason` is null unless it was declined. */
+/** One interaction with the payment gateway on a Payment, as the Customer reads it. */
+export interface PaymentTransaction {
+  kind: 'AUTHORIZATION' | 'VOID' | 'CAPTURE'
+  outcome: 'APPROVED' | 'DECLINED' | 'PENDING'
+  amount: Money
+  declineReason: string | null
+  at: string
+}
+
+/**
+ * An Order's Payment as the Customer reads it from Payment, with its Payment transactions oldest
+ * first; `declineReason` is null unless it was declined.
+ */
 export interface Payment {
   id: string
   orderId: string
   amount: Money
   status: PaymentStatus
   declineReason: string | null
+  transactions: PaymentTransaction[]
 }
 
 const paymentStatusLabels: Record<PaymentStatus, string> = {
@@ -181,6 +204,7 @@ const paymentStatusLabels: Record<PaymentStatus, string> = {
   AUTHORIZED: 'Authorized',
   DECLINED: 'Declined',
   VOIDED: 'Released',
+  CAPTURED: 'Charged',
 }
 
 /** A Payment status as the Customer reads it. */
@@ -203,12 +227,44 @@ export function paymentStatusNote({ status, declineReason }: Pick<Payment, 'stat
       return 'The amount is held on your card.'
     case 'VOIDED':
       return 'The hold on your card was released. Nothing was charged.'
+    case 'CAPTURED':
+      return 'The amount was charged to your card.'
     case 'DECLINED':
       if (!declineReason) return 'The payment was declined.'
       return Object.hasOwn(declineReasons, declineReason)
         ? declineReasons[declineReason]
         : `The payment was declined (${declineReason}).`
   }
+}
+
+/** One Payment transaction as the Customer's Order page lists it: what it did to their money, and when. */
+export interface PaymentTransactionRow {
+  label: string
+  amount: Money
+  /** The instant, for `<time dateTime>`. */
+  at: string
+}
+
+function transactionLabel({ kind, outcome }: Pick<PaymentTransaction, 'kind' | 'outcome'>): string {
+  switch (kind) {
+    case 'AUTHORIZATION':
+      return outcome === 'APPROVED' ? 'Amount held' : outcome === 'DECLINED' ? 'Declined' : 'Sent to your bank'
+    case 'CAPTURE':
+      return outcome === 'APPROVED' ? 'Charged' : 'Charge refused'
+    case 'VOID':
+      return 'Hold released'
+  }
+}
+
+/** A Payment's transactions for the Customer, oldest first. */
+export function paymentTransactionsOf(payment: {
+  transactions: readonly Pick<PaymentTransaction, 'kind' | 'outcome' | 'amount' | 'at'>[]
+}): PaymentTransactionRow[] {
+  return payment.transactions.map((transaction) => ({
+    label: transactionLabel(transaction),
+    amount: transaction.amount,
+    at: transaction.at,
+  }))
 }
 
 /**

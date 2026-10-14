@@ -1,5 +1,11 @@
 import { useFormatMoney } from '../api/currencies'
-import { type Payment, type PaymentStatus, paymentStatusLabel, paymentStatusNote } from '../domain/payment'
+import {
+  type Payment,
+  type PaymentStatus,
+  paymentStatusLabel,
+  paymentStatusNote,
+  paymentTransactionsOf,
+} from '../domain/payment'
 import { Badge, type Tone } from './ui/Badge'
 
 const paymentStatusTones: Record<PaymentStatus, Tone> = {
@@ -7,11 +13,13 @@ const paymentStatusTones: Record<PaymentStatus, Tone> = {
   AUTHORIZED: 'success',
   DECLINED: 'danger',
   VOIDED: 'neutral',
+  CAPTURED: 'success',
 }
 
 /**
- * An Order's Payments, newest first: each one's status, what it means for the Customer's money, and
- * its amount. Read only. An Order can have none, when the payment gateway never answered.
+ * An Order's Payments, newest first: each one's status, what it means for the Customer's money, its
+ * amount, and its Payment transactions, oldest first, such as the amount held and then charged.
+ * Read only. An Order can have none, when the payment gateway never answered.
  */
 export function OrderPayments({ payments }: { payments: readonly Payment[] }) {
   const formatMoney = useFormatMoney()
@@ -30,6 +38,19 @@ export function OrderPayments({ payments }: { payments: readonly Payment[] }) {
             <strong className="order-payment-amount">{formatMoney(payment.amount)}</strong>
           </div>
           <p className="muted">{paymentStatusNote(payment)}</p>
+          {payment.transactions.length > 0 && (
+            <ol className="order-payment-transactions" aria-label="Payment activity">
+              {paymentTransactionsOf(payment).map((row, i) => (
+                <li key={i}>
+                  <span>{row.label}</span>
+                  <span className="muted">{formatMoney(row.amount)}</span>
+                  <time className="muted" dateTime={row.at}>
+                    {new Date(row.at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+                  </time>
+                </li>
+              ))}
+            </ol>
+          )}
         </li>
       ))}
     </ul>
