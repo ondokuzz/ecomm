@@ -1,0 +1,227 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "fulfillment-shipping.shipment",
+  "description": "A snapshot of a Shipment, one Order's parcel, published whenever it is created, its status changes, or a Tracking event is recorded. Keyed by shipmentId.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "eventId",
+    "occurredAt",
+    "shipmentId",
+    "version",
+    "change",
+    "shipment"
+  ],
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique per event; the same event delivered twice has the same eventId."
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the change was published, in the transaction that made it."
+    },
+    "shipmentId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "The Shipment's ID: the message key."
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "The Shipment's version, which goes up by one with every change. Apply an event only if it is newer than what you hold."
+    },
+    "change": {
+      "type": "string",
+      "enum": [
+        "CREATED",
+        "PICKED",
+        "PACKED",
+        "SHIPPED",
+        "DELIVERED",
+        "ON_HOLD",
+        "TRACKED"
+      ],
+      "description": "Why the event was published: the status the Shipment moved to, CREATED for a new one, or TRACKED for a Tracking event that left the status as it was."
+    },
+    "shipment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "orderId",
+        "customerId",
+        "warehouseId",
+        "status",
+        "lines",
+        "trackingEvents",
+        "statusHistory",
+        "createdAt"
+      ],
+      "properties": {
+        "orderId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "customerId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "warehouseId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The Warehouse it ships from, such as WH-BER."
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "AWAITING_PICK",
+            "PICKED",
+            "PACKED",
+            "SHIPPED",
+            "DELIVERED",
+            "ON_HOLD"
+          ]
+        },
+        "lines": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "variantId",
+              "productName",
+              "quantity",
+              "serialTracking",
+              "serialNumbers"
+            ],
+            "properties": {
+              "variantId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "productName": {
+                "type": "string",
+                "minLength": 1
+              },
+              "quantity": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "serialTracking": {
+                "type": "string",
+                "enum": [
+                  "NONE",
+                  "SERIAL",
+                  "IMEI"
+                ]
+              },
+              "serialNumbers": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "description": "One per unit once packed, for a serial-tracked line; empty before, and always for an untracked one."
+              }
+            }
+          }
+        },
+        "carrier": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Left out until the Shipment is booked with its Carrier."
+        },
+        "trackingNumber": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Left out until the Shipment is booked with its Carrier."
+        },
+        "trackingEvents": {
+          "type": "array",
+          "description": "Every Tracking event the Carrier reported, oldest first.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "eventId",
+              "status",
+              "occurredAt"
+            ],
+            "properties": {
+              "eventId": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The Carrier's ID for it."
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "IN_TRANSIT",
+                  "OUT_FOR_DELIVERY",
+                  "DELIVERED"
+                ]
+              },
+              "occurredAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        },
+        "deliveredAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the Carrier delivered it; left out until then."
+        },
+        "holdReason": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Why it is ON_HOLD, such as the capture's decline reason; left out otherwise."
+        },
+        "statusHistory": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Every status it has been in, oldest first.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "status",
+              "at",
+              "by"
+            ],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "AWAITING_PICK",
+                  "PICKED",
+                  "PACKED",
+                  "SHIPPED",
+                  "DELIVERED",
+                  "ON_HOLD"
+                ]
+              },
+              "at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "by": {
+                "type": "string",
+                "minLength": 1,
+                "description": "A Staff member's ID, ORCHESTRATION or CARRIER."
+              }
+            }
+          }
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

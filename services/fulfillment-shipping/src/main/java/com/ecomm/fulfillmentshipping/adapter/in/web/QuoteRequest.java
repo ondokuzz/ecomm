@@ -20,10 +20,10 @@ record QuoteRequest(Map<String, Object> destination, List<Object> lines, Object 
 
   String toCountry() {
     if (destination == null) {
-      throw new InvalidQuoteRequestException("destination", "is required");
+      throw new InvalidRequestException("destination", "is required");
     }
     if (!(destination.get("country") instanceof String country) || !COUNTRIES.contains(country)) {
-      throw new InvalidQuoteRequestException(
+      throw new InvalidRequestException(
           "destination.country", "must be an ISO 3166-1 alpha-2 code, such as DE");
     }
     return country;
@@ -31,19 +31,19 @@ record QuoteRequest(Map<String, Object> destination, List<Object> lines, Object 
 
   List<Line> toLines() {
     if (lines == null || lines.isEmpty()) {
-      throw new InvalidQuoteRequestException("lines", "need at least one line");
+      throw new InvalidRequestException("lines", "need at least one line");
     }
     var converted = new ArrayList<Line>();
     for (var i = 0; i < lines.size(); i++) {
       var field = "lines[" + i + "]";
       if (!(lines.get(i) instanceof Map<?, ?> line)) {
-        throw new InvalidQuoteRequestException(field, "must be an object");
+        throw new InvalidRequestException(field, "must be an object");
       }
       if (!(line.get("variantId") instanceof String variantId) || variantId.isBlank()) {
-        throw new InvalidQuoteRequestException(field + ".variantId", "must be a non-blank string");
+        throw new InvalidRequestException(field + ".variantId", "must be a non-blank string");
       }
       if (!(line.get("quantity") instanceof Integer quantity) || quantity < 1) {
-        throw new InvalidQuoteRequestException(field + ".quantity", "must be a positive integer");
+        throw new InvalidRequestException(field + ".quantity", "must be a positive integer");
       }
       converted.add(new Line(variantId, quantity));
     }
@@ -58,6 +58,6 @@ record QuoteRequest(Map<String, Object> destination, List<Object> lines, Object 
         // Named below.
       }
     }
-    throw new InvalidQuoteRequestException("currency", "must be an ISO 4217 code, such as EUR");
+    throw new InvalidRequestException("currency", "must be an ISO 4217 code, such as EUR");
   }
 }
