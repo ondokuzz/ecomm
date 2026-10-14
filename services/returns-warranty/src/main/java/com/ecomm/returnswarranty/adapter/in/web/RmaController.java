@@ -1,6 +1,8 @@
 package com.ecomm.returnswarranty.adapter.in.web;
 
 import com.ecomm.commons.idempotency.IdempotentCommand;
+import com.ecomm.returnswarranty.application.port.in.Page;
+import com.ecomm.returnswarranty.application.port.in.RmaFilter;
 import com.ecomm.returnswarranty.application.port.in.RmaUseCase;
 import com.ecomm.returnswarranty.domain.Rma;
 import com.ecomm.returnswarranty.domain.RmaExceptions.NoWarrantyException;
@@ -12,6 +14,7 @@ import com.ecomm.returnswarranty.domain.RmaExceptions.RmaAlreadyDecidedException
 import com.ecomm.returnswarranty.domain.RmaExceptions.SerialNumberAlreadyClaimedException;
 import com.ecomm.returnswarranty.domain.RmaExceptions.SerialNumberNotShippedException;
 import com.ecomm.returnswarranty.domain.RmaExceptions.SerialNumbersMiscountedException;
+import com.ecomm.returnswarranty.domain.RmaStatus;
 import com.ecomm.returnswarranty.domain.Window;
 import java.net.URI;
 import java.util.List;
@@ -34,6 +37,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -45,6 +49,9 @@ import org.springframework.web.bind.annotation.RestController;
 class RmaController {
 
   private static final Logger log = LoggerFactory.getLogger(RmaController.class);
+
+  /** The most RMAs a page can hold. */
+  static final int MAX_PAGE_SIZE = 100;
 
   /** How long a Customer waits before asking again while Catalog's Products catch up. */
   private static final String RETRY_AFTER_SECONDS = "5";
@@ -126,6 +133,40 @@ class RmaController {
         .filter(rma -> isStaff(caller) || rma.belongsTo(caller.getName()))
         .map(RmaResponse::of)
         .orElseThrow(() -> new RmaNotFoundException(id));
+  }
+
+  /**
+   * A page of RMAs, oldest first: a Customer's own, or for Staff, everyone's (the RMA approval
+   * queue). {@code status} and {@code orderId} narrow it when given; {@code page} counts from 0;
+   * {@code size} is 1 to {@value #MAX_PAGE_SIZE}.
+   */
+  @GetMapping
+  @PreAuthorize("hasAnyRole('CUSTOMER', 'STAFF')")
+  Page<RmaResponse> rmas(
+      @RequestParam(required = false) String status,
+      @RequestParam(required = false) String orderId,
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "20") int size,
+      Authentication caller) {
+    if (page < 0) {
+      throw new InvalidRequestException("page", "counts from 0");
+    }
+    if (size < 1 || size > MAX_PAGE_SIZE) {
+      throw new InvalidRequestException("size", "is 1 to " + MAX_PAGE_SIZE);
+    }
+    var filter = new RmaFilter(isStaff(caller) ? null : caller.getName(), status(status), orderId);
+    return rmas.rmas(filter, page, size).map(RmaResponse::of);
+  }
+
+  private static RmaStatus status(String value) {
+    if (value == null) {
+      return null;
+    }
+    try {
+      return RmaStatus.valueOf(value);
+    } catch (IllegalArgumentException e) {
+      throw new InvalidRequestException("status", "must be one of " + List.of(RmaStatus.values()));
+    }
   }
 
   private static boolean isStaff(Authentication caller) {
