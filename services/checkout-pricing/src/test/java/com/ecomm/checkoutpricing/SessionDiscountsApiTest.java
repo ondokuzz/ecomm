@@ -150,7 +150,7 @@ class SessionDiscountsApiTest extends CheckoutApiTest {
     stubCampaigns(campaignDiscount(AUDIO_WEEK, "Audio week", 3735));
     stubCouponEvaluation(
         campaignDiscount(AUDIO_WEEK, "Audio week", 3735), couponDiscount("WELCOME10", 18096));
-    var sessionId = startedSessionId();
+    var sessionId = shippedSessionId();
     applyCoupon(sessionId, "WELCOME10").expectStatus().isOk();
 
     pay(sessionId).expectStatus().isOk();

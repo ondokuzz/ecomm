@@ -22,6 +22,7 @@ ecomm:
     inventory-url: http://inventory:8080
     cart-url: http://cart:8080
     promotions-url: http://promotions:8080
+    fulfillment-shipping-url: http://fulfillment-shipping:8080
   security:
     jwt:
       jwk-set-uri: http://keycloak:8080/realms/ecomm/protocol/openid-connect/certs

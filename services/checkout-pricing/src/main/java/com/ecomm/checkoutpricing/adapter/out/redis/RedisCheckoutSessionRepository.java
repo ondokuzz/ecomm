@@ -5,6 +5,8 @@ import com.ecomm.checkoutpricing.domain.CheckoutSession;
 import com.ecomm.checkoutpricing.domain.Discount;
 import com.ecomm.checkoutpricing.domain.PricedCart;
 import com.ecomm.checkoutpricing.domain.PricedLine;
+import com.ecomm.checkoutpricing.domain.ShippingAddress;
+import com.ecomm.checkoutpricing.domain.ShippingOption;
 import com.ecomm.commons.money.Money;
 import java.time.Duration;
 import java.time.Instant;
@@ -59,7 +61,11 @@ class RedisCheckoutSessionRepository implements CheckoutSessionRepository {
     this.json = json;
   }
 
-  /** A session as it is stored; decoupled from the domain so the domain can change freely. */
+  /**
+   * A session as it is stored; decoupled from the domain so the domain can change freely. One saved
+   * before Sprint 5 has no Shipping fields, which read as null: no address, no options and none
+   * chosen.
+   */
   private record Stored(
       String id,
       String customerId,
@@ -67,7 +73,10 @@ class RedisCheckoutSessionRepository implements CheckoutSessionRepository {
       List<StoredDiscount> discounts,
       StoredMoney tax,
       String reservationId,
-      Instant expiresAt) {
+      Instant expiresAt,
+      ShippingAddress shippingAddress,
+      List<StoredOption> shippingOptions,
+      StoredOption shippingOption) {
 
     static Stored of(CheckoutSession session) {
       return new Stored(
@@ -86,7 +95,10 @@ class RedisCheckoutSessionRepository implements CheckoutSessionRepository {
           session.discounts().stream().map(StoredDiscount::of).toList(),
           StoredMoney.of(session.tax()),
           session.reservationId(),
-          session.expiresAt());
+          session.expiresAt(),
+          session.shippingAddress(),
+          session.shippingOptions().stream().map(StoredOption::of).toList(),
+          session.shippingOption() == null ? null : StoredOption.of(session.shippingOption()));
     }
 
     /**
@@ -117,7 +129,24 @@ class RedisCheckoutSessionRepository implements CheckoutSessionRepository {
               discounts.stream().map(StoredDiscount::toDiscount).toList(),
               tax.toMoney(),
               reservationId,
-              expiresAt));
+              expiresAt,
+              shippingAddress,
+              shippingOptions == null
+                  ? List.of()
+                  : shippingOptions.stream().map(StoredOption::toOption).toList(),
+              shippingOption == null ? null : shippingOption.toOption()));
+    }
+  }
+
+  private record StoredOption(String id, String carrier, StoredMoney cost, int estimatedDays) {
+
+    static StoredOption of(ShippingOption option) {
+      return new StoredOption(
+          option.id(), option.carrier(), StoredMoney.of(option.cost()), option.estimatedDays());
+    }
+
+    ShippingOption toOption() {
+      return new ShippingOption(id, carrier, cost.toMoney(), estimatedDays);
     }
   }
 
