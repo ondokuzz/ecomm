@@ -136,8 +136,32 @@ class EdgeAuthenticationApiTest extends GatewayApiTest {
             });
   }
 
+  @Test
+  void theCarriersWebhookIsForwardedWithoutAToken() {
+    http.post()
+        .uri("/api/fulfillment-shipping/webhooks/carrier")
+        .header("Carrier-Signature", "sha256=abc")
+        .contentType(MediaType.APPLICATION_JSON)
+        .body("{\"eventId\": \"trk-1\"}")
+        .exchange()
+        .expectStatus()
+        .isOk();
+
+    assertThat(forwarded())
+        .singleElement()
+        .satisfies(
+            call -> {
+              assertThat(call.getUrl()).isEqualTo("/webhooks/carrier");
+              assertThat(call.getHeader("Carrier-Signature")).isEqualTo("sha256=abc");
+            });
+  }
+
   @ParameterizedTest
-  @CsvSource({"GET, /api/payment/webhooks/gateway", "POST, /api/payment/webhooks/other"})
+  @CsvSource({
+    "GET, /api/payment/webhooks/gateway",
+    "POST, /api/payment/webhooks/other",
+    "GET, /api/fulfillment-shipping/webhooks/carrier"
+  })
   void onlyTheWebhooksOwnMethodAndPathNeedNoToken(String method, String path) {
     http.method(HttpMethod.valueOf(method)).uri(path).exchange().expectStatus().isUnauthorized();
 

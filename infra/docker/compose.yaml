@@ -331,8 +331,9 @@ services:
       postgres-databases: { condition: service_completed_successfully }
       keycloak: { condition: service_healthy }
 
-  # Warehouses, as configuration, and Shipping quotes from the mock carrier behind the
-  # ShippingProvider port (ADR 0005), in Postgres's fulfillment_shipping database.
+  # Warehouses, as configuration, Shipping quotes, and Shipments from pick to delivery, with the
+  # mock carrier behind the ShippingProvider port (ADR 0005) sending signed Carrier webhooks, in
+  # Postgres's fulfillment_shipping database.
   fulfillment-shipping:
     <<: *spring-service
     build:
@@ -340,8 +341,13 @@ services:
       dockerfile: services/fulfillment-shipping/Dockerfile
     image: ${IMAGE_PREFIX:-ecomm}/fulfillment-shipping:${IMAGE_TAG:-latest}
     ports: ["${FULFILLMENT_SHIPPING_PORT:-8099}:8080"]
-    secrets: [{ source: postgres-password, target: spring.datasource.password }]
+    secrets:
+      - { source: postgres-password, target: spring.datasource.password }
+      # The secret the mock carrier signs its Carrier webhooks with and the service checks them by.
+      - source: carrier-webhook-secret
+        target: ecomm.fulfillment-shipping.carrier-webhooks.secret
     depends_on:
+      <<: *event-backbone
       postgres-databases: { condition: service_completed_successfully }
       keycloak: { condition: service_healthy }
 
@@ -730,6 +736,8 @@ secrets:
     file: ../../.secrets/${COMPOSE_PROJECT_NAME}/orchestration-client-secret
   payment-webhook-secret:
     file: ../../.secrets/${COMPOSE_PROJECT_NAME}/payment-webhook-secret
+  carrier-webhook-secret:
+    file: ../../.secrets/${COMPOSE_PROJECT_NAME}/carrier-webhook-secret
 
 volumes:
   postgres-data:

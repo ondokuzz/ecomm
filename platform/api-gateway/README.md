@@ -27,10 +27,11 @@ stay with the services, which still check every token themselves.
 | `search-discovery` | `/search` | |
 | `reviews-ratings` | `/products/*/reviews`, `/products/*/rating-summary`, `/rating-summaries` | |
 | `recommendations` | `/products/*/also-bought` | |
-| `fulfillment-shipping` | | `/shipping/**`: Shipping quotes, which only Checkout calls |
+| `fulfillment-shipping` | | `/shipping/**`: Shipping quotes, which only Checkout calls; `POST /shipments`, `POST /shipments/*/dispatch`, `POST /shipments/*/hold`: what only the fulfillment Saga does |
 
-Payment's `POST /webhooks/gateway` is its one webhook: routed without a token, since the payment
-gateway calls it from outside and Payment checks the webhook's signature itself.
+Two webhooks are routed without a token, since their senders call from outside and the service
+checks the webhook's signature itself: Payment's `POST /webhooks/gateway`, from the payment gateway,
+and Fulfillment & Shipping's `POST /webhooks/carrier`, from the Carrier.
 
 The table lives in [`application.yml`](./src/main/resources/application.yml) under
 `ecomm.gateway.services`, and routing and edge security are both built from it (`EdgeRoutes`), so

@@ -7,9 +7,10 @@ GROUPS := $(shell grep -v '^\#' infra/docker/consumer-groups)
 SEARCH_GROUPS := $(filter search-discovery.%,$(GROUPS))
 REVIEWS_GROUPS := $(filter reviews-ratings.%,$(GROUPS))
 RECOMMENDATIONS_GROUPS := $(filter recommendations.%,$(GROUPS))
+FULFILLMENT_GROUPS := $(filter fulfillment-shipping.%,$(GROUPS))
 DEAD_LETTER_TOPICS := $(foreach group,$(GROUPS),$(group).dlt $(group).redrive)
 
-.PHONY: secrets up down status seed-reset search-rebuild reviews-rebuild recommendations-rebuild dlt-redrive upgrade-from upgrade-to upgrade-clean
+.PHONY: secrets up down status seed-reset search-rebuild reviews-rebuild recommendations-rebuild fulfillment-rebuild dlt-redrive upgrade-from upgrade-to upgrade-clean
 
 ## Write each of the stack's secrets that is missing to .secrets/<project>/, never overwriting one
 ## (infra/docker/secrets.sh). `make up` runs it first.
@@ -95,6 +96,21 @@ recommendations-rebuild:
 	    --reset-offsets --to-latest --topic $$group.redrive --execute || exit 1; \
 	done
 	$(COMPOSE) up -d --wait recommendations
+
+## Rebuild Fulfillment & Shipping's Product projection from catalog.product: stop the service, empty
+## the projection, reset its group to the earliest offset, and start it again. Shipments keep the
+## Product names and Serial tracking they were created with.
+fulfillment-rebuild:
+	$(COMPOSE) stop fulfillment-shipping
+	$(COMPOSE) exec -T postgres psql -U ecomm -d fulfillment_shipping -v ON_ERROR_STOP=1 \
+	  -c 'TRUNCATE product_variant, product'
+	for group in $(FULFILLMENT_GROUPS); do \
+	  $(KAFKA)/kafka-consumer-groups.sh --bootstrap-server localhost:19092 --group $$group \
+	    --reset-offsets --to-earliest --all-topics --execute || exit 1; \
+	  $(KAFKA)/kafka-consumer-groups.sh --bootstrap-server localhost:19092 --group $$group \
+	    --reset-offsets --to-latest --topic $$group.redrive --execute || exit 1; \
+	done
+	$(COMPOSE) up -d --wait fulfillment-shipping
 
 ## Redrive a consumer group's dead events once their cause is fixed, e.g.
 ## `make dlt-redrive GROUP=search-discovery.products`: copy what was dead-lettered since the last
