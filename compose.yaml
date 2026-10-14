@@ -1,3 +1,8 @@
 # Run `docker compose up -d` from the repo root. Definitions live under infra/docker.
+# The project is `ecomm` wherever the checkout lives (a worktree, a clone under another name), so
+# its containers, volumes and `.secrets/<project>/` agree with `make secrets`. COMPOSE_PROJECT_NAME
+# overrides it, as `make upgrade-from` does.
+name: ${COMPOSE_PROJECT_NAME:-ecomm}
+
 include:
   - infra/docker/compose.yaml

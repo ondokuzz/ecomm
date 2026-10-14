@@ -1,13 +1,16 @@
 package com.ecomm.payment.application.port.out;
 
+import com.ecomm.commons.money.Money;
 import com.ecomm.payment.domain.AuthorizationRequest;
 import com.ecomm.payment.domain.GatewayAuthorization;
+import com.ecomm.payment.domain.GatewayCapture;
 import com.ecomm.payment.domain.PaymentGatewayUnavailableException;
 
 /**
  * The payment gateway, kept behind a port so a real, market-specific gateway can replace the mock
  * without touching the use cases (ADR 0005). Every call carries an idempotency key: the gateway
- * answers a repeated key with its first answer, so a retried call never authorizes or voids twice.
+ * answers a repeated key with its first answer, so a retried call never authorizes, voids or
+ * captures twice.
  */
 public interface PaymentGatewayPort {
 
@@ -25,4 +28,12 @@ public interface PaymentGatewayPort {
    * @throws PaymentGatewayUnavailableException when the gateway fails to answer
    */
   String voidAuthorization(String authorizationReference, String idempotencyKey);
+
+  /**
+   * Charges {@code amount}, the full amount of the authorization the gateway knows by {@code
+   * authorizationReference}; the gateway's answer: approved or declined.
+   *
+   * @throws PaymentGatewayUnavailableException when the gateway fails to answer
+   */
+  GatewayCapture capture(String authorizationReference, Money amount, String idempotencyKey);
 }

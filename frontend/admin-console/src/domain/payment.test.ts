@@ -46,7 +46,7 @@ const payment: Payment = {
 
 describe('paymentStatusLabel', () => {
   it('names each Payment status as Staff read it', () => {
-    expect(paymentStatuses.map(paymentStatusLabel)).toEqual(['Pending', 'Authorized', 'Declined', 'Voided'])
+    expect(paymentStatuses.map(paymentStatusLabel)).toEqual(['Pending', 'Authorized', 'Declined', 'Voided', 'Charged'])
   })
 })
 
@@ -63,6 +63,28 @@ describe('transactionRowsOf', () => {
       new Date('2026-10-03T12:00:00Z').toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'medium' }),
     )
     expect(rows.every((row) => row.note === undefined && row.declineReason === undefined)).toBe(true)
+  })
+
+  it('lists a capture, approved or declined with its reason', () => {
+    const rows = transactionRowsOf({
+      transactions: [
+        payment.transactions[1],
+        {
+          ...payment.transactions[2],
+          kind: 'CAPTURE',
+          outcome: 'DECLINED',
+          gatewayReference: 'mock_capture_1',
+          declineReason: 'authorization_expired',
+        },
+        { ...payment.transactions[2], kind: 'CAPTURE', gatewayReference: 'mock_capture_2' },
+      ],
+    })
+
+    expect(rows.map((row) => [row.kind, row.outcome, row.reference, row.declineReason])).toEqual([
+      ['Authorization', 'Approved', 'mock_auth_1', undefined],
+      ['Capture', 'Declined', 'mock_capture_1', 'authorization_expired'],
+      ['Capture', 'Approved', 'mock_capture_2', undefined],
+    ])
   })
 
   it('gives a declined transaction its reason', () => {

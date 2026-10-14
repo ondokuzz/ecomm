@@ -21,6 +21,8 @@ public record PaymentEvent(String paymentId, long version, Change change, Snapsh
     DECLINED,
     PENDING,
     VOIDED,
+    CAPTURED,
+    CAPTURE_DECLINED,
     BACKFILLED
   }
 

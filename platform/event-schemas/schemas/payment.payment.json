@@ -40,9 +40,11 @@
         "DECLINED",
         "PENDING",
         "VOIDED",
-        "BACKFILLED"
+        "BACKFILLED",
+        "CAPTURED",
+        "CAPTURE_DECLINED"
       ],
-      "description": "Why the event was published: the status a transaction left the Payment in, or BACKFILLED for a Payment recorded before Payment events."
+      "description": "Why the event was published: the status a transaction left the Payment in, CAPTURE_DECLINED for a capture the gateway refused (the Payment stays AUTHORIZED), or BACKFILLED for a Payment recorded before Payment events."
     },
     "payment": {
       "type": "object",
@@ -74,7 +76,8 @@
             "PENDING",
             "AUTHORIZED",
             "DECLINED",
-            "VOIDED"
+            "VOIDED",
+            "CAPTURED"
           ],
           "description": "Worked out from the transactions."
         },
@@ -102,7 +105,8 @@
                 "type": "string",
                 "enum": [
                   "AUTHORIZATION",
-                  "VOID"
+                  "VOID",
+                  "CAPTURE"
                 ]
               },
               "amount": {

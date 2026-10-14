@@ -138,6 +138,22 @@ abstract class PaymentApiTest {
         .exchange();
   }
 
+  /** Captures the Payment as the fulfillment Saga, for {@code customerId}, with a fresh key. */
+  RestTestClient.ResponseSpec capture(String id, String customerId) {
+    return captureWithKey(id, customerId, UUID.randomUUID().toString());
+  }
+
+  /** Captures the Payment as the fulfillment Saga, for {@code customerId}, with {@code key}. */
+  RestTestClient.ResponseSpec captureWithKey(String id, String customerId, String key) {
+    return http.post()
+        .uri("/payments/{id}/capture", id)
+        .headers(h -> h.setBearerAuth(orchestrationToken()))
+        .header("Idempotency-Key", key)
+        .contentType(MediaType.APPLICATION_JSON)
+        .body("{\"customerId\": \"%s\"}".formatted(customerId))
+        .exchange();
+  }
+
   /** Posts the webhook to Payment as the gateway does: no token, its signature in a header. */
   RestTestClient.ResponseSpec deliver(WebhookDelivery.SignedWebhook webhook) {
     return http.post()

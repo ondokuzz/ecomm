@@ -153,10 +153,13 @@ the tax and the total.
 
 The Order page shows its Payment from Payment's `GET /payments?orderId=`, which answers the
 Customer's own Payments for the Order, newest first. Each shows its status as a badge (Being
-confirmed, Authorized, Declined or Released, for `PENDING`, `AUTHORIZED`, `DECLINED` and `VOIDED`),
-its amount, and what that means for the Customer's money: still being confirmed by the bank, held
-on the card, why it was declined, or released with nothing charged (`paymentStatusLabel` and
-`paymentStatusNote` in [`src/domain/payment.ts`](./src/domain/payment.ts)). A cancelled Order says
+confirmed, Authorized, Declined, Released or Charged, for `PENDING`, `AUTHORIZED`, `DECLINED`,
+`VOIDED` and `CAPTURED`), its amount, and what that means for the Customer's money: still being
+confirmed by the bank, held on the card, why it was declined, released with nothing charged, or
+charged (`paymentStatusLabel` and `paymentStatusNote` in
+[`src/domain/payment.ts`](./src/domain/payment.ts)). Below, its Payment transactions oldest first,
+each with its amount and time: Sent to your bank, Amount held or Declined for the authorization,
+Hold released for a Void, and Charged or Charge refused for a Capture (`paymentTransactionsOf`). A cancelled Order says
 why above its timeline, by its latest Payment: "Payment declined" or "Card authorization released"
 (`cancellationReason`). An Order with no Payment, such as one whose payment gateway failed to
 answer, says none was recorded, and a failed read shows its error beside the rest of the page, with
@@ -267,9 +270,11 @@ Checkout shows where the Customer is (Cart → Payment → Done; the Order confi
 and a drawn payment card over a test-card picker: there is nothing to type, since the payment is
 mocked. Each test card is a radio named by its card and described by what it does
 (`testCards` in [`src/domain/payment.ts`](./src/domain/payment.ts)): **Approve**, **Decline**,
-**Insufficient funds**, **Gateway error**, **Bank confirms, approves** and **Bank confirms,
-declines**, sent as the Payment method `tok_approve`, `tok_decline`, `tok_insufficient_funds`,
-`tok_gateway_error`, `tok_async_approve` and `tok_async_decline`. Approve is chosen to begin with,
+**Insufficient funds**, **Gateway error**, **Bank confirms, approves**, **Bank confirms,
+declines** and **Charge refused**, sent as the Payment method `tok_approve`, `tok_decline`,
+`tok_insufficient_funds`, `tok_gateway_error`, `tok_async_approve`, `tok_async_decline` and
+`tok_capture_decline`. Charge refused pays like Approve, but the gateway refuses to capture the
+Payment when the Order ships, so its Shipment is held. Approve is chosen to begin with,
 and the drawn card shows the chosen one's last four digits. A Pay still unanswered after 2 seconds,
 as one the bank confirms later is, shows "Confirming your payment…" (`isConfirmingPayment`).
 
@@ -384,7 +389,7 @@ Sign in as `demo@ecomm.local` / `demo`, or register a new Customer.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: failed responses as messages and support references, Money formatting by Catalog's Minor units, Cart pricing, checkout problems, the session countdown and the price breakdown with each Discount, Coupon rejections, test cards and payment failures, an Order's Payment statuses and why a cancelled Order was cancelled, quantities, Stock levels and Cart lines' availability, toasts, the search's URL and its Facets as chips and filters, rating stars and summaries and the review form's validation, Product specs by their Category's definitions, Warranty terms in words, Customer initials, Orders and their timeline from the Order Status history, the Orders list's paging, Order Status colours, seed Product images, the Keycloak theme's and the Admin Console's copies of the tokens
+npm test          # Vitest: failed responses as messages and support references, Money formatting by Catalog's Minor units, Cart pricing, checkout problems, the session countdown and the price breakdown with each Discount, Coupon rejections, test cards and payment failures, an Order's Payment statuses and transactions and why a cancelled Order was cancelled, quantities, Stock levels and Cart lines' availability, toasts, the search's URL and its Facets as chips and filters, rating stars and summaries and the review form's validation, Product specs by their Category's definitions, Warranty terms in words, Customer initials, Orders and their timeline from the Order Status history, the Orders list's paging, Order Status colours, seed Product images, the Keycloak theme's and the Admin Console's copies of the tokens
 npm run test:e2e  # Playwright smoke, search, product-page and error-states tests against the running compose stack (`make up`)
 ```
 

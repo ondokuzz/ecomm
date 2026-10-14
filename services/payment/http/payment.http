@@ -264,3 +264,89 @@ Gateway-Signature: sha256=00
 Content-Type: application/json
 
 {"eventId": "evt-forged", "reference": "{{asyncReference}}", "outcome": "DECLINED", "declineReason": "card_declined"}
+
+### Capture: authorize an Order's payment for the fulfillment Saga to capture
+POST {{payment}}/payments
+Authorization: Bearer {{orchestrationToken}}
+Idempotency-Key: {{$uuid}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}", "orderId": "order-capture-1", "paymentMethod": "tok_approve", "amount": {"amountMinor": 79900, "currency": "EUR"}}
+
+> {% client.global.set("capturePaymentId", response.body.id); %}
+
+### Orchestration captures it: 200, CAPTURED, with an approved CAPTURE transaction for the full amount
+POST {{payment}}/payments/{{capturePaymentId}}/capture
+Authorization: Bearer {{orchestrationToken}}
+Idempotency-Key: {{$uuid}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}"}
+
+### Capturing it again, with another key: the same 200, and nothing more is recorded
+POST {{payment}}/payments/{{capturePaymentId}}/capture
+Authorization: Bearer {{orchestrationToken}}
+Idempotency-Key: {{$uuid}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}"}
+
+### A captured Payment can't be voided: 409, alreadyCaptured
+POST {{payment}}/payments/{{capturePaymentId}}/void
+Authorization: Bearer {{orchestrationToken}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}"}
+
+### Capturing without a key: 400, idempotencyKeyRequired
+POST {{payment}}/payments/{{capturePaymentId}}/capture
+Authorization: Bearer {{orchestrationToken}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}"}
+
+### A Customer can't capture, only Orchestration can: 403
+POST {{payment}}/payments/{{capturePaymentId}}/capture
+Authorization: Bearer {{customerToken}}
+Idempotency-Key: {{$uuid}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}"}
+
+### The API gateway hides the capture: 404
+POST {{gateway}}/payments/{{capturePaymentId}}/capture
+Authorization: Bearer {{customerToken}}
+Idempotency-Key: {{$uuid}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}"}
+
+### A declined Payment can't be captured: 409, paymentNotCapturable
+POST {{payment}}/payments/{{declinedPaymentId}}/capture
+Authorization: Bearer {{orchestrationToken}}
+Idempotency-Key: {{$uuid}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}"}
+
+### The test card whose capture is refused: 201, AUTHORIZED
+POST {{payment}}/payments
+Authorization: Bearer {{orchestrationToken}}
+Idempotency-Key: {{$uuid}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}", "orderId": "order-capture-2", "paymentMethod": "tok_capture_decline", "amount": {"amountMinor": 79900, "currency": "EUR"}}
+
+> {% client.global.set("refusedPaymentId", response.body.id); %}
+
+### Capturing it: 402, captureDeclined, authorization_expired; it stays AUTHORIZED, with a declined CAPTURE transaction
+POST {{payment}}/payments/{{refusedPaymentId}}/capture
+Authorization: Bearer {{orchestrationToken}}
+Idempotency-Key: {{$uuid}}
+Content-Type: application/json
+
+{"customerId": "{{customerId}}"}
+
+### Staff see its transactions, the declined CAPTURE among them
+GET {{gateway}}/staff/payments?orderId=order-capture-2
+Authorization: Bearer {{staffToken}}

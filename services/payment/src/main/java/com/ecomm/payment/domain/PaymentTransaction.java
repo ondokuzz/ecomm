@@ -6,8 +6,8 @@ import java.util.Objects;
 
 /**
  * One interaction with the payment gateway on a Payment, recorded for good and never changed (ADR
- * 0002): an authorization or a void, for an amount, with the gateway's answer and its reference for
- * it.
+ * 0002): an authorization, a void or a capture, for an amount, with the gateway's answer and its
+ * reference for it.
  *
  * @param declineReason the gateway's reason, such as {@code insufficient_funds}, when the outcome
  *     is {@code DECLINED}; null otherwise
@@ -25,10 +25,11 @@ public record PaymentTransaction(
     Instant at,
     boolean backfilled) {
 
-  /** What the gateway was asked to do. Capture and refund come with fulfillment and returns. */
+  /** What the gateway was asked to do. Refund comes with returns. */
   public enum Kind {
     AUTHORIZATION,
-    VOID
+    VOID,
+    CAPTURE
   }
 
   /** What the gateway answered: {@code PENDING} until it settles the answer later. */
@@ -68,5 +69,20 @@ public record PaymentTransaction(
   static PaymentTransaction voidOf(Money amount, String reference, Instant at) {
     return new PaymentTransaction(
         Kind.VOID, amount, Outcome.APPROVED, reference, null, null, at, false);
+  }
+
+  /** A capture of {@code amount} the gateway approved with {@code reference}. */
+  static PaymentTransaction captureOf(Money amount, String reference, Instant at) {
+    return new PaymentTransaction(
+        Kind.CAPTURE, amount, Outcome.APPROVED, reference, null, null, at, false);
+  }
+
+  /**
+   * A capture of {@code amount} the gateway declined, with {@code reference}, for {@code reason}.
+   */
+  static PaymentTransaction declinedCaptureOf(
+      Money amount, String reference, String reason, Instant at) {
+    return new PaymentTransaction(
+        Kind.CAPTURE, amount, Outcome.DECLINED, reference, reason, null, at, false);
   }
 }
