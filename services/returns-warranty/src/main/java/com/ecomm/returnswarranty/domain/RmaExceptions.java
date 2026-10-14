@@ -93,6 +93,28 @@ public final class RmaExceptions {
     }
   }
 
+  /**
+   * An Order with no delivered Shipment of the Customer's: not theirs, not delivered yet, or not
+   * projected yet.
+   */
+  public static class NotDeliveredException extends RuntimeException {
+
+    public NotDeliveredException(String orderId) {
+      super("No delivered Order " + orderId);
+    }
+  }
+
+  /**
+   * A warranty claim on a Variant whose Product the projection doesn't hold yet, so its Warranty
+   * terms aren't known. Catalog's events catch up, so a later try succeeds.
+   */
+  public static class ProductNotKnownYetException extends RuntimeException {
+
+    public ProductNotKnownYetException(String variantId) {
+      super("No Product is known yet for Variant " + variantId);
+    }
+  }
+
   /** A decision on an RMA that has already been decided. */
   public static class RmaAlreadyDecidedException extends RuntimeException {
 

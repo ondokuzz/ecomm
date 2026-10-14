@@ -1,0 +1,175 @@
+package com.ecomm.returnswarranty;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.stream.Collectors;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.client.EntityExchangeResult;
+import org.springframework.test.web.servlet.client.RestTestClient;
+
+/**
+ * Base for the RMA tests: delivered Shipments and Products as their contexts publish them, the
+ * Customer's requests and Staff's decisions as a client makes them, and the parts of an RMA a
+ * client reads.
+ */
+abstract class RmasApiTest extends ReturnsWarrantyApiTest {
+
+  /** Delivered three days before the fixed clock: within the 14-day Return Period. */
+  static final Instant RECENTLY = TestTimeSource.NOW.minus(Duration.ofDays(3));
+
+  /** A valid IMEI, its check digit computed, distinct on every call. */
+  static String newImei() {
+    var body =
+        String.format(
+            "%014d",
+            Math.floorMod(UUID.randomUUID().getLeastSignificantBits(), 100_000_000_000_000L));
+    var sum = 0;
+    for (var i = 0; i < 14; i++) {
+      var digit = body.charAt(13 - i) - '0';
+      if (i % 2 == 0) {
+        digit *= 2;
+        if (digit > 9) {
+          digit -= 9;
+        }
+      }
+      sum += digit;
+    }
+    return body + (10 - sum % 10) % 10;
+  }
+
+  static String newVariant(String prefix) {
+    return prefix + "-" + UUID.randomUUID();
+  }
+
+  /** The JSON of a request, with Serial numbers. */
+  static String rma(
+      String orderId, String variantId, int quantity, String kind, String... serialNumbers) {
+    return """
+        {"orderId": "%s", "variantId": "%s", "quantity": %d, "serialNumbers": [%s],
+         "kind": "%s", "reason": "It stopped charging"}
+        """
+        .formatted(
+            orderId,
+            variantId,
+            quantity,
+            List.of(serialNumbers).stream()
+                .map(s -> "\"" + s + "\"")
+                .collect(Collectors.joining(", ")),
+            kind);
+  }
+
+  RestTestClient.ResponseSpec request(String token, String body) {
+    return requestWithKey(token, UUID.randomUUID().toString(), body);
+  }
+
+  RestTestClient.ResponseSpec requestWithKey(String token, String key, String body) {
+    return http.post()
+        .uri("/rmas")
+        .headers(h -> h.setBearerAuth(token))
+        .header("Idempotency-Key", key)
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(body)
+        .exchange();
+  }
+
+  /**
+   * The Customer's request once the projections have caught up: until the Shipment is projected it
+   * is a 404, and until a warranty claim's Product is, a 503. Neither is recorded under the key, so
+   * this asks again with it, as a client would.
+   */
+  EntityExchangeResult<byte[]> requestedOnceProjected(String body) {
+    var key = UUID.randomUUID().toString();
+    return await()
+        .atMost(Duration.ofSeconds(20))
+        .until(
+            () -> requestWithKey(CUSTOMER, key, body).expectBody().returnResult(),
+            r -> r.getStatus().value() != 404 && r.getStatus().value() != 503);
+  }
+
+  /** The RMA the Customer's request created, once the projections have caught up. */
+  RmaView requested(String body) {
+    var result = requestedOnceProjected(body);
+    assertThat(result.getStatus().value())
+        .as(new String(result.getResponseBodyContent()))
+        .isEqualTo(201);
+    return JSON.readValue(result.getResponseBodyContent(), RmaView.class);
+  }
+
+  /**
+   * Waits until the Shipment projection has applied everything published before this call: it
+   * publishes a delivered Shipment of its own after them and waits until it can be claimed.
+   */
+  void awaitShipmentsProjected() {
+    var marker = newVariant("MARKER");
+    var shipment = Shipments.shipment(CUSTOMER_ID).line(marker, "Marker", 1, "NONE");
+    shipment.delivered(RECENTLY);
+    requested(rma(shipment.orderId(), marker, 1, "RETURN"));
+  }
+
+  RestTestClient.ResponseSpec approve(String token, String id, String body) {
+    return http.post()
+        .uri("/rmas/{id}/approve", id)
+        .headers(h -> h.setBearerAuth(token))
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(body)
+        .exchange();
+  }
+
+  RestTestClient.ResponseSpec reject(String token, String id, String body) {
+    return http.post()
+        .uri("/rmas/{id}/reject", id)
+        .headers(h -> h.setBearerAuth(token))
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(body)
+        .exchange();
+  }
+
+  RestTestClient.ResponseSpec read(String token, String id) {
+    return http.get().uri("/rmas/{id}", id).headers(h -> h.setBearerAuth(token)).exchange();
+  }
+
+  RmaView readRma(String token, String id) {
+    return read(token, id)
+        .expectStatus()
+        .isOk()
+        .expectBody(RmaView.class)
+        .returnResult()
+        .getResponseBody();
+  }
+
+  static RmaView body(RestTestClient.ResponseSpec response) {
+    return response.expectBody(RmaView.class).returnResult().getResponseBody();
+  }
+
+  private static final tools.jackson.databind.json.JsonMapper JSON =
+      new tools.jackson.databind.json.JsonMapper();
+
+  /** The parts of an RMA a client reads, independent of the service's classes. */
+  record RmaView(
+      String id,
+      String reference,
+      String orderId,
+      String customerId,
+      String variantId,
+      String productName,
+      int quantity,
+      List<String> serialNumbers,
+      String kind,
+      String reason,
+      WindowView window,
+      String status,
+      String requestedAt,
+      List<DecisionView> decisions) {}
+
+  record WindowView(String kind, String startsAt, String endsAt, Map<String, Object> warranty) {}
+
+  record DecisionView(String status, String decidedBy, String decidedAt, String note) {}
+
+  record PageView(List<RmaView> items, int page, int size, long total) {}
+}
