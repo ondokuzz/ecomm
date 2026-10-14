@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   type Payment,
   type PaymentStatus,
+  type PaymentTransaction,
   attemptFailure,
   cancellationReason,
   confirmation,
@@ -12,6 +13,7 @@ import {
   paymentStatusLabel,
   paymentStatusNote,
   paymentStatuses,
+  paymentTransactionsOf,
   pollFor,
   testCards,
 } from './payment'
@@ -25,8 +27,16 @@ describe('testCards', () => {
       'tok_gateway_error',
       'tok_async_approve',
       'tok_async_decline',
+      'tok_capture_decline',
     ])
     expect(defaultTestCard).toBe(testCards[0])
+  })
+
+  it('offers a card that pays but whose charge is refused at shipping', () => {
+    expect(testCards.find((card) => card.token === 'tok_capture_decline')).toMatchObject({
+      label: 'Charge refused',
+      outcome: 'The payment goes through, but the charge is refused when the order ships.',
+    })
   })
 
   it('gives each card its own number', () => {
@@ -168,7 +178,13 @@ describe('confirmation', () => {
 
 describe('paymentStatusLabel', () => {
   it('names each Payment status as the Customer reads it', () => {
-    expect(paymentStatuses.map(paymentStatusLabel)).toEqual(['Being confirmed', 'Authorized', 'Declined', 'Released'])
+    expect(paymentStatuses.map(paymentStatusLabel)).toEqual([
+      'Being confirmed',
+      'Authorized',
+      'Declined',
+      'Released',
+      'Charged',
+    ])
   })
 })
 
@@ -177,6 +193,7 @@ describe('paymentStatusNote', () => {
     expect(paymentStatusNote(payment('PENDING'))).toBe('Your bank is still confirming this payment.')
     expect(paymentStatusNote(payment('AUTHORIZED'))).toBe('The amount is held on your card.')
     expect(paymentStatusNote(payment('VOIDED'))).toBe('The hold on your card was released. Nothing was charged.')
+    expect(paymentStatusNote(payment('CAPTURED'))).toBe('The amount was charged to your card.')
   })
 
   it('says why a declined Payment was declined, in words for the reasons it knows', () => {
@@ -211,6 +228,44 @@ describe('cancellationReason', () => {
   })
 })
 
+describe('paymentTransactionsOf', () => {
+  const transaction = (
+    kind: PaymentTransaction['kind'],
+    outcome: PaymentTransaction['outcome'],
+    at: string,
+    declineReason: string | null = null,
+  ): PaymentTransaction => ({ kind, outcome, amount: { amountMinor: 79900, currency: 'EUR' }, declineReason, at })
+
+  it('says what each Payment transaction did to the Customer’s money, oldest first', () => {
+    const rows = paymentTransactionsOf({
+      transactions: [
+        transaction('AUTHORIZATION', 'PENDING', '2026-10-03T12:00:00Z'),
+        transaction('AUTHORIZATION', 'APPROVED', '2026-10-03T12:00:03Z'),
+        transaction('CAPTURE', 'APPROVED', '2026-10-04T09:00:00Z'),
+      ],
+    })
+
+    expect(rows.map((row) => [row.label, row.at])).toEqual([
+      ['Sent to your bank', '2026-10-03T12:00:00Z'],
+      ['Amount held', '2026-10-03T12:00:03Z'],
+      ['Charged', '2026-10-04T09:00:00Z'],
+    ])
+    expect(rows[2].amount).toEqual({ amountMinor: 79900, currency: 'EUR' })
+  })
+
+  it('names declines, a refused charge and a released hold', () => {
+    const rows = paymentTransactionsOf({
+      transactions: [
+        transaction('AUTHORIZATION', 'DECLINED', '2026-10-03T12:00:00Z', 'card_declined'),
+        transaction('CAPTURE', 'DECLINED', '2026-10-03T12:00:01Z', 'authorization_expired'),
+        transaction('VOID', 'APPROVED', '2026-10-03T12:00:02Z'),
+      ],
+    })
+
+    expect(rows.map((row) => row.label)).toEqual(['Declined', 'Charge refused', 'Hold released'])
+  })
+})
+
 function payment(status: PaymentStatus, declineReason: string | null = null): Payment {
   return {
     id: 'p-1',
@@ -218,5 +273,6 @@ function payment(status: PaymentStatus, declineReason: string | null = null): Pa
     amount: { amountMinor: 79900, currency: 'EUR' },
     status,
     declineReason,
+    transactions: [],
   }
 }

@@ -3,12 +3,12 @@
   "occurredAt": "2026-10-08T10:15:30.123456Z",
   "paymentId": "6f1c2d3e-4b5a-4c7d-8e9f-0a1b2c3d4e5f",
   "version": 2,
-  "change": "VOIDED",
+  "change": "CAPTURED",
   "payment": {
     "orderId": "3f2a1b0c-9d8e-4f7a-a6b5-c4d3e2f1a0b9",
     "customerId": "8d1e5f2a-3b4c-4d5e-8f6a-7b8c9d0e1f2a",
     "amount": { "amountMinor": 79900, "currency": "EUR" },
-    "status": "VOIDED",
+    "status": "CAPTURED",
     "transactions": [
       {
         "kind": "AUTHORIZATION",
@@ -19,10 +19,10 @@
         "backfilled": false
       },
       {
-        "kind": "VOID",
+        "kind": "CAPTURE",
         "amount": { "amountMinor": 79900, "currency": "EUR" },
         "outcome": "APPROVED",
-        "gatewayReference": "mock-void-1d2c3b4a-5f6e-4d7c-8b9a-0f1e2d3c4b5a",
+        "gatewayReference": "mock-capture-1d2c3b4a-5f6e-4d7c-8b9a-0f1e2d3c4b5a",
         "at": "2026-10-08T10:15:30.123456Z",
         "backfilled": false
       }

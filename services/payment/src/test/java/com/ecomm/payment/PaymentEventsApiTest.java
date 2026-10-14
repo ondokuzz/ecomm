@@ -108,6 +108,51 @@ class PaymentEventsApiTest extends PaymentApiTest {
   }
 
   @Test
+  void aCapturePublishesThePaymentWithAHigherVersion() {
+    var payment = authorized("order-events-capture");
+    capture(payment.id(), "customer-42").expectStatus().isOk();
+    capture(payment.id(), "customer-42").expectStatus().isOk();
+
+    var records = PaymentEvents.keyed(payment.id(), 2);
+
+    assertThat(records).hasSize(2);
+    assertThat(records).allSatisfy(r -> assertThat(PaymentEvents.schemaViolationsOf(r)).isEmpty());
+    var events = records.stream().map(PaymentEvents::valueOf).toList();
+    assertThat(events)
+        .extracting(e -> e.get("change").asText())
+        .containsExactly("AUTHORIZED", "CAPTURED");
+    assertThat(events).extracting(e -> e.get("version").asLong()).containsExactly(1L, 2L);
+    var captured = events.getLast().get("payment");
+    assertThat(captured.get("status").asText()).isEqualTo("CAPTURED");
+    assertThat(captured.get("transactions"))
+        .extracting(t -> t.get("kind").asText())
+        .containsExactly("AUTHORIZATION", "CAPTURE");
+  }
+
+  @Test
+  void aDeclinedCapturePublishesThePaymentWithTheCapturesReason() {
+    var payment =
+        authorize("order-events-capture-declined", "tok_capture_decline")
+            .expectBody(PaymentView.class)
+            .returnResult()
+            .getResponseBody();
+    capture(payment.id(), "customer-42").expectStatus().isEqualTo(402);
+
+    var records = PaymentEvents.keyed(payment.id(), 2);
+
+    assertThat(records).allSatisfy(r -> assertThat(PaymentEvents.schemaViolationsOf(r)).isEmpty());
+    var event = PaymentEvents.valueOf(records.getLast());
+    assertThat(event.get("change").asText()).isEqualTo("CAPTURE_DECLINED");
+    assertThat(event.get("version").asLong()).isEqualTo(2);
+    assertThat(event.at("/payment/status").asText()).isEqualTo("AUTHORIZED");
+    assertThat(event.at("/payment").has("declineReason")).isFalse();
+    assertThat(event.at("/payment/transactions/1/kind").asText()).isEqualTo("CAPTURE");
+    assertThat(event.at("/payment/transactions/1/outcome").asText()).isEqualTo("DECLINED");
+    assertThat(event.at("/payment/transactions/1/declineReason").asText())
+        .isEqualTo("authorization_expired");
+  }
+
+  @Test
   void aRequestThatChangesNothingPublishesNothing() {
     var body =
         """

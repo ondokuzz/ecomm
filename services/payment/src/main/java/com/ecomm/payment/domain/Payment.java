@@ -94,6 +94,35 @@ public record Payment(
     return new Payment(id, customerId, orderId, amount, appended);
   }
 
+  /**
+   * This Payment with a {@code CAPTURE} transaction the gateway approved with {@code reference}:
+   * {@code CAPTURED}.
+   *
+   * @throws PaymentNotCapturableException unless it is {@code AUTHORIZED}
+   */
+  public Payment captured(String reference, Instant at) {
+    return withCapture(PaymentTransaction.captureOf(amount, reference, at));
+  }
+
+  /**
+   * This Payment with a {@code CAPTURE} transaction the gateway declined with {@code reference},
+   * for {@code reason}: still {@code AUTHORIZED}.
+   *
+   * @throws PaymentNotCapturableException unless it is {@code AUTHORIZED}
+   */
+  public Payment captureDeclined(String reference, String reason, Instant at) {
+    return withCapture(PaymentTransaction.declinedCaptureOf(amount, reference, reason, at));
+  }
+
+  private Payment withCapture(PaymentTransaction capture) {
+    if (status() != PaymentStatus.AUTHORIZED) {
+      throw new PaymentNotCapturableException(id, status());
+    }
+    var appended = new ArrayList<>(transactions);
+    appended.add(capture);
+    return new Payment(id, customerId, orderId, amount, appended);
+  }
+
   public boolean belongsTo(String customerId) {
     return this.customerId.equals(customerId);
   }

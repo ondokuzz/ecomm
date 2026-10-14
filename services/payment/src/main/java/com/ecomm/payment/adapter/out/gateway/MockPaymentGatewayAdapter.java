@@ -1,8 +1,10 @@
 package com.ecomm.payment.adapter.out.gateway;
 
+import com.ecomm.commons.money.Money;
 import com.ecomm.payment.application.port.out.PaymentGatewayPort;
 import com.ecomm.payment.domain.AuthorizationRequest;
 import com.ecomm.payment.domain.GatewayAuthorization;
+import com.ecomm.payment.domain.GatewayCapture;
 import com.ecomm.payment.domain.PaymentGatewayUnavailableException;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
@@ -26,6 +28,11 @@ import tools.jackson.databind.json.JsonMapper;
  * tok_gateway_error} fails to answer; any other token declines as {@code unknown_payment_method}.
  * Every void succeeds.
  *
+ * <p>{@code tok_capture_decline} authorizes, and every capture of that authorization is declined as
+ * {@code authorization_expired}; any other authorization is captured. The mock keeps no record of
+ * its authorizations, so it marks that one in its reference, {@code mock-capture-decline-}, and its
+ * answer survives a restart.
+ *
  * <p>{@code tok_async_approve} and {@code tok_async_decline} stand for a card the Customer's bank
  * confirms later: they are answered as pending, and {@code webhookDelay} later the mock sends a
  * Gateway webhook settling the authorization as approved, or declined as {@code card_declined},
@@ -40,8 +47,12 @@ class MockPaymentGatewayAdapter implements PaymentGatewayPort, AutoCloseable {
 
   private static final int REMEMBERED_KEYS = 10_000;
 
+  /** Begins the reference of an authorization whose capture the mock declines. */
+  private static final String CAPTURE_DECLINE_PREFIX = "mock-capture-decline-";
+
   private final Map<String, GatewayAuthorization> authorizations = remembered();
   private final Map<String, String> voids = remembered();
+  private final Map<String, GatewayCapture> captures = remembered();
 
   private final WebhookDelivery webhooks;
   private final Duration webhookDelay;
@@ -70,6 +81,8 @@ class MockPaymentGatewayAdapter implements PaymentGatewayPort, AutoCloseable {
     GatewayAuthorization answer =
         switch (request.paymentMethod()) {
           case "tok_approve" -> new GatewayAuthorization.Approved(reference);
+          case "tok_capture_decline" ->
+              new GatewayAuthorization.Approved(CAPTURE_DECLINE_PREFIX + UUID.randomUUID());
           case "tok_decline" -> new GatewayAuthorization.Declined(reference, "card_declined");
           case "tok_insufficient_funds" ->
               new GatewayAuthorization.Declined(reference, "insufficient_funds");
@@ -122,6 +135,19 @@ class MockPaymentGatewayAdapter implements PaymentGatewayPort, AutoCloseable {
   @Override
   public String voidAuthorization(String authorizationReference, String idempotencyKey) {
     return voids.computeIfAbsent(idempotencyKey, key -> "mock-void-" + UUID.randomUUID());
+  }
+
+  @Override
+  public GatewayCapture capture(
+      String authorizationReference, Money amount, String idempotencyKey) {
+    return captures.computeIfAbsent(
+        idempotencyKey,
+        key -> {
+          var reference = "mock-capture-" + UUID.randomUUID();
+          return authorizationReference.startsWith(CAPTURE_DECLINE_PREFIX)
+              ? new GatewayCapture.Declined(reference, "authorization_expired")
+              : new GatewayCapture.Approved(reference);
+        });
   }
 
   /** The most recently added {@value #REMEMBERED_KEYS} entries, safe to share between threads. */
