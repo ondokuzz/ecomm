@@ -284,8 +284,8 @@ async function createInConsole(page: Page) {
   await page.getByLabel('Category').selectOption({ label: 'Phones' })
   await page.getByLabel('SKU').fill(phone.sku)
   await page.getByLabel('Name').fill(phone.name)
-  await page.getByLabel('brand').fill('Ecomm')
-  await page.getByLabel('screen').fill('6.1 in')
+  await page.getByLabel('brand', { exact: true }).fill('Ecomm')
+  await page.getByLabel('screen', { exact: true }).fill('6.1 in')
 
   await page.getByRole('button', { name: 'Add Variant' }).click()
   for (const [i, variant] of phone.variants.entries()) {

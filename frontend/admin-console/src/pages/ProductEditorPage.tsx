@@ -477,7 +477,7 @@ function ProductEditor({
                   placeholder="e.g. Samsung"
                   {...field('warranty.manufacturer')}
                 />
-                <span className="hint">Who gives the warranty, usually the brand.</span>
+                <span className="hint">Who gives the warranty, usually the maker.</span>
                 <FieldError id={errorId('warranty.manufacturer')} message={errors['warranty.manufacturer']} />
               </label>
               <label className="field">
