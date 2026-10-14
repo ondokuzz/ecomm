@@ -69,6 +69,8 @@ export function CheckoutShipping({
   const [editing, setEditing] = useState(session.shippingAddress === null)
   const formatMoney = useFormatMoney()
   const optionsName = useId()
+  // The option being chosen shows as chosen at once; the session's own once Checkout answers.
+  const chosenId = option.isPending ? option.variables?.optionId : session.shippingOption?.id
 
   return (
     <Card className="shipping">
@@ -106,7 +108,7 @@ export function CheckoutShipping({
                 type="radio"
                 name={optionsName}
                 value={quoted.id}
-                checked={session.shippingOption?.id === quoted.id}
+                checked={chosenId === quoted.id}
                 onChange={() => {
                   onChange()
                   option.mutate({ sessionId: session.id, optionId: quoted.id })

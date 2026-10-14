@@ -160,7 +160,9 @@ test('a Customer checks out a picked Variant and another Product, and on-hand St
   await expect(shippingTo).toContainText('10115 Berlin')
   await expect(payButton).toBeDisabled()
   // Express, with its cost and days, joins the total.
-  await page.getByRole('radio', { name: /^Express/ }).check()
+  const expressOption = page.getByRole('radio', { name: /^Express/ })
+  await expressOption.click()
+  await expect(expressOption).toBeChecked()
   const summary = page.getByRole('region', { name: 'Order summary' })
   const express = { amountMinor: expressFromBerlin, currency: 'EUR' }
   await expect(summary.getByText('Shipping (Express)')).toBeVisible()
@@ -212,7 +214,8 @@ test('a Customer checks out a picked Variant and another Product, and on-hand St
     await expect(progress.locator(`time[datetime="${entry.at}"]`)).toBeVisible()
   }
   // Its Payment, as Payment recorded it: authorized for the Order's total.
-  const payments = page.getByRole('list', { name: 'Payments' }).getByRole('listitem')
+  // Each Payment is a direct item; its activity is a list of its own inside it.
+  const payments = page.getByRole('list', { name: 'Payments' }).locator('> li')
   await expect(payments).toHaveCount(1)
   await expect(payments.locator('.payment-authorized')).toHaveText('Authorized')
   await expect(payments).toContainText(formatMoney(order.total, currencies, 'en-US'))
@@ -779,7 +782,9 @@ async function fillAddress(page: Page, fields: Record<keyof typeof berlin, strin
 async function shipTo(page: Page) {
   await fillAddress(page, berlin)
   await page.getByRole('form', { name: 'Shipping address' }).getByRole('button', { name: 'Use this address' }).click()
-  await page.getByRole('radio', { name: /^Standard/ }).check()
+  const standard = page.getByRole('radio', { name: /^Standard/ })
+  await standard.click()
+  await expect(standard).toBeChecked()
   await expect(page.getByRole('region', { name: 'Order summary' }).getByText('Shipping (Standard)')).toBeVisible()
 }
 

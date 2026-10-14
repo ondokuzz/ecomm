@@ -245,7 +245,7 @@ test.describe('Campaigns', () => {
       await shippingForm.getByLabel('Postcode', { exact: true }).fill('10115')
       await shippingForm.getByLabel('City', { exact: true }).fill('Berlin')
       await shippingForm.getByRole('button', { name: 'Use this address' }).click()
-      await storefront.getByRole('radio', { name: /^Standard/ }).check()
+      await storefront.getByRole('radio', { name: /^Standard/ }).click()
       await expect(summary.getByText('Shipping (Standard)')).toBeVisible()
       const total = { ...price, amountMinor: price.amountMinor - discount.amountMinor + 499 }
 
