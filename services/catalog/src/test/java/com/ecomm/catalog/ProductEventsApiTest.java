@@ -131,6 +131,29 @@ class ProductEventsApiTest extends CatalogApiTest {
   }
 
   @Test
+  void eventsCarryWarrantyTermsAndSerialTracking() {
+    var sku = newSku();
+    var withWarranty =
+        gadget(sku, "Gadget", 1999)
+            .replace(
+                "\"category\"",
+                "\"warranty\": {\"months\": 24, \"manufacturer\": \"Acme\"},"
+                    + " \"serialTracking\": \"SERIAL\", \"category\"");
+    create("event-warranty-1", withWarranty).expectStatus().isCreated();
+    replace(sku, "event-warranty-2", gadget(sku, "Gadget", 1999)).expectStatus().isOk();
+
+    var records = CatalogEvents.keyed(PRODUCT_TOPIC, sku, 2);
+
+    assertThat(records).allSatisfy(r -> assertThat(CatalogEvents.schemaViolationsOf(r)).isEmpty());
+    var events = CatalogEvents.valuesOf(records);
+    assertThat(events.get(0).at("/product/warranty/months").asInt()).isEqualTo(24);
+    assertThat(events.get(0).at("/product/warranty/manufacturer").asText()).isEqualTo("Acme");
+    assertThat(events.get(0).at("/product/serialTracking").asText()).isEqualTo("SERIAL");
+    assertThat(events.get(1).get("product").has("warranty")).isFalse();
+    assertThat(events.get(1).at("/product/serialTracking").asText()).isEqualTo("NONE");
+  }
+
+  @Test
   void aRefusedWritePublishesNothing() {
     var sku = newSku();
     create("event-refused-1", gadget(sku, "Gadget", 1999)).expectStatus().isCreated();

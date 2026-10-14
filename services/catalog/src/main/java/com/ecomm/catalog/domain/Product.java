@@ -11,7 +11,9 @@ import java.util.Optional;
  * A sellable item in the Catalog, identified by its SKU, and sold as one or more Variants, each at
  * its own Price. Its {@code description}, free text for Customers to read, is optional: null when
  * it has none. Its attributes and its Variants' axis values must satisfy its Category's definitions
- * whenever it is written; see {@link Category#violations(Product)}.
+ * whenever it is written; see {@link Category#violations(Product)}. Its {@code warranty}, its
+ * Warranty terms, is null when it has none, and its {@code serialTracking} is {@code NONE} unless
+ * given; both apply to all of its Variants.
  */
 public record Product(
     String sku,
@@ -20,7 +22,9 @@ public record Product(
     String category,
     Map<String, String> attributes,
     List<String> images,
-    List<Variant> variants) {
+    List<Variant> variants,
+    WarrantyTerms warranty,
+    SerialTracking serialTracking) {
 
   public Product {
     requireText(sku, "sku");
@@ -49,6 +53,7 @@ public record Product(
     if (variants.stream().map(v -> v.price().currency()).distinct().count() > 1) {
       throw new InvalidProductException("a Product's Variants must all be priced in one currency");
     }
+    serialTracking = serialTracking == null ? SerialTracking.NONE : serialTracking;
   }
 
   /** The lowest Price of any of its Variants. */
@@ -67,6 +72,13 @@ public record Product(
     return variants.stream().map(Variant::id).toList();
   }
 
+  /** This Product with {@code warranty} and {@code serialTracking} in place of its own. */
+  public Product withWarrantyTermsAndSerialTracking(
+      WarrantyTerms warranty, SerialTracking serialTracking) {
+    return new Product(
+        sku, name, description, category, attributes, images, variants, warranty, serialTracking);
+  }
+
   /** This Product with each Variant's axis values in {@code order}. */
   Product withAxisValuesIn(List<String> order) {
     return new Product(
@@ -76,7 +88,9 @@ public record Product(
         category,
         attributes,
         images,
-        variants.stream().map(v -> v.withAxisValuesIn(order)).toList());
+        variants.stream().map(v -> v.withAxisValuesIn(order)).toList(),
+        warranty,
+        serialTracking);
   }
 
   private static void requireText(String value, String field) {

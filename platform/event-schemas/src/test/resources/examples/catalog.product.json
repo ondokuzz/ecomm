@@ -17,6 +17,8 @@
         "images": []
       }
     ],
-    "removed": false
+    "removed": false,
+    "warranty": { "months": 24, "manufacturer": "Apple" },
+    "serialTracking": "IMEI"
   }
 }

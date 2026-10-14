@@ -38,6 +38,10 @@ ConfirmDialog asks before an action that can't be undone, such as "Empty cart", 
 `<dialog>` rather than the browser's `confirm()`: focus stays inside it, Escape or a click outside
 cancels, and Cancel has focus first so Enter never confirms by accident.
 
+The Product page shows the Product's Warranty terms under its Stock, such as "24 months,
+manufacturer's warranty (Samsung)", or "No manufacturer's warranty" (`warrantyLabel` in
+[`src/domain/catalog.ts`](./src/domain/catalog.ts)).
+
 The Product page's Stock indicator reads "In stock", "Only N left" at 5 or fewer
 (`lowStockThreshold` in [`src/domain/stock.ts`](./src/domain/stock.ts)), or "Out of stock", which
 also disables "Add to cart". The page reads every one of the Product's Variants' Stock through
@@ -380,8 +384,8 @@ Sign in as `demo@ecomm.local` / `demo`, or register a new Customer.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: failed responses as messages and support references, Money formatting by Catalog's Minor units, Cart pricing, checkout problems, the session countdown and the price breakdown with each Discount, Coupon rejections, test cards and payment failures, an Order's Payment statuses and why a cancelled Order was cancelled, quantities, Stock levels and Cart lines' availability, toasts, the search's URL and its Facets as chips and filters, rating stars and summaries and the review form's validation, Product specs by their Category's definitions, Customer initials, Orders and their timeline from the Order Status history, the Orders list's paging, Order Status colours, seed Product images, the Keycloak theme's and the Admin Console's copies of the tokens
-npm run test:e2e  # Playwright smoke, search and error-states tests against the running compose stack (`make up`)
+npm test          # Vitest: failed responses as messages and support references, Money formatting by Catalog's Minor units, Cart pricing, checkout problems, the session countdown and the price breakdown with each Discount, Coupon rejections, test cards and payment failures, an Order's Payment statuses and why a cancelled Order was cancelled, quantities, Stock levels and Cart lines' availability, toasts, the search's URL and its Facets as chips and filters, rating stars and summaries and the review form's validation, Product specs by their Category's definitions, Warranty terms in words, Customer initials, Orders and their timeline from the Order Status history, the Orders list's paging, Order Status colours, seed Product images, the Keycloak theme's and the Admin Console's copies of the tokens
+npm run test:e2e  # Playwright smoke, search, product-page and error-states tests against the running compose stack (`make up`)
 ```
 
 The smoke test ([`e2e/smoke.spec.ts`](./e2e/smoke.spec.ts)) walks the definitions of done of
@@ -412,7 +416,8 @@ also bought"; it deletes both Products and their Stock afterwards. The error-sta
 addresses and sees the Not Found page, answers the Product list with a 500 and sees the panel's
 reference and "Try again" recover, fails the Product page's Stock lookup and sees it say so with its
 reference, and refuses a token, once on My Orders' data and once on "Add to cart", and sees the
-Customer go to Keycloak and come back to the same page. The search test
+Customer go to Keycloak and come back to the same page. The product-page test ([`e2e/product-page.spec.ts`](./e2e/product-page.spec.ts)) opens seeded
+Products' pages and sees their Warranty terms. The search test
 ([`e2e/search.spec.ts`](./e2e/search.spec.ts)) searches the seed by text, chooses a Category and a
 storage value and sees the other values still counted, keeps to what is in stock and sorts by
 Price, then reloads and opens the URL afresh and sees the same Products in the same order; it

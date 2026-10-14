@@ -51,6 +51,8 @@ const pixel: Product = {
       images: ['/images/porcelain.svg', '/images/porcelain-back.svg'],
     },
   ],
+  warranty: { months: 24, manufacturer: 'Google' },
+  serialTracking: 'IMEI',
 }
 
 const stock = { 'PHN-PIXEL-9': 12, 'PHN-PIXEL-9-PORCELAIN-256': undefined }
@@ -65,6 +67,9 @@ describe('formOf', () => {
       attributes: { brand: 'Google', screen: '6.3 in' },
       images: '/images/front.svg\n/images/back.svg',
       currency: 'EUR',
+      warrantyMonths: '24',
+      warrantyManufacturer: 'Google',
+      serialTracking: 'IMEI',
       variants: [
         {
           id: 'PHN-PIXEL-9',
@@ -96,6 +101,9 @@ describe('formOf', () => {
       attributes: {},
       images: '',
       currency: 'EUR',
+      warrantyMonths: '',
+      warrantyManufacturer: '',
+      serialTracking: 'NONE',
       variants: [blankVariant(phones)],
     })
     expect(blankVariant(phones)).toEqual({
@@ -138,6 +146,8 @@ describe('productRequest', () => {
             images: ['/images/porcelain.svg', '/images/porcelain-back.svg'],
           },
         ],
+        warranty: { months: 24, manufacturer: 'Google' },
+        serialTracking: 'IMEI',
       },
       errors: {},
     })
@@ -170,6 +180,7 @@ describe('productRequest', () => {
             images: [],
           },
         ],
+        serialTracking: 'NONE',
       },
       errors: {},
     })
@@ -181,6 +192,42 @@ describe('productRequest', () => {
     expect(productRequest({ ...form, description: '   ' }, phones, currencies).request).not.toHaveProperty(
       'description',
     )
+  })
+
+  it('trims Warranty terms, and sends none when both are blank', () => {
+    const form = formOf(pixel, phones, stock, currencies)
+    expect(
+      productRequest({ ...form, warrantyMonths: ' 12 ', warrantyManufacturer: ' Google ' }, phones, currencies).request
+        ?.warranty,
+    ).toEqual({ months: 12, manufacturer: 'Google' })
+    expect(
+      productRequest({ ...form, warrantyMonths: ' ', warrantyManufacturer: '' }, phones, currencies).request,
+    ).not.toHaveProperty('warranty')
+  })
+
+  it.each([
+    ['0', 'Google', 'warranty.months'],
+    ['121', 'Google', 'warranty.months'],
+    ['1.5', 'Google', 'warranty.months'],
+    ['', 'Google', 'warranty.months'],
+    ['24', ' ', 'warranty.manufacturer'],
+  ])(
+    'names Warranty terms of %j months from %j by the field Catalog would use, and sends nothing',
+    (months, manufacturer, field) => {
+      const form = formOf(pixel, phones, stock, currencies)
+      const { request, errors } = productRequest(
+        { ...form, warrantyMonths: months, warrantyManufacturer: manufacturer },
+        phones,
+        currencies,
+      )
+      expect(request).toBeUndefined()
+      expect(Object.keys(errors)).toEqual([field])
+    },
+  )
+
+  it('edits a Product without Warranty terms or Serial tracking as blank and NONE', () => {
+    const form = formOf({ ...pixel, warranty: null, serialTracking: 'NONE' }, phones, stock, currencies)
+    expect([form.warrantyMonths, form.warrantyManufacturer, form.serialTracking]).toEqual(['', '', 'NONE'])
   })
 
   it('edits a Product that has no description as a blank one', () => {

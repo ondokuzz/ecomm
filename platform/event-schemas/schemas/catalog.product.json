@@ -120,6 +120,37 @@
         "removed": {
           "type": "boolean",
           "description": "True in the last event of a Product removed from the Catalog."
+        },
+        "warranty": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "The Product's Warranty terms, for all its Variants. Left out when it has none, and in events published before Warranty terms existed.",
+          "required": [
+            "months",
+            "manufacturer"
+          ],
+          "properties": {
+            "months": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 120,
+              "description": "How long the warranty lasts, from delivery."
+            },
+            "manufacturer": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Who gives the warranty, such as Samsung."
+            }
+          }
+        },
+        "serialTracking": {
+          "type": "string",
+          "enum": [
+            "NONE",
+            "SERIAL",
+            "IMEI"
+          ],
+          "description": "How each unit of the Product's Variants is identified when it ships. Read a missing value, as in events published before Serial tracking existed, as NONE."
         }
       }
     }
