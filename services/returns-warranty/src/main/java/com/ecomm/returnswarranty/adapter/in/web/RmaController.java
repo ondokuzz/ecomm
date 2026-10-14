@@ -2,11 +2,13 @@ package com.ecomm.returnswarranty.adapter.in.web;
 
 import com.ecomm.commons.idempotency.IdempotentCommand;
 import com.ecomm.returnswarranty.application.port.in.RmaUseCase;
+import com.ecomm.returnswarranty.domain.Rma;
 import com.ecomm.returnswarranty.domain.RmaExceptions.NoWarrantyException;
 import com.ecomm.returnswarranty.domain.RmaExceptions.NotDeliveredException;
 import com.ecomm.returnswarranty.domain.RmaExceptions.OutsideWindowException;
 import com.ecomm.returnswarranty.domain.RmaExceptions.ProductNotKnownYetException;
 import com.ecomm.returnswarranty.domain.RmaExceptions.QuantityExceededException;
+import com.ecomm.returnswarranty.domain.RmaExceptions.RmaAlreadyDecidedException;
 import com.ecomm.returnswarranty.domain.RmaExceptions.SerialNumberAlreadyClaimedException;
 import com.ecomm.returnswarranty.domain.RmaExceptions.SerialNumberNotShippedException;
 import com.ecomm.returnswarranty.domain.RmaExceptions.SerialNumbersMiscountedException;
@@ -15,6 +17,7 @@ import java.net.URI;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -23,6 +26,8 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -69,6 +74,49 @@ class RmaController {
     return ResponseEntity.created(URI.create("/rmas/" + rma.id())).body(RmaResponse.of(rma));
   }
 
+  record ApproveBody(String note) {}
+
+  record RejectBody(String reason) {}
+
+  /**
+   * Staff approve a {@code REQUESTED} RMA, with an optional note of up to 1,000 characters; 409
+   * {@code rmaAlreadyDecided} once it is decided. A repeat is refused rather than replayed, so it
+   * takes no {@code Idempotency-Key}.
+   */
+  @PostMapping("/{id}/approve")
+  @PreAuthorize("hasRole('STAFF')")
+  RmaResponse approve(
+      @PathVariable String id,
+      @RequestBody(required = false) ApproveBody body,
+      @AuthenticationPrincipal Jwt staff) {
+    var note = body == null ? null : body.note();
+    if (note != null && (note.isBlank() || note.length() > RequestRmaBody.MAX_TEXT)) {
+      throw new InvalidRequestException(
+          "note", "must be 1 to " + RequestRmaBody.MAX_TEXT + " characters when given");
+    }
+    return decided(id, uuid -> rmas.approve(uuid, staff.getSubject(), note));
+  }
+
+  /**
+   * Staff reject a {@code REQUESTED} RMA, with a reason of 1 to 1,000 characters; 409 {@code
+   * rmaAlreadyDecided} once it is decided.
+   */
+  @PostMapping("/{id}/reject")
+  @PreAuthorize("hasRole('STAFF')")
+  RmaResponse reject(
+      @PathVariable String id,
+      @RequestBody(required = false) RejectBody body,
+      @AuthenticationPrincipal Jwt staff) {
+    var reason = RequestRmaBody.text("reason", body == null ? null : body.reason());
+    return decided(id, uuid -> rmas.reject(uuid, staff.getSubject(), reason));
+  }
+
+  private RmaResponse decided(String id, Function<UUID, Optional<Rma>> decision) {
+    var rma = parse(id).flatMap(decision).orElseThrow(() -> new RmaNotFoundException(id));
+    log.info("{} is {}", rma.reference(), rma.status());
+    return RmaResponse.of(rma);
+  }
+
   /** The RMA. A Customer reads only their own: another's is a 404. */
   @GetMapping("/{id}")
   @PreAuthorize("hasAnyRole('CUSTOMER', 'STAFF')")
@@ -107,6 +155,13 @@ class RmaController {
   @ExceptionHandler(NotDeliveredException.class)
   ProblemDetail notDelivered(NotDeliveredException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
+  }
+
+  @ExceptionHandler(RmaAlreadyDecidedException.class)
+  ProblemDetail alreadyDecided(RmaAlreadyDecidedException e) {
+    var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
+    problem.setProperty("reason", "rmaAlreadyDecided");
+    return problem;
   }
 
   @ExceptionHandler(QuantityExceededException.class)
