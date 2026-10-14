@@ -10,8 +10,13 @@ dependencies {
   // 0002).
   implementation("org.springframework.boot:spring-boot-starter-security-oauth2-client")
   implementation("org.springframework.boot:spring-boot-starter-restclient")
+  // Order and Shipment events start and wake the fulfillment Saga; Orchestration publishes none.
+  implementation("org.springframework.boot:spring-boot-starter-kafka")
 
   testImplementation(libs.temporal.testing)
   testImplementation(libs.wiremock.standalone)
+  testImplementation(project(":platform:event-schemas"))
+  testImplementation(libs.json.schema.validator)
+  testImplementation("org.apache.kafka:kafka-clients")
   testImplementation("org.awaitility:awaitility")
 }

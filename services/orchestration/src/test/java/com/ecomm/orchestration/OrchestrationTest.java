@@ -2,6 +2,7 @@ package com.ecomm.orchestration;
 
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
 
+import com.ecomm.commons.events.EventBackbone;
 import com.ecomm.commons.security.FakeKeycloak;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import io.temporal.testserver.TestServer;
@@ -20,7 +21,8 @@ import org.springframework.test.context.DynamicPropertySource;
  * over gRPC like the real one, with time skipping on: whenever every workflow is only waiting, on a
  * retry's backoff or a timer, the server's clock jumps ahead. One WireMock server stands in for
  * every service Orchestration calls and for Keycloak's token endpoint. Each test starts with no
- * stubs.
+ * stubs. The shared Kafka from {@link EventBackbone} carries the topics Orchestration consumes,
+ * with its consumer groups' dead-letter and redrive topics.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureRestTestClient
@@ -31,24 +33,37 @@ abstract class OrchestrationTest {
 
   static final String TOKEN_PATH = "/realms/ecomm/protocol/openid-connect/token";
 
-  private static final int TEMPORAL_PORT = freePort();
+  static final int TEMPORAL_PORT = freePort();
 
   static final WireMockServer DOWNSTREAM = new WireMockServer(wireMockConfig().dynamicPort());
 
   static {
     TestServer.createPortBoundServer(TEMPORAL_PORT, false);
     DOWNSTREAM.start();
+    for (var topic : FulfillmentEvents.TOPICS) {
+      EventBackbone.createTopic(topic);
+    }
+    for (var group : FulfillmentEvents.GROUPS) {
+      EventBackbone.createDeadLetterTopicsOf(group);
+    }
   }
 
   @DynamicPropertySource
   static void infrastructure(DynamicPropertyRegistry registry) {
     FakeKeycloak.registerWith(registry);
+    EventBackbone.registerWith(registry);
     registry.add("spring.temporal.connection.target", () -> "localhost:" + TEMPORAL_PORT);
     registry.add(
         "spring.security.oauth2.client.provider.keycloak.token-uri",
         () -> DOWNSTREAM.baseUrl() + TOKEN_PATH);
     for (var service :
-        List.of("order-management", "payment", "inventory", "cart", "checkout-pricing")) {
+        List.of(
+            "order-management",
+            "payment",
+            "inventory",
+            "cart",
+            "checkout-pricing",
+            "fulfillment-shipping")) {
       registry.add("ecomm.orchestration." + service + "-url", DOWNSTREAM::baseUrl);
     }
     registry.add(
