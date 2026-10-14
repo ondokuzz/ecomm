@@ -101,6 +101,15 @@ abstract class RmasApiTest extends ReturnsWarrantyApiTest {
     return JSON.readValue(result.getResponseBodyContent(), RmaView.class);
   }
 
+  /** The problem detail the Customer's request was refused with, once the projections caught up. */
+  tools.jackson.databind.JsonNode refused(String body) {
+    var result = requestedOnceProjected(body);
+    assertThat(result.getStatus().value())
+        .as(new String(result.getResponseBodyContent()))
+        .isEqualTo(422);
+    return JSON.readTree(result.getResponseBodyContent());
+  }
+
   /**
    * Waits until the Shipment projection has applied everything published before this call: it
    * publishes a delivered Shipment of its own after them and waits until it can be claimed.
@@ -110,6 +119,19 @@ abstract class RmasApiTest extends ReturnsWarrantyApiTest {
     var shipment = Shipments.shipment(CUSTOMER_ID).line(marker, "Marker", 1, "NONE");
     shipment.delivered(RECENTLY);
     requested(rma(shipment.orderId(), marker, 1, "RETURN"));
+  }
+
+  /**
+   * Waits until the Product projection has applied everything published before this call: it
+   * publishes a Product with Warranty terms of its own after them, and waits until a warranty claim
+   * on it is accepted.
+   */
+  void awaitProductsProjected() {
+    var marker = newVariant("MARKER");
+    Products.product("Marker", marker).warranty(12, "Marker").publish();
+    var shipment = Shipments.shipment(CUSTOMER_ID).line(marker, "Marker", 1, "NONE");
+    shipment.delivered(RECENTLY);
+    requested(rma(shipment.orderId(), marker, 1, "WARRANTY_CLAIM"));
   }
 
   RestTestClient.ResponseSpec approve(String token, String id, String body) {
