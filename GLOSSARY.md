@@ -9,7 +9,7 @@ A person who browses, buys, and manages Orders on the platform. Keycloak holds a
 _Avoid_: User, Account, Buyer
 
 **Staff**:
-A back-office person with the `STAFF` role. In the Admin Console, which turns away anyone without the role, Staff manage the Catalog, Coupons and Campaigns, look up every Customer's Orders with their Payments without changing them, read each Variant's Stock movements, and work the RMA approval queue: requested RMAs, oldest first, each approved or rejected once by an RMA decision.
+A back-office person with the `STAFF` role. In the Admin Console, which turns away anyone without the role, Staff manage the Catalog, Coupons and Campaigns, look up every Customer's Orders with their Payments without changing them, read each Variant's Stock movements, and work two queues. In the fulfillment queue, Shipments by status and Warehouse, oldest first, Staff pick each Shipment and pack it with a Serial number per unit of each serial-tracked line; the fulfillment Saga does the rest, so Staff never capture a Payment, book a Carrier or hold a Shipment themselves. In the RMA approval queue, requested RMAs, oldest first, each is approved or rejected once by an RMA decision. A Staff member's ID is recorded on each Shipment status change and RMA decision they make. Customers can neither list, pick nor pack Shipments.
 _Avoid_: Admin, Operator
 
 **Storefront**:
@@ -17,7 +17,7 @@ The web app where Customers browse the Catalog, keep a Cart, check out and follo
 _Avoid_: Shop, Site, Frontend (there are two)
 
 **Admin Console**:
-The web app where Staff manage the Catalog (Products with their Variants, Prices and Stock, and Categories with their Attribute definitions) and Promotions' Coupons and Campaigns, and read every Customer's Orders with their Order Status history and their Payments' Payment transactions, and each Variant's Stock movements. Only Staff get in; a Customer who signs in is told it is for Staff. Like the Storefront it is a UI over the contexts, and each service still checks the Staff role on every change.
+The web app where Staff manage the Catalog (Products with their Variants, Prices and Stock, and Categories with their Attribute definitions) and Promotions' Coupons and Campaigns, and read every Customer's Orders with their Order Status history, their Payments' Payment transactions and their Shipment, and each Variant's Stock movements. It holds Staff's two queues: the fulfillment queue, where Shipments are picked and packed, and the RMA approval queue. Only Staff get in; a Customer who signs in is told it is for Staff. Like the Storefront it is a UI over the contexts, and each service still checks the Staff role on every change.
 _Avoid_: Admin panel, Back office, Dashboard
 
 **Product**:

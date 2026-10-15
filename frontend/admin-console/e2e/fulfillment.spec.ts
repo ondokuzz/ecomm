@@ -52,7 +52,7 @@ test('Staff pick and pack a Shipment from the queue, and the fulfillment Saga di
   await signInOnKeycloak(page)
   await expect(page.getByRole('heading', { name: 'Fulfillment' })).toBeVisible()
   await page.getByLabel('Warehouse').selectOption('WH-BER')
-  if (lastPage > 1) await page.goto(`/fulfillment?page=${lastPage}`)
+  await page.goto(lastPage > 1 ? `/fulfillment?page=${lastPage}` : '/fulfillment')
   // The Warehouse is remembered by the browser, past a reload.
   await expect(page.getByLabel('Warehouse')).toHaveValue('WH-BER')
   const tabs = page.getByRole('navigation', { name: 'Shipment statuses' })
