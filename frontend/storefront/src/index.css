@@ -2216,6 +2216,35 @@ main {
 .order-payment-transactions time {
   margin-left: auto;
 }
+.order-shipment-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.order-shipment-top .card-title {
+  margin: 0;
+}
+.order-shipment-carrier {
+  margin: var(--space-3) 0 0;
+  overflow-wrap: anywhere;
+}
+.order-shipment-tracking {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+}
+.order-shipment-tracking li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+}
+.order-shipment-tracking time {
+  margin-left: auto;
+}
 .order-id {
   margin: var(--space-3) 0 0;
   font-size: var(--text-xs);

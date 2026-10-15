@@ -43,6 +43,7 @@ export type Service =
   | 'search-discovery'
   | 'reviews-ratings'
   | 'recommendations'
+  | 'fulfillment-shipping'
 
 interface RequestOptions {
   method?: string

@@ -1,0 +1,61 @@
+import { useShipment } from '../api/shipments'
+import type { OrderStatus } from '../domain/order'
+import { type ShipmentStatus, shipmentStatusLabel, trackingEventsOf, trackingRefreshInterval } from '../domain/shipment'
+import { Badge, type Tone } from './ui/Badge'
+import { Card } from './ui/Card'
+
+const shipmentStatusTones: Record<ShipmentStatus, Tone> = {
+  AWAITING_PICK: 'info',
+  PICKED: 'info',
+  PACKED: 'info',
+  ON_HOLD: 'info',
+  SHIPPED: 'accent',
+  DELIVERED: 'success',
+}
+
+/**
+ * The Order's Shipment: whether it is being prepared, shipped or delivered, the Carrier and tracking
+ * number once it ships, and its Tracking events, oldest first. Like "Customers also bought", nothing
+ * shows while it loads, for an Order without a Shipment, or when Fulfillment & Shipping can't be
+ * asked. It is asked again every 10 s while the Order is `Shipped`.
+ */
+export function OrderShipment({ orderId, orderStatus }: { orderId: string; orderStatus: OrderStatus }) {
+  const shipment = useShipment(orderId, trackingRefreshInterval(orderStatus)).data
+  if (!shipment) return null
+  const tracking = trackingEventsOf(shipment)
+
+  return (
+    <Card className="order-shipment" role="region" aria-labelledby="order-shipment-heading">
+      <div className="order-shipment-top">
+        <h2 id="order-shipment-heading" className="card-title">
+          Shipment
+        </h2>
+        {/* The smoke test finds the Shipment's status by its `shipment-*` class. */}
+        <Badge
+          tone={shipmentStatusTones[shipment.status]}
+          dot
+          className={`shipment-${shipment.status.toLowerCase().replaceAll('_', '-')}`}
+        >
+          {shipmentStatusLabel(shipment.status)}
+        </Badge>
+      </div>
+      {shipment.carrier && shipment.trackingNumber && (
+        <p className="order-shipment-carrier">
+          {shipment.carrier}, tracking number <code>{shipment.trackingNumber}</code>
+        </p>
+      )}
+      {tracking.length > 0 && (
+        <ol className="order-shipment-tracking" aria-label="Tracking events">
+          {tracking.map((row) => (
+            <li key={row.id}>
+              <span>{row.label}</span>
+              <time className="muted" dateTime={row.at}>
+                {new Date(row.at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+              </time>
+            </li>
+          ))}
+        </ol>
+      )}
+    </Card>
+  )
+}
