@@ -256,7 +256,7 @@ test("Staff give a Product Warranty terms and Serial tracking, and the Storefron
   await page.getByRole('row').filter({ hasText: sku }).getByRole('link', { name, exact: true }).click()
   await page.getByLabel('Warranty months').fill('200')
   await page.getByLabel('Warranty manufacturer').fill('Ecomm')
-  await page.getByLabel('Serial tracking').selectOption({ label: 'IMEI' })
+  await page.getByRole('combobox', { name: /^Serial tracking/ }).selectOption({ label: 'IMEI' })
   await page.getByRole('button', { name: 'Save changes' }).click()
   await expect(page.getByText('must be a whole number of months from 1 to 120')).toBeVisible()
 
