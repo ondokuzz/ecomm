@@ -1,3 +1,5 @@
+import { formatTime } from './order'
+
 /** An RMA's status: requested by its Customer, then approved or rejected by Staff, once. */
 export type RmaStatus = 'REQUESTED' | 'APPROVED' | 'REJECTED'
 
@@ -57,4 +59,30 @@ export function rmaStatusLabel(status: RmaStatus): string {
 /** An RMA's kind as Staff read it: "Return" or "Warranty claim". */
 export function rmaKindLabel(kind: RmaKind): string {
   return kind === 'RETURN' ? 'Return' : 'Warranty claim'
+}
+
+/** The window an RMA was checked against, as its page shows it. */
+export interface WindowView {
+  name: 'Return Period' | 'Warranty Window'
+  /** A Warranty Window's Warranty terms: "24 months, from Google". */
+  terms?: string
+  /** The instants, for `<time dateTime>`, and as Staff read them, in their own time zone. */
+  startsAt: string
+  from: string
+  endsAt: string
+  to: string
+}
+
+/** The window an RMA was checked against, named, with its Warranty terms when it is a Warranty Window. */
+export function windowOf(window: RmaWindow, locale?: string): WindowView {
+  const view: WindowView = {
+    name: window.kind === 'RETURN_PERIOD' ? 'Return Period' : 'Warranty Window',
+    startsAt: window.startsAt,
+    from: formatTime(window.startsAt, locale),
+    endsAt: window.endsAt,
+    to: formatTime(window.endsAt, locale),
+  }
+  if (!window.warranty) return view
+  const { months, manufacturer } = window.warranty
+  return { ...view, terms: `${months} ${months === 1 ? 'month' : 'months'}, from ${manufacturer}` }
 }
