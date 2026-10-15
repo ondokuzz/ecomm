@@ -14,7 +14,7 @@ export const orderStatuses: readonly OrderStatus[] = [
   'RETURNED',
 ]
 
-/** The caller that made a Status change: Checkout, for now. */
+/** The caller that made a Status change: Checkout, or Orchestration in the checkout or fulfillment Saga. */
 export type Caller = 'CHECKOUT' | 'ORCHESTRATION'
 
 /**
@@ -185,6 +185,14 @@ export interface HistoryRow {
 
 const callers: Record<Caller, string> = { CHECKOUT: 'Checkout', ORCHESTRATION: 'Checkout Saga' }
 
+/** The Order Statuses Orchestration sets in the fulfillment Saga rather than the checkout Saga. */
+const fulfillmentStatuses: readonly OrderStatus[] = ['FULFILLED', 'SHIPPED', 'DELIVERED']
+
+function changedByOf(entry: StatusHistoryEntry): string {
+  if (entry.changedBy === 'ORCHESTRATION' && fulfillmentStatuses.includes(entry.status)) return 'Fulfillment Saga'
+  return callers[entry.changedBy] ?? entry.changedBy
+}
+
 /**
  * The Order's Status history for Staff, newest first, each change with when it happened and the
  * caller that made it. A backfilled change's time was never recorded, so it isn't shown.
@@ -195,7 +203,7 @@ export function historyRowsOf(order: Pick<Order, 'statusHistory'>, locale?: stri
     .map((entry, i): HistoryRow => {
       const row = {
         status: orderStatusLabel(entry.status),
-        changedBy: callers[entry.changedBy] ?? entry.changedBy,
+        changedBy: changedByOf(entry),
         current: i === last,
       }
       return entry.backfilled
