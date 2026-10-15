@@ -1,4 +1,5 @@
 import type { Money } from './money'
+import { formatTime } from './order'
 
 /** How each unit of a Variant is identified when it ships, as Catalog's Serial tracking says. */
 export type SerialTracking = 'NONE' | 'SERIAL' | 'IMEI'
@@ -168,6 +169,34 @@ export function shipmentsQueryOf(queue: Queue, warehouseId: string | undefined, 
   const params = new URLSearchParams({ status: queue.status, page: String(queue.page), size: String(size) })
   if (warehouseId) params.set('warehouseId', warehouseId)
   return `?${params}`
+}
+
+/** One Shipment status change as the Shipment page lists it. */
+export interface ShipmentHistoryRow {
+  status: string
+  /** The instant, for `<time dateTime>`, and as Staff read it, to the second. */
+  at: string
+  time: string
+  /** "Fulfillment Saga", "Carrier", or the Staff member's ID. */
+  by: string
+  /** Whether `by` is a Staff member's ID. */
+  staff?: true
+}
+
+const changedBy: Record<string, string> = { ORCHESTRATION: 'Fulfillment Saga', CARRIER: 'Carrier' }
+
+/** A Shipment's status history for Staff, newest first, each change with when and who made it. */
+export function shipmentHistoryRowsOf(
+  shipment: Pick<Shipment, 'statusHistory'>,
+  locale?: string,
+): ShipmentHistoryRow[] {
+  return shipment.statusHistory
+    .map((entry): ShipmentHistoryRow => {
+      const row = { status: shipmentStatusLabel(entry.status), at: entry.at, time: formatTime(entry.at, locale) }
+      const caller = changedBy[entry.by]
+      return caller ? { ...row, by: caller } : { ...row, by: entry.by, staff: true }
+    })
+    .reverse()
 }
 
 /** How many units a Shipment holds, over all its lines. */

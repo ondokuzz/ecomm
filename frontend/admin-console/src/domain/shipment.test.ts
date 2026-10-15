@@ -5,6 +5,7 @@ import {
   queueSearchOf,
   serialCheckOf,
   serialFieldOf,
+  shipmentHistoryRowsOf,
   shipmentStatusLabel,
   shipmentsQueryOf,
   trackingStatusLabel,
@@ -140,6 +141,33 @@ describe('the fulfillment queue in the URL', () => {
       '?status=PICKED&page=1&size=20&warehouseId=WH-AMS',
     )
     expect(shipmentsQueryOf({ status: 'PICKED', page: 0 }, undefined, 1)).toBe('?status=PICKED&page=0&size=1')
+  })
+})
+
+describe('shipmentHistoryRowsOf', () => {
+  // The tests run in Asia/Tokyo, nine hours ahead of UTC.
+  it('lists each change newest first, saying who made it: the Saga, the Carrier or a Staff member', () => {
+    const rows = shipmentHistoryRowsOf(
+      {
+        statusHistory: [
+          { status: 'AWAITING_PICK', at: '2026-10-15T03:00:00Z', by: 'ORCHESTRATION' },
+          { status: 'PICKED', at: '2026-10-15T03:05:00Z', by: 'b7c1e0f2-staff' },
+          { status: 'DELIVERED', at: '2026-10-16T03:00:00Z', by: 'CARRIER' },
+        ],
+      },
+      'en-GB',
+    )
+    expect(rows).toEqual([
+      { status: 'Delivered', at: '2026-10-16T03:00:00Z', time: '16 Oct 2026, 12:00:00', by: 'Carrier' },
+      {
+        status: 'Picked',
+        at: '2026-10-15T03:05:00Z',
+        time: '15 Oct 2026, 12:05:00',
+        by: 'b7c1e0f2-staff',
+        staff: true,
+      },
+      { status: 'Awaiting pick', at: '2026-10-15T03:00:00Z', time: '15 Oct 2026, 12:00:00', by: 'Fulfillment Saga' },
+    ])
   })
 })
 
