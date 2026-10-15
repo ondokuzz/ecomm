@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { packRequestOf, serialCheckOf, serialFieldOf } from './shipment'
+import { packRequestOf, serialCheckOf, serialFieldOf, shipmentStatusLabel, trackingStatusLabel } from './shipment'
 
 describe('serialCheckOf, as Staff type a Serial number', () => {
   it('takes an IMEI whose last digit is its Luhn check digit', () => {
@@ -87,5 +87,24 @@ describe('packRequestOf', () => {
     expect(packRequestOf([phone], entered)).toEqual({
       errors: { [`serialNumbers.${phone.variantId}[1]`]: 'Entered twice in this Shipment.' },
     })
+  })
+})
+
+describe('shipmentStatusLabel', () => {
+  it('reads each Shipment status as Staff say it', () => {
+    expect(shipmentStatusLabel('AWAITING_PICK')).toBe('Awaiting pick')
+    expect(shipmentStatusLabel('PICKED')).toBe('Picked')
+    expect(shipmentStatusLabel('PACKED')).toBe('Packed')
+    expect(shipmentStatusLabel('SHIPPED')).toBe('Shipped')
+    expect(shipmentStatusLabel('DELIVERED')).toBe('Delivered')
+    expect(shipmentStatusLabel('ON_HOLD')).toBe('On hold')
+  })
+})
+
+describe('trackingStatusLabel', () => {
+  it('reads each Tracking event as the Carrier means it', () => {
+    expect(trackingStatusLabel('IN_TRANSIT')).toBe('In transit')
+    expect(trackingStatusLabel('OUT_FOR_DELIVERY')).toBe('Out for delivery')
+    expect(trackingStatusLabel('DELIVERED')).toBe('Delivered')
   })
 })

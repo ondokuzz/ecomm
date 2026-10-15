@@ -1,5 +1,93 @@
+import type { Money } from './money'
+
 /** How each unit of a Variant is identified when it ships, as Catalog's Serial tracking says. */
 export type SerialTracking = 'NONE' | 'SERIAL' | 'IMEI'
+
+/**
+ * Where a Shipment is: `AWAITING_PICK → PICKED → PACKED → SHIPPED → DELIVERED`, or from `PACKED` to
+ * `ON_HOLD` when its Payment couldn't be captured, which is final.
+ */
+export type ShipmentStatus = 'AWAITING_PICK' | 'PICKED' | 'PACKED' | 'SHIPPED' | 'DELIVERED' | 'ON_HOLD'
+
+/** What a Tracking event from the Carrier says of the parcel. */
+export type TrackingStatus = 'IN_TRANSIT' | 'OUT_FOR_DELIVERY' | 'DELIVERED'
+
+/** Where a Shipment goes, as its Order was placed with it. */
+export interface ShippingAddress {
+  recipientName: string
+  line1: string
+  line2?: string | null
+  postcode: string
+  city: string
+  region?: string | null
+  /** ISO 3166-1 alpha-2, such as `DE`. */
+  country: string
+  phone?: string | null
+}
+
+/** One line of a Shipment: a Variant, its Product's name, how many, and their Serial numbers once packed. */
+export interface ShipmentLine extends PackLine {
+  productName: string
+  serialNumbers: string[]
+}
+
+/** One Shipment status change: when, and by whom (a Staff member's ID, `ORCHESTRATION` or `CARRIER`). */
+export interface ShipmentHistoryEntry {
+  status: ShipmentStatus
+  at: string
+  by: string
+}
+
+/** One Order's parcel, as Fulfillment & Shipping shows it to Staff. */
+export interface Shipment {
+  id: string
+  orderId: string
+  customerId: string
+  warehouseId: string
+  status: ShipmentStatus
+  shippingAddress: ShippingAddress
+  shippingOption: { id: string; carrier: string; cost: Money; estimatedDays?: number | null }
+  lines: ShipmentLine[]
+  /** The Carrier and tracking number, once it is dispatched. */
+  carrier: string | null
+  trackingNumber: string | null
+  /** Oldest first. */
+  trackingEvents: { eventId: string; status: TrackingStatus; occurredAt: string }[]
+  deliveredAt: string | null
+  /** Why it is on hold: the payment gateway's reason for refusing the capture. */
+  holdReason: string | null
+  /** Oldest first. */
+  statusHistory: ShipmentHistoryEntry[]
+  /** When the fulfillment Saga created it, as soon as its Order was paid. */
+  createdAt: string
+}
+
+/** A Warehouse a Shipment ships from, as Staff read the configured ones. */
+export interface Warehouse {
+  id: string
+  name: string
+  default: boolean
+}
+
+const statusLabels: Record<ShipmentStatus, string> = {
+  AWAITING_PICK: 'Awaiting pick',
+  PICKED: 'Picked',
+  PACKED: 'Packed',
+  SHIPPED: 'Shipped',
+  DELIVERED: 'Delivered',
+  ON_HOLD: 'On hold',
+}
+
+/** A Shipment status as Staff read it: "Awaiting pick", "On hold". */
+export function shipmentStatusLabel(status: ShipmentStatus): string {
+  return statusLabels[status]
+}
+
+/** A Tracking event's status as Staff read it: "In transit", "Out for delivery", "Delivered". */
+export function trackingStatusLabel(status: TrackingStatus): string {
+  const words = status.toLowerCase().replaceAll('_', ' ')
+  return words.charAt(0).toUpperCase() + words.slice(1)
+}
 
 /**
  * A Serial number as Staff type it, checked as Fulfillment & Shipping will: valid, with the value
