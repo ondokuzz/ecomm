@@ -1,0 +1,126 @@
+# Exercises Returns & Warranty against the compose stack (`make up`): the demo Customer requests a
+# return of a delivered phone, after the requests it refuses, and Staff approve it.
+# Run the requests top to bottom in the IntelliJ HTTP client; the token requests store tokens for
+# the ones after them.
+# It needs a delivered Order of the demo Customer's with a phone: check one out in the Storefront,
+# pack its Shipment in the Admin Console, and wait about 30 seconds for the mock carrier to deliver
+# it. Then set @orderId to the Order's ID, @variantId to the phone's Variant ID, and @imei to the
+# IMEI entered when it was packed (GET /api/fulfillment-shipping/shipments?orderId= shows them).
+
+@returns = http://localhost:8100
+@gateway = http://localhost:8000
+@keycloak = http://localhost:8180/realms/ecomm/protocol/openid-connect/token
+@orderId = <the delivered Order's ID>
+@variantId = <the phone's Variant ID>
+@imei = <the phone's IMEI>
+
+### The demo Customer's token
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=dev-cli&username=demo@ecomm.local&password=demo
+
+> {% client.global.set("customerToken", response.body.access_token); %}
+
+### Staff token
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=dev-cli&username=staff@ecomm.local&password=staff
+
+> {% client.global.set("staffToken", response.body.access_token); %}
+
+### An IMEI not shipped on that Order: 422 serialNotShipped
+POST {{returns}}/rmas
+Authorization: Bearer {{customerToken}}
+Idempotency-Key: {{$random.uuid}}
+Content-Type: application/json
+
+{"orderId": "{{orderId}}", "variantId": "{{variantId}}", "quantity": 1,
+ "serialNumbers": ["490154203237518"], "kind": "RETURN", "reason": "Not what I expected"}
+
+### Two phones when one was delivered: 422 quantityExceeded, with what is available (1)
+POST {{returns}}/rmas
+Authorization: Bearer {{customerToken}}
+Idempotency-Key: {{$random.uuid}}
+Content-Type: application/json
+
+{"orderId": "{{orderId}}", "variantId": "{{variantId}}", "quantity": 2,
+ "serialNumbers": ["{{imei}}", "490154203237518"], "kind": "RETURN", "reason": "Both broken"}
+
+### A return of the phone, naming its IMEI, through the gateway: 201, REQUESTED, with the Return Period
+POST {{gateway}}/api/returns-warranty/rmas
+Authorization: Bearer {{customerToken}}
+Idempotency-Key: {{$random.uuid}}
+Content-Type: application/json
+
+{"orderId": "{{orderId}}", "variantId": "{{variantId}}", "quantity": 1, "serialNumbers": ["{{imei}}"],
+ "kind": "RETURN", "reason": "Not what I expected"}
+
+> {% client.global.set("returnId", response.body.id); %}
+
+### The same phone again, as a warranty claim: 422 quantityExceeded, since the return holds the only unit
+POST {{returns}}/rmas
+Authorization: Bearer {{customerToken}}
+Idempotency-Key: {{$random.uuid}}
+Content-Type: application/json
+
+{"orderId": "{{orderId}}", "variantId": "{{variantId}}", "quantity": 1, "serialNumbers": ["{{imei}}"],
+ "kind": "WARRANTY_CLAIM", "reason": "It stopped charging"}
+
+### An Order that isn't the Customer's, or isn't delivered: 404
+POST {{returns}}/rmas
+Authorization: Bearer {{customerToken}}
+Idempotency-Key: {{$random.uuid}}
+Content-Type: application/json
+
+{"orderId": "no-such-order", "variantId": "{{variantId}}", "quantity": 1, "kind": "RETURN",
+ "reason": "Not what I expected"}
+
+### Without an Idempotency-Key: 400
+POST {{returns}}/rmas
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"orderId": "{{orderId}}", "variantId": "{{variantId}}", "quantity": 1, "kind": "RETURN",
+ "reason": "Not what I expected"}
+
+### The Customer's own RMAs, oldest first
+GET {{gateway}}/api/returns-warranty/rmas
+Authorization: Bearer {{customerToken}}
+
+### Staff's RMA approval queue: requested RMAs, oldest first
+GET {{gateway}}/api/returns-warranty/rmas?status=REQUESTED&page=0&size=20
+Authorization: Bearer {{staffToken}}
+
+### A rejection without a reason: 400 naming reason
+POST {{returns}}/rmas/{{returnId}}/reject
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{}
+
+### Staff approve the return, with a note: APPROVED, the decision in its history
+POST {{gateway}}/api/returns-warranty/rmas/{{returnId}}/approve
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{"note": "Send it to the Berlin Warehouse"}
+
+### Deciding it again: 409 rmaAlreadyDecided
+POST {{returns}}/rmas/{{returnId}}/reject
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{"reason": "Changed our minds"}
+
+### The Customer reads it, with its decision history
+GET {{gateway}}/api/returns-warranty/rmas/{{returnId}}
+Authorization: Bearer {{customerToken}}
+
+### The Customer can't decide: 403
+POST {{returns}}/rmas/{{returnId}}/approve
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{}

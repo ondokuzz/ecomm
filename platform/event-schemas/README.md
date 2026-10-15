@@ -12,6 +12,7 @@ Changing an event means changing its schema here, in a reviewed pull request.
 | `catalog.category` | `slug` | Catalog |
 | `payment.payment` | `paymentId` | Payment |
 | `fulfillment-shipping.shipment` | `shipmentId` | Fulfillment & Shipping |
+| `returns-warranty.rma` | `rmaId` | Returns & Warranty |
 
 ## The shape of an event
 

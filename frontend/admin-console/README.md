@@ -23,7 +23,9 @@ Vite, React, TypeScript, React Router and TanStack Query, with `oidc-client-ts`.
 | `/promotions/campaigns/new` | A new Campaign |
 | `/promotions/campaigns/{id}` | A Campaign |
 | `/orders` | Every Customer's Orders, newest first, 20 to a page: Order reference, when placed, Customer ID, items, total and Order Status. Filter by Status, Customer ID, the days placed and Order reference |
-| `/orders/{id}` | An Order: its ID, Customer ID, lines, each Discount by its Campaign or Coupon, tax and total, its Payments with their transactions, and its Order Status history |
+| `/orders/{id}` | An Order: its ID, Customer ID, lines, each Discount by its Campaign or Coupon, tax and total, its Payments with their transactions, its RMAs, and its Order Status history |
+| `/rmas` | The RMA approval queue: requested RMAs, oldest first, 20 to a page, with tabs for the approved and the rejected (`?status=&page=`): RMA reference, kind, Order reference, Product and how long ago it was requested |
+| `/rmas/{id}` | An RMA: its Order, Customer, Product and Variant, quantity, Serial numbers, kind, the Customer's reason, the window it was checked against, and its decision history. Approve or reject a requested one |
 
 `/` opens the Products. Every page needs a Staff sign-in.
 
@@ -172,6 +174,36 @@ A transaction backfilled from a Payment recorded before the ledger says its time
 no Payment, such as one whose payment gateway failed to answer, says none was recorded. Like the
 rest of the page, Payments are read only.
 
+The Order page also lists the Order's RMAs, oldest first, from Returns & Warranty's
+`GET /rmas?orderId=`: each RMA reference links to its page, with its kind, Product, quantity, when it
+was requested and its status.
+
+## RMAs
+
+The RMA approval queue and the RMA page call Returns & Warranty's `GET /rmas?status=&page=&size=`
+and `GET /rmas/{id}`, and decide with `POST /rmas/{id}/approve` and `/reject`, all as Staff (see the
+[Returns & Warranty README](../../services/returns-warranty/README.md#api)). Customers request RMAs
+through the API this sprint; the Storefront's form is Sprint 6's.
+
+- **The queue** opens on the requested RMAs, oldest first, so none waits forgotten; its Approved
+  and Rejected tabs list the decided ones in the same order. The tab and the page live in the URL,
+  and the RMA page's back link returns to them. "How long ago" counts from when the page was
+  fetched, in whole minutes, hours or days.
+- **The RMA page** shows what it claims, the Customer's reason, and the window it was checked
+  against, as it was then: the Return Period, or the Warranty Window with its Warranty terms, such
+  as "12 months, from JBL", each from delivery to its end, in the browser's time zone.
+- **Deciding**: a requested RMA can be approved, with an optional note, or rejected, with a reason
+  the Customer is told. A rejection without a reason, or either text over 1,000 characters, is
+  refused beside its field before anything is sent. Once decided, the page offers neither again; an
+  RMA another Staff member decided first answers 409 `rmaAlreadyDecided`, which the page says,
+  showing the RMA as they left it.
+- **The decision history** is newest first: the decision, when to the second, the deciding Staff
+  member's ID, and the note or reason.
+
+`queueOf`, `queueSearchOf`, `rmasQueryOf`, `windowOf`, `decisionRowsOf` and `decisionOf` in
+[`src/domain/rma.ts`](./src/domain/rma.ts), and `formatAgo` in
+[`src/domain/ago.ts`](./src/domain/ago.ts), do this.
+
 ## Validation errors
 
 Catalog and Promotions check every write. A 400 names each offending field in its problem detail's `errors`,
@@ -223,7 +255,8 @@ squarer corners. Dark mode follows `prefers-color-scheme`, as in the Storefront.
 ## Calling the services
 
 The browser reaches Catalog at `/api/catalog/…`, Inventory at `/api/inventory/…`, Order Management
-at `/api/order-management/…`, Payment at `/api/payment/…` and Promotions at `/api/promotions/…` on the console's own origin. Everything under
+at `/api/order-management/…`, Payment at `/api/payment/…`, Promotions at `/api/promotions/…` and Returns & Warranty at
+`/api/returns-warranty/…` on the console's own origin. Everything under
 `/api/` goes to the [API gateway](../../platform/api-gateway/README.md), which checks the token and
 routes it. In development the Vite dev proxy forwards `/api` to the gateway's compose host port,
 8000 ([`vite.config.ts`](./vite.config.ts)). In compose, nginx does it
@@ -258,7 +291,7 @@ how to apply the client to an existing realm.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: failed requests as messages and references, field errors from problem details, the STAFF role in an access token, a Category, a Product with its Warranty terms and Serial tracking, a Coupon and a Campaign to and from their editor's form, decimals to and from Money, the Order list's filters to Order Management's query, an Order's Status history, Payment statuses and transactions, and Stock movements and their balance
+npm test          # Vitest: failed requests as messages and references, field errors from problem details, the STAFF role in an access token, a Category, a Product with its Warranty terms and Serial tracking, a Coupon and a Campaign to and from their editor's form, decimals to and from Money, the Order list's filters to Order Management's query, an Order's Status history, Payment statuses and transactions, Stock movements and their balance, RMA statuses and kinds, the RMA approval queue's URL and query, an RMA's window, its decision history and a decision before it is sent, and how long ago
 npm run build
 npm run test:e2e  # Playwright against the running compose stack (`make up`)
 ```
@@ -300,8 +333,19 @@ Order stays, Cancelled. A second test places an Order the same way, authorizes i
 and marks it paid, then opens it in the console and sees the Payment Authorized with its
 authorization transaction: Approved, with the gateway's reference and time.
 
+[`e2e/rmas.spec.ts`](./e2e/rmas.spec.ts) places an Order of two JBL Flip 6 speakers for the demo
+Customer, `demo@ecomm.local`, the same way, and leaves it placed, so no Saga takes it up. It creates
+and dispatches its Shipment as the fulfillment Saga does, straight at Fulfillment & Shipping on its
+host port (`FULFILLMENT_SHIPPING_URL`, default `http://localhost:8099`), picking and packing it as
+Staff through the gateway with Serial numbers of the run's own, and waits for the mock carrier to
+deliver it, about 30 seconds. As the demo Customer it then requests a return of one speaker and a
+warranty claim on the other through the gateway. In the console it finds the return on the queue's
+last page, checks its page, approves it with a note and sees the decision in its history; then it
+opens the warranty claim, sees its Warranty Window of 12 months from JBL, is refused a rejection
+without a reason, and rejects it with one. The Order page lists both RMAs with their statuses.
+
 Each test removes its Product and Stock, Coupon, Campaign or Customer through the services' and
 Keycloak's APIs if it failed before doing so itself, so the stack is left as it was, but for the
-Orders the Order and Campaign tests place. It runs against the console on 8090; set `ADMIN_CONSOLE_URL` to use Vite's
+Orders the Order and Campaign tests place, and the RMA test's Order, Shipment and RMAs. It runs against the console on 8090; set `ADMIN_CONSOLE_URL` to use Vite's
 5174, and `STOREFRONT_URL` or `KEYCLOAK_URL` for other hosts. Install Chromium once with
 `npx playwright install chromium`.

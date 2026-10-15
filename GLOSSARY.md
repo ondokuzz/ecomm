@@ -9,7 +9,7 @@ A person who browses, buys, and manages Orders on the platform. Keycloak holds a
 _Avoid_: User, Account, Buyer
 
 **Staff**:
-A back-office person with the `STAFF` role. In the Admin Console, which turns away anyone without the role, Staff manage the Catalog, Coupons and Campaigns, look up every Customer's Orders with their Payments without changing them, and read each Variant's Stock movements.
+A back-office person with the `STAFF` role. In the Admin Console, which turns away anyone without the role, Staff manage the Catalog, Coupons and Campaigns, look up every Customer's Orders with their Payments without changing them, read each Variant's Stock movements, and work the RMA approval queue: requested RMAs, oldest first, each approved or rejected once by an RMA decision.
 _Avoid_: Admin, Operator
 
 **Storefront**:
@@ -220,12 +220,20 @@ The Carrier's notice of a Tracking event, posted to Fulfillment & Shipping's `PO
 _Avoid_: Callback, notification (on their own), Gateway webhook (the payment gateway's)
 
 **RMA (Return Case)**:
-A Customer-initiated request to return or exchange a Variant from a delivered Order, tracked through its own approve/inspect/resolve lifecycle, distinct from the original Order's lifecycle.
+A Customer's request about units of one Variant from their delivered Order, of one of two kinds: a return (`RETURN`), within the Return Period, or a warranty claim (`WARRANTY_CLAIM`), within the Warranty Window. It names how many units, the Serial number of each where the Product has Serial tracking, and the Customer's reason. It is refused if those units weren't delivered, or another of the Customer's RMAs that isn't rejected holds them. It keeps the window it was checked against. Its status is `REQUESTED`, then `APPROVED` or `REJECTED` by an RMA decision; receiving, inspecting and resolving an approved RMA come in Sprint 6. Its own lifecycle is apart from its Order's. It is shown by its RMA reference, such as `RMA-3F2A9C1B`: `RMA-` and the first eight characters of its ID, upper-cased, like an Order reference. Returns & Warranty owns RMAs.
 _Avoid_: Return, Refund — those are possible outcomes of an RMA, not the RMA itself
 
+**RMA decision**:
+Staff approving or rejecting a `REQUESTED` RMA: who decided, when, and a note, which an approval may leave out and a rejection must give as its reason. An RMA is decided once; its decision history only ever grows.
+_Avoid_: Review, Resolution (what follows an approval in Sprint 6)
+
+**Return Period**:
+How long after its Shipment is delivered a Customer may request a return of a Variant: 14 days, one for the store, whatever the Product. A return requested after it ends is refused with the moment it ended.
+_Avoid_: Return window, Cooling-off period, Warranty Window (the manufacturer's, for warranty claims)
+
 **Warranty Window**:
-The time period, tied to a Product's category and manufacturer terms, during which an RMA can be opened for a given Variant.
-_Avoid_: Return Period (Return Period is broader/retailer-set; Warranty Window is manufacturer-tied)
+The time in which a Customer may make a warranty claim on a Variant: from its Shipment's delivery for its Product's Warranty terms' months, counted on the calendar, so a delivery on 31 January with one month's warranty ends on the last day of February. A Product without Warranty terms has none. An RMA keeps the Warranty Window it was checked against, with the terms it came from, so a later change to the Product's Warranty terms doesn't change it.
+_Avoid_: Return Period (the store's, for returns), Warranty terms (what it is worked out from)
 
 **Support Assistant**:
 The AI-driven conversational agent that answers a Customer's questions about their own Order, Payment, or RMA, grounded in that Customer's real data.

@@ -41,6 +41,11 @@ ecomm:
     # How long the checkout Saga awaits a bank's confirmation of a pending authorization before it
     # voids the Payment and cancels the Order.
     settlement-deadline: 10m
+    # How long a step's call to another context may take to connect and to answer. The read timeout
+    # stays under the Saga's 30 seconds for an attempt (CheckoutSaga.ATTEMPT), so a slow call fails
+    # in the worker and its retry replays with the same key.
+    connect-timeout: 5s
+    read-timeout: 25s
     order-management-url: http://localhost:8085
     payment-url: http://localhost:8084
     inventory-url: http://localhost:8082

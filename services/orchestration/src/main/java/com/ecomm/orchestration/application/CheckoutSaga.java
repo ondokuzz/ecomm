@@ -50,10 +50,19 @@ public class CheckoutSaga implements CheckoutWorkflow {
 
   private static final Logger log = Workflow.getLogger(CheckoutSaga.class);
 
+  /**
+   * How long one attempt at a step may take. A service that has sat idle can take more than 10
+   * seconds to answer its first call (13.5 seconds for Order Management on 2026-10-14).
+   * Orchestration's HTTP clients give up sooner ({@code ecomm.orchestration.read-timeout}), so a
+   * slow attempt fails in the worker and is retried with its key, rather than being abandoned while
+   * its call is still waiting.
+   */
+  static final Duration ATTEMPT = Duration.ofSeconds(30);
+
   /** Placing the Order and committing its Stock: transient failures for up to about a minute. */
   private static final ActivityOptions TRANSIENT_FOR_A_MINUTE =
       ActivityOptions.newBuilder()
-          .setStartToCloseTimeout(Duration.ofSeconds(10))
+          .setStartToCloseTimeout(ATTEMPT)
           .setScheduleToCloseTimeout(Duration.ofMinutes(1))
           .setRetryOptions(
               RetryOptions.newBuilder()
@@ -70,7 +79,7 @@ public class CheckoutSaga implements CheckoutWorkflow {
    */
   private static final ActivityOptions AUTHORIZING =
       ActivityOptions.newBuilder()
-          .setStartToCloseTimeout(Duration.ofSeconds(15))
+          .setStartToCloseTimeout(ATTEMPT)
           .setRetryOptions(
               RetryOptions.newBuilder()
                   .setInitialInterval(Duration.ofMillis(1500))
@@ -87,7 +96,7 @@ public class CheckoutSaga implements CheckoutWorkflow {
    */
   private static final ActivityOptions AWAITING_SETTLEMENT =
       ActivityOptions.newBuilder()
-          .setStartToCloseTimeout(Duration.ofSeconds(10))
+          .setStartToCloseTimeout(ATTEMPT)
           .setScheduleToCloseTimeout(Duration.ofMinutes(10))
           .setRetryOptions(
               RetryOptions.newBuilder()
@@ -101,7 +110,7 @@ public class CheckoutSaga implements CheckoutWorkflow {
   /** Marking the Order paid and the compensations: retried until they succeed, refusals too. */
   private static final ActivityOptions UNTIL_DONE =
       ActivityOptions.newBuilder()
-          .setStartToCloseTimeout(Duration.ofSeconds(10))
+          .setStartToCloseTimeout(ATTEMPT)
           .setRetryOptions(
               RetryOptions.newBuilder()
                   .setInitialInterval(Duration.ofSeconds(1))
