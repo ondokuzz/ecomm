@@ -119,3 +119,48 @@ export function windowOf(window: RmaWindow, locale?: string): WindowView {
   const { months, manufacturer } = window.warranty
   return { ...view, terms: `${months} ${months === 1 ? 'month' : 'months'}, from ${manufacturer}` }
 }
+
+/** One RMA decision as the RMA page lists it. */
+export interface DecisionRow {
+  status: string
+  decidedBy: string
+  /** The instant, for `<time dateTime>`, and as Staff read it, to the second. */
+  at: string
+  time: string
+  /** An approval's note, or a rejection's reason; absent from an approval without one. */
+  note?: string
+}
+
+/** An RMA's decision history for Staff, newest first. A requested RMA has none. */
+export function decisionRowsOf(rma: Pick<Rma, 'decisions'>, locale?: string): DecisionRow[] {
+  return rma.decisions
+    .map((decision): DecisionRow => {
+      const row = {
+        status: rmaStatusLabel(decision.status),
+        decidedBy: decision.decidedBy,
+        at: decision.decidedAt,
+        time: formatTime(decision.decidedAt, locale),
+      }
+      return decision.note ? { ...row, note: decision.note } : row
+    })
+    .reverse()
+}
+
+/** The longest note or reason Returns & Warranty keeps. */
+const maxText = 1000
+
+/**
+ * The body of `POST /rmas/{id}/approve` or `/reject` for what Staff typed, or why it can't be sent:
+ * an approval's note is optional, a rejection's reason is not, and either is at most 1,000
+ * characters once trimmed.
+ */
+export function decisionOf(
+  decision: 'approve' | 'reject',
+  text: string,
+): { body: { note?: string } | { reason: string } } | { error: string } {
+  const trimmed = text.trim()
+  if (trimmed.length > maxText) return { error: 'Keep it to 1,000 characters.' }
+  if (decision === 'approve') return { body: trimmed ? { note: trimmed } : {} }
+  if (!trimmed) return { error: 'Say why it is rejected: the Customer is told.' }
+  return { body: { reason: trimmed } }
+}

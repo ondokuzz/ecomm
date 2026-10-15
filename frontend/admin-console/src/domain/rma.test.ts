@@ -1,5 +1,67 @@
 import { describe, expect, it } from 'vitest'
-import { queueOf, queueSearchOf, rmaKindLabel, rmaStatusLabel, rmasQueryOf, windowOf } from './rma'
+import {
+  decisionOf,
+  decisionRowsOf,
+  queueOf,
+  queueSearchOf,
+  rmaKindLabel,
+  rmaStatusLabel,
+  rmasQueryOf,
+  windowOf,
+} from './rma'
+
+describe('decisionRowsOf', () => {
+  it('lists none for a requested RMA', () => {
+    expect(decisionRowsOf({ decisions: [] })).toEqual([])
+  })
+
+  it('shows a decision with who made it, when, and its note, newest first', () => {
+    const rows = decisionRowsOf(
+      {
+        decisions: [
+          { status: 'APPROVED', decidedBy: 'staff-1', decidedAt: '2026-10-15T03:00:00Z' },
+          { status: 'REJECTED', decidedBy: 'staff-2', decidedAt: '2026-10-16T03:00:00Z', note: 'Water damage' },
+        ],
+      },
+      'en-GB',
+    )
+    expect(rows).toEqual([
+      {
+        status: 'Rejected',
+        decidedBy: 'staff-2',
+        at: '2026-10-16T03:00:00Z',
+        time: '16 Oct 2026, 12:00:00',
+        note: 'Water damage',
+      },
+      { status: 'Approved', decidedBy: 'staff-1', at: '2026-10-15T03:00:00Z', time: '15 Oct 2026, 12:00:00' },
+    ])
+  })
+})
+
+describe('decisionOf', () => {
+  it('approves without a note when none is typed', () => {
+    expect(decisionOf('approve', '')).toEqual({ body: {} })
+    expect(decisionOf('approve', '   ')).toEqual({ body: {} })
+  })
+
+  it('approves with the note, trimmed', () => {
+    expect(decisionOf('approve', '  Send it to Berlin ')).toEqual({ body: { note: 'Send it to Berlin' } })
+  })
+
+  it('refuses to reject without a reason', () => {
+    expect(decisionOf('reject', ' ')).toEqual({ error: 'Say why it is rejected: the Customer is told.' })
+  })
+
+  it('rejects with the reason, trimmed', () => {
+    expect(decisionOf('reject', ' Outside the box ')).toEqual({ body: { reason: 'Outside the box' } })
+  })
+
+  it('takes a note or a reason of up to 1,000 characters', () => {
+    expect(decisionOf('reject', 'x'.repeat(1000))).toEqual({ body: { reason: 'x'.repeat(1000) } })
+    expect(decisionOf('reject', 'x'.repeat(1001))).toEqual({ error: 'Keep it to 1,000 characters.' })
+    expect(decisionOf('approve', 'x'.repeat(1001))).toEqual({ error: 'Keep it to 1,000 characters.' })
+  })
+})
 
 describe('the RMA approval queue in the URL', () => {
   it('opens on the requested RMAs, first page, by default', () => {
