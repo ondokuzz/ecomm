@@ -38,6 +38,55 @@ export function serialCheckOf(tracking: Exclude<SerialTracking, 'NONE'>, entered
   return { state: 'valid', serialNumber: typed.toUpperCase() }
 }
 
+/** What a Pack needs of a Shipment line: its Variant, how many units, and how each is identified. */
+export interface PackLine {
+  variantId: string
+  quantity: number
+  serialTracking: SerialTracking
+}
+
+/** The body of `POST /shipments/{id}/pack`: the Serial numbers of each serial-tracked line, by Variant ID. */
+export interface PackRequest {
+  serialNumbers: Record<string, string[]>
+}
+
+/**
+ * The name of one unit's Serial number input, as Fulfillment & Shipping names it in a violation,
+ * such as `serialNumbers.PHN-1[0]`, so the server's violations land on the same input.
+ */
+export function serialFieldOf(variantId: string, unit: number): string {
+  return `serialNumbers.${variantId}[${unit}]`
+}
+
+/**
+ * The Pack request for what Staff typed, one Serial number per unit of each serial-tracked line, or
+ * each unit's problem by its field: empty, half typed, wrong, or entered twice in the Shipment.
+ */
+export function packRequestOf(
+  lines: readonly PackLine[],
+  entered: Readonly<Record<string, readonly string[]>>,
+): { body: PackRequest } | { errors: Record<string, string> } {
+  const serialNumbers: Record<string, string[]> = {}
+  const errors: Record<string, string> = {}
+  const seen = new Set<string>()
+  for (const line of lines) {
+    if (line.serialTracking === 'NONE') continue
+    const kept: string[] = []
+    for (let unit = 0; unit < line.quantity; unit++) {
+      const field = serialFieldOf(line.variantId, unit)
+      const check = serialCheckOf(line.serialTracking, entered[line.variantId]?.[unit] ?? '')
+      if (check.state !== 'valid') errors[field] = check.message
+      else if (seen.has(check.serialNumber)) errors[field] = 'Entered twice in this Shipment.'
+      else {
+        seen.add(check.serialNumber)
+        kept.push(check.serialNumber)
+      }
+    }
+    serialNumbers[line.variantId] = kept
+  }
+  return Object.keys(errors).length > 0 ? { errors } : { body: { serialNumbers } }
+}
+
 /** Whether the last digit is the Luhn check digit over the others. */
 function luhn(digits: string): boolean {
   let sum = 0

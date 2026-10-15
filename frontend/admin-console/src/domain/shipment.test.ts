@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { serialCheckOf } from './shipment'
+import { packRequestOf, serialCheckOf, serialFieldOf } from './shipment'
 
 describe('serialCheckOf, as Staff type a Serial number', () => {
   it('takes an IMEI whose last digit is its Luhn check digit', () => {
@@ -40,5 +40,52 @@ describe('serialCheckOf, as Staff type a Serial number', () => {
 
   it('waits for a serial number shorter than 4 while it is being typed', () => {
     expect(serialCheckOf('SERIAL', 'C0')).toEqual({ state: 'incomplete', message: 'Enter the serial number.' })
+  })
+})
+
+describe('packRequestOf', () => {
+  const phone = { variantId: 'PHN-PIXEL-9-OBSIDIAN-128', quantity: 2, serialTracking: 'IMEI' as const }
+  const laptop = { variantId: 'LPT-XPS-13-16', quantity: 1, serialTracking: 'SERIAL' as const }
+  const case_ = { variantId: 'ACC-CASE', quantity: 3, serialTracking: 'NONE' as const }
+
+  it('names each unit’s input as Fulfillment & Shipping names it in a violation', () => {
+    expect(serialFieldOf('PHN-1', 0)).toBe('serialNumbers.PHN-1[0]')
+  })
+
+  it('sends one Serial number per unit of each serial-tracked line, as kept, and nothing for the others', () => {
+    const entered = {
+      [phone.variantId]: ['490154203237518', ' 356938035643809 '],
+      [laptop.variantId]: ['c02-xk9'],
+    }
+    expect(packRequestOf([phone, laptop, case_], entered)).toEqual({
+      body: {
+        serialNumbers: {
+          [phone.variantId]: ['490154203237518', '356938035643809'],
+          [laptop.variantId]: ['C02-XK9'],
+        },
+      },
+    })
+  })
+
+  it('packs a Shipment with no serial-tracked line with no Serial numbers', () => {
+    expect(packRequestOf([case_], {})).toEqual({ body: { serialNumbers: {} } })
+  })
+
+  it('refuses each unit left empty, half typed or wrong, against its own input', () => {
+    const entered = { [phone.variantId]: ['490154203237517'], [laptop.variantId]: ['C0'] }
+    expect(packRequestOf([phone, laptop], entered)).toEqual({
+      errors: {
+        [`serialNumbers.${phone.variantId}[0]`]: 'Not a valid IMEI: its check digit is wrong. Check for a typo.',
+        [`serialNumbers.${phone.variantId}[1]`]: 'Enter the IMEI: 15 digits.',
+        [`serialNumbers.${laptop.variantId}[0]`]: 'Enter the serial number.',
+      },
+    })
+  })
+
+  it('refuses a Serial number entered twice in the Shipment, against the second', () => {
+    const entered = { [phone.variantId]: ['490154203237518', '490154203237518'] }
+    expect(packRequestOf([phone], entered)).toEqual({
+      errors: { [`serialNumbers.${phone.variantId}[1]`]: 'Entered twice in this Shipment.' },
+    })
   })
 })
