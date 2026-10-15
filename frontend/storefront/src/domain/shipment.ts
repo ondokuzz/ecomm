@@ -1,3 +1,5 @@
+import type { OrderStatus } from './order'
+
 /**
  * A Shipment's status in Fulfillment & Shipping: picked and packed in a Warehouse, then handed to
  * the Carrier and delivered. `ON_HOLD` is a packed Shipment whose Payment couldn't be captured.
@@ -54,6 +56,14 @@ export interface TrackingRow {
   id: string
   label: string
   at: string
+}
+
+/**
+ * How often the Order page asks again for its Order and Shipment, in milliseconds: every 10 seconds
+ * while the Order is `Shipped`, as Tracking events arrive, and not at all before or once `Delivered`.
+ */
+export function trackingRefreshInterval(orderStatus: OrderStatus): number | false {
+  return orderStatus === 'SHIPPED' ? 10_000 : false
 }
 
 /** A Shipment's Tracking events, oldest first, in words. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { type TrackingStatus, shipmentStatusLabel, trackingEventsOf } from './shipment'
+import { type TrackingStatus, shipmentStatusLabel, trackingEventsOf, trackingRefreshInterval } from './shipment'
 
 describe('shipmentStatusLabel', () => {
   it('says "Being prepared" until the Shipment leaves the Warehouse', () => {
@@ -38,5 +38,17 @@ describe('trackingEventsOf', () => {
 
   it('has none before the Carrier reports one', () => {
     expect(trackingEventsOf(shipment([]))).toEqual([])
+  })
+})
+
+describe('trackingRefreshInterval', () => {
+  it('refreshes every 10 seconds while the Order is Shipped', () => {
+    expect(trackingRefreshInterval('SHIPPED')).toBe(10_000)
+  })
+
+  it('stops once the Order is Delivered, and does not refresh before it ships', () => {
+    expect(trackingRefreshInterval('DELIVERED')).toBe(false)
+    expect(trackingRefreshInterval('PAID')).toBe(false)
+    expect(trackingRefreshInterval('FULFILLED')).toBe(false)
   })
 })
