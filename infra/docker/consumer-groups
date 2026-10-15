@@ -12,3 +12,5 @@ recommendations.products
 fulfillment-shipping.products
 returns-warranty.shipments
 returns-warranty.products
+orchestration.orders
+orchestration.shipments

@@ -43,7 +43,7 @@ public class FulfillmentSaga implements FulfillmentWorkflow {
   /** Capturing: a gateway failure is retried for about a minute, then taken as a refusal. */
   private static final ActivityOptions FOR_A_MINUTE =
       ActivityOptions.newBuilder()
-          .setStartToCloseTimeout(Duration.ofSeconds(15))
+          .setStartToCloseTimeout(CheckoutSaga.ATTEMPT)
           .setScheduleToCloseTimeout(Duration.ofMinutes(1))
           .setRetryOptions(
               RetryOptions.newBuilder()
@@ -60,7 +60,7 @@ public class FulfillmentSaga implements FulfillmentWorkflow {
    */
   private static final ActivityOptions UNTIL_CREATED =
       ActivityOptions.newBuilder()
-          .setStartToCloseTimeout(Duration.ofSeconds(10))
+          .setStartToCloseTimeout(CheckoutSaga.ATTEMPT)
           .setRetryOptions(
               RetryOptions.newBuilder()
                   .setInitialInterval(Duration.ofSeconds(1))
@@ -73,7 +73,7 @@ public class FulfillmentSaga implements FulfillmentWorkflow {
   /** Every step after the capture, and the hold: retried until they succeed, refusals too. */
   private static final ActivityOptions UNTIL_DONE =
       ActivityOptions.newBuilder()
-          .setStartToCloseTimeout(Duration.ofSeconds(10))
+          .setStartToCloseTimeout(CheckoutSaga.ATTEMPT)
           .setRetryOptions(
               RetryOptions.newBuilder()
                   .setInitialInterval(Duration.ofSeconds(1))
@@ -144,12 +144,13 @@ public class FulfillmentSaga implements FulfillmentWorkflow {
     shipmentsUntilDone.dispatchShipment(shipmentId);
     orders.markOrderShipped(customerId, orderId);
 
-    if (!Workflow.await(request.deliveryDeadline(), () -> reached("DELIVERED"))) {
+    if (!Workflow.await(
+        Duration.ofSeconds(request.deliveryDeadlineSeconds()), () -> reached("DELIVERED"))) {
       log.warn(
           "Order {}'s Shipment {} wasn't confirmed delivered within {}",
           orderId,
           shipmentId,
-          request.deliveryDeadline());
+          Duration.ofSeconds(request.deliveryDeadlineSeconds()));
       return ended(new FulfillmentOutcome(Status.DELIVERY_UNCONFIRMED, shipmentId, null));
     }
     orders.markOrderDelivered(customerId, orderId);

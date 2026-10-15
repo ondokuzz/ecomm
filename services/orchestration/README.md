@@ -6,14 +6,16 @@ from [`platform/service-template`](../../platform/service-template/README.md), s
 security and testing conventions apply here.
 
 It has no public API, and the gateway doesn't route it. Over HTTP it serves only its health and its
-metrics (`/actuator/health`, `/actuator/prometheus`); it publishes no host port. Other services
-start its workflows through Temporal's client, never over HTTP to Orchestration.
+metrics (`/actuator/health`, `/actuator/prometheus`); it publishes no host port. Checkout starts
+its workflow through Temporal's client, never over HTTP to Orchestration, and Orchestration starts
+and wakes the fulfillment Saga itself from the events it consumes. It publishes none.
 
 ## Workflows
 
 | Task queue | Workflow type | |
 |---|---|---|
 | `checkout` | `checkout` | The checkout Saga ([below](#the-checkout-saga)), which Checkout starts when a Customer pays a Checkout Session |
+| `fulfillment` | `fulfillment` | The fulfillment Saga ([below](#the-fulfillment-saga)), which Orchestration starts when an Order is paid |
 
 The workers, their workflow classes and their activity beans are declared in `application.yml`
 under `spring.temporal.workers`, through Temporal's Spring Boot starter. Workflow interfaces are
@@ -93,6 +95,59 @@ and carries the Correlation ID of the Customer's Pay request: the workflow puts 
 `CorrelationIdPropagator` hands it to each activity's thread, so the calls and every log line carry
 it.
 
+## The fulfillment Saga
+
+`FulfillmentSaga` takes one paid Order to its Customer, with the workflow ID `fulfillment:<orderId>`,
+so Temporal's UI finds an Order's fulfillment by its ID.
+
+**Starting it.** `FulfillmentListener` consumes `order-management.order` in the group
+`orchestration.orders`, which read from the latest offset when it first started: Orders paid before
+it existed aren't fulfilled. From then on it resumes where it left off, so an Order paid while
+Orchestration was down is fulfilled once it is back. An Order event whose status is `PAID` and which
+has a Shipping address starts the Saga, with the Order's ID, Customer, lines, address and Shipping
+option, and the event's Correlation ID. The workflow ID's reuse policy refuses a second start, even
+after the first run closed (for as long as Temporal keeps it, 7 days), so a redelivered or replayed
+event starts nothing, and that is logged, not an error. An Order paid without a Shipping address,
+before Sprint 5, starts nothing: it stays `PAID`, with no Shipment, as it was. An upgraded stack's
+pre-Sprint 5 Orders were paid before the group existed anyway.
+
+**Waking it.** The same listener consumes `fulfillment-shipping.shipment` in the group
+`orchestration.shipments`, and signals `fulfillment:<orderId>` (`shipmentChanged`) with the
+Shipment's ID, version and status. The workflow ignores a version it has seen, or an older one, so a
+duplicate or a stale event changes nothing. A signal for a Saga that doesn't exist, or has ended, is
+logged and skipped, not dead-lettered. Either group's dead-letter and redrive topics are
+`<group>.dlt` and `<group>.redrive`, as for every group (`infra/docker/consumer-groups`).
+
+It answers `{"status", "shipmentId", "holdReason"}`, `status` being `DELIVERED`,
+`CAPTURE_REFUSED`, `DELIVERY_UNCONFIRMED` or `FAILED`. The steps, in order:
+
+1. **Create the Shipment** (`POST /shipments` on Fulfillment & Shipping) from the Order's lines,
+   address and option. A failure, such as the `503 productsNotKnownYet` while Fulfillment & Shipping
+   awaits Catalog's Products, is retried with backoff up to a minute until it succeeds. A `409`
+   (`shipmentExists`) is read as success: the Order's Shipment is read (`GET /shipments?orderId=`)
+   and the Saga goes on with it. Any other 4xx ends it `FAILED`, with nothing charged.
+2. **Await `PACKED`**, with no deadline: picking and packing are Staff's work.
+3. **Capture the Payment**: the Order's Payments are read (`GET /payments?orderId=&customerId=`,
+   Payment's read for Orchestration), and the authorized one, or one captured already, is captured
+   (`POST /payments/{id}/capture`). A `402 captureDeclined` **holds the Shipment** (`POST
+   /shipments/{id}/hold`) with the reason `Capture declined: <declineReason>`; a capture that still
+   fails after about a minute (the gateway's 502, say), or an Order with no authorized Payment,
+   holds it with `Capture failed: …`. Either way the outcome is `CAPTURE_REFUSED`: the Order stays
+   `PAID` and the Payment `AUTHORIZED`. Resolving it is out of scope.
+4. **Mark the Order `FULFILLED`** (`PATCH /orders/{id}/status`).
+5. **Dispatch the Shipment** (`POST /shipments/{id}/dispatch`), which books it with its Carrier.
+6. **Mark the Order `SHIPPED`**.
+7. **Await `DELIVERED`**, for up to `ecomm.orchestration.delivery-deadline` (30 days). Past it the
+   outcome is `DELIVERY_UNCONFIRMED`, logged, and the Order stays `SHIPPED`.
+8. **Mark the Order `DELIVERED`**. The outcome is `DELIVERED`.
+
+Once the Payment is captured nothing is compensated: steps 4 to 6 and 8, like the hold, are retried
+until they succeed. Each attempt has the checkout Saga's 30 seconds. Each command carries the
+`Idempotency-Key` `fulfillment:<orderId>:<runId>:<step>` (`createShipment`, `capturePayment`,
+`holdShipment`, `markOrderFulfilled`, `dispatchShipment`, `markOrderShipped`,
+`markOrderDelivered`), and every call carries the Correlation ID of the Order event that started
+the Saga. Order Management records each status change as made by `ORCHESTRATION`.
+
 ### Changing the workflow
 
 Workflow code must replay the same way every time: no I/O, clock, randomness or threads of its own,
@@ -130,13 +185,19 @@ with the task queue, workflow and activity type):
 - `checkout_workflows_total{outcome}`: runs by outcome, a `PAID` run counted once its Order is
   marked paid;
 - `checkout_step_failures_total{step}`: failed attempts of each step, before Temporal retries it;
-- `checkout_compensations_total{kind}`: `cancelOrder` and `voidPayment`.
+- `checkout_compensations_total{kind}`: `cancelOrder` and `voidPayment`;
+- `fulfillment_workflows_total{outcome}`: fulfillment runs by outcome;
+- `fulfillment_step_failures_total{step}`: failed attempts of each fulfillment step;
+- `fulfillment_holds_total{kind}`: Shipments held, `captureDeclined` or `captureFailed`.
 
-Temporal's Spring Boot starter reports them to Micrometer every 10 seconds, its fixed interval, but
-only once it has counted something. So that Prometheus has each at 0 before its first count, which
-`increase()` would otherwise miss, `CheckoutMetrics` registers every outcome, step and
-compensation at 0 when Orchestration starts, with the tags Temporal's scopes give them. It reads
-the steps from the activity interfaces, but a compensation added to the Saga is added there by hand. Grafana's **Checkout Saga** dashboard shows them
+A step's failure is counted under its Saga's workflow type, so an activity shared by both Sagas
+would count in each. Temporal's Spring Boot starter reports them to Micrometer every 10 seconds, its
+fixed interval, but only once it has counted something. So that Prometheus has each at 0 before its
+first count, which `increase()` would otherwise miss, `SagaMetrics` registers every outcome, step,
+compensation and kind of hold at 0 when Orchestration starts, with the tags Temporal's scopes give
+them. It reads the steps from each Saga's activity interfaces, but a compensation or kind of hold
+added to a Saga is added there by hand. Grafana's **Sagas** dashboard shows them, in a Checkout and
+a Fulfillment row, the latter with the lag of the two consumer groups
 ([infra/docker/grafana](../../infra/docker/grafana)).
 
 ## Temporal
@@ -190,6 +251,18 @@ Orchestration calls:
   `/actuator/prometheus`;
 - `CheckoutMetricsTest`: every counter at 0 before any checkout, and a run counting on those same
   series;
+- `FulfillmentWorkflowTest`: the fulfillment Saga from Kafka in (a Kafka container, with the
+  consumers' topics and dead-letter topics) to WireMock out: a paid Order's event starting one Saga,
+  the same event twice and a replay after it closed starting nothing more, an Order without an
+  address or not yet paid starting nothing, the steps in order with their keys and the Correlation
+  ID, a Shipment that exists already, one whose Products aren't known yet, duplicate and stale
+  Shipment events ignored, a declined capture and an Order without an authorized Payment holding the
+  Shipment with the Order untouched, a 503 on `FULFILLED` retried, delivery never confirmed ending
+  `DELIVERY_UNCONFIRMED` at the delivery deadline (10 seconds here, so the test shows the setting is
+  the one honoured), and an event for no running Saga skipped, not dead-lettered. Time skipping is
+  locked while each test runs, so the Saga waits for the test's events in real time
+  (`TimeSkipping`);
+- `FulfillmentMetricsTest`: every fulfillment counter at 0 before any run;
 - `ServiceTokenTest`: the token's caching, renewal and retry on a 401;
 - `HealthApiTest`: health is public, and there is no API;
 - `ArchitectureTest`: the shared `HexagonalRules`, and workflow code reaching other contexts only

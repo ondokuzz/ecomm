@@ -17,7 +17,6 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
-import com.ecomm.commons.events.EventBackbone;
 import com.ecomm.orchestration.application.port.in.FulfillmentOutcome;
 import com.ecomm.orchestration.application.port.in.FulfillmentOutcome.Status;
 import com.github.tomakehurst.wiremock.client.MappingBuilder;
@@ -29,6 +28,7 @@ import io.temporal.api.workflowservice.v1.DescribeWorkflowExecutionRequest;
 import io.temporal.client.WorkflowClient;
 import io.temporal.client.WorkflowException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -45,8 +45,9 @@ import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
  * Shipment events from Kafka, and its real activities call WireMock stubs of Fulfillment &
  * Shipping, Payment and Order Management with Orchestration's own token.
  *
- * <p>Time skipping is locked while each test runs, so the Saga's 30-day wait for delivery doesn't
- * end before the test's Shipment events arrive; a test that wants the wait over skips it.
+ * <p>Time skipping is locked while each test runs, so the Saga's wait for delivery, {@link
+ * #DELIVERY_DEADLINE} here, doesn't end before the test's Shipment events arrive, and passes in
+ * real time when none do.
  *
  * <p>Each topic has one partition, consumed in order, so once a later event has visibly been
  * handled, every event sent before it has been too: that is how a test sees that an event started
@@ -87,10 +88,15 @@ class FulfillmentWorkflowTest extends OrchestrationTest {
                                 && !c.getAssignedPartitions().isEmpty()));
   }
 
-  /** Ends a run the test left waiting, so it can't call the next test's stubs. */
+  /**
+   * Ends a run the test left waiting, so it can't call the next test's stubs. It waits for the
+   * run's last step to complete first: the test server keeps a time-skipping lock for an activity
+   * whose workflow is terminated before its completion arrives, and would then never skip time.
+   */
   @AfterEach
   void endTheRun() {
     try {
+      awaitNoPendingActivity();
       temporal.newUntypedWorkflowStub(workflowId()).terminate("the test is over");
     } catch (WorkflowException | StatusRuntimeException e) {
       // It ended, or never started.
@@ -335,19 +341,18 @@ class FulfillmentWorkflowTest extends OrchestrationTest {
   }
 
   @Test
-  void aDeliveryNeverConfirmedEndsTheSagaAfter30Days() {
+  void aDeliveryNeverConfirmedEndsTheSagaAtTheDeliveryDeadline() {
     stubEveryStep();
     paid();
     awaitCalls(1);
     shipment(3, "PACKED");
     awaitCalls(6);
-
-    TimeSkipping.skip(Duration.ofDays(29));
-    assertThat(isRunning(workflowId())).isTrue();
-    TimeSkipping.skip(Duration.ofDays(2));
+    var shipped = Instant.now();
 
     assertThat(outcome())
         .isEqualTo(new FulfillmentOutcome(Status.DELIVERY_UNCONFIRMED, SHIPMENT_ID, null));
+    assertThat(Duration.between(shipped, Instant.now()))
+        .isGreaterThanOrEqualTo(DELIVERY_DEADLINE.minusSeconds(1));
     assertThat(calls()).doesNotContain("PATCH " + status() + " DELIVERED");
   }
 
@@ -363,8 +368,7 @@ class FulfillmentWorkflowTest extends OrchestrationTest {
     shipment(3, "PACKED");
 
     awaitCalls(6);
-    assertThat(EventBackbone.recordsKeyed("orchestration.shipments.dlt", unknownShipment))
-        .isEmpty();
+    assertThat(Kafka.recordsKeyed("orchestration.shipments.dlt", unknownShipment)).isEmpty();
   }
 
   // --- events ---
@@ -410,8 +414,14 @@ class FulfillmentWorkflowTest extends OrchestrationTest {
     return describe(workflowId).getWorkflowExecutionInfo().getExecution().getRunId();
   }
 
-  boolean isRunning(String workflowId) {
-    return describe(workflowId).getWorkflowExecutionInfo().getStatusValue() == 1;
+  /** Waits until this Order's run, if it was started, has no step scheduled or running. */
+  void awaitNoPendingActivity() {
+    if (!isStarted(workflowId())) {
+      return;
+    }
+    await()
+        .atMost(Duration.ofSeconds(30))
+        .until(() -> describe(workflowId()).getPendingActivitiesCount() == 0);
   }
 
   boolean isStarted(String workflowId) {

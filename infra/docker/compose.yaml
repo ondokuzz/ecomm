@@ -494,6 +494,8 @@ services:
     depends_on:
       temporal-namespace: { condition: service_completed_successfully }
       keycloak-realm: { condition: service_completed_successfully }
+      # It consumes Order and Shipment events, which start and wake the fulfillment Saga.
+      kafka-topics: { condition: service_completed_successfully }
 
   # The one way in for browsers: authenticates at the edge and routes /api/<service>/** to the
   # services (platform/api-gateway). The services' own host ports above bypass it, for development.
@@ -703,7 +705,7 @@ services:
       timeout: 3s
       retries: 10
 
-  # The Services, Event consumers and Checkout Saga dashboards on http://localhost:3000, open to
+  # The Services, Event consumers and Sagas dashboards on http://localhost:3000, open to
   # anyone for viewing; sign in as admin, with the password in
   # .secrets/<project>/grafana-admin-password, to explore. Its data source and dashboards are
   # provisioned from grafana/, and it keeps nothing else between restarts.

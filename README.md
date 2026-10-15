@@ -110,7 +110,7 @@ Orchestration, which serves nothing but its health:
 | 9092 | Kafka |
 | 7233 | Temporal, for workers and clients run from the host ([Orchestration](./services/orchestration/README.md#temporal)) |
 | 8233 | Temporal's web UI: every workflow, its history and its retries |
-| 3000 | Grafana: the Services, Event consumers and Checkout Saga dashboards, open for viewing ([below](#metrics-and-dashboards)) |
+| 3000 | Grafana: the Services, Event consumers and Sagas dashboards, open for viewing ([below](#metrics-and-dashboards)) |
 | 9090 | Prometheus: every service's metrics, and Kafka's consumer lag, for 2 days |
 | 27017 | Mongo |
 | 5050 | pgAdmin, once started (below) |
@@ -144,9 +144,12 @@ dashboards, under **ecomm**, are files in [`infra/docker/grafana`](./infra/docke
   each group's committed offsets from the broker, so it keeps showing while a group is stopped or
   stuck retrying an event. The consumers' own lag, which counts only from what they have fetched,
   isn't plotted.
-- **Checkout Saga:** checkouts by outcome (`PAID`, `DECLINED`, `HOLD_EXPIRED`, `FAILED`), step
-  failures by step, compensations by kind, and Temporal's own activity failures and workflow
-  durations.
+- **Sagas:** a Checkout row, with checkouts by outcome (`PAID`, `DECLINED`, `HOLD_EXPIRED`,
+  `FAILED`), step failures by step, compensations by kind, and Temporal's own activity failures and
+  workflow durations; and a Fulfillment row, with fulfillments by outcome (`DELIVERED`,
+  `CAPTURE_REFUSED`, `DELIVERY_UNCONFIRMED`, `FAILED`), step failures by step, Shipments on hold by
+  kind, the lag of Orchestration's `orchestration.orders` and `orchestration.shipments` groups, and
+  workflow durations.
 
 A panel plotting `rate()` or `increase()` counts a series only from its second sample, so a
 counter has to be on `/actuator/prometheus` at 0 before its first count, or that count is missed.

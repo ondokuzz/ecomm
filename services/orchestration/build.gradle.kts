@@ -18,5 +18,7 @@ dependencies {
   testImplementation(project(":platform:event-schemas"))
   testImplementation(libs.json.schema.validator)
   testImplementation("org.apache.kafka:kafka-clients")
+  // Kafka alone: Orchestration only consumes, so its tests need no schema registry.
+  testImplementation("org.testcontainers:testcontainers-kafka")
   testImplementation("org.awaitility:awaitility")
 }

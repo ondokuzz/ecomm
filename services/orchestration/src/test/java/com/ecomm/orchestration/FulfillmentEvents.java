@@ -1,6 +1,5 @@
 package com.ecomm.orchestration;
 
-import com.ecomm.commons.events.EventBackbone;
 import com.networknt.schema.InputFormat;
 import com.networknt.schema.JsonSchema;
 import com.networknt.schema.JsonSchemaFactory;
@@ -36,7 +35,7 @@ final class FulfillmentEvents {
       JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V7);
   private static final KafkaProducer<String, String> PRODUCER =
       new KafkaProducer<>(
-          Map.of("bootstrap.servers", EventBackbone.bootstrapServers()),
+          Map.of("bootstrap.servers", Kafka.bootstrapServers()),
           new StringSerializer(),
           new StringSerializer());
 
