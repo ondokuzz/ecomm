@@ -9,6 +9,7 @@ import io.temporal.testserver.TestServer;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.ServerSocket;
+import java.time.Duration;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureRestTestClient;
@@ -30,6 +31,12 @@ abstract class OrchestrationTest {
 
   /** How long the Saga awaits a pending authorization here. */
   static final String SETTLEMENT_DEADLINE = "2m";
+
+  /**
+   * How long a call to another service may take here: shorter than the stack's 25 seconds, so a
+   * test can outlast it without waiting as long, and still more than a cold service's first answer.
+   */
+  static final Duration READ_TIMEOUT = Duration.ofSeconds(15);
 
   static final String TOKEN_PATH = "/realms/ecomm/protocol/openid-connect/token";
 
@@ -70,6 +77,7 @@ abstract class OrchestrationTest {
         "spring.security.oauth2.client.registration.orchestration.client-secret", () -> "test");
     // Shorter than the stack's 10 minutes, so a test shows the setting is the one honoured.
     registry.add("ecomm.orchestration.settlement-deadline", () -> SETTLEMENT_DEADLINE);
+    registry.add("ecomm.orchestration.read-timeout", READ_TIMEOUT::toString);
   }
 
   @BeforeEach

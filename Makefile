@@ -8,9 +8,10 @@ SEARCH_GROUPS := $(filter search-discovery.%,$(GROUPS))
 REVIEWS_GROUPS := $(filter reviews-ratings.%,$(GROUPS))
 RECOMMENDATIONS_GROUPS := $(filter recommendations.%,$(GROUPS))
 FULFILLMENT_GROUPS := $(filter fulfillment-shipping.%,$(GROUPS))
+RETURNS_GROUPS := $(filter returns-warranty.%,$(GROUPS))
 DEAD_LETTER_TOPICS := $(foreach group,$(GROUPS),$(group).dlt $(group).redrive)
 
-.PHONY: secrets up down status seed-reset search-rebuild reviews-rebuild recommendations-rebuild fulfillment-rebuild dlt-redrive upgrade-from upgrade-to upgrade-clean
+.PHONY: secrets up down status seed-reset search-rebuild reviews-rebuild recommendations-rebuild fulfillment-rebuild returns-rebuild dlt-redrive upgrade-from upgrade-to upgrade-clean
 
 ## Write each of the stack's secrets that is missing to .secrets/<project>/, never overwriting one
 ## (infra/docker/secrets.sh). `make up` runs it first.
@@ -31,17 +32,18 @@ status:
 	@infra/docker/stack-status.sh
 
 ## Put the seed Categories, Products, Stock and Coupons back and drop every Cart, Checkout Session,
-## Reservation, Order, Payment and review. Keycloak is left alone, so registered Customers stay. The
-## reset stores count their events' versions from the start again, so every topic, dead-letter and
-## redrive topics included, is emptied and Search's, Reviews' and Recommendations' databases
-## dropped, or their consumers would take the new events for stale ones. Kafka deletes topics in the background, and one can't be created again until it has gone.
+## Reservation, Order, Payment, review, Shipment and RMA. Keycloak is left alone, so registered
+## Customers stay. The reset stores count their events' versions from the start again, so every
+## topic, dead-letter and redrive topics included, is emptied and Search's, Reviews',
+## Recommendations' and Returns & Warranty's databases dropped, or their consumers would take the
+## new events for stale ones. Kafka deletes topics in the background, and one can't be created again until it has gone.
 seed-reset:
 	$(COMPOSE) up -d --wait couchbase postgres redis kafka mongo
-	$(COMPOSE) stop storefront checkout-pricing catalog inventory cart payment order-management promotions search-discovery reviews-ratings recommendations fulfillment-shipping
+	$(COMPOSE) stop storefront checkout-pricing catalog inventory cart payment order-management promotions search-discovery reviews-ratings recommendations fulfillment-shipping returns-warranty
 	$(COMPOSE) exec -T couchbase sh -c \
 	  'couchbase-cli bucket-delete -c localhost:8091 -u admin -p "$$(cat /run/secrets/couchbase-password)" --bucket catalog'
 	$(COMPOSE) run --rm --no-deps couchbase-init
-	for db in inventory payment orders promotions recommendations fulfillment_shipping; do \
+	for db in inventory payment orders promotions recommendations fulfillment_shipping returns_warranty; do \
 	  $(COMPOSE) exec -T postgres psql -U ecomm -d postgres -v ON_ERROR_STOP=1 \
 	    -c "DROP DATABASE IF EXISTS $$db WITH (FORCE)" -c "CREATE DATABASE $$db" || exit 1; \
 	done
@@ -111,6 +113,22 @@ fulfillment-rebuild:
 	    --reset-offsets --to-latest --topic $$group.redrive --execute || exit 1; \
 	done
 	$(COMPOSE) up -d --wait fulfillment-shipping
+
+## Rebuild Returns & Warranty's projections of delivered Shipments and of Products from their
+## topics (services/returns-warranty/README.md): stop the service, empty the projections, reset its
+## groups to the earliest offset, and start it again. RMAs stay, with the windows they were checked
+## against. As for Search, the redrive topics aren't replayed.
+returns-rebuild:
+	$(COMPOSE) stop returns-warranty
+	$(COMPOSE) exec -T postgres psql -U ecomm -d returns_warranty -v ON_ERROR_STOP=1 \
+	  -c 'TRUNCATE shipment_line, shipment, product_variant, product'
+	for group in $(RETURNS_GROUPS); do \
+	  $(KAFKA)/kafka-consumer-groups.sh --bootstrap-server localhost:19092 --group $$group \
+	    --reset-offsets --to-earliest --all-topics --execute || exit 1; \
+	  $(KAFKA)/kafka-consumer-groups.sh --bootstrap-server localhost:19092 --group $$group \
+	    --reset-offsets --to-latest --topic $$group.redrive --execute || exit 1; \
+	done
+	$(COMPOSE) up -d --wait returns-warranty
 
 ## Redrive a consumer group's dead events once their cause is fixed, e.g.
 ## `make dlt-redrive GROUP=search-discovery.products`: copy what was dead-lettered since the last

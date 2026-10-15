@@ -22,6 +22,7 @@ scrape_configs:
           - reviews-ratings:8080
           - recommendations:8080
           - fulfillment-shipping:8080
+          - returns-warranty:8080
           - orchestration:8080
 
   # Consumer lag from the broker's committed offsets (compose.yaml's kafka-exporter). Only its lag

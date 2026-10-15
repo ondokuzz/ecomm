@@ -1,6 +1,10 @@
 package com.ecomm.orchestration.adapter.out.http;
 
+import java.net.http.HttpClient;
 import java.time.Clock;
+import java.time.Duration;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.client.AuthorizedClientServiceOAuth2AuthorizedClientManager;
@@ -29,12 +33,15 @@ public class ServiceRestClients {
 
   private final RestClient.Builder builder;
   private final OAuth2ClientHttpRequestInterceptor oauth2;
+  private final JdkClientHttpRequestFactory requests;
 
   ServiceRestClients(
       RestClient.Builder builder,
       ClientRegistrationRepository registrations,
       OAuth2AuthorizedClientService authorizedClients,
-      Clock clock) {
+      Clock clock,
+      @Value("${ecomm.orchestration.connect-timeout}") Duration connectTimeout,
+      @Value("${ecomm.orchestration.read-timeout}") Duration readTimeout) {
     // The default clock skew is 60 seconds: a token with less left is replaced before it is sent.
     var provider = new ClientCredentialsOAuth2AuthorizedClientProvider();
     provider.setClock(clock);
@@ -49,6 +56,13 @@ public class ServiceRestClients {
     oauth2.setAuthorizationFailureHandler(
         OAuth2ClientHttpRequestInterceptor.authorizationFailureHandler(authorizedClients));
     this.builder = builder;
+    // A call gives up before Temporal's budget for the attempt (CheckoutSaga.ATTEMPT) runs out, so
+    // the attempt fails here, where its retry is counted and replays with its key, instead of being
+    // abandoned while its call still waits.
+    requests =
+        new JdkClientHttpRequestFactory(
+            HttpClient.newBuilder().connectTimeout(connectTimeout).build());
+    requests.setReadTimeout(readTimeout);
   }
 
   /** A client for the service at {@code baseUrl} that sends Orchestration's token. */
@@ -56,6 +70,7 @@ public class ServiceRestClients {
     return builder
         .clone()
         .baseUrl(baseUrl)
+        .requestFactory(requests)
         // The first interceptor wraps the rest, so the retry re-runs the OAuth2 one.
         .requestInterceptor(new RetryOnceOnUnauthorized())
         .requestInterceptor(oauth2)
