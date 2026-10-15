@@ -165,6 +165,18 @@ why above its timeline, by its latest Payment: "Payment declined" or "Card autho
 answer, says none was recorded, and a failed read shows its error beside the rest of the page, with
 a way to try again. The section is read only.
 
+Below its Shipping, the Order page shows its Shipment, from Fulfillment & Shipping's
+`GET /shipments?orderId=`, which answers only the Customer's own. Its status reads "Being prepared"
+while the Warehouse picks and packs it (and while it is on hold), then "Shipped" and "Delivered"
+(`shipmentStatusLabel` in [`src/domain/shipment.ts`](./src/domain/shipment.ts)). Once it ships it
+names the Carrier and tracking number, and lists the Tracking events the Carrier reported (In
+transit, Out for delivery, Delivered), oldest first with their times (`trackingEventsOf`). Like
+"Customers also bought", the panel is simply absent while it loads, for an Order without a Shipment
+(placed before Sprint 5, or not yet taken up by the fulfillment Saga; a 404) and when the read
+fails. While the Order is Shipped, the page asks again for the Order and its Shipment every 10
+seconds, and stops once it is Delivered (`trackingRefreshInterval`). Its Payment shows Charged once
+the Saga has captured it.
+
 My Orders lists them as cards: reference, date, the first three Products' thumbnails (and how many
 more), item count, total and Order Status badge, and "Saved with Audio week, WELCOME10" naming each
 Discount it got (`discountNames`); the Order page lists them in its summary as checkout did. Each Order Status badge has a colour of its own
@@ -240,7 +252,8 @@ to the page they asked for.
 ## Calling the services
 
 The browser reaches each service at `/api/<service>/…` on the Storefront's own origin: `catalog`,
-`inventory`, `cart`, `checkout-pricing`, `order-management`, `search-discovery`, `reviews-ratings` and `recommendations`. Everything under `/api/` goes to the
+`inventory`, `cart`, `checkout-pricing`, `order-management`, `payment`, `search-discovery`, `reviews-ratings`, `recommendations` and
+`fulfillment-shipping`. Everything under `/api/` goes to the
 [API gateway](../../platform/api-gateway/README.md), which checks the token and routes it; it sends
 no CORS headers. In development the Vite dev proxy forwards `/api` to the gateway's compose host
 port, 8000 ([`vite.config.ts`](./vite.config.ts)); in compose, nginx does
@@ -405,12 +418,12 @@ Sign in as `demo@ecomm.local` / `demo`, or register a new Customer.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: failed responses as messages and support references, Money formatting by Catalog's Minor units, Cart pricing, checkout problems, the session countdown and the price breakdown with each Discount and the Shipping cost, address violations mapped to their fields, Shipping options and addresses in words, whether a session can be paid, Coupon rejections, test cards and payment failures, an Order's Payment statuses and transactions and why a cancelled Order was cancelled, quantities, Stock levels and Cart lines' availability, toasts, the search's URL and its Facets as chips and filters, rating stars and summaries and the review form's validation, Product specs by their Category's definitions, Warranty terms in words, Customer initials, Orders and their timeline from the Order Status history, the Orders list's paging, Order Status colours, seed Product images, the Keycloak theme's and the Admin Console's copies of the tokens
+npm test          # Vitest: failed responses as messages and support references, Money formatting by Catalog's Minor units, Cart pricing, checkout problems, the session countdown and the price breakdown with each Discount and the Shipping cost, address violations mapped to their fields, Shipping options and addresses in words, whether a session can be paid, Coupon rejections, test cards and payment failures, an Order's Payment statuses and transactions and why a cancelled Order was cancelled, quantities, Stock levels and Cart lines' availability, toasts, the search's URL and its Facets as chips and filters, rating stars and summaries and the review form's validation, Product specs by their Category's definitions, Warranty terms in words, Customer initials, Orders and their timeline from the Order Status history, Shipment statuses in words, Tracking events oldest first and when the Order page refreshes them, the Orders list's paging, Order Status colours, seed Product images, the Keycloak theme's and the Admin Console's copies of the tokens
 npm run test:e2e  # Playwright smoke, search, product-page and error-states tests against the running compose stack (`make up`)
 ```
 
 The smoke test ([`e2e/smoke.spec.ts`](./e2e/smoke.spec.ts)) walks the definitions of done of
-Sprints 1 to 3. Its tests run one after another, since the first compares Stock before and after
+Sprints 1 to 5. Its tests run one after another, since the first compares Stock before and after
 checkout and nothing else may check out meanwhile, so every test of this suite that checks out is
 in it; the Admin Console's suite checks out too, so run the two one after the other. Each test
 signs in on Keycloak for real as a Customer made for it through Keycloak's admin API (as `admin`),
@@ -435,7 +448,13 @@ Rating summary on the Product's page and its card. The other opens a Product it 
 can't review it, and Reviews refuses a post with `notPurchased`. Of Sprint 4's, one creates two
 Products of its own as Staff through Catalog's and Inventory's APIs, buys them together, waits for
 Recommendations to have the Order, and sees each one's page show the other, alone, under "Customers
-also bought"; it deletes both Products and their Stock afterwards. The error-states test
+also bought"; it deletes both Products and their Stock afterwards. Of Sprint 5's, one pays an
+Order, waits for the fulfillment Saga to create its Shipment and sees it "Being prepared", then
+picks and packs it as Staff through the gateway (as the Admin Console does, with a new Serial
+number or IMEI for any serial-tracked line), waits for the Saga to ship it, and sees the Carrier
+and tracking number, the Payment Charged, the Tracking events arrive by themselves and the Shipment
+and Order end Delivered; the other places an Order as Orchestration with no Shipping address, as
+before Sprint 5, and sees no Shipment panel. The error-states test
 ([`e2e/error-states.spec.ts`](./e2e/error-states.spec.ts)) opens unknown route, Product and Order
 addresses and sees the Not Found page, answers the Product list with a 500 and sees the panel's
 reference and "Try again" recover, fails the Product page's Stock lookup and sees it say so with its
