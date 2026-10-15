@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { packRequestOf, serialCheckOf, serialFieldOf, shipmentStatusLabel, trackingStatusLabel } from './shipment'
+import {
+  packRequestOf,
+  queueOf,
+  queueSearchOf,
+  serialCheckOf,
+  serialFieldOf,
+  shipmentStatusLabel,
+  shipmentsQueryOf,
+  trackingStatusLabel,
+  unitsOf,
+} from './shipment'
 
 describe('serialCheckOf, as Staff type a Serial number', () => {
   it('takes an IMEI whose last digit is its Luhn check digit', () => {
@@ -106,5 +116,35 @@ describe('trackingStatusLabel', () => {
     expect(trackingStatusLabel('IN_TRANSIT')).toBe('In transit')
     expect(trackingStatusLabel('OUT_FOR_DELIVERY')).toBe('Out for delivery')
     expect(trackingStatusLabel('DELIVERED')).toBe('Delivered')
+  })
+})
+
+describe('the fulfillment queue in the URL', () => {
+  it('opens on the Shipments awaiting pick, first page, by default', () => {
+    expect(queueOf(new URLSearchParams())).toEqual({ status: 'AWAITING_PICK', page: 0 })
+  })
+
+  it('reads a queued status and a page counted from 1, ignoring what it doesn’t know', () => {
+    expect(queueOf(new URLSearchParams('status=ON_HOLD&page=2'))).toEqual({ status: 'ON_HOLD', page: 1 })
+    // Shipped and delivered Shipments are out of Staff's hands: no tab of their own.
+    expect(queueOf(new URLSearchParams('status=SHIPPED&page=0'))).toEqual({ status: 'AWAITING_PICK', page: 0 })
+  })
+
+  it('writes it back, leaving out the defaults', () => {
+    expect(queueSearchOf({ status: 'AWAITING_PICK', page: 0 })).toBe('')
+    expect(queueSearchOf({ status: 'PACKED', page: 2 })).toBe('?status=PACKED&page=3')
+  })
+
+  it('asks for that status’s page from the chosen Warehouse, or from every one', () => {
+    expect(shipmentsQueryOf({ status: 'PICKED', page: 1 }, 'WH-AMS', 20)).toBe(
+      '?status=PICKED&page=1&size=20&warehouseId=WH-AMS',
+    )
+    expect(shipmentsQueryOf({ status: 'PICKED', page: 0 }, undefined, 1)).toBe('?status=PICKED&page=0&size=1')
+  })
+})
+
+describe('unitsOf', () => {
+  it('counts every unit on every line', () => {
+    expect(unitsOf({ lines: [{ quantity: 2 }, { quantity: 1 }] })).toBe(3)
   })
 })

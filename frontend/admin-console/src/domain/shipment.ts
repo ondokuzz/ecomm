@@ -126,6 +126,55 @@ export function serialCheckOf(tracking: Exclude<SerialTracking, 'NONE'>, entered
   return { state: 'valid', serialNumber: typed.toUpperCase() }
 }
 
+/** The statuses the fulfillment queue has a tab for: the Shipments still in Staff's hands, or held. */
+export type QueuedStatus = Extract<ShipmentStatus, 'AWAITING_PICK' | 'PICKED' | 'PACKED' | 'ON_HOLD'>
+
+/** The fulfillment queue's tabs, in the order a Shipment moves through them. */
+export const queuedStatuses: readonly QueuedStatus[] = ['AWAITING_PICK', 'PICKED', 'PACKED', 'ON_HOLD']
+
+/** How many Shipments a page of the queue shows. */
+export const shipmentsPageSize = 20
+
+/** The fulfillment queue's tab and its page, counting from 0. */
+export interface Queue {
+  status: QueuedStatus
+  page: number
+}
+
+/** The queue a URL's query names: its `status` (awaiting pick unless another tab is named), and its `page`, from 1. */
+export function queueOf(params: URLSearchParams): Queue {
+  const status = params.get('status') as QueuedStatus
+  const page = Number(params.get('page'))
+  return {
+    status: queuedStatuses.includes(status) ? status : 'AWAITING_PICK',
+    page: Number.isInteger(page) && page >= 1 ? page - 1 : 0,
+  }
+}
+
+/** The URL query that keeps the queue: the inverse of `queueOf`, leaving out the defaults. */
+export function queueSearchOf(queue: Queue): string {
+  const params = new URLSearchParams()
+  if (queue.status !== 'AWAITING_PICK') params.set('status', queue.status)
+  if (queue.page > 0) params.set('page', String(queue.page + 1))
+  const search = params.toString()
+  return search && `?${search}`
+}
+
+/**
+ * The query for `GET /shipments` that a tab stands for, from one Warehouse or, without one, from
+ * all; Fulfillment & Shipping lists them oldest first.
+ */
+export function shipmentsQueryOf(queue: Queue, warehouseId: string | undefined, size: number): string {
+  const params = new URLSearchParams({ status: queue.status, page: String(queue.page), size: String(size) })
+  if (warehouseId) params.set('warehouseId', warehouseId)
+  return `?${params}`
+}
+
+/** How many units a Shipment holds, over all its lines. */
+export function unitsOf(shipment: { lines: readonly { quantity: number }[] }): number {
+  return shipment.lines.reduce((units, line) => units + line.quantity, 0)
+}
+
 /** What a Pack needs of a Shipment line: its Variant, how many units, and how each is identified. */
 export interface PackLine {
   variantId: string
