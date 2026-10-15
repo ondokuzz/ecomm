@@ -6,6 +6,7 @@ import type { Page as ListPage } from '../src/domain/paging'
 import type { AlsoBought } from '../src/domain/recommendations'
 import type { Eligibility, RatingSummary } from '../src/domain/reviews'
 import type { SearchResults } from '../src/domain/search'
+import type { Shipment } from '../src/domain/shipment'
 import { stackSecret } from './secrets'
 
 /**
@@ -28,6 +29,10 @@ import { stackSecret } from './secrets'
  * - Pay with a card the bank confirms later: the page says the payment is being confirmed until the
  *   gateway's webhook settles it, then shows the paid Order; or, declined, shows why, and the held
  *   session is then paid with a card that approves.
+ * - Once Staff pick and pack a paid Order's Shipment through the gateway, as the Admin Console does,
+ *   the fulfillment Saga captures the Payment and ships it, and the Order page shows the Shipment,
+ *   its Tracking events as the mock carrier sends them, then `Delivered`, and the Payment charged.
+ *   An Order without a Shipment, placed as before Sprint 5, shows no Shipment panel.
  */
 
 // The first checkout compares Stock before and after, so nothing else may check out meanwhile:
@@ -61,6 +66,10 @@ interface ProductInStock {
 }
 
 const keycloakUrl = process.env.KEYCLOAK_URL ?? 'http://localhost:8180'
+/** Order Management's compose host port, which bypasses the gateway, for the checkout Saga's commands. */
+const orderManagementUrl = process.env.ORDER_MANAGEMENT_URL ?? 'http://localhost:8085'
+/** The seeded Staff user, who picks and packs Shipments through the gateway as the Admin Console does. */
+const staff: Credentials = { email: 'staff@ecomm.local', password: 'staff' }
 
 let customer: Customer | undefined
 
@@ -735,6 +744,91 @@ test.describe('Sprint 4', () => {
   })
 })
 
+test.describe('Sprint 5', () => {
+  test('once Staff pack a paid Order, its page shows the Shipment’s Tracking events, then Delivered, and the Payment charged', async ({
+    page,
+    request,
+  }) => {
+    // The fulfillment Saga's steps, then the mock carrier's three Tracking events 10, 20 and 30 s after dispatch.
+    test.setTimeout(240_000)
+    const customer = signedUp()
+    const token = await tokenFor(request, customer)
+    const { variantId } = await aProductInStock(request)
+    await putInCart(request, token, variantId)
+
+    await page.goto('/checkout')
+    await signInOnKeycloak(page, customer)
+    await expect(page.getByRole('timer', { name: 'Time left' })).toBeVisible()
+    await shipTo(page)
+    await testCard(page, 'Approve').check()
+    await page.getByRole('button', { name: /^Pay/ }).click()
+    await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/)
+    await expect(page.locator('.status-paid')).toHaveText('Paid')
+    const orderId = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!)
+
+    // The fulfillment Saga creates the Shipment once the Order is paid; Staff then pick and pack it.
+    const staffHeaders = { Authorization: `Bearer ${await tokenFor(request, staff)}` }
+    const created = await shipmentOf(request, staffHeaders, orderId)
+    await page.reload()
+    const panel = page.getByRole('region', { name: 'Shipment' })
+    await expect(panel.locator('.shipment-awaiting-pick')).toHaveText('Being prepared')
+    await expect(panel.getByRole('list', { name: 'Tracking events' })).toBeHidden()
+
+    const shipmentUrl = `/api/fulfillment-shipping/shipments/${created.id}`
+    expect((await request.post(`${shipmentUrl}/pick`, { headers: staffHeaders })).ok()).toBeTruthy()
+    const packed = await request.post(`${shipmentUrl}/pack`, {
+      headers: staffHeaders,
+      data: { serialNumbers: serialNumbersFor(created) },
+    })
+    expect(packed.ok()).toBeTruthy()
+
+    // The Saga captures the Payment, marks the Order Fulfilled, dispatches the Shipment and marks it Shipped.
+    await expect
+      .poll(async () => (await orderOf(request, token, orderId)).status, { timeout: 90_000, intervals: [2_000] })
+      .toBe('SHIPPED')
+    const shipped = await shipmentOf(request, { Authorization: `Bearer ${token}` }, orderId)
+    expect(shipped.trackingNumber).toBeTruthy()
+
+    // From here the page asks again every 10 s by itself, so it isn't reloaded.
+    await page.reload()
+    await expect(page.locator('.status-shipped')).toHaveText('Shipped')
+    await expect(panel.locator('.shipment-shipped')).toHaveText('Shipped')
+    await expect(panel).toContainText(`${shipped.carrier}, tracking number ${shipped.trackingNumber}`)
+    await expect(page.locator('.payment-captured')).toHaveText('Charged')
+    const tracking = panel.getByRole('list', { name: 'Tracking events' }).getByRole('listitem')
+    await expect(tracking.first()).toContainText('In transit', { timeout: 60_000 })
+    await expect(panel.locator('.shipment-delivered')).toHaveText('Delivered', { timeout: 90_000 })
+    await expect(tracking).toHaveText([/^In transit/, /^Out for delivery/, /^Delivered/])
+    await expect(page.locator('.status-delivered')).toHaveText('Delivered', { timeout: 30_000 })
+  })
+
+  test('an Order without a Shipment shows no Shipment panel', async ({ page, request }) => {
+    const customer = signedUp()
+    const { variant } = await aProductInStock(request)
+    // Placed as before Sprint 5, with no Shipping address, and never paid, so no Saga takes it up.
+    const placed = await request.post(`${orderManagementUrl}/orders`, {
+      headers: {
+        Authorization: `Bearer ${await orchestrationToken(request)}`,
+        'Idempotency-Key': crypto.randomUUID(),
+      },
+      data: {
+        customerId: customer.id,
+        lines: [{ variantId: variant.id, quantity: 1, unitPrice: variant.price }],
+        tax: { amountMinor: 0, currency: variant.price.currency },
+      },
+    })
+    expect(placed.status()).toBe(201)
+    const { id: orderId } = (await placed.json()) as { id: string }
+
+    const asked = page.waitForResponse((response) => response.url().includes('/api/fulfillment-shipping/shipments?'))
+    await page.goto(`/orders/${orderId}`)
+    await signInOnKeycloak(page, customer)
+    await expect(page.locator('.status-placed')).toHaveText('Placed')
+    expect((await asked).status()).toBe(404)
+    await expect(page.getByRole('region', { name: 'Shipment' })).toHaveCount(0)
+  })
+})
+
 async function putInCart(request: APIRequestContext, token: string, variantId: string) {
   const put = await request.put(`/api/cart/cart/items/${encodeURIComponent(variantId)}`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -823,6 +917,72 @@ async function tokenFor(request: APIRequestContext, user: Credentials) {
   })
   expect(response.ok()).toBeTruthy()
   return ((await response.json()) as { access_token: string }).access_token
+}
+
+/** A token for the orchestration client, as the Sagas call the services with. */
+async function orchestrationToken(request: APIRequestContext): Promise<string> {
+  const response = await request.post(`${keycloakUrl}/realms/ecomm/protocol/openid-connect/token`, {
+    form: {
+      grant_type: 'client_credentials',
+      client_id: 'orchestration',
+      client_secret: stackSecret('orchestration-client-secret'),
+    },
+  })
+  expect(response.ok()).toBeTruthy()
+  return ((await response.json()) as { access_token: string }).access_token
+}
+
+/** A Shipment as Staff and its Customer read it, with what packing it needs. */
+interface ShipmentRead extends Shipment {
+  lines: { variantId: string; quantity: number; serialTracking: 'NONE' | 'SERIAL' | 'IMEI' }[]
+}
+
+/** The Order's Shipment, read with `headers`, once the fulfillment Saga has created it. */
+async function shipmentOf(
+  request: APIRequestContext,
+  headers: Record<string, string>,
+  orderId: string,
+): Promise<ShipmentRead> {
+  let shipment: ShipmentRead | undefined
+  await expect
+    .poll(
+      async () => {
+        const response = await request.get(
+          `/api/fulfillment-shipping/shipments?orderId=${encodeURIComponent(orderId)}`,
+          { headers },
+        )
+        if (response.ok()) shipment = (await response.json()) as ShipmentRead
+        return response.status()
+      },
+      { timeout: 60_000, intervals: [1_000, 2_000] },
+    )
+    .toBe(200)
+  return shipment!
+}
+
+/** A Serial number for each unit of each serial-tracked line, new on every run: IMEIs with their Luhn digit. */
+function serialNumbersFor(shipment: ShipmentRead): Record<string, string[]> {
+  const run = `${Date.now().toString(36)}${test.info().workerIndex}`.toUpperCase()
+  return Object.fromEntries(
+    shipment.lines
+      .filter((line) => line.serialTracking !== 'NONE')
+      .map((line) => [
+        line.variantId,
+        Array.from({ length: line.quantity }, (_, unit) =>
+          line.serialTracking === 'IMEI' ? anImei() : `E2E-${run}-${unit + 1}`,
+        ),
+      ]),
+  )
+}
+
+/** A random 15-digit IMEI whose last digit is its Luhn check digit. */
+function anImei(): string {
+  const body = Array.from({ length: 14 }, () => Math.floor(Math.random() * 10))
+  const sum = body.reduceRight((total, digit, i) => {
+    const doubled = (13 - i) % 2 === 0 ? digit * 2 : digit
+    return total + (doubled > 9 ? doubled - 9 : doubled)
+  }, 0)
+  return body.join('') + ((10 - (sum % 10)) % 10)
 }
 
 async function orderOf(request: APIRequestContext, token: string, orderId: string) {
