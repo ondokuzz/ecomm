@@ -1,5 +1,27 @@
 import { describe, expect, it } from 'vitest'
-import { rmaKindLabel, rmaStatusLabel, windowOf } from './rma'
+import { queueOf, queueSearchOf, rmaKindLabel, rmaStatusLabel, rmasQueryOf, windowOf } from './rma'
+
+describe('the RMA approval queue in the URL', () => {
+  it('opens on the requested RMAs, first page, by default', () => {
+    expect(queueOf(new URLSearchParams())).toEqual({ status: 'REQUESTED', page: 0 })
+  })
+
+  it('reads a tab and a page counted from 1, ignoring what it doesn’t know', () => {
+    expect(queueOf(new URLSearchParams('status=REJECTED&page=3'))).toEqual({ status: 'REJECTED', page: 2 })
+    expect(queueOf(new URLSearchParams('status=LOST&page=-1'))).toEqual({ status: 'REQUESTED', page: 0 })
+    expect(queueOf(new URLSearchParams('page=1.5'))).toEqual({ status: 'REQUESTED', page: 0 })
+  })
+
+  it('writes it back, leaving out the defaults', () => {
+    expect(queueSearchOf({ status: 'REQUESTED', page: 0 })).toBe('')
+    expect(queueSearchOf({ status: 'APPROVED', page: 0 })).toBe('?status=APPROVED')
+    expect(queueSearchOf({ status: 'REQUESTED', page: 1 })).toBe('?page=2')
+  })
+
+  it('asks Returns & Warranty for that status’s page, oldest first being its order', () => {
+    expect(rmasQueryOf({ status: 'APPROVED', page: 2 }, 20)).toBe('?status=APPROVED&page=2&size=20')
+  })
+})
 
 describe('rmaStatusLabel', () => {
   it('reads each RMA status as Staff say it', () => {

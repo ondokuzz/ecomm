@@ -61,6 +61,39 @@ export function rmaKindLabel(kind: RmaKind): string {
   return kind === 'RETURN' ? 'Return' : 'Warranty claim'
 }
 
+/** How many RMAs a page of the queue shows. */
+export const rmasPageSize = 20
+
+/** The RMA approval queue's tab, an RMA status, and its page, counting from 0. */
+export interface Queue {
+  status: RmaStatus
+  page: number
+}
+
+/** The queue a URL's query names: its `status` (requested unless another is named), and its `page`, counting from 1. */
+export function queueOf(params: URLSearchParams): Queue {
+  const status = params.get('status') as RmaStatus
+  const page = Number(params.get('page'))
+  return {
+    status: rmaStatuses.includes(status) ? status : 'REQUESTED',
+    page: Number.isInteger(page) && page >= 1 ? page - 1 : 0,
+  }
+}
+
+/** The URL query that keeps the queue: the inverse of `queueOf`, leaving out the defaults. */
+export function queueSearchOf(queue: Queue): string {
+  const params = new URLSearchParams()
+  if (queue.status !== 'REQUESTED') params.set('status', queue.status)
+  if (queue.page > 0) params.set('page', String(queue.page + 1))
+  const search = params.toString()
+  return search && `?${search}`
+}
+
+/** The query for `GET /rmas` that the queue stands for; Returns & Warranty lists them oldest first. */
+export function rmasQueryOf(queue: Queue, size: number): string {
+  return `?${new URLSearchParams({ status: queue.status, page: String(queue.page), size: String(size) })}`
+}
+
 /** The window an RMA was checked against, as its page shows it. */
 export interface WindowView {
   name: 'Return Period' | 'Warranty Window'
