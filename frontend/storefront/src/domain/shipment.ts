@@ -18,3 +18,47 @@ export function shipmentStatusLabel(status: ShipmentStatus): string {
       return 'Being prepared'
   }
 }
+
+/** What the Carrier reported about a Shipment on its way, in a Carrier webhook. */
+export type TrackingStatus = 'IN_TRANSIT' | 'OUT_FOR_DELIVERY' | 'DELIVERED'
+
+/** A Tracking event: what the Carrier reported, and when it happened. */
+export interface TrackingEvent {
+  eventId: string
+  status: TrackingStatus
+  occurredAt: string
+}
+
+/**
+ * An Order's Shipment, as Fulfillment & Shipping shows it to its Customer: the parts the Order page
+ * shows. The carrier and tracking number are null until the Shipment is dispatched.
+ */
+export interface Shipment {
+  id: string
+  orderId: string
+  status: ShipmentStatus
+  carrier: string | null
+  trackingNumber: string | null
+  trackingEvents: TrackingEvent[]
+  deliveredAt: string | null
+}
+
+const trackingLabels: Record<TrackingStatus, string> = {
+  IN_TRANSIT: 'In transit',
+  OUT_FOR_DELIVERY: 'Out for delivery',
+  DELIVERED: 'Delivered',
+}
+
+/** One Tracking event as the Customer reads it. */
+export interface TrackingRow {
+  id: string
+  label: string
+  at: string
+}
+
+/** A Shipment's Tracking events, oldest first, in words. */
+export function trackingEventsOf(shipment: Pick<Shipment, 'trackingEvents'>): TrackingRow[] {
+  return [...shipment.trackingEvents]
+    .sort((a, b) => Date.parse(a.occurredAt) - Date.parse(b.occurredAt))
+    .map((event) => ({ id: event.eventId, label: trackingLabels[event.status], at: event.occurredAt }))
+}
