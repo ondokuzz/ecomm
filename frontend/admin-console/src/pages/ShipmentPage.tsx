@@ -320,9 +320,13 @@ function Pack({ shipment }: { shipment: Shipment }) {
               {Array.from({ length: line.quantity }, (_, unit) => {
                 const field = serialFieldOf(line.variantId, unit)
                 return (
-                  <label key={unit} className="field">
-                    {line.quantity === 1 ? kind : `${kind} ${unit + 1} of ${line.quantity}`}
+                  // The error hangs outside the label, so it never becomes part of the input's name.
+                  <div key={unit} className="field">
+                    <label htmlFor={`${id}-${field}`}>
+                      {line.quantity === 1 ? kind : `${kind} ${unit + 1} of ${line.quantity}`}
+                    </label>
                     <input
+                      id={`${id}-${field}`}
                       className="input"
                       name={field}
                       autoComplete="off"
@@ -334,7 +338,7 @@ function Pack({ shipment }: { shipment: Shipment }) {
                       aria-describedby={errors[field] ? errorId(field) : undefined}
                     />
                     <FieldError id={errorId(field)} message={errors[field]} />
-                  </label>
+                  </div>
                 )
               })}
               <FieldError id={errorId(lineField)} message={errors[lineField]} />
