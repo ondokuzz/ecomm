@@ -18,10 +18,21 @@ x-event-backbone: &event-backbone
   kafka-topics: { condition: service_completed_successfully }
   schema-registry-init: { condition: service_completed_successfully }
 
-# Every Spring service: a JVM capped at 384 MB, of which its image gives 60% to the heap
-# (-XX:MaxRAMPercentage=60), and healthy once its actuator says UP.
+# The JVM options every Spring service runs with here. 60% of its cap goes to the heap, as its
+# image sets for itself. The rest trades peak speed, which a local stack doesn't need, for the
+# memory beside the heap: only the C1 compiler (C2's code and compilations take more), 512 KB thread
+# stacks, and two malloc arenas instead of one per core. Each service then took about 50 MB less,
+# and the idle stack 5.1 GB instead of 5.7 (2026-10-17), where the 8 GB Docker VM had run out of
+# swap. Images built for elsewhere keep the JVM's defaults.
+x-spring-jvm: &spring-jvm
+  JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=60 -XX:TieredStopAtLevel=1 -Xss512k
+  MALLOC_ARENA_MAX: "2"
+
+# Every Spring service: a JVM capped at 384 MB, with the options above, and healthy once its
+# actuator says UP.
 x-spring-service: &spring-service
   mem_limit: 384m
+  environment: *spring-jvm
   healthcheck:
     # The JRE image has no curl, and its sh has no /dev/tcp; talk HTTP over bash's.
     test:
@@ -194,6 +205,10 @@ services:
       interval: 5s
       timeout: 3s
       retries: 30
+      # Started beside the rest of the stack, its server gave up waiting for its own CouchDB node
+      # after 3 minutes and started again, serving its UI after 4 (2026-10-17, twice in a row);
+      # the 150 seconds of retries alone failed `make up`.
+      start_period: 5m
 
   couchbase-init:
     image: couchbase:community-7.6.2
@@ -492,7 +507,8 @@ services:
     # 230 MB it may grow to; the rest of the cap is room for what isn't heap.
     mem_limit: 512m
     environment:
-      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=45
+      <<: *spring-jvm
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=45 -XX:TieredStopAtLevel=1 -Xss512k
     secrets:
       # Orchestration's own client in the ecomm realm (Identity & Access ADR 0002), whose secret
       # realm sync sets from the same file.

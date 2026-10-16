@@ -5,3 +5,9 @@
 .scratch/
 .idea/
 .secrets/
+# The services' images build from the repo root but need only the Gradle build. Without these, a
+# change to the Compose file, a doc or a Playwright run's results rebuilt every one of them.
+frontend/
+infra/
+docs/
+**/*.md
