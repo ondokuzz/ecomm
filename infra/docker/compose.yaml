@@ -486,6 +486,13 @@ services:
       context: ../..
       dockerfile: services/orchestration/Dockerfile
     image: ${IMAGE_PREFIX:-ecomm}/orchestration:${IMAGE_TAG:-latest}
+    # Idle, it holds about 285 MB beside the heap it has committed (metaspace and code 150 MB, the
+    # rest threads and native buffers, Temporal's gRPC client and two Kafka consumers among them),
+    # so at 384 MB it sat at 340 MB and was killed for memory (2026-10-16). The heap keeps the
+    # 230 MB it may grow to; the rest of the cap is room for what isn't heap.
+    mem_limit: 512m
+    environment:
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=45
     secrets:
       # Orchestration's own client in the ecomm realm (Identity & Access ADR 0002), whose secret
       # realm sync sets from the same file.
