@@ -1,20 +1,26 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from 'react-oidc-context'
 import { type Order, ordersPageSize } from '../domain/order'
 import type { Page } from '../domain/paging'
-import { trackingRefreshInterval } from '../domain/shipment'
+import { type Shipment, trackingRefreshInterval } from '../domain/shipment'
 import { api } from './http'
+import { shipmentKey } from './shipments'
 
 export const ordersKey = ['orders']
 
-/** One of the Customer's Orders, asked again every 10 s while it is `Shipped`, so `Delivered` shows. */
+/**
+ * One of the Customer's Orders, asked again every 10 s while it or its Shipment is `Shipped`, so
+ * `Delivered` shows.
+ */
 export function useOrder(id: string) {
   const token = useAuth().user?.access_token
+  const client = useQueryClient()
   return useQuery({
     queryKey: [...ordersKey, id],
     queryFn: () => api<Order>('order-management', `/orders/${encodeURIComponent(id)}`, { token }),
     enabled: token !== undefined,
-    refetchInterval: (query) => (query.state.data ? trackingRefreshInterval(query.state.data.status) : false),
+    refetchInterval: (query) =>
+      trackingRefreshInterval(query.state.data?.status, client.getQueryData<Shipment>(shipmentKey(id))?.status),
   })
 }
 

@@ -43,12 +43,20 @@ describe('trackingEventsOf', () => {
 
 describe('trackingRefreshInterval', () => {
   it('refreshes every 10 seconds while the Order is Shipped', () => {
-    expect(trackingRefreshInterval('SHIPPED')).toBe(10_000)
+    expect(trackingRefreshInterval('SHIPPED', 'SHIPPED')).toBe(10_000)
+    expect(trackingRefreshInterval('SHIPPED', undefined)).toBe(10_000)
   })
 
-  it('stops once the Order is Delivered, and does not refresh before it ships', () => {
-    expect(trackingRefreshInterval('DELIVERED')).toBe(false)
-    expect(trackingRefreshInterval('PAID')).toBe(false)
-    expect(trackingRefreshInterval('FULFILLED')).toBe(false)
+  it('keeps refreshing while either one is still Shipped, since either may hear of the delivery first', () => {
+    expect(trackingRefreshInterval('DELIVERED', 'SHIPPED')).toBe(10_000)
+    expect(trackingRefreshInterval('SHIPPED', 'DELIVERED')).toBe(10_000)
+  })
+
+  it('stops once both are Delivered, and does not refresh before the Order ships', () => {
+    expect(trackingRefreshInterval('DELIVERED', 'DELIVERED')).toBe(false)
+    expect(trackingRefreshInterval('DELIVERED', undefined)).toBe(false)
+    expect(trackingRefreshInterval('PAID', 'AWAITING_PICK')).toBe(false)
+    expect(trackingRefreshInterval('FULFILLED', 'PACKED')).toBe(false)
+    expect(trackingRefreshInterval(undefined, undefined)).toBe(false)
   })
 })

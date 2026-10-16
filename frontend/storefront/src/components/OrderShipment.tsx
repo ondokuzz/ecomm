@@ -1,6 +1,5 @@
 import { useShipment } from '../api/shipments'
-import type { OrderStatus } from '../domain/order'
-import { type ShipmentStatus, shipmentStatusLabel, trackingEventsOf, trackingRefreshInterval } from '../domain/shipment'
+import { type ShipmentStatus, shipmentStatusLabel, trackingEventsOf } from '../domain/shipment'
 import { Badge, type Tone } from './ui/Badge'
 import { Card } from './ui/Card'
 
@@ -17,10 +16,10 @@ const shipmentStatusTones: Record<ShipmentStatus, Tone> = {
  * The Order's Shipment: whether it is being prepared, shipped or delivered, the Carrier and tracking
  * number once it ships, and its Tracking events, oldest first. Like "Customers also bought", nothing
  * shows while it loads, for an Order without a Shipment, or when Fulfillment & Shipping can't be
- * asked. It is asked again every 10 s while the Order is `Shipped`.
+ * asked. It is asked again every 10 s while it or the Order is `Shipped`.
  */
-export function OrderShipment({ orderId, orderStatus }: { orderId: string; orderStatus: OrderStatus }) {
-  const shipment = useShipment(orderId, trackingRefreshInterval(orderStatus)).data
+export function OrderShipment({ orderId }: { orderId: string }) {
+  const shipment = useShipment(orderId).data
   if (!shipment) return null
   const tracking = trackingEventsOf(shipment)
 

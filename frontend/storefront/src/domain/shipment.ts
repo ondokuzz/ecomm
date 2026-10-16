@@ -60,10 +60,16 @@ export interface TrackingRow {
 
 /**
  * How often the Order page asks again for its Order and Shipment, in milliseconds: every 10 seconds
- * while the Order is `Shipped`, as Tracking events arrive, and not at all before or once `Delivered`.
+ * while either is `Shipped`, as Tracking events arrive, and not at all before the Order ships or
+ * once both are `Delivered`. Either may be read as delivered first (the Saga marks the Order
+ * delivered moments after the Carrier's webhook), so one stopping alone would leave the other stale.
+ * Each is `undefined` until it is read (or when the Order has no Shipment).
  */
-export function trackingRefreshInterval(orderStatus: OrderStatus): number | false {
-  return orderStatus === 'SHIPPED' ? 10_000 : false
+export function trackingRefreshInterval(
+  orderStatus: OrderStatus | undefined,
+  shipmentStatus: ShipmentStatus | undefined,
+): number | false {
+  return orderStatus === 'SHIPPED' || shipmentStatus === 'SHIPPED' ? 10_000 : false
 }
 
 /** A Shipment's Tracking events, oldest first, in words. */

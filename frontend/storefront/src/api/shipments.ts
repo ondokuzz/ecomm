@@ -1,19 +1,28 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from 'react-oidc-context'
-import type { Shipment } from '../domain/shipment'
+import type { Order } from '../domain/order'
+import { type Shipment, trackingRefreshInterval } from '../domain/shipment'
 import { api } from './http'
 
+/** The query key of an Order's Shipment. */
+export function shipmentKey(orderId: string) {
+  return ['shipments', orderId]
+}
+
 /**
- * The Customer's own Order's Shipment, from Fulfillment & Shipping, asked again every
- * `refetchInterval` ms when it is a number. An Order without one is a 404, which isn't retried.
+ * The Customer's own Order's Shipment, from Fulfillment & Shipping, asked again every 10 s while it
+ * or its Order is `Shipped`. An Order without one is a 404, which isn't retried.
  */
-export function useShipment(orderId: string, refetchInterval: number | false) {
+export function useShipment(orderId: string) {
   const token = useAuth().user?.access_token
+  const client = useQueryClient()
   return useQuery({
-    queryKey: ['shipments', orderId],
+    queryKey: shipmentKey(orderId),
     queryFn: () =>
       api<Shipment>('fulfillment-shipping', `/shipments?orderId=${encodeURIComponent(orderId)}`, { token }),
     enabled: token !== undefined,
-    refetchInterval,
+    // The Order's key is spelled out rather than imported, since orders.ts imports this module.
+    refetchInterval: (query) =>
+      trackingRefreshInterval(client.getQueryData<Order>(['orders', orderId])?.status, query.state.data?.status),
   })
 }

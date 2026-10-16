@@ -173,8 +173,10 @@ names the Carrier and tracking number, and lists the Tracking events the Carrier
 transit, Out for delivery, Delivered), oldest first with their times (`trackingEventsOf`). Like
 "Customers also bought", the panel is simply absent while it loads, for an Order without a Shipment
 (placed before Sprint 5, or not yet taken up by the fulfillment Saga; a 404) and when the read
-fails. While the Order is Shipped, the page asks again for the Order and its Shipment every 10
-seconds, and stops once it is Delivered (`trackingRefreshInterval`). Its Payment shows Charged once
+fails. While the Order or its Shipment is Shipped, the page asks again for both every 10 seconds,
+and stops once both are Delivered (`trackingRefreshInterval`). Either can be read as delivered
+first, since the Saga marks the Order Delivered moments after the Carrier's webhook, so neither
+stops on its own. Its Payment shows Charged once
 the Saga has captured it.
 
 My Orders lists them as cards: reference, date, the first three Products' thumbnails (and how many

@@ -115,7 +115,7 @@ export function OrderPage() {
               </p>
             </Card>
           )}
-          <OrderShipment orderId={order.id} orderStatus={order.status} />
+          <OrderShipment orderId={order.id} />
           <Card>
             <h2 className="card-title">Products</h2>
             <LookupError failure={variantsFailure} title="We couldn't load the products' names and pictures" />
