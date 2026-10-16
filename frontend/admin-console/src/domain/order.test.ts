@@ -163,6 +163,25 @@ describe('historyRowsOf', () => {
     expect(rows[0].changedBy).toBe('Checkout Saga')
   })
 
+  it('names the fulfillment Saga for Fulfilled, Shipped and Delivered', () => {
+    const at = '2026-10-15T12:00:00Z'
+    const rows = historyRowsOf({
+      statusHistory: [
+        { status: 'PAID', at, changedBy: 'ORCHESTRATION', backfilled: false },
+        { status: 'FULFILLED', at, changedBy: 'ORCHESTRATION', backfilled: false },
+        { status: 'SHIPPED', at, changedBy: 'ORCHESTRATION', backfilled: false },
+        { status: 'DELIVERED', at, changedBy: 'ORCHESTRATION', backfilled: false },
+      ],
+    })
+
+    expect(rows.map((row) => row.changedBy)).toEqual([
+      'Fulfillment Saga',
+      'Fulfillment Saga',
+      'Fulfillment Saga',
+      'Checkout Saga',
+    ])
+  })
+
   it('says a backfilled change’s time is not known, since it is only the placement time', () => {
     const [cancelled] = historyRowsOf(order, 'en-GB')
 

@@ -4,6 +4,7 @@ import { ApiError } from './api/http'
 import { AdminConsoleAuthProvider, RequireStaff } from './auth/auth'
 import { Layout } from './components/Layout'
 import { NotFound } from './components/NotFound'
+import { FulfillmentQueuePage } from './pages/FulfillmentQueuePage'
 import { CampaignEditorPage } from './pages/CampaignEditorPage'
 import { CampaignListPage } from './pages/CampaignListPage'
 import { CategoryEditorPage } from './pages/CategoryEditorPage'
@@ -16,6 +17,7 @@ import { ProductEditorPage } from './pages/ProductEditorPage'
 import { ProductListPage } from './pages/ProductListPage'
 import { RmaPage } from './pages/RmaPage'
 import { RmaQueuePage } from './pages/RmaQueuePage'
+import { ShipmentPage } from './pages/ShipmentPage'
 import { StockMovementsPage } from './pages/StockMovementsPage'
 
 const queryClient = new QueryClient({
@@ -52,6 +54,8 @@ export function App() {
                 <Route path="promotions/campaigns/:id" element={<CampaignEditorPage />} />
                 <Route path="orders" element={<OrderListPage />} />
                 <Route path="orders/:id" element={<OrderPage />} />
+                <Route path="fulfillment" element={<FulfillmentQueuePage />} />
+                <Route path="fulfillment/:id" element={<ShipmentPage />} />
                 <Route path="rmas" element={<RmaQueuePage />} />
                 <Route path="rmas/:id" element={<RmaPage />} />
                 <Route path="*" element={<NotFound />} />

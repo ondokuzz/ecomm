@@ -4,9 +4,11 @@ import { isNotFound } from '../api/failure'
 import { useOrder } from '../api/orders'
 import { usePayments } from '../api/payments'
 import { useOrderRmas } from '../api/rmas'
+import { useOrderShipment } from '../api/shipments'
 import { NotFound } from '../components/NotFound'
 import { OrderStatusBadge } from '../components/OrderStatusBadge'
 import { RmaStatusBadge } from '../components/RmaStatusBadge'
+import { ShipmentStatusBadge } from '../components/ShipmentStatusBadge'
 import { ErrorMessage } from '../components/Status'
 import { Badge, type Tone } from '../components/ui/Badge'
 import { Icon } from '../components/ui/Icon'
@@ -67,6 +69,7 @@ function BackLink() {
 function OrderDetail({ order, currencies }: { order: Order; currencies: Currencies }) {
   const payments = usePayments(order.id)
   const rmas = useOrderRmas(order.id)
+  const shipment = useOrderShipment(order.id)
   const money = (amount: Money) => formatMoney(amount, currencies)
   return (
     <>
@@ -181,6 +184,11 @@ function OrderDetail({ order, currencies }: { order: Order; currencies: Currenci
         <Payments payments={payments} money={money} />
       </section>
 
+      <section className="panel" aria-labelledby="order-shipment">
+        <h2 id="order-shipment">Shipment</h2>
+        <OrderShipment shipment={shipment} />
+      </section>
+
       <section className="panel" aria-labelledby="order-rmas">
         <h2 id="order-rmas">RMAs</h2>
         <Rmas rmas={rmas} />
@@ -216,6 +224,64 @@ function OrderDetail({ order, currencies }: { order: Order; currencies: Currenci
         </div>
       </section>
     </>
+  )
+}
+
+type ShipmentQuery = ReturnType<typeof useOrderShipment>
+
+/** The Order's Shipment, its status and a link to it; none until the fulfillment Saga creates it once paid. */
+function OrderShipment({ shipment }: { shipment: ShipmentQuery }) {
+  if (shipment.error) {
+    return (
+      <ErrorMessage
+        error={shipment.error}
+        title="Couldn't load the Shipment"
+        retrying={shipment.isFetching}
+        onRetry={() => shipment.refetch()}
+      />
+    )
+  }
+  if (shipment.data === undefined) {
+    return (
+      <div aria-busy="true">
+        <span className="skeleton heading-skeleton" />
+        <span className="visually-hidden">Loading…</span>
+      </div>
+    )
+  }
+  if (shipment.data === null) {
+    return <p className="muted">No Shipment: it is created once the Order is paid, from Sprint 5 on.</p>
+  }
+  const { id, warehouseId, status, trackingNumber } = shipment.data
+  return (
+    <dl className="facts">
+      <div>
+        <dt>Status</dt>
+        <dd>
+          <ShipmentStatusBadge status={status} />
+        </dd>
+      </div>
+      <div>
+        <dt>Warehouse</dt>
+        <dd>
+          <code>{warehouseId}</code>
+        </dd>
+      </div>
+      {trackingNumber && (
+        <div>
+          <dt>Tracking number</dt>
+          <dd>
+            <code>{trackingNumber}</code>
+          </dd>
+        </div>
+      )}
+      <div>
+        <dt>Shipment</dt>
+        <dd>
+          <Link to={`/fulfillment/${id}`}>Open the Shipment</Link>
+        </dd>
+      </div>
+    </dl>
   )
 }
 

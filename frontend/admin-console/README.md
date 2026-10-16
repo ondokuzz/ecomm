@@ -23,7 +23,9 @@ Vite, React, TypeScript, React Router and TanStack Query, with `oidc-client-ts`.
 | `/promotions/campaigns/new` | A new Campaign |
 | `/promotions/campaigns/{id}` | A Campaign |
 | `/orders` | Every Customer's Orders, newest first, 20 to a page: Order reference, when placed, Customer ID, items, total and Order Status. Filter by Status, Customer ID, the days placed and Order reference |
-| `/orders/{id}` | An Order: its ID, Customer ID, lines, each Discount by its Campaign or Coupon, tax and total, its Payments with their transactions, its RMAs, and its Order Status history |
+| `/orders/{id}` | An Order: its ID, Customer ID, lines, each Discount by its Campaign or Coupon, tax and total, its Payments with their transactions, its Shipment, its RMAs, and its Order Status history |
+| `/fulfillment` | The fulfillment queue: Shipments awaiting pick, picked, packed or on hold, one tab each with its count, oldest first, 20 to a page (`?status=&page=`), from the Warehouse chosen or all: Order reference, how long ago it was paid, Warehouse, destination country and units |
+| `/fulfillment/{id}` | A Shipment: its Order, Warehouse, Shipping option, Shipping address and lines. Pick it, pack it with a Serial number per unit, and see its tracking, its hold reason and its status history |
 | `/rmas` | The RMA approval queue: requested RMAs, oldest first, 20 to a page, with tabs for the approved and the rejected (`?status=&page=`): RMA reference, kind, Order reference, Product and how long ago it was requested |
 | `/rmas/{id}` | An RMA: its Order, Customer, Product and Variant, quantity, Serial numbers, kind, the Customer's reason, the window it was checked against, and its decision history. Approve or reject a requested one |
 
@@ -176,7 +178,46 @@ rest of the page, Payments are read only.
 
 The Order page also lists the Order's RMAs, oldest first, from Returns & Warranty's
 `GET /rmas?orderId=`: each RMA reference links to its page, with its kind, Product, quantity, when it
-was requested and its status.
+was requested and its status. Above them, its Shipment from Fulfillment & Shipping's
+`GET /shipments?orderId=`: its status, Warehouse, tracking number once dispatched, and a link to
+its page. An Order not yet paid, or placed before Sprint 5, has none, and says so.
+
+## Fulfillment
+
+The fulfillment queue and the Shipment page call Fulfillment & Shipping's `GET /warehouses`,
+`GET /shipments?status=&warehouseId=&page=&size=` and `GET /shipments/{id}`, and move a Shipment with
+`POST /shipments/{id}/pick` and `/pack`, all as Staff (see the
+[Fulfillment & Shipping README](../../services/fulfillment-shipping/README.md)). The fulfillment
+Saga creates each Shipment once its Order is paid, and dispatches or holds it once packed; the
+console only reads what it did.
+
+- **The queue** has a tab for each status still in Staff's hands, Awaiting pick, Picked and Packed,
+  and one for On hold, each with its count. Shipments are oldest first, so Orders are worked in the
+  order they were paid; "how long ago" counts from the Shipment's creation, when the Order was
+  paid. The tab and page live in the URL. The **Warehouse** filter is remembered by the browser, in
+  `localStorage`, so Staff at one site see its Shipments every time; a browser that can't store it
+  forgets it when the page is left.
+- **The Shipment page** shows the Order reference, linking to the Order, the Shipping address and
+  option, and each line's Product, Variant and quantity. An Awaiting pick one offers **Mark
+  picked**.
+- **Pack**, once picked, has one input per unit of each serial-tracked line: an IMEI for a phone, a
+  serial number otherwise. Each is checked as it is typed: an IMEI with anything but digits, more
+  than 15, or a wrong Luhn check digit is refused beside its input at once; one still short of 15
+  is refused only when Pack is pressed, as is a Serial number entered twice. Fulfillment &
+  Shipping's 422 violations, named `serialNumbers.<variantId>[<unit>]` as the inputs are, show beside
+  the same inputs, and a 409 `serialAlreadyShipped` beside the input holding that Serial number. A
+  Shipment moved on elsewhere first answers 409 `illegalTransition`, which the page says.
+- **After packing**, the page asks again every 3 seconds while the Shipment is Packed or Shipped.
+  Once the fulfillment Saga captures the Payment and dispatches it, the page shows the Carrier, the
+  tracking number and the Tracking events, newest first, and when it was delivered. If the capture
+  was refused, the Shipment is On hold with the payment gateway's reason, and stays out of the
+  Carrier's hands.
+- **The status history** is newest first: the status, when to the second, and who: a Staff
+  member's ID, the Fulfillment Saga or the Carrier. The Order page's Status history likewise names
+  the Fulfillment Saga for Fulfilled, Shipped and Delivered, and the Checkout Saga for the rest.
+
+`serialCheckOf`, `packRequestOf`, `queueOf`, `queueSearchOf`, `shipmentsQueryOf`, `unitsOf` and
+`shipmentHistoryRowsOf` in [`src/domain/shipment.ts`](./src/domain/shipment.ts) do this.
 
 ## RMAs
 
@@ -255,7 +296,7 @@ squarer corners. Dark mode follows `prefers-color-scheme`, as in the Storefront.
 ## Calling the services
 
 The browser reaches Catalog at `/api/catalog/…`, Inventory at `/api/inventory/…`, Order Management
-at `/api/order-management/…`, Payment at `/api/payment/…`, Promotions at `/api/promotions/…` and Returns & Warranty at
+at `/api/order-management/…`, Payment at `/api/payment/…`, Fulfillment & Shipping at `/api/fulfillment-shipping/…`, Promotions at `/api/promotions/…` and Returns & Warranty at
 `/api/returns-warranty/…` on the console's own origin. Everything under
 `/api/` goes to the [API gateway](../../platform/api-gateway/README.md), which checks the token and
 routes it. In development the Vite dev proxy forwards `/api` to the gateway's compose host port,
@@ -291,7 +332,7 @@ how to apply the client to an existing realm.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: failed requests as messages and references, field errors from problem details, the STAFF role in an access token, a Category, a Product with its Warranty terms and Serial tracking, a Coupon and a Campaign to and from their editor's form, decimals to and from Money, the Order list's filters to Order Management's query, an Order's Status history, Payment statuses and transactions, Stock movements and their balance, RMA statuses and kinds, the RMA approval queue's URL and query, an RMA's window, its decision history and a decision before it is sent, and how long ago
+npm test          # Vitest: failed requests as messages and references, field errors from problem details, the STAFF role in an access token, a Category, a Product with its Warranty terms and Serial tracking, a Coupon and a Campaign to and from their editor's form, decimals to and from Money, the Order list's filters to Order Management's query, an Order's Status history, Payment statuses and transactions, Stock movements and their balance, RMA statuses and kinds, the RMA approval queue's URL and query, an RMA's window, its decision history and a decision before it is sent, Shipment and Tracking event statuses, the fulfillment queue's URL and query, an IMEI or serial number as it is typed, a Pack request, a Shipment's status history, and how long ago
 npm run build
 npm run test:e2e  # Playwright against the running compose stack (`make up`)
 ```
@@ -344,8 +385,19 @@ last page, checks its page, approves it with a note and sees the decision in its
 opens the warranty claim, sees its Warranty Window of 12 months from JBL, is refused a rejection
 without a reason, and rejects it with one. The Order page lists both RMAs with their statuses.
 
+[`e2e/fulfillment.spec.ts`](./e2e/fulfillment.spec.ts) needs the fulfillment Saga. As a Customer
+of its own it buys a seeded phone through the gateway, shipped to Berlin, Standard, and pays with
+`tok_approve`. Once the Saga has created the Shipment, the console finds it in the queue under the
+Berlin Warehouse (remembered past a reload) with its country and how long ago it was paid, picks
+it, has an IMEI with a wrong check digit refused as typed, and packs it with a valid one of the
+run's own. Within a minute the Saga captures the Payment and dispatches it: the page shows it
+Shipped by the Fulfillment Saga with the tracking number Fulfillment & Shipping gives, and the
+Order page shows the Shipment and links back to it. A second Order, paid with
+`tok_capture_decline`, is picked and packed through the API; its Shipment goes on hold with the
+gateway's reason, without tracking, and is listed under On hold.
+
 Each test removes its Product and Stock, Coupon, Campaign or Customer through the services' and
 Keycloak's APIs if it failed before doing so itself, so the stack is left as it was, but for the
-Orders the Order and Campaign tests place, and the RMA test's Order, Shipment and RMAs. It runs against the console on 8090; set `ADMIN_CONSOLE_URL` to use Vite's
+Orders the Order and Campaign tests place, the RMA test's Order, Shipment and RMAs, and the fulfillment test's two Orders and Shipments. It runs against the console on 8090; set `ADMIN_CONSOLE_URL` to use Vite's
 5174, and `STOREFRONT_URL` or `KEYCLOAK_URL` for other hosts. Install Chromium once with
 `npx playwright install chromium`.
