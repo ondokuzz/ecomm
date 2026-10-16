@@ -3,8 +3,10 @@ package com.ecomm.payment;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.ecomm.commons.security.FakeKeycloak;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.client.RestTestClient;
 
@@ -56,6 +58,23 @@ class OrchestrationPaymentApiTest extends PaymentApiTest {
     var payment = authorized("order-orch-other-" + UUID.randomUUID());
 
     orchestrationReads(payment.id(), "customer-43").expectStatus().isNotFound();
+  }
+
+  @Test
+  void orchestrationReadsTheNamedCustomersPaymentsForAnOrder() {
+    var orderId = "order-orch-by-order-" + UUID.randomUUID();
+    var payment = authorized(orderId);
+
+    orchestrationReadsPaymentsOf(orderId, "customer-42")
+        .expectStatus()
+        .isOk()
+        .expectBody(new ParameterizedTypeReference<List<PaymentView>>() {})
+        .isEqualTo(List.of(payment));
+    orchestrationReadsPaymentsOf(orderId, "customer-43")
+        .expectStatus()
+        .isOk()
+        .expectBody(new ParameterizedTypeReference<List<PaymentView>>() {})
+        .isEqualTo(List.of());
   }
 
   @Test
@@ -135,6 +154,14 @@ class OrchestrationPaymentApiTest extends PaymentApiTest {
         .headers(h -> h.setBearerAuth(ORCHESTRATION))
         .contentType(MediaType.APPLICATION_JSON)
         .body("{\"customerId\": \"%s\"}".formatted(customerId))
+        .exchange();
+  }
+
+  private RestTestClient.ResponseSpec orchestrationReadsPaymentsOf(
+      String orderId, String customerId) {
+    return http.get()
+        .uri("/payments?orderId={orderId}&customerId={customerId}", orderId, customerId)
+        .headers(h -> h.setBearerAuth(ORCHESTRATION))
         .exchange();
   }
 

@@ -31,33 +31,6 @@ class OrderHttpActivities implements OrderActivities {
       AddressBody shippingAddress,
       ShippingOption shippingOption) {}
 
-  /** An address's optional fields are left out when it has none. */
-  @JsonInclude(JsonInclude.Include.NON_NULL)
-  private record AddressBody(
-      String recipientName,
-      String line1,
-      String line2,
-      String postcode,
-      String city,
-      String region,
-      String country,
-      String phone) {
-
-    static AddressBody of(ShippingAddress a) {
-      return a == null
-          ? null
-          : new AddressBody(
-              a.recipientName(),
-              a.line1(),
-              a.line2(),
-              a.postcode(),
-              a.city(),
-              a.region(),
-              a.country(),
-              a.phone());
-    }
-  }
-
   /** A Campaign's names it by ID and name, a Coupon's by its code; the rest is left out. */
   @JsonInclude(JsonInclude.Include.NON_NULL)
   private record DiscountBody(
