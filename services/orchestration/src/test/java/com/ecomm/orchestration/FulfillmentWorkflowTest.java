@@ -24,9 +24,12 @@ import com.github.tomakehurst.wiremock.client.WireMock;
 import com.github.tomakehurst.wiremock.verification.LoggedRequest;
 import io.grpc.StatusRuntimeException;
 import io.temporal.api.common.v1.WorkflowExecution;
+import io.temporal.api.testservice.v1.LockTimeSkippingRequest;
 import io.temporal.api.workflowservice.v1.DescribeWorkflowExecutionRequest;
 import io.temporal.client.WorkflowClient;
 import io.temporal.client.WorkflowException;
+import io.temporal.serviceclient.TestServiceStubs;
+import io.temporal.serviceclient.TestServiceStubsOptions;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -35,6 +38,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,9 +49,9 @@ import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
  * Shipment events from Kafka, and its real activities call WireMock stubs of Fulfillment &
  * Shipping, Payment and Order Management with Orchestration's own token.
  *
- * <p>Time skipping is locked while each test runs, so the Saga's wait for delivery, {@link
- * #DELIVERY_DEADLINE} here, doesn't end before the test's Shipment events arrive, and passes in
- * real time when none do.
+ * <p>Time skipping is off on its JVM's test server, so the Saga's waits pass in real time: its wait
+ * for delivery, {@link #DELIVERY_DEADLINE} here, doesn't end before the test's Shipment events
+ * arrive.
  *
  * <p>Each topic has one partition, consumed in order, so once a later event has visibly been
  * handled, every event sent before it has been too: that is how a test sees that an event started
@@ -63,18 +67,32 @@ class FulfillmentWorkflowTest extends OrchestrationTest {
   static final String HOLD = "/shipments/" + SHIPMENT_ID + "/hold";
   static final String CAPTURE = "/payments/" + PAYMENT_ID + "/capture";
 
+  /** Locks time skipping on this JVM's test server for good (a JVM per test class, build file). */
+  @BeforeAll
+  static void timeSkippingOff() {
+    var server =
+        TestServiceStubs.newServiceStubs(
+            TestServiceStubsOptions.newBuilder()
+                .setTarget("localhost:" + TEMPORAL_PORT)
+                .validateAndBuildWithDefaults());
+    server.blockingStub().lockTimeSkipping(LockTimeSkippingRequest.getDefaultInstance());
+  }
+
   @Autowired WorkflowClient temporal;
   @Autowired KafkaListenerEndpointRegistry listeners;
 
   String orderId;
   String correlationId;
 
+  /** Every Order whose PAID event this test sent: their Sagas end with the test. */
+  final List<String> ordersPaid = new java.util.ArrayList<>();
+
   @BeforeEach
   void newOrder() {
     orderId = UUID.randomUUID().toString();
+    ordersPaid.add(orderId);
     correlationId = "corr-" + orderId;
     stubToken();
-    TimeSkipping.lock();
     // The Order consumer starts from the latest offset, so an event sent before it is assigned
     // its partition would be missed.
     await()
@@ -88,20 +106,17 @@ class FulfillmentWorkflowTest extends OrchestrationTest {
                                 && !c.getAssignedPartitions().isEmpty()));
   }
 
-  /**
-   * Ends a run the test left waiting, so it can't call the next test's stubs. It waits for the
-   * run's last step to complete first: the test server keeps a time-skipping lock for an activity
-   * whose workflow is terminated before its completion arrives, and would then never skip time.
-   */
+  /** Ends every run the test left waiting, so none can call the next test's stubs. */
   @AfterEach
   void endTheRun() {
-    try {
-      awaitNoPendingActivity();
-      temporal.newUntypedWorkflowStub(workflowId()).terminate("the test is over");
-    } catch (WorkflowException | StatusRuntimeException e) {
-      // It ended, or never started.
+    for (var order : ordersPaid) {
+      var id = "fulfillment:" + order;
+      try {
+        temporal.newUntypedWorkflowStub(id).terminate("the test is over");
+      } catch (WorkflowException | StatusRuntimeException e) {
+        // It ended, or never started.
+      }
     }
-    TimeSkipping.unlock();
   }
 
   @Test
@@ -379,8 +394,9 @@ class FulfillmentWorkflowTest extends OrchestrationTest {
   }
 
   /** Another Order, paid: once its Shipment is created, every event before it has been handled. */
-  static String anotherPaidOrder() {
+  String anotherPaidOrder() {
     var other = UUID.randomUUID().toString();
+    ordersPaid.add(other);
     FulfillmentEvents.order(other, CUSTOMER_ID, 2, "PAID", true, "corr-" + other);
     return other;
   }
@@ -412,16 +428,6 @@ class FulfillmentWorkflowTest extends OrchestrationTest {
 
   String runIdOf(String workflowId) {
     return describe(workflowId).getWorkflowExecutionInfo().getExecution().getRunId();
-  }
-
-  /** Waits until this Order's run, if it was started, has no step scheduled or running. */
-  void awaitNoPendingActivity() {
-    if (!isStarted(workflowId())) {
-      return;
-    }
-    await()
-        .atMost(Duration.ofSeconds(30))
-        .until(() -> describe(workflowId()).getPendingActivitiesCount() == 0);
   }
 
   boolean isStarted(String workflowId) {

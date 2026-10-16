@@ -33,7 +33,7 @@ abstract class OrchestrationTest {
 
   /**
    * How long the fulfillment Saga awaits delivery here: far shorter than the stack's 30 days, so a
-   * test shows the setting is the one honoured. The fulfillment tests hold time skipping, so it
+   * test shows the setting is the one honoured. The fulfillment tests lock time skipping, so it
    * passes in real time.
    */
   static final java.time.Duration DELIVERY_DEADLINE = java.time.Duration.ofSeconds(10);
@@ -92,7 +92,7 @@ abstract class OrchestrationTest {
     DOWNSTREAM.resetAll();
   }
 
-  private static int freePort() {
+  static int freePort() {
     try (var socket = new ServerSocket(0)) {
       return socket.getLocalPort();
     } catch (IOException e) {
