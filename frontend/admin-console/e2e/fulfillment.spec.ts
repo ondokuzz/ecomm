@@ -135,7 +135,7 @@ test('a Shipment whose Payment is refused at capture goes on hold with the reaso
       { timeout: 90_000, intervals: [2_000] },
     )
     .toBe('ON_HOLD')
-  expect(held!.holdReason).toBeTruthy()
+  expect(held!.holdReason).toBe('Capture declined: authorization_expired')
   expect(held!.trackingNumber).toBeNull()
 
   await page.goto(`/fulfillment/${shipment.id}`)
