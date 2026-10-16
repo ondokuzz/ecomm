@@ -453,8 +453,8 @@ Order, waits for the fulfillment Saga to create its Shipment and sees it "Being 
 picks and packs it as Staff through the gateway (as the Admin Console does, with a new Serial
 number or IMEI for any serial-tracked line), waits for the Saga to ship it, and sees the Carrier
 and tracking number, the Payment Charged, the Tracking events arrive by themselves and the Shipment
-and Order end Delivered; the other places an Order as Orchestration with no Shipping address, as
-before Sprint 5, and sees no Shipment panel. The error-states test
+and Order end Delivered; the other places an Order as Orchestration and never pays it, so the
+fulfillment Saga never creates its Shipment, and sees no Shipment panel. The error-states test
 ([`e2e/error-states.spec.ts`](./e2e/error-states.spec.ts)) opens unknown route, Product and Order
 addresses and sees the Not Found page, answers the Product list with a 500 and sees the panel's
 reference and "Try again" recover, fails the Product page's Stock lookup and sees it say so with its

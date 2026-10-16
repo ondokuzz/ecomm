@@ -32,7 +32,7 @@ import { stackSecret } from './secrets'
  * - Once Staff pick and pack a paid Order's Shipment through the gateway, as the Admin Console does,
  *   the fulfillment Saga captures the Payment and ships it, and the Order page shows the Shipment,
  *   its Tracking events as the mock carrier sends them, then `Delivered`, and the Payment charged.
- *   An Order without a Shipment, placed as before Sprint 5, shows no Shipment panel.
+ *   An Order without a Shipment, placed but never paid, shows no Shipment panel.
  */
 
 // The first checkout compares Stock before and after, so nothing else may check out meanwhile:
@@ -805,7 +805,9 @@ test.describe('Sprint 5', () => {
   test('an Order without a Shipment shows no Shipment panel', async ({ page, request }) => {
     const customer = signedUp()
     const { variant } = await aProductInStock(request)
-    // Placed as before Sprint 5, with no Shipping address, and never paid, so no Saga takes it up.
+    // Placed as the checkout Saga would, and never paid, so the fulfillment Saga, which starts on
+    // PAID, never creates its Shipment. (Order Management refuses new Orders without Shipping, so
+    // an Order from before Sprint 5 is shown by the upgrade check instead.)
     const placed = await request.post(`${orderManagementUrl}/orders`, {
       headers: {
         Authorization: `Bearer ${await orchestrationToken(request)}`,
@@ -815,6 +817,18 @@ test.describe('Sprint 5', () => {
         customerId: customer.id,
         lines: [{ variantId: variant.id, quantity: 1, unitPrice: variant.price }],
         tax: { amountMinor: 0, currency: variant.price.currency },
+        shippingAddress: {
+          recipientName: berlin['Full name'],
+          line1: berlin.Address,
+          postcode: berlin.Postcode,
+          city: berlin.City,
+          country: 'DE',
+        },
+        shippingOption: {
+          id: 'STANDARD',
+          carrier: 'Mock Carrier',
+          cost: { amountMinor: standardFromBerlin, currency: 'EUR' },
+        },
       },
     })
     expect(placed.status()).toBe(201)
