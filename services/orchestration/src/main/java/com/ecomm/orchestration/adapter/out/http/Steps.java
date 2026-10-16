@@ -16,7 +16,9 @@ final class Steps {
   /**
    * The {@code Idempotency-Key} of the step {@code step} in this run: {@code
    * <workflowId>:<runId>:<step>}. It stays the same across the step's retries, so a retry replays;
-   * another run of the same workflow, paying the session again, gets keys of its own (ADR 0009).
+   * another run of the same workflow, paying the session again, gets keys of its own (ADR 0009). A
+   * fulfillment's workflow ID, {@code fulfillment:<orderId>}, makes its keys {@code
+   * fulfillment:<orderId>:<runId>:<step>}.
    */
   static String idempotencyKey(String step) {
     var info = Activity.getExecutionContext().getInfo();
@@ -81,11 +83,13 @@ final class Steps {
         });
   }
 
+  /** Counts a failure of {@code step} as its Saga's: {@code <workflow type>_step_failures}. */
   static void countFailure(String step) {
-    Activity.getExecutionContext()
+    var context = Activity.getExecutionContext();
+    context
         .getMetricsScope()
         .tagged(Map.of("step", step))
-        .counter("checkout_step_failures")
+        .counter(context.getInfo().getWorkflowType() + "_step_failures")
         .inc(1);
   }
 }

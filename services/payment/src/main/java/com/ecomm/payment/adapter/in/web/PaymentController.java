@@ -162,6 +162,17 @@ class PaymentController {
     return find.payments(customer.id(), orderId).stream().map(PaymentResponse::of).toList();
   }
 
+  /**
+   * The named Customer's Payments for one of their Orders, newest first, as the fulfillment Saga
+   * reads them to find the Payment to capture; empty for anyone else's.
+   */
+  @GetMapping(params = {"orderId", "customerId"})
+  @PreAuthorize("hasRole('ORCHESTRATION')")
+  List<PaymentResponse> customersPayments(
+      @RequestParam String orderId, @RequestParam String customerId) {
+    return find.payments(customerId, orderId).stream().map(PaymentResponse::of).toList();
+  }
+
   private PaymentResponse ownedPayment(String customerId, String id) {
     return parse(id)
         .flatMap(paymentId -> find.payment(customerId, paymentId))

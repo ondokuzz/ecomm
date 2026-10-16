@@ -1,7 +1,7 @@
 {
   "uid": "ecomm-checkout-saga",
-  "title": "Checkout Saga",
-  "description": "The checkout Saga that Orchestration runs on Temporal: how checkouts end, which steps fail and are retried, and what is undone. Each run is also in Temporal's UI on http://localhost:8233.",
+  "title": "Sagas",
+  "description": "The Sagas Orchestration runs on Temporal. Checkout: how checkouts end, which steps fail and are retried, and what is undone. Fulfillment: how paid Orders' fulfillments end, which steps fail, which Shipments are held, and the lag of the events that start and wake them. Each run is also in Temporal's UI on http://localhost:8233.",
   "tags": [
     "ecomm"
   ],
@@ -30,6 +30,19 @@
   ],
   "panels": [
     {
+      "id": 100,
+      "type": "row",
+      "title": "Checkout",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
       "id": 1,
       "type": "bargauge",
       "title": "Outcomes in the time range",
@@ -40,7 +53,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 0,
+        "y": 1,
         "w": 8,
         "h": 8
       },
@@ -88,7 +101,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 0,
+        "y": 1,
         "w": 16,
         "h": 8
       },
@@ -143,7 +156,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 8,
+        "y": 9,
         "w": 12,
         "h": 8
       },
@@ -198,7 +211,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 8,
+        "y": 9,
         "w": 12,
         "h": 8
       },
@@ -253,7 +266,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 16,
+        "y": 17,
         "w": 12,
         "h": 8
       },
@@ -309,7 +322,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 16,
+        "y": 17,
         "w": 12,
         "h": 8
       },
@@ -350,6 +363,344 @@
             "uid": "prometheus"
           },
           "expr": "sum(rate(temporal_workflow_endtoend_latency_seconds_sum{workflow_type=\"checkout\"}[$__rate_interval])) / sum(rate(temporal_workflow_endtoend_latency_seconds_count{workflow_type=\"checkout\"}[$__rate_interval]))",
+          "legendFormat": "mean"
+        }
+      ]
+    },
+    {
+      "id": 101,
+      "type": "row",
+      "title": "Fulfillment",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 25,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 11,
+      "type": "bargauge",
+      "title": "Outcomes in the time range",
+      "description": "How every fulfillment Saga that ended in the time range ended: DELIVERED, CAPTURE_REFUSED (the Shipment is on hold and the Order stays Paid), DELIVERY_UNCONFIRMED (no delivery within the deadline, 30 days on the stack) or FAILED (the Shipment couldn't be created).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 26,
+        "w": 8,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "showUnfilled": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (outcome) (round(increase(fulfillment_workflows_total[$__range])))",
+          "legendFormat": "{{outcome}}",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Outcomes over time",
+      "description": "Fulfillment Sagas ending, by outcome.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 26,
+        "w": 16,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "custom": {
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "drawStyle": "bars",
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "sum"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (outcome) (round(increase(fulfillment_workflows_total[$__rate_interval])))",
+          "legendFormat": "{{outcome}}"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Step failures",
+      "description": "Failed attempts of each fulfillment step: a context that didn't answer, or refused. Every step after the capture is retried until it succeeds.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 34,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "custom": {
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "drawStyle": "bars",
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "sum"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (step) (round(increase(fulfillment_step_failures_total[$__rate_interval])))",
+          "legendFormat": "{{step}}"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Shipments on hold",
+      "description": "Shipments put on hold because their Payment's capture was declined (captureDeclined) or couldn't be made (captureFailed). Resolving them is Staff's.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 34,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "custom": {
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "drawStyle": "bars",
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "sum"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (kind) (round(increase(fulfillment_holds_total[$__rate_interval])))",
+          "legendFormat": "{{kind}}"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Event lag (Orchestration's consumers)",
+      "description": "Order and Shipment events not yet read by the groups that start and wake the fulfillment Saga, from the broker's committed offsets. It rises while Orchestration is down, then drains.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 42,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "0",
+          "custom": {
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "drawStyle": "line",
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (group) (kafka_consumergroup_lag{group=~\"orchestration\\\\..*\"})",
+          "legendFormat": "{{group}}"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "Workflow duration (Temporal)",
+      "description": "Mean time from a paid Order to the fulfillment Saga's end; most of it is Staff's packing and the Carrier's delivery.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 42,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "0",
+          "custom": {
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "drawStyle": "line",
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(temporal_workflow_endtoend_latency_seconds_sum{workflow_type=\"fulfillment\"}[$__rate_interval])) / sum(rate(temporal_workflow_endtoend_latency_seconds_count{workflow_type=\"fulfillment\"}[$__rate_interval]))",
           "legendFormat": "mean"
         }
       ]
