@@ -14,6 +14,8 @@ import { OrderListPage } from './pages/OrderListPage'
 import { OrderPage } from './pages/OrderPage'
 import { ProductEditorPage } from './pages/ProductEditorPage'
 import { ProductListPage } from './pages/ProductListPage'
+import { RmaPage } from './pages/RmaPage'
+import { RmaQueuePage } from './pages/RmaQueuePage'
 import { StockMovementsPage } from './pages/StockMovementsPage'
 
 const queryClient = new QueryClient({
@@ -50,6 +52,8 @@ export function App() {
                 <Route path="promotions/campaigns/:id" element={<CampaignEditorPage />} />
                 <Route path="orders" element={<OrderListPage />} />
                 <Route path="orders/:id" element={<OrderPage />} />
+                <Route path="rmas" element={<RmaQueuePage />} />
+                <Route path="rmas/:id" element={<RmaPage />} />
                 <Route path="*" element={<NotFound />} />
               </Route>
             </Routes>

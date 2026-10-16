@@ -256,7 +256,7 @@ test("Staff give a Product Warranty terms and Serial tracking, and the Storefron
   await page.getByRole('row').filter({ hasText: sku }).getByRole('link', { name, exact: true }).click()
   await page.getByLabel('Warranty months').fill('200')
   await page.getByLabel('Warranty manufacturer').fill('Ecomm')
-  await page.getByLabel('Serial tracking').selectOption({ label: 'IMEI' })
+  await page.getByRole('combobox', { name: /^Serial tracking/ }).selectOption({ label: 'IMEI' })
   await page.getByRole('button', { name: 'Save changes' }).click()
   await expect(page.getByText('must be a whole number of months from 1 to 120')).toBeVisible()
 
@@ -284,8 +284,8 @@ async function createInConsole(page: Page) {
   await page.getByLabel('Category').selectOption({ label: 'Phones' })
   await page.getByLabel('SKU').fill(phone.sku)
   await page.getByLabel('Name').fill(phone.name)
-  await page.getByLabel('brand').fill('Ecomm')
-  await page.getByLabel('screen').fill('6.1 in')
+  await page.getByLabel('brand', { exact: true }).fill('Ecomm')
+  await page.getByLabel('screen', { exact: true }).fill('6.1 in')
 
   await page.getByRole('button', { name: 'Add Variant' }).click()
   for (const [i, variant] of phone.variants.entries()) {

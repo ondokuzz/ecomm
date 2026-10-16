@@ -3,14 +3,17 @@ import { useCurrencies } from '../api/currencies'
 import { isNotFound } from '../api/failure'
 import { useOrder } from '../api/orders'
 import { usePayments } from '../api/payments'
+import { useOrderRmas } from '../api/rmas'
 import { NotFound } from '../components/NotFound'
 import { OrderStatusBadge } from '../components/OrderStatusBadge'
+import { RmaStatusBadge } from '../components/RmaStatusBadge'
 import { ErrorMessage } from '../components/Status'
 import { Badge, type Tone } from '../components/ui/Badge'
 import { Icon } from '../components/ui/Icon'
 import { type Currencies, type Money, formatMoney } from '../domain/money'
 import { type Order, discountLabel, formatTime, historyRowsOf, orderReference } from '../domain/order'
 import { type Payment, type PaymentStatus, paymentStatusLabel, transactionRowsOf } from '../domain/payment'
+import { rmaKindLabel } from '../domain/rma'
 import type { FromListState } from './OrderListPage'
 
 /** `/orders/:id`: one Order, whoever it belongs to, how it got to its Status, and its Payments. Read only. */
@@ -63,6 +66,7 @@ function BackLink() {
 
 function OrderDetail({ order, currencies }: { order: Order; currencies: Currencies }) {
   const payments = usePayments(order.id)
+  const rmas = useOrderRmas(order.id)
   const money = (amount: Money) => formatMoney(amount, currencies)
   return (
     <>
@@ -177,6 +181,11 @@ function OrderDetail({ order, currencies }: { order: Order; currencies: Currenci
         <Payments payments={payments} money={money} />
       </section>
 
+      <section className="panel" aria-labelledby="order-rmas">
+        <h2 id="order-rmas">RMAs</h2>
+        <Rmas rmas={rmas} />
+      </section>
+
       <section className="panel" aria-labelledby="order-history">
         <h2 id="order-history">Status history</h2>
         <div className="table-scroll">
@@ -207,6 +216,69 @@ function OrderDetail({ order, currencies }: { order: Order; currencies: Currenci
         </div>
       </section>
     </>
+  )
+}
+
+type RmasQuery = ReturnType<typeof useOrderRmas>
+
+/** The Order's RMAs, oldest first, each linking to its page; none until its Customer requests one. */
+function Rmas({ rmas }: { rmas: RmasQuery }) {
+  if (rmas.error) {
+    return (
+      <ErrorMessage
+        error={rmas.error}
+        title="Couldn't load the RMAs"
+        retrying={rmas.isFetching}
+        onRetry={() => rmas.refetch()}
+      />
+    )
+  }
+  if (!rmas.data) {
+    return (
+      <div aria-busy="true">
+        <span className="skeleton heading-skeleton" />
+        <span className="visually-hidden">Loading…</span>
+      </div>
+    )
+  }
+  if (rmas.data.items.length === 0) return <p className="muted">No return or warranty claim was requested.</p>
+  return (
+    <div className="table-scroll">
+      <table className="table" aria-labelledby="order-rmas">
+        <thead>
+          <tr>
+            <th scope="col">RMA</th>
+            <th scope="col">Kind</th>
+            <th scope="col">Product</th>
+            <th scope="col" className="num">
+              Quantity
+            </th>
+            <th scope="col">Requested</th>
+            <th scope="col">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rmas.data.items.map((rma) => (
+            <tr key={rma.id}>
+              <th scope="row">
+                <Link to={`/rmas/${rma.id}`}>
+                  <code>{rma.reference}</code>
+                </Link>
+              </th>
+              <td>{rmaKindLabel(rma.kind)}</td>
+              <td>{rma.productName ?? <code>{rma.variantId}</code>}</td>
+              <td className="num">{rma.quantity}</td>
+              <td>
+                <time dateTime={rma.requestedAt}>{formatTime(rma.requestedAt)}</time>
+              </td>
+              <td>
+                <RmaStatusBadge status={rma.status} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }
 

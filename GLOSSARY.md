@@ -9,7 +9,7 @@ A person who browses, buys, and manages Orders on the platform. Keycloak holds a
 _Avoid_: User, Account, Buyer
 
 **Staff**:
-A back-office person with the `STAFF` role. In the Admin Console, which turns away anyone without the role, Staff manage the Catalog, Coupons and Campaigns, look up every Customer's Orders with their Payments without changing them, and read each Variant's Stock movements.
+A back-office person with the `STAFF` role. In the Admin Console, which turns away anyone without the role, Staff manage the Catalog, Coupons and Campaigns, look up every Customer's Orders with their Payments without changing them, read each Variant's Stock movements, and work the RMA approval queue: requested RMAs, oldest first, each approved or rejected once by an RMA decision.
 _Avoid_: Admin, Operator
 
 **Storefront**:

@@ -34,6 +34,9 @@ export function Layout() {
             <NavLink to="/orders" className="nav-link">
               Orders
             </NavLink>
+            <NavLink to="/rmas" className="nav-link">
+              RMAs
+            </NavLink>
           </nav>
           <Account />
         </div>
