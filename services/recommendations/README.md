@@ -70,8 +70,9 @@ The projection can be rebuilt from the topics, which are compacted, at any time.
 make recommendations-rebuild
 ```
 
-stops the service, empties its tables, resets both consumer groups to the earliest offset, apart
-from their redrive topics, which are moved to their end, and starts it again. `make seed-reset`
+stops the service, resets both consumer groups to the earliest offset, apart from their redrive
+topics, which are moved to their end, empties its tables, and starts it again ([`replay-groups.sh`](../../infra/docker/replay-groups.sh) fails
+the command, before anything is emptied, if Kafka refuses a reset). `make seed-reset`
 drops and recreates the whole `recommendations` database instead, since the topics are emptied.
 
 ## Run it

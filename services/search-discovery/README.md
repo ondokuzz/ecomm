@@ -117,8 +117,8 @@ each Product's Stock, joined from `stock` by Variant ID.
 ### Rebuilding
 
 The topics are compacted, so they always hold every aggregate's latest event, and the projection can
-be rebuilt from them at any time: stop the service, drop its collections, reset its consumer groups
-to the earliest offset, and start it again. Each group's redrive topic is moved to its end instead,
+be rebuilt from them at any time: stop the service, reset its consumer groups to the earliest
+offset, drop its collections, and start it again. Each group's redrive topic is moved to its end instead,
 since what was redriven is still on the topic it came from. From the repo root:
 
 ```sh
@@ -129,15 +129,15 @@ which runs:
 
 ```sh
 docker compose stop search-discovery
+infra/docker/replay-groups.sh search-discovery.products search-discovery.categories search-discovery.stock
 docker compose exec -T mongo mongosh --quiet search --eval 'db.products.drop(); db.categories.drop(); db.stock.drop()'
-for group in search-discovery.products search-discovery.categories search-discovery.stock; do
-  docker compose exec -T kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:19092 \
-    --group $group --reset-offsets --to-earliest --all-topics --execute
-  docker compose exec -T kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:19092 \
-    --group $group --reset-offsets --to-latest --topic $group.redrive --execute
-done
 docker compose up -d --wait search-discovery
 ```
+
+[`replay-groups.sh`](../../infra/docker/replay-groups.sh) waits up to a minute for each group to be
+empty, since a consumer killed while closing stays a member until the broker's session timeout, and
+Kafka refuses to reset a group that has members. It fails, before anything is dropped, if a group
+isn't empty or a reset is refused: `kafka-consumer-groups.sh` itself says so but exits 0.
 
 The groups can only be reset while the service is stopped. `make seed-reset` drops the `search`
 database and empties the topics instead, since Catalog's and Inventory's versions start again from 1

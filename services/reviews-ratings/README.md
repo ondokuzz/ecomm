@@ -103,8 +103,10 @@ themselves stay. From the repo root:
 make reviews-rebuild
 ```
 
-stops the service, drops `orders` and `products`, resets both consumer groups to the earliest
-offset, apart from their redrive topics, which are moved to their end, and starts it again. `make seed-reset` drops the whole `reviews` database instead, reviews
+stops the service, resets both consumer groups to the earliest offset, apart from their redrive
+topics, which are moved to their end, drops `orders` and `products`, and starts it again
+([`replay-groups.sh`](../../infra/docker/replay-groups.sh) fails the command, before anything is
+dropped, if Kafka refuses a reset). `make seed-reset` drops the whole `reviews` database instead, reviews
 included, since every Order goes with it and the topics are emptied.
 
 ## Run it

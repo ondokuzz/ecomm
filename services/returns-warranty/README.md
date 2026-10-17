@@ -123,8 +123,10 @@ root:
 make returns-rebuild
 ```
 
-stops the service, empties the projections, resets both consumer groups to the earliest offset,
-apart from their redrive topics, which are moved to their end, and starts it again. RMAs stay, with
+stops the service, resets both consumer groups to the earliest offset, apart from their redrive
+topics, which are moved to their end, empties the projections, and starts it again
+([`replay-groups.sh`](../../infra/docker/replay-groups.sh) fails the command, before anything is
+emptied, if Kafka refuses a reset). RMAs stay, with
 the windows they were checked against. `make seed-reset` drops and recreates the whole
 `returns_warranty` database instead, since the topics are emptied.
 

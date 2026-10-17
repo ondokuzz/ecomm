@@ -59,75 +59,52 @@ seed-reset:
 	$(COMPOSE) up -d --wait
 
 ## Rebuild Search's projection from the topics: drop its collections and read every topic again
-## from the start (services/search-discovery/README.md). The redrive topics aren't replayed: what
-## was redriven is still on the topic it came from.
+## from the start (services/search-discovery/README.md). Each rebuild resets its service's groups
+## (infra/docker/replay-groups.sh) before it empties anything, so a reset Kafka refuses leaves the
+## projection as it was. The redrive topics aren't replayed: what was redriven is still on the
+## topic it came from.
 search-rebuild:
 	$(COMPOSE) stop search-discovery
+	infra/docker/replay-groups.sh $(SEARCH_GROUPS)
 	$(COMPOSE) exec -T mongo mongosh --quiet search --eval 'db.products.drop(); db.categories.drop(); db.stock.drop()'
-	for group in $(SEARCH_GROUPS); do \
-	  $(KAFKA)/kafka-consumer-groups.sh --bootstrap-server localhost:19092 --group $$group \
-	    --reset-offsets --to-earliest --all-topics --execute || exit 1; \
-	  $(KAFKA)/kafka-consumer-groups.sh --bootstrap-server localhost:19092 --group $$group \
-	    --reset-offsets --to-latest --topic $$group.redrive --execute || exit 1; \
-	done
 	$(COMPOSE) up -d --wait search-discovery
 
 ## Rebuild Reviews' projection of Orders and Products from the topics; the reviews themselves stay
 ## (services/reviews-ratings/README.md). As for Search, the redrive topics aren't replayed.
 reviews-rebuild:
 	$(COMPOSE) stop reviews-ratings
+	infra/docker/replay-groups.sh $(REVIEWS_GROUPS)
 	$(COMPOSE) exec -T mongo mongosh --quiet reviews --eval 'db.orders.drop(); db.products.drop()'
-	for group in $(REVIEWS_GROUPS); do \
-	  $(KAFKA)/kafka-consumer-groups.sh --bootstrap-server localhost:19092 --group $$group \
-	    --reset-offsets --to-earliest --all-topics --execute || exit 1; \
-	  $(KAFKA)/kafka-consumer-groups.sh --bootstrap-server localhost:19092 --group $$group \
-	    --reset-offsets --to-latest --topic $$group.redrive --execute || exit 1; \
-	done
 	$(COMPOSE) up -d --wait reviews-ratings
 
 ## Rebuild Recommendations' projection of Orders and Products from the topics
 ## (services/recommendations/README.md). As for Search, the redrive topics aren't replayed.
 recommendations-rebuild:
 	$(COMPOSE) stop recommendations
+	infra/docker/replay-groups.sh $(RECOMMENDATIONS_GROUPS)
 	$(COMPOSE) exec -T postgres psql -U ecomm -d recommendations -v ON_ERROR_STOP=1 \
 	  -c 'TRUNCATE orders, order_variants, products, variants'
-	for group in $(RECOMMENDATIONS_GROUPS); do \
-	  $(KAFKA)/kafka-consumer-groups.sh --bootstrap-server localhost:19092 --group $$group \
-	    --reset-offsets --to-earliest --all-topics --execute || exit 1; \
-	  $(KAFKA)/kafka-consumer-groups.sh --bootstrap-server localhost:19092 --group $$group \
-	    --reset-offsets --to-latest --topic $$group.redrive --execute || exit 1; \
-	done
 	$(COMPOSE) up -d --wait recommendations
 
-## Rebuild Fulfillment & Shipping's Product projection from catalog.product: stop the service, empty
-## the projection, reset its group to the earliest offset, and start it again. Shipments keep the
+## Rebuild Fulfillment & Shipping's Product projection from catalog.product: stop the service, reset
+## its group to the earliest offset, empty the projection, and start it again. Shipments keep the
 ## Product names and Serial tracking they were created with.
 fulfillment-rebuild:
 	$(COMPOSE) stop fulfillment-shipping
+	infra/docker/replay-groups.sh $(FULFILLMENT_GROUPS)
 	$(COMPOSE) exec -T postgres psql -U ecomm -d fulfillment_shipping -v ON_ERROR_STOP=1 \
 	  -c 'TRUNCATE product_variant, product'
-	for group in $(FULFILLMENT_GROUPS); do \
-	  $(KAFKA)/kafka-consumer-groups.sh --bootstrap-server localhost:19092 --group $$group \
-	    --reset-offsets --to-earliest --all-topics --execute || exit 1; \
-	  $(KAFKA)/kafka-consumer-groups.sh --bootstrap-server localhost:19092 --group $$group \
-	    --reset-offsets --to-latest --topic $$group.redrive --execute || exit 1; \
-	done
 	$(COMPOSE) up -d --wait fulfillment-shipping
 
 ## Rebuild Returns & Warranty's projections of delivered Shipments and of Products from their
-## topics (services/returns-warranty/README.md): stop the service, empty the projections, reset its
-## groups to the earliest offset, and start it again. RMAs stay, with the windows they were checked
+## topics (services/returns-warranty/README.md): stop the service, reset its groups to the earliest
+## offset, empty the projections, and start it again. RMAs stay, with the windows they were checked
 ## against. As for Search, the redrive topics aren't replayed.
 returns-rebuild:
 	$(COMPOSE) stop returns-warranty
+	infra/docker/replay-groups.sh $(RETURNS_GROUPS)
 	$(COMPOSE) exec -T postgres psql -U ecomm -d returns_warranty -v ON_ERROR_STOP=1 \
 	  -c 'TRUNCATE shipment_line, shipment, product_variant, product'
-	for group in $(RETURNS_GROUPS); do \
-	  $(KAFKA)/kafka-consumer-groups.sh --bootstrap-server localhost:19092 --group $$group \
-	    --reset-offsets --to-earliest --all-topics --execute || exit 1; \
-	  $(KAFKA)/kafka-consumer-groups.sh --bootstrap-server localhost:19092 --group $$group \
-	    --reset-offsets --to-latest --topic $$group.redrive --execute || exit 1; \
-	done
 	$(COMPOSE) up -d --wait returns-warranty
 
 ## Redrive a consumer group's dead events once their cause is fixed, e.g.
