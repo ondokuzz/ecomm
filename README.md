@@ -1,8 +1,8 @@
 # Ecomm Platform
 
-A from-scratch e-commerce platform, architected as fifteen bounded contexts across five parallel team tracks, planned over nine two-week sprints for a small (4-5 person) engineering team. Sprint 4 has put paying on a Saga, and it all runs locally: search the Catalog with Facets, pick a Variant, keep a Cart, check out with a Checkout Session that reserves its Stock, gets the running Campaigns by itself and a Coupon on top, and pay through a mock payment that can decline or wait for the bank, which the checkout Saga on Temporal either completes or undoes whole. Then follow the Order's Status history and its Payment, review what you bought, and see what others bought with it. Staff manage the Catalog, Coupons and Campaigns, and look up Orders with their Payments and each Variant's Stock movements, in an Admin Console. Grafana shows the services, the event consumers and checkout.
+A from-scratch e-commerce platform, architected as fifteen bounded contexts across five parallel team tracks, planned over nine two-week sprints for a small (4-5 person) engineering team. Sprint 5 has added fulfillment and returns, and it all runs locally: search the Catalog with Facets, pick a Variant, keep a Cart, check out with a Checkout Session that reserves its Stock, gets the running Campaigns by itself and a Coupon on top, and pay through a mock payment that can decline or wait for the bank, which the checkout Saga on Temporal either completes or undoes whole, after giving a Shipping address and choosing a Shipping option. Staff pick and pack the Order from a fulfillment queue, and the fulfillment Saga captures its Payment, hands it to the carrier and follows it to delivery. Then follow the Order's Status history, its Payment and its Shipment's Tracking events, review what you bought, see what others bought with it, and, through the API, ask to return it or claim its warranty. Staff manage the Catalog, with Warranty terms and Serial tracking, Coupons and Campaigns, look up Orders with their Payments and each Variant's Stock movements, and work the fulfillment and RMA approval queues, in an Admin Console. Grafana shows the services, the event consumers and both Sagas.
 
-## Run Sprint 4
+## Run Sprint 5
 
 You need Docker with about 8 GB of memory, `make`, and Node 24 for the smoke tests.
 
@@ -21,20 +21,33 @@ The first build takes several minutes. Then open the Storefront on http://localh
 3. add Products to the Cart, which warns of a line that asks for more than is in Stock, and go to
    checkout, which holds them and their Prices for 15 minutes
    and shows the time left. An `audio` Product gets the "Audio week" Campaign's 15% off by itself.
-   Enter the Coupon `WELCOME10` for 10% off what is left, then pick a test card and press **Pay**.
+   Enter the Coupon `WELCOME10` for 10% off what is left. Give a Shipping address in the EU: each
+   field's problem is named (a German postcode is five digits, a Dutch one `1012 AB`), and a valid
+   one comes back normalised. Choose **Standard** or **Express**, whose Shipping cost, quoted from
+   the Warehouse that will ship it (Amsterdam for the Netherlands, Berlin for anywhere else), joins
+   the total. Then pick a test card and press **Pay**.
    Paying starts the checkout Saga in [Orchestration](./services/orchestration/README.md), which
    you can follow step by step in Temporal's UI on http://localhost:8233; a payment that takes more
    than a few seconds shows "Confirming your payment…" until it is done. Paying again with another
    card works while the Checkout Session lasts;
-4. see the Order confirmation with its Order Status, **Paid**, its timeline drawn from the Order
+4. see the Order confirmation with its Order Status, **Paid**, its Shipping address and option, its timeline drawn from the Order
    Status history (Placed, then Paid, each with its time), each of its Discounts and its Payment,
    **Authorized**, and find the Order under **My Orders**. A cancelled Order says why: its payment
-   was declined, or its Payment voided, releasing the hold on the card;
+   was declined, or its Payment voided, releasing the hold on the card. Once Staff pack it, the
+   Order page shows its Shipment: carrier, tracking number and Tracking events, refreshed every 10
+   seconds while it is Shipped, and **Delivered** about 30 seconds after packing, its Payment
+   **Captured**;
 5. go back to a Product you paid for and review it: rate it, and give it a title and a few words.
    Its stars show on its card and its page, and you can edit or delete your review there. On a
    Product you haven't bought, the page says why you can't review it;
 6. see, under a Product's page, what Customers also bought with it: the Products most often in the
-   same paid Orders, from [Recommendations](./services/recommendations/README.md).
+   same paid Orders, from [Recommendations](./services/recommendations/README.md), and its Warranty
+   terms, such as "24 months, manufacturer's warranty (Samsung)";
+7. once an Order is delivered, request an RMA for it through the API: a return within the 14-day
+   Return Period, or a warranty claim within the Warranty Window, naming the IMEI or serial number
+   of a serial-tracked unit ([Returns & Warranty](./services/returns-warranty/README.md) and its
+   [`.http` file](./services/returns-warranty/http/returns-warranty.http)). The Storefront's form
+   comes in Sprint 6.
 
 The payment gateway is mocked, and each test card stands for a Payment method:
 
@@ -70,7 +83,18 @@ signed in as `staff@ecomm.local` / `staff`; the demo Customer is refused there. 
    attribute definitions. A new Product, or a changed Price, shows in the Storefront's listing within
    a second or two, once [Search & Discovery](./services/search-discovery/README.md) has the event,
    and on its own page at once. A Product's editor shows each Variant's On-hand, reserved and
-   available Stock, and its Stock movements, newest first, with whether they balance.
+   available Stock, and its Stock movements, newest first, with whether they balance. It also sets a
+   Product's Warranty terms (months and manufacturer) and Serial tracking (none, serial number or
+   IMEI);
+4. under **Fulfillment**, work the queue of Shipments by Warehouse and status, oldest first: pick
+   one, then pack it, entering the IMEI or serial number of each serial-tracked unit, checked as they
+   type. Packing lets the fulfillment Saga in [Orchestration](./services/orchestration/README.md)
+   capture the Payment, mark the Order **Fulfilled**, hand the Shipment to the mock carrier and mark
+   it **Shipped** with a tracking number, then **Delivered** once the carrier's signed webhooks say
+   so. Paid with `tok_capture_decline`, the Shipment goes on hold with "Capture declined:
+   authorization_expired", and the Order stays **Paid**;
+5. under **RMAs**, approve or reject each requested RMA with a note, each decision kept in its
+   history; an Order's page lists its Shipment and its RMAs.
 
 Every failed request on a Storefront page shows a support reference: the request's
 [Correlation ID](./GLOSSARY.md). The services log JSON lines carrying it, and the events a request
@@ -186,7 +210,8 @@ How a service publishes and consumes events is in the [service template's README
 
 The Storefront's smoke test walks the Customer's path in Chromium against the running stack, each
 test as a Customer it makes in Keycloak and deletes afterwards. It adds two Products, checks out
-with the approving test card, expects `PAID` and an authorized Payment on the confirmation page, and
+to a German address, first with a malformed postcode it sees named, then corrected, with Express
+in the total, pays with the approving test card, expects `PAID` and an authorized Payment on the confirmation page, and
 checks through the Inventory API that the Checkout Session reserved their Stock and paying took it
 off on-hand. It also pays with a declining card, sees the decline, then pays the same session with
 the approving one, applies `WELCOME10` and sees its discount on the `PAID` Order, gets Audio week
@@ -198,7 +223,9 @@ Customer is told they can't review a Product they never bought. Then Sprint 4's:
 new Products together and sees each under "Customers also bought" on the other's page, and pays with
 each card the bank confirms, seeing "Confirming your payment…" and then the paid Order, its Payment
 approved by the gateway's webhook, or the decline's reason, after which the same session is paid
-with the approving card:
+with the approving card. Then Sprint 5's: a Product page shows its Warranty terms, and once Staff
+pack a paid Order its page shows the Shipment's Tracking events, then Delivered, and the Payment
+captured; an Order without a Shipment shows none:
 
 ```sh
 cd frontend/storefront
@@ -211,10 +238,19 @@ Customer picks either on the Storefront; Staff set a Variant's Stock and see its
 balanced; Staff find a Customer's Order and see its history, and open a paid Order and see its
 Payment's authorization; Staff
 manage Coupons and Campaigns, and a Campaign they create applies to a Customer's next checkout,
-whose Order Staff then find. Run it with `npm run test:e2e` in `frontend/admin-console`, after the
+whose Order Staff then find; Staff give a Product Warranty terms and Serial tracking and the
+Storefront shows the warranty; Staff pick and pack a Shipment from the fulfillment queue, refused an
+invalid IMEI, and see it dispatched, and a Shipment whose capture is refused goes on hold with the
+reason; Staff approve a return and reject a warranty claim from the RMA approval queue. Run it with `npm run test:e2e` in `frontend/admin-console`, after the
 Storefront's rather than beside it, since both check out. Both suites make their own Customers
 through Keycloak's admin API and delete them again; the Orders they place, and the Stock those
-take, stay.
+take, stay. The tests pick from the seeded Products only, so an `E2E-` Product a failed test left
+behind doesn't throw them.
+
+Each suite runs its spec files side by side, one Playwright worker each. Where Docker's memory is short of what
+the stack uses, or the host swaps Docker's VM out, requests stall for tens of seconds and tests time
+out; `npx playwright test --workers=1` loads the stack less, and is how both suites passed on a
+16 GB laptop on 2026-10-17 ([Sprint 5's note](./docs/roadmap.md#sprint-5-weeks-910--fulfillment--returns-foundations)).
 
 ### Secrets
 
@@ -327,18 +363,26 @@ redirect_uri" ([Identity & Access README](./services/identity-access/README.md#t
 
 ### Memory
 
-Each Spring service is capped at 384 MB, with 60% of it for the heap, Keycloak at 768 MB with 40%
+Each Spring service is capped at 384 MB, with 60% of it for the heap, except Orchestration, capped
+at 512 MB with 45% (the same 230 MB heap, and room for its Temporal and Kafka clients). On the local
+stack they run with only the C1 compiler, 512 KB thread stacks and two malloc arenas, which takes
+about 50 MB off each; the images themselves keep the JVM's defaults (`x-spring-jvm` in
+[`infra/docker/compose.yaml`](./infra/docker/compose.yaml)). Keycloak is capped at 768 MB with 40%
 for the heap, and each nginx at 64 MB. Kafka is capped at 640 MB with a 256 MB heap, and Mongo at
 512 MB with a 256 MB cache, Apicurio and pgAdmin at 384 MB each, the Temporal server at 384 MB, its
 UI at 64 MB, Prometheus and Grafana at 256 MB each, the Kafka exporter at 32 MB, and the init steps
-at 256 MB or less. The default stack fits in about 8 GB of Docker memory, with some of it in swap;
-`docker stats` shows what it uses ([Sprint 4's
-reading](./docs/roadmap.md#sprint-4-weeks-78--checkout-saga--payment-ledger)).
-Couchbase, Postgres and Redis are uncapped. Building the images takes about 1.3 GB more while it
-runs, so on 8 GB, `make down` before a `make up` that rebuilds many of them: built beside the
-running stack, they can run Docker out of memory, and the kernel then kills a container, often
-Kafka or Keycloak. `make status` names it as killed for memory under its cap, since Docker doesn't
-say which ran out, and `make up` starts it again.
+at 256 MB or less. Couchbase, Postgres and Redis are uncapped. After both suites the default stack
+uses about 5.6 GB (`docker stats`), and fits in about 8 GB of Docker memory, with some of it in
+swap ([Sprint 5's reading](./docs/roadmap.md#sprint-5-weeks-910--fulfillment--returns-foundations)).
+That leaves little over: with 8 GB given to Docker on a 16 GB host that also runs a browser and an
+IDE, the host swaps the VM out, and requests stall for tens of seconds.
+
+Building the images takes about 1.3 GB more while it runs, so on 8 GB, `make down` before a
+`make up` that rebuilds many of them: built beside the running stack, they can run Docker out of
+memory, and the kernel then kills a container, often Kafka or Keycloak. `make status` names it as
+killed for memory under its cap, since Docker doesn't say which ran out, and `make up` starts it
+again. The services' images build from the Gradle build alone (`.dockerignore`), so editing the
+Compose file, the Makefile or a doc, or running Playwright, doesn't rebuild them.
 
 ## CI
 
