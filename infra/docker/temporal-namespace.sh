@@ -8,7 +8,17 @@
 # other failure is tried again, for up to a minute.
 set -u
 
-until temporal operator cluster health >/dev/null 2>&1; do sleep 1; done
+# The server may exit while starting and be restarted (its `restart: on-failure`), so wait for it
+# for about 5 minutes rather than for ever, which left `make up` waiting with nothing to say.
+waited=0
+until temporal operator cluster health >/dev/null 2>&1; do
+  if [ "$waited" -ge 300 ]; then
+    echo "Temporal's server wasn't healthy after $waited seconds" >&2
+    exit 1
+  fi
+  waited=$((waited + 1))
+  sleep 1
+done
 
 retention() { temporal operator namespace update --namespace default --retention 168h; }
 

@@ -451,6 +451,9 @@ services:
       # The Go runtime collects harder as it nears this, staying under the cap.
       GOMEMLIMIT: 300MiB
     mem_limit: 384m
+    # Under load its worker service can miss the server's start deadline, and the server exits 1
+    # after reporting healthy (2026-10-17); started again, it comes up.
+    restart: on-failure
     secrets: [postgres-password]
     ports: ["${TEMPORAL_PORT:-7233}:7233"]
     volumes:
