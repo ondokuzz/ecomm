@@ -1028,11 +1028,19 @@ async function products(request: APIRequestContext): Promise<Product[]> {
 }
 
 /**
+ * The seeded Products, without the `E2E-` ones the tests make: one a test failed to delete stays
+ * in the Catalog, maybe in a Campaign's category or without Stock.
+ */
+async function seededProducts(request: APIRequestContext): Promise<Product[]> {
+  return (await products(request)).filter((product) => !product.sku.startsWith('E2E-'))
+}
+
+/**
  * A seeded Variant other than its Product's first, with Stock left, that differs from the first in
  * one axis value, so picking that value on the Product page reaches it.
  */
 async function aNonDefaultVariantInStock(request: APIRequestContext): Promise<ProductInStock> {
-  for (const product of await products(request)) {
+  for (const product of await seededProducts(request)) {
     const first = defaultVariant(product)
     for (const variant of product.variants.slice(1)) {
       const differing = Object.keys(variant.axisValues).filter(
@@ -1050,7 +1058,7 @@ async function aNonDefaultVariantInStock(request: APIRequestContext): Promise<Pr
 
 /** The first seeded Product (other than `exceptSku`) whose first Variant has Stock left; earlier runs may have sold some out. */
 async function aProductInStock(request: APIRequestContext, exceptSku?: string): Promise<ProductInStock> {
-  for (const product of await products(request)) {
+  for (const product of await seededProducts(request)) {
     if (product.sku === exceptSku) continue
     const variant = defaultVariant(product)
     const stock = await stockOf(request, variant.id)
@@ -1061,7 +1069,7 @@ async function aProductInStock(request: APIRequestContext, exceptSku?: string): 
 
 /** A Product in `category` with its default Variant in Stock. */
 async function aProductInStockIn(request: APIRequestContext, category: string): Promise<ProductInStock> {
-  for (const product of await products(request)) {
+  for (const product of await seededProducts(request)) {
     if (product.category !== category) continue
     const variant = defaultVariant(product)
     const stock = await stockOf(request, variant.id)
