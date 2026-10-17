@@ -83,7 +83,7 @@ and publishes the Shipment, in one transaction under the Shipment's row lock.
   is 15 digits whose last is a Luhn check digit; a serial number is 4 to 40 of `[A-Za-z0-9-]`, kept
   upper-cased. A malformed one, the wrong count, one entered twice in the Shipment, or one for a
   Variant that isn't tracked (or isn't shipped here) is a 422 naming each field, such as
-  `serialNumbers.PHN-PIXEL-9-OBSIDIAN-128[0]`. One another Shipment carries is a 409
+  `serialNumbers.PHN-PIXEL-9[0]`. One another Shipment carries is a 409
   `serialAlreadyShipped` with the `serialNumber`; a unit ships on one Shipment only, until returns
   (Sprint 6) say otherwise.
 - **Dispatching** books the Shipment with the Carrier, passing the request's `Idempotency-Key` on,
@@ -127,7 +127,7 @@ GET /warehouses
 POST /shipping/quotes
 {"destination": {"recipientName": "Erika Mustermann", "line1": "Hauptstraße 5",
                  "postcode": "75001", "city": "Paris", "country": "FR"},
- "lines": [{"variantId": "PHN-PIXEL-9-OBSIDIAN-128", "quantity": 1}],
+ "lines": [{"variantId": "PHN-PIXEL-9", "quantity": 1}],
  "currency": "EUR"}
 
 200
@@ -150,7 +150,7 @@ POST /shipping/quotes
 ```json
 POST /shipments                                   (ORCHESTRATION, Idempotency-Key)
 {"orderId": "5d2a9c1e-...", "customerId": "c0ffee00-...",
- "lines": [{"variantId": "PHN-PIXEL-9-OBSIDIAN-128", "quantity": 1}],
+ "lines": [{"variantId": "PHN-PIXEL-9", "quantity": 1}],
  "shippingAddress": {"recipientName": "Erika Mustermann", "line1": "Hauptstraße 5", "line2": null,
                      "postcode": "10115", "city": "Berlin", "region": null, "country": "DE",
                      "phone": null},
@@ -161,7 +161,7 @@ POST /shipments                                   (ORCHESTRATION, Idempotency-Ke
 {"id": "0b8e6f2a-...", "orderId": "5d2a9c1e-...", "customerId": "c0ffee00-...",
  "warehouseId": "WH-BER", "status": "AWAITING_PICK",
  "shippingAddress": {...}, "shippingOption": {...},
- "lines": [{"variantId": "PHN-PIXEL-9-OBSIDIAN-128", "productName": "Pixel 9", "quantity": 1,
+ "lines": [{"variantId": "PHN-PIXEL-9", "productName": "Pixel 9", "quantity": 1,
             "serialTracking": "IMEI", "serialNumbers": []}],
  "carrier": null, "trackingNumber": null, "trackingEvents": [], "deliveredAt": null,
  "holdReason": null,

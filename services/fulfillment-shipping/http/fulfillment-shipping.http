@@ -37,7 +37,7 @@ Content-Type: application/json
 
 {"destination": {"recipientName": "Erika Mustermann", "line1": "Hauptstraße 5", "postcode": "10115",
                  "city": "Berlin", "country": "DE"},
- "lines": [{"variantId": "PHN-PIXEL-9-OBSIDIAN-128", "quantity": 1}],
+ "lines": [{"variantId": "PHN-PIXEL-9", "quantity": 1}],
  "currency": "EUR"}
 
 ### A Dutch address: from WH-AMS, at domestic prices
@@ -47,7 +47,7 @@ Content-Type: application/json
 
 {"destination": {"recipientName": "Jan Jansen", "line1": "Damrak 1", "postcode": "1012 LG",
                  "city": "Amsterdam", "country": "NL"},
- "lines": [{"variantId": "PHN-PIXEL-9-OBSIDIAN-128", "quantity": 1}],
+ "lines": [{"variantId": "PHN-PIXEL-9", "quantity": 1}],
  "currency": "EUR"}
 
 ### A French address: no Warehouse in France, so from the default WH-BER at EU prices, €9.99 and €19.99
@@ -57,7 +57,7 @@ Content-Type: application/json
 
 {"destination": {"recipientName": "Marie Dupont", "line1": "1 rue de Rivoli", "postcode": "75001",
                  "city": "Paris", "country": "FR"},
- "lines": [{"variantId": "PHN-PIXEL-9-OBSIDIAN-128", "quantity": 1}],
+ "lines": [{"variantId": "PHN-PIXEL-9", "quantity": 1}],
  "currency": "EUR"}
 
 ### Outside the EU: 422, reason shippingUnavailable
@@ -65,7 +65,7 @@ POST {{fulfillment}}/shipping/quotes
 Authorization: Bearer {{checkoutToken}}
 Content-Type: application/json
 
-{"destination": {"country": "US"}, "lines": [{"variantId": "PHN-PIXEL-9-OBSIDIAN-128", "quantity": 1}],
+{"destination": {"country": "US"}, "lines": [{"variantId": "PHN-PIXEL-9", "quantity": 1}],
  "currency": "EUR"}
 
 ### A Currency the mock carrier has no table for: 422, reason shippingUnavailable
@@ -73,7 +73,7 @@ POST {{fulfillment}}/shipping/quotes
 Authorization: Bearer {{checkoutToken}}
 Content-Type: application/json
 
-{"destination": {"country": "DE"}, "lines": [{"variantId": "PHN-PIXEL-9-OBSIDIAN-128", "quantity": 1}],
+{"destination": {"country": "DE"}, "lines": [{"variantId": "PHN-PIXEL-9", "quantity": 1}],
  "currency": "USD"}
 
 ### A malformed country: 400 naming destination.country
@@ -81,7 +81,7 @@ POST {{fulfillment}}/shipping/quotes
 Authorization: Bearer {{checkoutToken}}
 Content-Type: application/json
 
-{"destination": {"country": "Germany"}, "lines": [{"variantId": "PHN-PIXEL-9-OBSIDIAN-128", "quantity": 1}],
+{"destination": {"country": "Germany"}, "lines": [{"variantId": "PHN-PIXEL-9", "quantity": 1}],
  "currency": "EUR"}
 
 ### As Staff: 403, only Checkout quotes
@@ -89,7 +89,7 @@ POST {{fulfillment}}/shipping/quotes
 Authorization: Bearer {{staffToken}}
 Content-Type: application/json
 
-{"destination": {"country": "DE"}, "lines": [{"variantId": "PHN-PIXEL-9-OBSIDIAN-128", "quantity": 1}],
+{"destination": {"country": "DE"}, "lines": [{"variantId": "PHN-PIXEL-9", "quantity": 1}],
  "currency": "EUR"}
 
 ### Through the gateway: 404, quotes are internal
@@ -97,7 +97,7 @@ POST {{gateway}}/api/fulfillment-shipping/shipping/quotes
 Authorization: Bearer {{checkoutToken}}
 Content-Type: application/json
 
-{"destination": {"country": "DE"}, "lines": [{"variantId": "PHN-PIXEL-9-OBSIDIAN-128", "quantity": 1}],
+{"destination": {"country": "DE"}, "lines": [{"variantId": "PHN-PIXEL-9", "quantity": 1}],
  "currency": "EUR"}
 
 ### Orchestration's own token (client credentials), for the fulfillment Saga's commands
@@ -119,7 +119,7 @@ Idempotency-Key: {{$random.uuid}}
 Content-Type: application/json
 
 {"orderId": "{{orderId}}", "customerId": "http-demo-customer",
- "lines": [{"variantId": "PHN-PIXEL-9-OBSIDIAN-128", "quantity": 1}],
+ "lines": [{"variantId": "PHN-PIXEL-9", "quantity": 1}],
  "shippingAddress": {"recipientName": "Erika Mustermann", "line1": "Hauptstraße 5", "postcode": "10115",
                      "city": "Berlin", "country": "DE"},
  "shippingOption": {"id": "EXPRESS", "carrier": "Mock Carrier", "cost": {"amountMinor": 999, "currency": "EUR"},
@@ -137,7 +137,7 @@ Idempotency-Key: {{$random.uuid}}
 Content-Type: application/json
 
 {"orderId": "{{shipmentOrderId}}", "customerId": "http-demo-customer",
- "lines": [{"variantId": "PHN-PIXEL-9-OBSIDIAN-128", "quantity": 1}],
+ "lines": [{"variantId": "PHN-PIXEL-9", "quantity": 1}],
  "shippingAddress": {"recipientName": "Erika Mustermann", "line1": "Hauptstraße 5", "postcode": "10115",
                      "city": "Berlin", "country": "DE"},
  "shippingOption": {"id": "EXPRESS", "carrier": "Mock Carrier", "cost": {"amountMinor": 999, "currency": "EUR"}}}
@@ -159,18 +159,18 @@ POST {{gateway}}/api/fulfillment-shipping/shipments/{{shipmentId}}/pack
 Authorization: Bearer {{staffToken}}
 Content-Type: application/json
 
-{"serialNumbers": {"PHN-PIXEL-9-OBSIDIAN-128": ["490154203237518"]}}
+{"serialNumbers": {"PHN-PIXEL-9": ["490154203237518"]}}
 
 ### Staff pick it: PICKED, by the Staff user
 POST {{gateway}}/api/fulfillment-shipping/shipments/{{shipmentId}}/pick
 Authorization: Bearer {{staffToken}}
 
-### An IMEI whose check digit is wrong: 422 naming serialNumbers.PHN-PIXEL-9-OBSIDIAN-128[0]
+### An IMEI whose check digit is wrong: 422 naming serialNumbers.PHN-PIXEL-9[0]
 POST {{gateway}}/api/fulfillment-shipping/shipments/{{shipmentId}}/pack
 Authorization: Bearer {{staffToken}}
 Content-Type: application/json
 
-{"serialNumbers": {"PHN-PIXEL-9-OBSIDIAN-128": ["490154203237517"]}}
+{"serialNumbers": {"PHN-PIXEL-9": ["490154203237517"]}}
 
 ### A valid IMEI, new on every run: PACKED, with the IMEI on its line
 < {%
@@ -187,7 +187,7 @@ POST {{gateway}}/api/fulfillment-shipping/shipments/{{shipmentId}}/pack
 Authorization: Bearer {{staffToken}}
 Content-Type: application/json
 
-{"serialNumbers": {"PHN-PIXEL-9-OBSIDIAN-128": ["{{imei}}"]}}
+{"serialNumbers": {"PHN-PIXEL-9": ["{{imei}}"]}}
 
 ### As the fulfillment Saga: dispatch it. SHIPPED, with the mock carrier's tracking number; its Carrier
 ### webhooks follow 10, 20 and 30 seconds later
