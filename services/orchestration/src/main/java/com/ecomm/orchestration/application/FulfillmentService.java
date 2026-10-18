@@ -46,7 +46,7 @@ public class FulfillmentService implements FulfillmentUseCase {
                 order.lines(),
                 order.shippingAddress(),
                 order.shippingOption(),
-                deliveryDeadline.toSeconds(),
+                deliveryDeadline,
                 order.correlationId()));
     if (started) {
       log.info("Started Order {}'s fulfillment", order.orderId());

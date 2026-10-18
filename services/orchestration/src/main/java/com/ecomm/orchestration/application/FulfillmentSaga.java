@@ -144,13 +144,12 @@ public class FulfillmentSaga implements FulfillmentWorkflow {
     shipmentsUntilDone.dispatchShipment(shipmentId);
     orders.markOrderShipped(customerId, orderId);
 
-    if (!Workflow.await(
-        Duration.ofSeconds(request.deliveryDeadlineSeconds()), () -> reached("DELIVERED"))) {
+    if (!Workflow.await(request.deliveryDeadline(), () -> reached("DELIVERED"))) {
       log.warn(
           "Order {}'s Shipment {} wasn't confirmed delivered within {}",
           orderId,
           shipmentId,
-          Duration.ofSeconds(request.deliveryDeadlineSeconds()));
+          request.deliveryDeadline());
       return ended(new FulfillmentOutcome(Status.DELIVERY_UNCONFIRMED, shipmentId, null));
     }
     orders.markOrderDelivered(customerId, orderId);
