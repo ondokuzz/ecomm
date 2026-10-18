@@ -25,6 +25,8 @@ import com.github.tomakehurst.wiremock.verification.LoggedRequest;
 import io.grpc.StatusRuntimeException;
 import io.temporal.api.common.v1.WorkflowExecution;
 import io.temporal.api.testservice.v1.LockTimeSkippingRequest;
+import io.temporal.api.testservice.v1.TestServiceGrpc;
+import io.temporal.api.testservice.v1.UnlockTimeSkippingRequest;
 import io.temporal.api.workflowservice.v1.DescribeWorkflowExecutionRequest;
 import io.temporal.client.WorkflowClient;
 import io.temporal.client.WorkflowException;
@@ -37,6 +39,7 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -49,9 +52,9 @@ import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
  * Shipment events from Kafka, and its real activities call WireMock stubs of Fulfillment &
  * Shipping, Payment and Order Management with Orchestration's own token.
  *
- * <p>Time skipping is off on its JVM's test server, so the Saga's waits pass in real time: its wait
- * for delivery, {@link #DELIVERY_DEADLINE} here, doesn't end before the test's Shipment events
- * arrive.
+ * <p>Time skipping is locked on the test server while the class runs, so the Saga's waits pass in
+ * real time: its wait for delivery, {@link #DELIVERY_DEADLINE} here, doesn't end before the test's
+ * Shipment events arrive.
  *
  * <p>Each topic has one partition, consumed in order, so once a later event has visibly been
  * handled, every event sent before it has been too: that is how a test sees that an event started
@@ -67,15 +70,24 @@ class FulfillmentWorkflowTest extends OrchestrationTest {
   static final String HOLD = "/shipments/" + SHIPMENT_ID + "/hold";
   static final String CAPTURE = "/payments/" + PAYMENT_ID + "/capture";
 
-  /** Locks time skipping on this JVM's test server for good (a JVM per test class, build file). */
+  /** Locks time skipping on the test server while this class runs. */
   @BeforeAll
   static void timeSkippingOff() {
-    var server =
-        TestServiceStubs.newServiceStubs(
+    testServer().lockTimeSkipping(LockTimeSkippingRequest.getDefaultInstance());
+  }
+
+  /** Lets the next class's tests skip time again. */
+  @AfterAll
+  static void timeSkippingOn() {
+    testServer().unlockTimeSkipping(UnlockTimeSkippingRequest.getDefaultInstance());
+  }
+
+  static TestServiceGrpc.TestServiceBlockingStub testServer() {
+    return TestServiceStubs.newServiceStubs(
             TestServiceStubsOptions.newBuilder()
                 .setTarget("localhost:" + TEMPORAL_PORT)
-                .validateAndBuildWithDefaults());
-    server.blockingStub().lockTimeSkipping(LockTimeSkippingRequest.getDefaultInstance());
+                .validateAndBuildWithDefaults())
+        .blockingStub();
   }
 
   @Autowired WorkflowClient temporal;
