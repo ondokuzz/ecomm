@@ -125,8 +125,13 @@ It answers `{"status", "shipmentId", "holdReason"}`, `status` being `DELIVERED`,
    address and option. A failure, such as the `503 productsNotKnownYet` while Fulfillment & Shipping
    awaits Catalog's Products, is retried with backoff up to a minute until it succeeds. A `409`
    (`shipmentExists`) is read as success: the Order's Shipment is read (`GET /shipments?orderId=`)
-   and the Saga goes on with it. Any other 4xx ends it `FAILED`, with nothing charged.
-2. **Await `PACKED`**, with no deadline: picking and packing are Staff's work.
+   and the Saga takes it up from its status (see "A Shipment that exists already" below). Any
+   other 4xx ends it `FAILED`, with nothing charged.
+2. **Await `PACKED`**, with no deadline: picking and packing are Staff's work. Each time
+   `ecomm.orchestration.packing-check` (1 hour) passes without a `PACKED` event, the Shipment is
+   read again (step `findShipment`), so a run whose event never comes, dead-lettered say, goes on
+   once the read says it is packed. Each check adds a handful of events to the run's history, about
+   200 a day, well under Temporal's limit for anything Staff would leave unpacked.
 3. **Capture the Payment**: the Order's Payments are read (step `findPayment`, `GET
    /payments?orderId=&customerId=`, Payment's read for Orchestration), and the authorized one, or
    one captured already, is captured (step `capturePayment`, `POST /payments/{id}/capture`), each
@@ -150,6 +155,23 @@ until they succeed. Each attempt has the checkout Saga's 30 seconds. Each comman
 `holdShipment`, `markOrderFulfilled`, `dispatchShipment`, `markOrderShipped`,
 `markOrderDelivered`), and every call carries the Correlation ID of the Order event that started
 the Saga. Order Management records each status change as made by `ORCHESTRATION`.
+
+**A Shipment that exists already.** A second run of an Order's fulfillment starts when its `PAID`
+event is replayed after Temporal stopped keeping the first (7 days). Its keys carry its own run ID,
+so they replay nothing of the first run's, and Order Management refuses a status change the Order
+has made already (`409`). So the run takes the Shipment up from the status it reads, skipping what
+is done:
+
+| Shipment found | What the run does |
+| --- | --- |
+| `AWAITING_PICK`, `PICKED` | every step from 2 on |
+| `PACKED` | every step from 3 on, without awaiting an event (a capture made already is answered as captured) |
+| `SHIPPED` | steps 7 and 8 only: the run that dispatched it had captured the Payment and marked the Order `FULFILLED` and `SHIPPED` |
+| `DELIVERED` | step 8 only, where a `409` counts as done: the first run may have marked the Order `DELIVERED` already, or ended `DELIVERY_UNCONFIRMED` before the delivery |
+| `ON_HOLD` | nothing: it ends `CAPTURE_REFUSED` with the Shipment's hold reason, as the first run did |
+
+A status read this way carries no version, so it counts only when it is further along than the
+events seen so far.
 
 ### Changing the workflow
 
