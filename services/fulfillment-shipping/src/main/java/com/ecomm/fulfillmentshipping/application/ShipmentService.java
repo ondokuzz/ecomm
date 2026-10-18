@@ -122,7 +122,7 @@ public class ShipmentService
         id,
         shipment -> {
           var packed = shipment.packed(serialNumbers, staffId, time.now());
-          var elsewhere = shipments.shippedElsewhere(packed.serialNumbers(), id);
+          var elsewhere = shipments.shippedElsewhere(packed);
           if (!elsewhere.isEmpty()) {
             throw new SerialNumberAlreadyShippedException(elsewhere.getFirst());
           }

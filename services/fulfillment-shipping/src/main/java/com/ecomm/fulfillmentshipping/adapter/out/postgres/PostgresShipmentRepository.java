@@ -147,40 +147,43 @@ class PostgresShipmentRepository implements ShipmentRepository {
   }
 
   /**
-   * Inserts the Serial numbers not yet kept. One another Shipment holds, committed or not, is
-   * refused once that Shipment's transaction ends.
+   * Inserts the Serial numbers not yet kept, each for its line's Product. One another Shipment of
+   * the Product holds, committed or not, is refused once that Shipment's transaction ends. A
+   * Shipment put on hold releases its own, for another Shipment to pack.
    */
   private void addSerialNumbers(Shipment shipment) {
     var lines = shipment.lines();
     for (var position = 0; position < lines.size(); position++) {
-      var serials = lines.get(position).serialNumbers();
+      var line = lines.get(position);
+      var serials = line.serialNumbers();
       for (var unit = 0; unit < serials.size(); unit++) {
         var serial = serials.get(unit);
-        var inserted =
-            jdbc.sql(
-                    """
-                    INSERT INTO shipment_serial_number
-                      (serial_number, shipment_id, line_position, unit)
-                    VALUES (:serial, :shipmentId, :position, :unit)
-                    ON CONFLICT (serial_number) DO NOTHING
-                    """)
-                .param("serial", serial)
-                .param("shipmentId", shipment.id())
-                .param("position", position)
-                .param("unit", unit)
-                .update();
-        if (inserted == 0 && !shipment.id().equals(holderOf(serial))) {
+        try {
+          jdbc.sql(
+                  """
+                  INSERT INTO shipment_serial_number
+                    (serial_number, shipment_id, line_position, unit, product_sku)
+                  VALUES (:serial, :shipmentId, :position, :unit,
+                    COALESCE((SELECT sku FROM product_variant WHERE variant_id = :variantId),
+                             :variantId))
+                  ON CONFLICT (shipment_id, line_position, unit) DO NOTHING
+                  """)
+              .param("serial", serial)
+              .param("shipmentId", shipment.id())
+              .param("position", position)
+              .param("unit", unit)
+              .param("variantId", line.variantId())
+              .update();
+        } catch (DuplicateKeyException e) {
           throw new SerialNumberAlreadyShippedException(serial);
         }
       }
     }
-  }
-
-  private UUID holderOf(String serial) {
-    return jdbc.sql("SELECT shipment_id FROM shipment_serial_number WHERE serial_number = :serial")
-        .param("serial", serial)
-        .query(UUID.class)
-        .single();
+    if (shipment.status() == ShipmentStatus.ON_HOLD) {
+      jdbc.sql("UPDATE shipment_serial_number SET released = true WHERE shipment_id = :id")
+          .param("id", shipment.id())
+          .update();
+    }
   }
 
   @Override
@@ -223,20 +226,29 @@ class PostgresShipmentRepository implements ShipmentRepository {
   }
 
   @Override
-  public List<String> shippedElsewhere(Collection<String> serialNumbers, UUID shipmentId) {
-    if (serialNumbers.isEmpty()) {
-      return List.of();
+  public List<String> shippedElsewhere(Shipment shipment) {
+    var found = new ArrayList<String>();
+    for (var line : shipment.lines()) {
+      if (line.serialNumbers().isEmpty()) {
+        continue;
+      }
+      found.addAll(
+          jdbc.sql(
+                  """
+                  SELECT serial_number FROM shipment_serial_number
+                  WHERE serial_number IN (:serials) AND shipment_id <> :shipmentId
+                    AND NOT released
+                    AND product_sku = COALESCE(
+                      (SELECT sku FROM product_variant WHERE variant_id = :variantId), :variantId)
+                  ORDER BY serial_number
+                  """)
+              .param("serials", line.serialNumbers())
+              .param("shipmentId", shipment.id())
+              .param("variantId", line.variantId())
+              .query(String.class)
+              .list());
     }
-    return jdbc.sql(
-            """
-            SELECT serial_number FROM shipment_serial_number
-            WHERE serial_number IN (:serials) AND shipment_id <> :shipmentId
-            ORDER BY serial_number
-            """)
-        .param("serials", serialNumbers)
-        .param("shipmentId", shipmentId)
-        .query(String.class)
-        .list();
+    return found;
   }
 
   @Override

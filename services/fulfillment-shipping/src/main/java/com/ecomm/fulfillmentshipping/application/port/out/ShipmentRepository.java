@@ -45,8 +45,11 @@ public interface ShipmentRepository {
   /** The Shipment the Carrier knows by {@code trackingNumber}, locked as {@link #lockToChange}. */
   Optional<Shipment> lockToChangeByTrackingNumber(String trackingNumber);
 
-  /** Which of {@code serialNumbers} a Shipment other than {@code shipmentId} carries. */
-  List<String> shippedElsewhere(Collection<String> serialNumbers, UUID shipmentId);
+  /**
+   * Which of {@code shipment}'s Serial numbers another Shipment, not on hold, carries for the same
+   * Product.
+   */
+  List<String> shippedElsewhere(Shipment shipment);
 
   /**
    * A page of Shipments, oldest first, in {@code status} and from {@code warehouseId} when they are

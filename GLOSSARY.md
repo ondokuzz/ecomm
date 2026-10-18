@@ -208,7 +208,7 @@ One Order's parcel, in Fulfillment & Shipping: its Warehouse, its Shipping addre
 _Avoid_: Parcel, Package, Consignment, Delivery
 
 **Serial number**:
-What tells one unit of a serial-tracked Variant from another, entered by Staff for each unit as they pack a Shipment. An IMEI is the kind for phones: 15 digits, the last a Luhn check digit. Any other is 4 to 40 letters, digits and hyphens, kept upper-cased. A Serial number ships on one Shipment only; Returns & Warranty checks an RMA's units against them.
+What tells one unit of a serial-tracked Variant from another, entered by Staff for each unit as they pack a Shipment. An IMEI is the kind for phones: 15 digits, the last a Luhn check digit. Any other is 4 to 40 letters, digits and hyphens, kept upper-cased. A Serial number ships on one Shipment only, and is unique for its Product, not across Products; a Shipment put on hold gives its numbers back for another to pack. Returns & Warranty checks an RMA's units against them.
 _Avoid_: Serial (on its own), Unit ID, IMEI (one kind of Serial number, not another name for it)
 
 **Tracking event**:
