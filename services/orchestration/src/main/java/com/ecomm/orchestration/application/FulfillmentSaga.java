@@ -122,9 +122,9 @@ public class FulfillmentSaga implements FulfillmentWorkflow {
     var customerId = request.customerId();
     var orderId = request.orderId();
 
-    String shipmentId;
+    ShipmentActivities.Shipment shipment;
     try {
-      shipmentId =
+      shipment =
           shipmentsUntilCreated.createShipment(
               orderId,
               customerId,
@@ -134,6 +134,16 @@ public class FulfillmentSaga implements FulfillmentWorkflow {
     } catch (ActivityFailure e) {
       log.error("Order {}'s Shipment couldn't be created; nothing was charged", orderId, e);
       return ended(new FulfillmentOutcome(Status.FAILED, null, null));
+    }
+    var shipmentId = shipment.id();
+    if ("ON_HOLD".equals(shipment.status())) {
+      log.info(
+          "Order {}'s Shipment {} is on hold already: {}",
+          orderId,
+          shipmentId,
+          shipment.holdReason());
+      return ended(
+          new FulfillmentOutcome(Status.CAPTURE_REFUSED, shipmentId, shipment.holdReason()));
     }
     log.info("Order {}'s Shipment {} awaits packing", orderId, shipmentId);
     Workflow.await(() -> reached("PACKED"));

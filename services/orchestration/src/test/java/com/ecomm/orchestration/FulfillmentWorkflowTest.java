@@ -235,17 +235,7 @@ class FulfillmentWorkflowTest extends OrchestrationTest {
   @Test
   void aShipmentThatExistsAlreadyIsReadByOrderAndTakenAsCreated() {
     stubEveryStep();
-    DOWNSTREAM.stubFor(
-        post("/shipments")
-            .atPriority(1)
-            .willReturn(
-                aResponse()
-                    .withStatus(409)
-                    .withHeader("Content-Type", "application/problem+json")
-                    .withBody("{\"reason\": \"shipmentExists\"}")));
-    DOWNSTREAM.stubFor(
-        get(urlEqualTo("/shipments?orderId=" + orderId))
-            .willReturn(okJson("{\"id\": \"%s\"}".formatted(SHIPMENT_ID))));
+    stubShipmentExists("AWAITING_PICK", null);
     paid();
     awaitCalls(2);
 
@@ -253,6 +243,24 @@ class FulfillmentWorkflowTest extends OrchestrationTest {
 
     awaitCalls(7);
     assertThat(calls()).contains("POST " + DISPATCH);
+  }
+
+  /**
+   * A PAID event replayed once Temporal no longer keeps the first run (7 days) starts a second one,
+   * which finds the Shipment held by the first: it ends as that one did, and changes nothing.
+   */
+  @Test
+  void aShipmentFoundOnHoldEndsTheSagaAsCaptureRefusedWithItsReason() {
+    stubEveryStep();
+    stubShipmentExists("ON_HOLD", "Capture declined: authorization_expired");
+
+    paid();
+
+    assertThat(outcome())
+        .isEqualTo(
+            new FulfillmentOutcome(
+                Status.CAPTURE_REFUSED, SHIPMENT_ID, "Capture declined: authorization_expired"));
+    assertThat(calls()).containsExactly("POST /shipments", "GET /shipments?orderId=" + orderId);
   }
 
   @Test
@@ -465,6 +473,7 @@ class FulfillmentWorkflowTest extends OrchestrationTest {
   }
 
   FulfillmentOutcome outcome() {
+    await().atMost(Duration.ofSeconds(30)).until(() -> isStarted(workflowId()));
     try {
       return temporal
           .newUntypedWorkflowStub(workflowId())
@@ -525,6 +534,30 @@ class FulfillmentWorkflowTest extends OrchestrationTest {
     DOWNSTREAM.stubFor(
         post(DISPATCH).willReturn(okJson("{\"id\": \"%s\"}".formatted(SHIPMENT_ID))));
     DOWNSTREAM.stubFor(post(HOLD).willReturn(okJson("{\"id\": \"%s\"}".formatted(SHIPMENT_ID))));
+  }
+
+  /** The Order has its Shipment already, in {@code status}: creating one again is a 409. */
+  void stubShipmentExists(String status, String holdReason) {
+    DOWNSTREAM.stubFor(
+        post("/shipments")
+            .atPriority(1)
+            .willReturn(
+                aResponse()
+                    .withStatus(409)
+                    .withHeader("Content-Type", "application/problem+json")
+                    .withBody("{\"reason\": \"shipmentExists\"}")));
+    DOWNSTREAM.stubFor(
+        get(urlEqualTo("/shipments?orderId=" + orderId))
+            .willReturn(
+                okJson(
+                    """
+                    {"id": "%s", "orderId": "%s", "status": "%s", "holdReason": %s}
+                    """
+                        .formatted(
+                            SHIPMENT_ID,
+                            orderId,
+                            status,
+                            holdReason == null ? "null" : "\"" + holdReason + "\""))));
   }
 
   static com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder shipmentCreated() {
