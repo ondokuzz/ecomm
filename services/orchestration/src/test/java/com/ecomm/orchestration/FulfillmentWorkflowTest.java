@@ -263,6 +263,26 @@ class FulfillmentWorkflowTest extends OrchestrationTest {
     assertThat(calls()).containsExactly("POST /shipments", "GET /shipments?orderId=" + orderId);
   }
 
+  /** One found packed, its PACKED event long consumed, goes on at once: it is captured once. */
+  @Test
+  void aShipmentFoundPackedIsCapturedFulfilledDispatchedAndShippedWithoutAnEvent() {
+    stubEveryStep();
+    stubShipmentExists("PACKED", null);
+
+    paid();
+
+    awaitCalls(7);
+    assertThat(calls())
+        .containsExactly(
+            "POST /shipments",
+            "GET /shipments?orderId=" + orderId,
+            "GET " + readPayments(),
+            "POST " + CAPTURE,
+            "PATCH " + status() + " FULFILLED",
+            "POST " + DISPATCH,
+            "PATCH " + status() + " SHIPPED");
+  }
+
   @Test
   void aShipmentWhoseProductsAreNotKnownYetIsCreatedOnceTheyAre() {
     stubEveryStep();

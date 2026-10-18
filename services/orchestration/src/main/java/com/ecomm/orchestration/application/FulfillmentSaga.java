@@ -145,6 +145,7 @@ public class FulfillmentSaga implements FulfillmentWorkflow {
       return ended(
           new FulfillmentOutcome(Status.CAPTURE_REFUSED, shipmentId, shipment.holdReason()));
     }
+    found(shipment.status());
     log.info("Order {}'s Shipment {} awaits packing", orderId, shipmentId);
     Workflow.await(() -> reached("PACKED"));
 
@@ -211,6 +212,17 @@ public class FulfillmentSaga implements FulfillmentWorkflow {
       return capturesUntilAnswered.findPayment(customerId, orderId).captured();
     } catch (ActivityFailure e) {
       return false;
+    }
+  }
+
+  /**
+   * Takes the Shipment's status as read from Fulfillment & Shipping, which carries no version: it
+   * counts only when it has come further than the events seen so far, so a read that crossed a
+   * newer event never takes the Saga back.
+   */
+  private void found(String status) {
+    if (shipmentStatus == null || ON_ITS_WAY.indexOf(status) > ON_ITS_WAY.indexOf(shipmentStatus)) {
+      shipmentStatus = status;
     }
   }
 
