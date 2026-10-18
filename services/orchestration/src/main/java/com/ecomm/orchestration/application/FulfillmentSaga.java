@@ -146,19 +146,25 @@ public class FulfillmentSaga implements FulfillmentWorkflow {
           new FulfillmentOutcome(Status.CAPTURE_REFUSED, shipmentId, shipment.holdReason()));
     }
     found(shipment.status());
-    log.info("Order {}'s Shipment {} awaits packing", orderId, shipmentId);
-    Workflow.await(() -> reached("PACKED"));
+    if (reached("SHIPPED")) {
+      // Dispatched by an earlier run, once it had captured the Payment and marked the Order
+      // fulfilled, and that run marked it shipped: only delivery is left.
+      log.info("Order {}'s Shipment {} is {} already", orderId, shipmentId, shipmentStatus);
+    } else {
+      log.info("Order {}'s Shipment {} awaits packing", orderId, shipmentId);
+      Workflow.await(() -> reached("PACKED"));
 
-    var hold = capture(customerId, orderId);
-    if (hold != null) {
-      count("fulfillment_holds", "kind", hold.kind());
-      shipmentsUntilDone.holdShipment(shipmentId, hold.reason());
-      return ended(new FulfillmentOutcome(Status.CAPTURE_REFUSED, shipmentId, hold.reason()));
+      var hold = capture(customerId, orderId);
+      if (hold != null) {
+        count("fulfillment_holds", "kind", hold.kind());
+        shipmentsUntilDone.holdShipment(shipmentId, hold.reason());
+        return ended(new FulfillmentOutcome(Status.CAPTURE_REFUSED, shipmentId, hold.reason()));
+      }
+
+      orders.markOrderFulfilled(customerId, orderId);
+      shipmentsUntilDone.dispatchShipment(shipmentId);
+      orders.markOrderShipped(customerId, orderId);
     }
-
-    orders.markOrderFulfilled(customerId, orderId);
-    shipmentsUntilDone.dispatchShipment(shipmentId);
-    orders.markOrderShipped(customerId, orderId);
 
     if (!Workflow.await(request.deliveryDeadline(), () -> reached("DELIVERED"))) {
       log.warn(

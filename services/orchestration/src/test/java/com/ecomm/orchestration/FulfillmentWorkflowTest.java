@@ -283,6 +283,27 @@ class FulfillmentWorkflowTest extends OrchestrationTest {
             "PATCH " + status() + " SHIPPED");
   }
 
+  /**
+   * One found shipped was dispatched once its Payment was captured, and its Order marked shipped,
+   * by a run that ended before delivery was confirmed: this one only awaits delivery.
+   */
+  @Test
+  void aShipmentFoundShippedOnlyAwaitsDeliveryThenMarksTheOrderDelivered() {
+    stubEveryStep();
+    stubShipmentExists("SHIPPED", null);
+    paid();
+    awaitCalls(2);
+
+    shipment(5, "DELIVERED");
+
+    assertThat(outcome()).isEqualTo(new FulfillmentOutcome(Status.DELIVERED, SHIPMENT_ID, null));
+    assertThat(calls())
+        .containsExactly(
+            "POST /shipments",
+            "GET /shipments?orderId=" + orderId,
+            "PATCH " + status() + " DELIVERED");
+  }
+
   @Test
   void aShipmentWhoseProductsAreNotKnownYetIsCreatedOnceTheyAre() {
     stubEveryStep();
