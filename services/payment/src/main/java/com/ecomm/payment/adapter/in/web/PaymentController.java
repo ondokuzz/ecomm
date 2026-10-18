@@ -164,9 +164,10 @@ class PaymentController {
 
   /**
    * The named Customer's Payments for one of their Orders, newest first, as the fulfillment Saga
-   * reads them to find the Payment to capture; empty for anyone else's.
+   * reads them to find the Payment to capture; empty for anyone else's. A path of its own, so it
+   * never shadows the Customer's {@code GET /payments?orderId=} when a request names a customer.
    */
-  @GetMapping(params = {"orderId", "customerId"})
+  @GetMapping("/by-order")
   @PreAuthorize("hasRole('ORCHESTRATION')")
   List<PaymentResponse> customersPayments(
       @RequestParam String orderId, @RequestParam String customerId) {

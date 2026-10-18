@@ -555,7 +555,7 @@ class FulfillmentWorkflowTest extends OrchestrationTest {
   }
 
   MappingBuilder readPaymentsRequest() {
-    return get(urlPathEqualTo("/payments"))
+    return get(urlPathEqualTo("/payments/by-order"))
         .withQueryParam("orderId", equalTo(orderId))
         .withQueryParam("customerId", equalTo(CUSTOMER_ID));
   }
@@ -572,7 +572,7 @@ class FulfillmentWorkflowTest extends OrchestrationTest {
   }
 
   String readPayments() {
-    return "/payments?orderId=" + orderId + "&customerId=" + CUSTOMER_ID;
+    return "/payments/by-order?orderId=" + orderId + "&customerId=" + CUSTOMER_ID;
   }
 
   /** This Order's calls, oldest first; a status change shows the status it asked for. */

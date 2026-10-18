@@ -128,8 +128,8 @@ It answers `{"status", "shipmentId", "holdReason"}`, `status` being `DELIVERED`,
    and the Saga goes on with it. Any other 4xx ends it `FAILED`, with nothing charged.
 2. **Await `PACKED`**, with no deadline: picking and packing are Staff's work.
 3. **Capture the Payment**: the Order's Payments are read (step `findPayment`, `GET
-   /payments?orderId=&customerId=`, Payment's read for Orchestration), and the authorized one, or
-   one captured already, is captured (step `capturePayment`, `POST /payments/{id}/capture`), each
+   /payments/by-order?orderId=&customerId=`, Payment's read for Orchestration), and the authorized
+   one, or one captured already, is captured (step `capturePayment`, `POST /payments/{id}/capture`), each
    step retried on its own. A `402 captureDeclined` **holds the Shipment** (`POST
    /shipments/{id}/hold`) with the reason `Capture declined: <declineReason>`; a capture that still
    fails after about a minute (the gateway's 502, say), or an Order with no authorized Payment,

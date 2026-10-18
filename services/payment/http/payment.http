@@ -210,7 +210,7 @@ Content-Type: application/json
 > {% client.global.set("sagaPaymentId", response.body.id); %}
 
 ### Orchestration reads the Order's Payments, naming the Customer, as the fulfillment Saga does to find the one to capture
-GET {{payment}}/payments?orderId=order-saga-1&customerId={{customerId}}
+GET {{payment}}/payments/by-order?orderId=order-saga-1&customerId={{customerId}}
 Authorization: Bearer {{orchestrationToken}}
 
 ### Orchestration reads it, naming the Customer, as the Saga does while it awaits settlement

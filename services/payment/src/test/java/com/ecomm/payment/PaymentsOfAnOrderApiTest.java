@@ -49,6 +49,24 @@ class PaymentsOfAnOrderApiTest extends PaymentApiTest {
   }
 
   @Test
+  void aCustomerNamingACustomerStillReadsOnlyTheirOwnPayments() {
+    var authorized = authorized("order-named-customer");
+
+    var payments =
+        http.get()
+            .uri("/payments?orderId=order-named-customer&customerId=customer-7")
+            .headers(h -> h.setBearerAuth(customerToken()))
+            .exchange()
+            .expectStatus()
+            .isOk()
+            .expectBody(new ParameterizedTypeReference<List<PaymentView>>() {})
+            .returnResult()
+            .getResponseBody();
+
+    assertThat(payments).containsExactly(authorized);
+  }
+
+  @Test
   void anOrderWithoutPaymentsHasNone() {
     customerPayments(customerToken(), "order-unpaid").expectStatus().isOk().expectBody().json("[]");
   }

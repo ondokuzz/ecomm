@@ -123,6 +123,12 @@ class OrchestrationPaymentApiTest extends PaymentApiTest {
         .exchange()
         .expectStatus()
         .isForbidden();
+    http.get()
+        .uri("/payments/by-order?orderId=order-orch-cust&customerId=customer-42")
+        .headers(h -> h.setBearerAuth(customerToken()))
+        .exchange()
+        .expectStatus()
+        .isForbidden();
   }
 
   private static String paymentOf(String orderId, String paymentMethod) {
@@ -160,7 +166,7 @@ class OrchestrationPaymentApiTest extends PaymentApiTest {
   private RestTestClient.ResponseSpec orchestrationReadsPaymentsOf(
       String orderId, String customerId) {
     return http.get()
-        .uri("/payments?orderId={orderId}&customerId={customerId}", orderId, customerId)
+        .uri("/payments/by-order?orderId={orderId}&customerId={customerId}", orderId, customerId)
         .headers(h -> h.setBearerAuth(ORCHESTRATION))
         .exchange();
   }

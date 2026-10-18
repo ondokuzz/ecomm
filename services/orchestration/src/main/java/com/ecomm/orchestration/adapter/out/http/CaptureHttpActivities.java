@@ -40,7 +40,10 @@ class CaptureHttpActivities implements CaptureActivities {
             "findPayment",
             () ->
                 http.get()
-                    .uri("/payments?orderId={orderId}&customerId={customerId}", orderId, customerId)
+                    .uri(
+                        "/payments/by-order?orderId={orderId}&customerId={customerId}",
+                        orderId,
+                        customerId)
                     .retrieve()
                     .body(PaymentBody[].class));
     return Arrays.stream(payments == null ? new PaymentBody[0] : payments)
