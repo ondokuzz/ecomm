@@ -144,11 +144,6 @@ public record Shipment(
     return moved.with(packedLines);
   }
 
-  /** Every Serial number packed in it. */
-  public List<String> serialNumbers() {
-    return lines.stream().flatMap(line -> line.serialNumbers().stream()).toList();
-  }
-
   /** The fulfillment Saga has handed it to the Carrier, which booked it. */
   public Shipment shipped(Booking booking, Instant at) {
     var moved = movedTo(ShipmentStatus.SHIPPED, at, StatusChange.ORCHESTRATION);

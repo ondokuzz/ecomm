@@ -83,9 +83,11 @@ and publishes the Shipment, in one transaction under the Shipment's row lock.
   is 15 digits whose last is a Luhn check digit; a serial number is 4 to 40 of `[A-Za-z0-9-]`, kept
   upper-cased. A malformed one, the wrong count, one entered twice in the Shipment, or one for a
   Variant that isn't tracked (or isn't shipped here) is a 422 naming each field, such as
-  `serialNumbers.PHN-PIXEL-9[0]`. One another Shipment carries is a 409
-  `serialAlreadyShipped` with the `serialNumber`; a unit ships on one Shipment only, until returns
-  (Sprint 6) say otherwise.
+  `serialNumbers.PHN-PIXEL-9[0]`. One another Shipment carries for the same Product is a 409
+  `serialAlreadyShipped` with the `serialNumber`: a unit ships on one Shipment only, until returns
+  (Sprint 6) say otherwise. Two Products may share a number, since manufacturers number their units
+  alike, and a Shipment put on hold gives its numbers back, so a unit unpacked from it can be
+  packed on another; the held Shipment still shows them.
 - **Dispatching** books the Shipment with the Carrier, passing the request's `Idempotency-Key` on,
   so a retried dispatch books once.
 - **Tracking events** are kept oldest first, however late each arrives. Only `DELIVERED` moves the

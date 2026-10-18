@@ -11,9 +11,9 @@ import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 /**
- * Payment's {@code /payments/{id}/capture}, for the Payment its read by Order finds authorized, or
- * captured already. A 402 ({@code captureDeclined}) is the gateway's answer, not a failure; a 502
- * is retried like any other failure, and a 409 ({@code paymentNotCapturable}) is a refusal.
+ * Payment's read by Order, which finds the Payment authorized, or captured already, and its {@code
+ * /payments/{id}/capture}. A 402 ({@code captureDeclined}) is the gateway's answer, not a failure;
+ * a 502 is retried like any other failure, and a 409 ({@code paymentNotCapturable}) is a refusal.
  */
 @Component("captureActivities")
 class CaptureHttpActivities implements CaptureActivities {
@@ -34,44 +34,47 @@ class CaptureHttpActivities implements CaptureActivities {
   private record DeclineBody(String declineReason) {}
 
   @Override
-  public Capture capturePayment(String customerId, String orderId) {
+  public PaymentToCapture findPayment(String customerId, String orderId) {
     var payments =
         Steps.call(
-            "capturePayment",
+            "findPayment",
             () ->
                 http.get()
                     .uri("/payments?orderId={orderId}&customerId={customerId}", orderId, customerId)
                     .retrieve()
                     .body(PaymentBody[].class));
-    var payment =
-        Arrays.stream(payments == null ? new PaymentBody[0] : payments)
-            .filter(p -> CAPTURABLE.contains(p.status()))
-            .findFirst()
-            .orElseThrow(
-                () -> {
-                  Steps.countFailure("capturePayment");
-                  return ApplicationFailure.newNonRetryableFailure(
-                      "Order " + orderId + " has no authorized Payment to capture",
-                      Refusals.REFUSED);
-                });
+    return Arrays.stream(payments == null ? new PaymentBody[0] : payments)
+        .filter(p -> CAPTURABLE.contains(p.status()))
+        .findFirst()
+        .map(p -> new PaymentToCapture(p.id(), "CAPTURED".equals(p.status())))
+        .orElseThrow(
+            () -> {
+              Steps.countFailure("findPayment");
+              return ApplicationFailure.newNonRetryableFailure(
+                  "Order " + orderId + " has no authorized Payment to capture", Refusals.REFUSED);
+            });
+  }
+
+  @Override
+  public Capture capturePayment(String customerId, String paymentId) {
     return Steps.call(
         "capturePayment",
         () -> {
           try {
             http.post()
-                .uri("/payments/{id}/capture", payment.id())
+                .uri("/payments/{id}/capture", paymentId)
                 .header("Idempotency-Key", Steps.idempotencyKey("capturePayment"))
                 .body(new CustomerBody(customerId))
                 .retrieve()
                 .toBodilessEntity();
-            return new Capture(payment.id(), Capture.Status.CAPTURED, null);
+            return new Capture(paymentId, Capture.Status.CAPTURED, null);
           } catch (HttpClientErrorException e) {
             if (e.getStatusCode().value() != HttpStatus.PAYMENT_REQUIRED.value()) {
               throw e;
             }
             var decline = e.getResponseBodyAs(DeclineBody.class);
             return new Capture(
-                payment.id(),
+                paymentId,
                 Capture.Status.DECLINED,
                 decline == null ? null : decline.declineReason());
           }

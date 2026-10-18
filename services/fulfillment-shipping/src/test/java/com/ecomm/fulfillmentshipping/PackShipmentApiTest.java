@@ -12,7 +12,8 @@ import org.springframework.test.web.servlet.client.RestTestClient;
  * Staff pack a picked Shipment, entering one Serial number per unit of each serial-tracked line: an
  * IMEI with a valid check digit, or a serial number of 4 to 40 letters, digits and hyphens, kept
  * upper-cased. Anything else, the wrong count, or a repeat within the Shipment is a 422 naming the
- * field; one another Shipment carries is a 409.
+ * field; one another Shipment carries for the same Product is a 409, unless that Shipment is on
+ * hold.
  */
 class PackShipmentApiTest extends ShipmentsApiTest {
 
@@ -103,6 +104,28 @@ class PackShipmentApiTest extends ShipmentsApiTest {
         .jsonPath("$.serialNumber")
         .isEqualTo(imei);
     assertThat(read(STAFF, second.id()).status()).isEqualTo("PICKED");
+  }
+
+  @Test
+  void aSerialNumberOnAShipmentPutOnHoldCanBePackedOnAnother() {
+    var imei = newImei();
+    var held = picked(Map.of(PHONE, 1));
+    pack(held.id(), serials(Map.of(PHONE, List.of(imei)))).expectStatus().isOk();
+    hold(held.id(), "Capture declined: authorization_expired").expectStatus().isOk();
+    var second = picked(Map.of(PHONE, 1));
+
+    pack(second.id(), serials(Map.of(PHONE, List.of(imei)))).expectStatus().isOk();
+    assertThat(read(STAFF, held.id()).lines().getFirst().serialNumbers()).containsExactly(imei);
+  }
+
+  @Test
+  void twoProductsUnitsMayShareASerialNumber() {
+    var serial = newSerial();
+    var laptop = picked(Map.of(LAPTOP, 1));
+    pack(laptop.id(), serials(Map.of(LAPTOP, List.of(serial)))).expectStatus().isOk();
+    var headphones = picked(Map.of(HEADPHONES, 1));
+
+    pack(headphones.id(), serials(Map.of(HEADPHONES, List.of(serial)))).expectStatus().isOk();
   }
 
   @Test

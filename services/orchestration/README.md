@@ -127,12 +127,15 @@ It answers `{"status", "shipmentId", "holdReason"}`, `status` being `DELIVERED`,
    (`shipmentExists`) is read as success: the Order's Shipment is read (`GET /shipments?orderId=`)
    and the Saga goes on with it. Any other 4xx ends it `FAILED`, with nothing charged.
 2. **Await `PACKED`**, with no deadline: picking and packing are Staff's work.
-3. **Capture the Payment**: the Order's Payments are read (`GET /payments?orderId=&customerId=`,
-   Payment's read for Orchestration), and the authorized one, or one captured already, is captured
-   (`POST /payments/{id}/capture`). A `402 captureDeclined` **holds the Shipment** (`POST
+3. **Capture the Payment**: the Order's Payments are read (step `findPayment`, `GET
+   /payments?orderId=&customerId=`, Payment's read for Orchestration), and the authorized one, or
+   one captured already, is captured (step `capturePayment`, `POST /payments/{id}/capture`), each
+   step retried on its own. A `402 captureDeclined` **holds the Shipment** (`POST
    /shipments/{id}/hold`) with the reason `Capture declined: <declineReason>`; a capture that still
    fails after about a minute (the gateway's 502, say), or an Order with no authorized Payment,
-   holds it with `Capture failed: …`. Either way the outcome is `CAPTURE_REFUSED`: the Order stays
+   holds it with `Capture failed: …`. Since the hold is final, a failed capture is first checked:
+   the Payment is read again, retried until Payment answers, and when an attempt whose answer was
+   lost captured it after all, the Saga goes on as captured. Either way the outcome is `CAPTURE_REFUSED`: the Order stays
    `PAID` and the Payment `AUTHORIZED`. Resolving it is out of scope.
 4. **Mark the Order `FULFILLED`** (`PATCH /orders/{id}/status`).
 5. **Dispatch the Shipment** (`POST /shipments/{id}/dispatch`), which books it with its Carrier.

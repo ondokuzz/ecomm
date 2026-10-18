@@ -17,15 +17,20 @@ import org.springframework.test.web.servlet.client.RestTestClient;
  */
 abstract class ShipmentsApiTest extends FulfillmentShippingApiTest {
 
-  /** A phone tracked by IMEI, a laptop by serial number, and a case not tracked, all projected. */
+  /**
+   * A phone tracked by IMEI, a laptop and headphones by serial number, and a case not tracked, all
+   * projected.
+   */
   static final String PHONE = "PHN-" + UUID.randomUUID();
 
   static final String LAPTOP = "LAP-" + UUID.randomUUID();
+  static final String HEADPHONES = "AUD-" + UUID.randomUUID();
   static final String CASE = "CASE-" + UUID.randomUUID();
 
   static {
     Products.product("Pixel 9", PHONE).tracked("IMEI").publish();
     Products.product("ThinkPad X1", LAPTOP).tracked("SERIAL").publish();
+    Products.product("WH-1000XM5", HEADPHONES).tracked("SERIAL").publish();
     Products.product("Pixel 9 Case", CASE).publish();
   }
 

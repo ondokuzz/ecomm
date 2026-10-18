@@ -7,6 +7,7 @@ import com.ecomm.orchestration.application.port.in.FulfillmentWorkflow;
 import com.ecomm.orchestration.application.port.in.ShipmentChange;
 import com.ecomm.orchestration.application.port.out.CaptureActivities;
 import com.ecomm.orchestration.application.port.out.CaptureActivities.Capture;
+import com.ecomm.orchestration.application.port.out.CaptureActivities.PaymentToCapture;
 import com.ecomm.orchestration.application.port.out.OrderFulfillmentActivities;
 import com.ecomm.orchestration.application.port.out.Refusals;
 import com.ecomm.orchestration.application.port.out.ShipmentActivities;
@@ -30,7 +31,8 @@ import org.slf4j.MDC;
  *
  * <p>Once the Payment is captured nothing is undone: every later step is retried until it succeeds.
  * A capture the gateway declines, or one that can't be made, puts the Shipment on hold instead and
- * leaves the Order {@code PAID}.
+ * leaves the Order {@code PAID}; one that failed is first checked against the Payment, which an
+ * attempt whose answer was lost may have captured.
  */
 public class FulfillmentSaga implements FulfillmentWorkflow {
 
@@ -55,8 +57,9 @@ public class FulfillmentSaga implements FulfillmentWorkflow {
           .build();
 
   /**
-   * Creating the Shipment: retried until it succeeds, such as while Fulfillment & Shipping waits
-   * for Catalog's Products, but not when it is refused.
+   * Creating the Shipment, and reading the Payment again once its capture failed: retried until it
+   * succeeds, such as while Fulfillment & Shipping waits for Catalog's Products, but not when it is
+   * refused.
    */
   private static final ActivityOptions UNTIL_CREATED =
       ActivityOptions.newBuilder()
@@ -88,6 +91,8 @@ public class FulfillmentSaga implements FulfillmentWorkflow {
       Workflow.newActivityStub(ShipmentActivities.class, UNTIL_DONE);
   private final CaptureActivities captures =
       Workflow.newActivityStub(CaptureActivities.class, FOR_A_MINUTE);
+  private final CaptureActivities capturesUntilAnswered =
+      Workflow.newActivityStub(CaptureActivities.class, UNTIL_CREATED);
   private final OrderFulfillmentActivities orders =
       Workflow.newActivityStub(OrderFulfillmentActivities.class, UNTIL_DONE);
 
@@ -144,13 +149,12 @@ public class FulfillmentSaga implements FulfillmentWorkflow {
     shipmentsUntilDone.dispatchShipment(shipmentId);
     orders.markOrderShipped(customerId, orderId);
 
-    if (!Workflow.await(
-        Duration.ofSeconds(request.deliveryDeadlineSeconds()), () -> reached("DELIVERED"))) {
+    if (!Workflow.await(request.deliveryDeadline(), () -> reached("DELIVERED"))) {
       log.warn(
           "Order {}'s Shipment {} wasn't confirmed delivered within {}",
           orderId,
           shipmentId,
-          Duration.ofSeconds(request.deliveryDeadlineSeconds()));
+          request.deliveryDeadline());
       return ended(new FulfillmentOutcome(Status.DELIVERY_UNCONFIRMED, shipmentId, null));
     }
     orders.markOrderDelivered(customerId, orderId);
@@ -162,10 +166,21 @@ public class FulfillmentSaga implements FulfillmentWorkflow {
 
   /** Captures the Order's Payment: null once captured, else why the Shipment is held. */
   private Hold capture(String customerId, String orderId) {
+    PaymentToCapture payment;
+    try {
+      payment = captures.findPayment(customerId, orderId);
+    } catch (ActivityFailure e) {
+      log.error("Order {}'s Payment to capture couldn't be found", orderId, e);
+      return new Hold(CAPTURE_FAILED, "Capture failed: the Payment couldn't be captured");
+    }
     Capture capture;
     try {
-      capture = captures.capturePayment(customerId, orderId);
+      capture = captures.capturePayment(customerId, payment.id());
     } catch (ActivityFailure e) {
+      if (capturedAfterAll(customerId, orderId)) {
+        log.warn("Order {}'s capture failed, but its Payment is captured: going on", orderId, e);
+        return null;
+      }
       log.error("Order {}'s Payment couldn't be captured", orderId, e);
       return new Hold(CAPTURE_FAILED, "Capture failed: the Payment couldn't be captured");
     }
@@ -174,6 +189,19 @@ public class FulfillmentSaga implements FulfillmentWorkflow {
       return new Hold(CAPTURE_DECLINED, "Capture declined: " + capture.declineReason());
     }
     return null;
+  }
+
+  /**
+   * Whether the Order's Payment is captured after all, read again once capturing it failed: an
+   * attempt that timed out may have been made, so the hold, which is final, waits for Payment's
+   * answer. With no Payment to capture, it isn't.
+   */
+  private boolean capturedAfterAll(String customerId, String orderId) {
+    try {
+      return capturesUntilAnswered.findPayment(customerId, orderId).captured();
+    } catch (ActivityFailure e) {
+      return false;
+    }
   }
 
   /** Whether the Shipment has come as far as {@code status} on its way to the Customer. */
