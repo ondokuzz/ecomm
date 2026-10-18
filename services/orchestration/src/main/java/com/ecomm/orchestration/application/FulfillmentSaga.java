@@ -57,9 +57,9 @@ public class FulfillmentSaga implements FulfillmentWorkflow {
           .build();
 
   /**
-   * Creating the Shipment, and reading the Payment again once its capture failed: retried until it
-   * succeeds, such as while Fulfillment & Shipping waits for Catalog's Products, but not when it is
-   * refused.
+   * Creating the Shipment, reading the Payment again once its capture failed, and marking delivered
+   * the Order of a Shipment an earlier run dispatched: retried until it succeeds, such as while
+   * Fulfillment & Shipping waits for Catalog's Products, but not when it is refused.
    */
   private static final ActivityOptions UNTIL_CREATED =
       ActivityOptions.newBuilder()
@@ -95,6 +95,8 @@ public class FulfillmentSaga implements FulfillmentWorkflow {
       Workflow.newActivityStub(CaptureActivities.class, UNTIL_CREATED);
   private final OrderFulfillmentActivities orders =
       Workflow.newActivityStub(OrderFulfillmentActivities.class, UNTIL_DONE);
+  private final OrderFulfillmentActivities ordersUntilAnswered =
+      Workflow.newActivityStub(OrderFulfillmentActivities.class, UNTIL_CREATED);
 
   /** The newest Shipment event seen: its version, and the Shipment's status at it. */
   private long shipmentVersion;
@@ -146,7 +148,8 @@ public class FulfillmentSaga implements FulfillmentWorkflow {
           new FulfillmentOutcome(Status.CAPTURE_REFUSED, shipmentId, shipment.holdReason()));
     }
     found(shipment.status());
-    if (reached("SHIPPED")) {
+    var shippedBefore = reached("SHIPPED");
+    if (shippedBefore) {
       // Dispatched by an earlier run, once it had captured the Payment and marked the Order
       // fulfilled, and that run marked it shipped: only delivery is left.
       log.info("Order {}'s Shipment {} is {} already", orderId, shipmentId, shipmentStatus);
@@ -174,8 +177,24 @@ public class FulfillmentSaga implements FulfillmentWorkflow {
           request.deliveryDeadline());
       return ended(new FulfillmentOutcome(Status.DELIVERY_UNCONFIRMED, shipmentId, null));
     }
-    orders.markOrderDelivered(customerId, orderId);
+    if (shippedBefore) {
+      markDeliveredUnlessItIs(customerId, orderId);
+    } else {
+      orders.markOrderDelivered(customerId, orderId);
+    }
     return ended(new FulfillmentOutcome(Status.DELIVERED, shipmentId, null));
+  }
+
+  /**
+   * Marks delivered the Order of a Shipment an earlier run dispatched. That run may have marked it
+   * delivered already, so Order Management's refusal to deliver it twice counts as done.
+   */
+  private void markDeliveredUnlessItIs(String customerId, String orderId) {
+    try {
+      ordersUntilAnswered.markOrderDelivered(customerId, orderId);
+    } catch (ActivityFailure e) {
+      log.info("Order {} was marked delivered already, as its refusal says", orderId, e);
+    }
   }
 
   /** Why the Shipment is put on hold: its kind, one of {@link #HOLDS}, and the reason given. */

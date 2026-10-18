@@ -304,6 +304,36 @@ class FulfillmentWorkflowTest extends OrchestrationTest {
             "PATCH " + status() + " DELIVERED");
   }
 
+  /**
+   * One found delivered may have been delivered after its first run's deadline, its Order still
+   * shipped, or within it, its Order delivered already: Order Management refuses to deliver it
+   * twice, and that refusal means it is.
+   */
+  @Test
+  void aShipmentFoundDeliveredMarksTheOrderDeliveredUnlessItIsAlready() {
+    stubEveryStep();
+    stubShipmentExists("DELIVERED", null);
+    DOWNSTREAM.stubFor(
+        statusChangeTo("DELIVERED")
+            .atPriority(1)
+            .willReturn(
+                aResponse()
+                    .withStatus(409)
+                    .withHeader("Content-Type", "application/problem+json")
+                    .withBody(
+                        "{\"status\": 409, \"detail\": \"an order can't go from DELIVERED to"
+                            + " DELIVERED\"}")));
+
+    paid();
+
+    assertThat(outcome()).isEqualTo(new FulfillmentOutcome(Status.DELIVERED, SHIPMENT_ID, null));
+    assertThat(calls())
+        .containsExactly(
+            "POST /shipments",
+            "GET /shipments?orderId=" + orderId,
+            "PATCH " + status() + " DELIVERED");
+  }
+
   @Test
   void aShipmentWhoseProductsAreNotKnownYetIsCreatedOnceTheyAre() {
     stubEveryStep();
