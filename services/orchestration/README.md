@@ -263,8 +263,9 @@ Orchestration calls:
   Shipment with the Order untouched, a 503 on `FULFILLED` retried, delivery never confirmed ending
   `DELIVERY_UNCONFIRMED` at the delivery deadline (10 seconds here, so the test shows the setting is
   the one honoured), and an event for no running Saga skipped, not dead-lettered. Time skipping is
-  locked while the class runs, so the Saga waits for the test's events in real time, and unlocked
-  after it for the other classes, which share the test server;
+  off for its JVM (a JVM per test class), so the Saga waits for the test's events in real time
+  (a server that skips time ends up centuries ahead of the worker's clock, which Temporal's SDK
+  metrics can't measure, so no class shares one);
 - `FulfillmentMetricsTest`: every fulfillment counter at 0 before any run;
 - `ServiceTokenTest`: the token's caching, renewal and retry on a 401;
 - `HealthApiTest`: health is public, and there is no API;

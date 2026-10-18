@@ -22,3 +22,9 @@ dependencies {
   testImplementation("org.testcontainers:testcontainers-kafka")
   testImplementation("org.awaitility:awaitility")
 }
+
+// A JVM per test class, so each has Temporal test servers of its own. Time skipping moves a test
+// server's clock ahead of the worker's; once it is centuries ahead, past what Temporal's SDK
+// metrics can measure ("Duration of this magnitude not supported"), no workflow on it can complete,
+// so one class's skipping must not reach another's server.
+tasks.test { forkEvery = 1 }
