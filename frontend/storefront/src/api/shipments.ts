@@ -11,7 +11,8 @@ export function shipmentKey(orderId: string) {
 
 /**
  * The Customer's own Order's Shipment, from Fulfillment & Shipping, asked again every 10 s while it
- * or its Order is `Shipped`. An Order without one is a 404, which isn't retried.
+ * is being prepared or it or its Order is `Shipped`, until the Saga's outcome is final (see
+ * `trackingRefreshInterval`). An Order without one is a 404, which isn't retried.
  */
 export function useShipment(orderId: string) {
   const token = useAuth().user?.access_token
@@ -23,6 +24,6 @@ export function useShipment(orderId: string) {
     enabled: token !== undefined,
     // The Order's key is spelled out rather than imported, since orders.ts imports this module.
     refetchInterval: (query) =>
-      trackingRefreshInterval(client.getQueryData<Order>(['orders', orderId])?.status, query.state.data?.status),
+      trackingRefreshInterval(client.getQueryData<Order>(['orders', orderId]), query.state.data?.status),
   })
 }

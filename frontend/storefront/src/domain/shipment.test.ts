@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { Order, OrderStatus, StatusHistoryEntry } from './order'
 import { type TrackingStatus, shipmentStatusLabel, trackingEventsOf, trackingRefreshInterval } from './shipment'
 
 describe('shipmentStatusLabel', () => {
@@ -42,21 +43,60 @@ describe('trackingEventsOf', () => {
 })
 
 describe('trackingRefreshInterval', () => {
+  const now = Date.parse('2026-10-18T12:00:00Z')
+  const day = 24 * 60 * 60 * 1000
+  const entry = (status: OrderStatus, msAgo: number): StatusHistoryEntry => ({
+    status,
+    at: new Date(now - msAgo).toISOString(),
+    changedBy: 'ORCHESTRATION',
+    backfilled: false,
+  })
+  /** An Order that went through `statuses` a minute apart, the last one `msAgo` ago. */
+  const order = (msAgo: number, ...statuses: OrderStatus[]): Pick<Order, 'status' | 'statusHistory'> => ({
+    status: statuses[statuses.length - 1],
+    statusHistory: statuses.map((status, i) => entry(status, msAgo + (statuses.length - 1 - i) * 60_000)),
+  })
+  const paid = order(60_000, 'PLACED', 'PAID')
+  const fulfilled = order(60_000, 'PLACED', 'PAID', 'FULFILLED')
+  const shipped = (msAgo: number) => order(msAgo, 'PLACED', 'PAID', 'FULFILLED', 'SHIPPED')
+  const delivered = order(60_000, 'PLACED', 'PAID', 'FULFILLED', 'SHIPPED', 'DELIVERED')
+
+  it('refreshes every 10 seconds while the Shipment is being prepared, so "Shipped" shows', () => {
+    expect(trackingRefreshInterval(paid, 'AWAITING_PICK', now)).toBe(10_000)
+    expect(trackingRefreshInterval(paid, 'PICKED', now)).toBe(10_000)
+    expect(trackingRefreshInterval(paid, 'PACKED', now)).toBe(10_000)
+    expect(trackingRefreshInterval(fulfilled, 'PACKED', now)).toBe(10_000)
+  })
+
   it('refreshes every 10 seconds while the Order is Shipped', () => {
-    expect(trackingRefreshInterval('SHIPPED', 'SHIPPED')).toBe(10_000)
-    expect(trackingRefreshInterval('SHIPPED', undefined)).toBe(10_000)
+    expect(trackingRefreshInterval(shipped(day), 'SHIPPED', now)).toBe(10_000)
+    expect(trackingRefreshInterval(shipped(day), undefined, now)).toBe(10_000)
+    expect(trackingRefreshInterval(fulfilled, 'SHIPPED', now)).toBe(10_000)
   })
 
   it('keeps refreshing while either one is still Shipped, since either may hear of the delivery first', () => {
-    expect(trackingRefreshInterval('DELIVERED', 'SHIPPED')).toBe(10_000)
-    expect(trackingRefreshInterval('SHIPPED', 'DELIVERED')).toBe(10_000)
+    expect(trackingRefreshInterval(delivered, 'SHIPPED', now)).toBe(10_000)
+    expect(trackingRefreshInterval(shipped(day), 'DELIVERED', now)).toBe(10_000)
   })
 
-  it('stops once both are Delivered, and does not refresh before the Order ships', () => {
-    expect(trackingRefreshInterval('DELIVERED', 'DELIVERED')).toBe(false)
-    expect(trackingRefreshInterval('DELIVERED', undefined)).toBe(false)
-    expect(trackingRefreshInterval('PAID', 'AWAITING_PICK')).toBe(false)
-    expect(trackingRefreshInterval('FULFILLED', 'PACKED')).toBe(false)
-    expect(trackingRefreshInterval(undefined, undefined)).toBe(false)
+  it('stops once both are Delivered', () => {
+    expect(trackingRefreshInterval(delivered, 'DELIVERED', now)).toBe(false)
+    expect(trackingRefreshInterval(delivered, undefined, now)).toBe(false)
+  })
+
+  it('stops once the Shipment is On hold, since its Payment could not be captured', () => {
+    expect(trackingRefreshInterval(paid, 'ON_HOLD', now)).toBe(false)
+  })
+
+  it('stops once the Order has been Shipped longer than the delivery deadline, when delivery is unconfirmed', () => {
+    expect(trackingRefreshInterval(shipped(29 * day), 'SHIPPED', now)).toBe(10_000)
+    expect(trackingRefreshInterval(shipped(30 * day + 1), 'SHIPPED', now)).toBe(false)
+    expect(trackingRefreshInterval(shipped(31 * day), undefined, now)).toBe(false)
+  })
+
+  it('does not refresh an unshipped Order without a Shipment, or before either is read', () => {
+    expect(trackingRefreshInterval(paid, undefined, now)).toBe(false)
+    expect(trackingRefreshInterval(order(60_000, 'PLACED', 'CANCELLED'), undefined, now)).toBe(false)
+    expect(trackingRefreshInterval(undefined, undefined, now)).toBe(false)
   })
 })

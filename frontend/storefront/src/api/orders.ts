@@ -9,8 +9,9 @@ import { shipmentKey } from './shipments'
 export const ordersKey = ['orders']
 
 /**
- * One of the Customer's Orders, asked again every 10 s while it or its Shipment is `Shipped`, so
- * `Delivered` shows.
+ * One of the Customer's Orders, asked again every 10 s while its Shipment is being prepared or it or
+ * its Shipment is `Shipped`, so `Shipped` and `Delivered` show, until the Saga's outcome is final
+ * (see `trackingRefreshInterval`).
  */
 export function useOrder(id: string) {
   const token = useAuth().user?.access_token
@@ -20,7 +21,7 @@ export function useOrder(id: string) {
     queryFn: () => api<Order>('order-management', `/orders/${encodeURIComponent(id)}`, { token }),
     enabled: token !== undefined,
     refetchInterval: (query) =>
-      trackingRefreshInterval(query.state.data?.status, client.getQueryData<Shipment>(shipmentKey(id))?.status),
+      trackingRefreshInterval(query.state.data, client.getQueryData<Shipment>(shipmentKey(id))?.status),
   })
 }
 

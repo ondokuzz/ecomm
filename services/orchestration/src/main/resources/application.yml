@@ -52,7 +52,8 @@ ecomm:
     # voids the Payment and cancels the Order.
     settlement-deadline: 10m
     # How long the fulfillment Saga awaits a shipped Order's delivery before it ends
-    # DELIVERY_UNCONFIRMED.
+    # DELIVERY_UNCONFIRMED. The Storefront's Order page stops asking after the same 30 days
+    # (deliveryDeadlineMs in frontend/storefront/src/domain/shipment.ts); change both together.
     delivery-deadline: 30d
     # How long a step's call to another context may take to connect and to answer. The read timeout
     # stays under the Sagas' 30 seconds for an attempt (CheckoutSaga.ATTEMPT), so a slow call fails

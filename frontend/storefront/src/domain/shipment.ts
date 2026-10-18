@@ -1,4 +1,4 @@
-import type { OrderStatus } from './order'
+import type { Order } from './order'
 
 /**
  * A Shipment's status in Fulfillment & Shipping: picked and packed in a Warehouse, then handed to
@@ -59,17 +59,36 @@ export interface TrackingRow {
 }
 
 /**
+ * How long Orchestration's fulfillment Saga awaits delivery once an Order is Shipped
+ * (`ecomm.orchestration.delivery-deadline`). Past it the Saga ends `DELIVERY_UNCONFIRMED`, and the
+ * Order and its Shipment stay `Shipped` for good.
+ */
+export const deliveryDeadlineMs = 30 * 24 * 60 * 60 * 1000
+
+const beingPrepared: ReadonlySet<ShipmentStatus> = new Set(['AWAITING_PICK', 'PICKED', 'PACKED'])
+
+/**
  * How often the Order page asks again for its Order and Shipment, in milliseconds: every 10 seconds
- * while either is `Shipped`, as Tracking events arrive, and not at all before the Order ships or
- * once both are `Delivered`. Either may be read as delivered first (the Saga marks the Order
- * delivered moments after the Carrier's webhook), so one stopping alone would leave the other stale.
- * Each is `undefined` until it is read (or when the Order has no Shipment).
+ * while the Shipment is being prepared (so "Shipped" shows without a reload) and while either is
+ * `Shipped` (as Tracking events arrive). It stops once the fulfillment Saga's outcome is final, as
+ * far as the Storefront can see it: both `Delivered`, the Shipment `On hold` (its Payment couldn't be
+ * captured), or the Order `Shipped` for longer than the delivery deadline (delivery unconfirmed).
+ * Either may be read as delivered first (the Saga marks the Order delivered moments after the
+ * Carrier's webhook), so one stopping alone would leave the other stale. Each is `undefined` until
+ * it is read (or when the Order has no Shipment); an unshipped Order without a Shipment isn't asked
+ * again, since an Order placed before Shipping never gets one.
  */
 export function trackingRefreshInterval(
-  orderStatus: OrderStatus | undefined,
+  order: Pick<Order, 'status' | 'statusHistory'> | undefined,
   shipmentStatus: ShipmentStatus | undefined,
+  now: number = Date.now(),
 ): number | false {
-  return orderStatus === 'SHIPPED' || shipmentStatus === 'SHIPPED' ? 10_000 : false
+  if (shipmentStatus === 'ON_HOLD') return false
+  if (shipmentStatus !== undefined && beingPrepared.has(shipmentStatus)) return 10_000
+  if (order?.status !== 'SHIPPED' && shipmentStatus !== 'SHIPPED') return false
+  const shippedAt = order?.statusHistory.findLast((entry) => entry.status === 'SHIPPED')?.at
+  if (shippedAt !== undefined && now - Date.parse(shippedAt) > deliveryDeadlineMs) return false
+  return 10_000
 }
 
 /** A Shipment's Tracking events, oldest first, in words. */
