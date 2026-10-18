@@ -4,7 +4,7 @@ import static com.couchbase.client.java.query.QueryOptions.queryOptions;
 
 import com.couchbase.client.core.error.DocumentExistsException;
 import com.couchbase.client.core.error.DocumentNotFoundException;
-import com.couchbase.client.java.Cluster;
+import com.couchbase.client.java.Bucket;
 import com.couchbase.client.java.Collection;
 import com.couchbase.client.java.Scope;
 import com.couchbase.client.java.json.JsonArray;
@@ -17,7 +17,6 @@ import com.ecomm.catalog.domain.SerialTracking;
 import com.ecomm.catalog.domain.Variant;
 import com.ecomm.catalog.domain.WarrantyTerms;
 import com.ecomm.commons.money.Money;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -25,7 +24,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
@@ -45,12 +43,7 @@ class CouchbaseProductRepository implements ProductRepository {
   private final CouchbaseTransactions transactions;
   private final AggregateVersions versions;
 
-  CouchbaseProductRepository(
-      Cluster cluster,
-      @Value("${ecomm.catalog.bucket}") String bucketName,
-      CouchbaseTransactions transactions) {
-    var bucket = cluster.bucket(bucketName);
-    bucket.waitUntilReady(Duration.ofSeconds(60));
+  CouchbaseProductRepository(Bucket bucket, CouchbaseTransactions transactions) {
     this.scope = bucket.defaultScope();
     this.collection = bucket.defaultCollection();
     this.transactions = transactions;

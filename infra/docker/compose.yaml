@@ -230,6 +230,11 @@ services:
       dockerfile: services/catalog/Dockerfile
     image: ${IMAGE_PREFIX:-ecomm}/catalog:${IMAGE_TAG:-latest}
     ports: ["${CATALOG_PORT:-8081}:8080"]
+    environment:
+      <<: *spring-jvm
+      # Couchbase's start_period: a cold Couchbase beside the whole stack timed out the 60 s
+      # default once (#71). The healthcheck's 20 s + 30 × 10 s still outlasts it.
+      ECOMM_CATALOG_BUCKET_READY_TIMEOUT: 5m
     secrets: [{ source: couchbase-password, target: spring.couchbase.password }]
     depends_on:
       <<: *event-backbone

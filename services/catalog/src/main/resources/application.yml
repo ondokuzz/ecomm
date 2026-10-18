@@ -20,6 +20,9 @@ spring:
 ecomm:
   catalog:
     bucket: catalog
+    # How long startup waits for the bucket to be ready before it fails. The compose stack waits
+    # 5 minutes, as long as Couchbase's own start_period, since a cold Couchbase can take 4.
+    bucket-ready-timeout: 60s
     # The local cluster is one node, with no replica to make a write durable on; a production
     # cluster leaves this out and keeps the SDK's MAJORITY.
     transaction-durability: NONE

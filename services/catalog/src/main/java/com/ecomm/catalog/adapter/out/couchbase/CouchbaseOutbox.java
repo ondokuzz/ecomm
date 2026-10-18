@@ -1,6 +1,6 @@
 package com.ecomm.catalog.adapter.out.couchbase;
 
-import com.couchbase.client.java.Cluster;
+import com.couchbase.client.java.Bucket;
 import com.couchbase.client.java.Collection;
 import com.couchbase.client.java.json.JsonObject;
 import com.ecomm.commons.events.IntegrationEvent;
@@ -8,12 +8,10 @@ import com.ecomm.commons.events.IntegrationEventPublisher;
 import com.ecomm.commons.web.CorrelationId;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import java.time.Clock;
-import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
@@ -41,13 +39,10 @@ class CouchbaseOutbox implements IntegrationEventPublisher {
   private final Clock clock;
 
   CouchbaseOutbox(
-      Cluster cluster,
-      @Value("${ecomm.catalog.bucket}") String bucketName,
+      Bucket bucket,
       CouchbaseTransactions transactions,
       JsonMapper json,
       ObjectProvider<Clock> clock) {
-    var bucket = cluster.bucket(bucketName);
-    bucket.waitUntilReady(Duration.ofSeconds(60));
     this.collection = bucket.defaultCollection();
     this.transactions = transactions;
     this.json =

@@ -3,7 +3,7 @@ package com.ecomm.catalog.adapter.out.couchbase;
 import static com.couchbase.client.java.kv.MutateInOptions.mutateInOptions;
 import static com.couchbase.client.java.query.QueryOptions.queryOptions;
 
-import com.couchbase.client.java.Cluster;
+import com.couchbase.client.java.Bucket;
 import com.couchbase.client.java.Collection;
 import com.couchbase.client.java.Scope;
 import com.couchbase.client.java.json.JsonObject;
@@ -63,12 +63,9 @@ class OutboxRelay implements SmartLifecycle {
   private ScheduledExecutorService scheduler;
 
   OutboxRelay(
-      Cluster cluster,
-      @Value("${ecomm.catalog.bucket}") String bucketName,
+      Bucket bucket,
       KafkaOperations<String, Object> kafka,
       @Value("${ecomm.catalog.outbox.relay-every:500ms}") Duration interval) {
-    var bucket = cluster.bucket(bucketName);
-    bucket.waitUntilReady(Duration.ofSeconds(60));
     this.scope = bucket.defaultScope();
     this.collection = bucket.defaultCollection();
     this.kafka = kafka;

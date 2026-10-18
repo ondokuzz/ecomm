@@ -268,3 +268,8 @@ keycloak kafka-topics schema-registry-init`) and start the service with
 Since Sprint 5 the Couchbase password is a Compose secret, mounted as the file
 `spring.couchbase.password` (see the root README's "Secrets"); `application.yml` has none. Outside
 Docker, give it as `SPRING_COUCHBASE_PASSWORD="$(cat .secrets/ecomm/couchbase-password)"`.
+
+On startup the service waits for its bucket to be ready for `ecomm.catalog.bucket-ready-timeout`
+(60 s by default), then fails. The compose stack sets 5 minutes
+(`ECOMM_CATALOG_BUCKET_READY_TIMEOUT`), as long as Couchbase's own `start_period`, since a cold
+Couchbase beside the whole stack can take 4 minutes to serve.

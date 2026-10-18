@@ -4,7 +4,7 @@ import static com.couchbase.client.java.query.QueryOptions.queryOptions;
 
 import com.couchbase.client.core.error.DocumentExistsException;
 import com.couchbase.client.core.error.DocumentNotFoundException;
-import com.couchbase.client.java.Cluster;
+import com.couchbase.client.java.Bucket;
 import com.couchbase.client.java.Collection;
 import com.couchbase.client.java.Scope;
 import com.couchbase.client.java.json.JsonArray;
@@ -14,11 +14,9 @@ import com.ecomm.catalog.application.port.out.CategoryRepository;
 import com.ecomm.catalog.domain.AttributeDefinition;
 import com.ecomm.catalog.domain.AttributeType;
 import com.ecomm.catalog.domain.Category;
-import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.IntStream;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
@@ -36,12 +34,7 @@ class CouchbaseCategoryRepository implements CategoryRepository {
   private final CouchbaseTransactions transactions;
   private final AggregateVersions versions;
 
-  CouchbaseCategoryRepository(
-      Cluster cluster,
-      @Value("${ecomm.catalog.bucket}") String bucketName,
-      CouchbaseTransactions transactions) {
-    var bucket = cluster.bucket(bucketName);
-    bucket.waitUntilReady(Duration.ofSeconds(60));
+  CouchbaseCategoryRepository(Bucket bucket, CouchbaseTransactions transactions) {
     this.scope = bucket.defaultScope();
     this.collection = bucket.defaultCollection();
     this.transactions = transactions;
