@@ -368,6 +368,36 @@ class FulfillmentWorkflowTest extends OrchestrationTest {
     assertThat(keys().get(2)).isEqualTo(keys().get(3)).isEqualTo(keyOf("capturePayment"));
   }
 
+  /**
+   * The gateway captured during an attempt whose answer was lost, and every later attempt failed:
+   * the Payment, read again, is captured, so the Order is fulfilled rather than held. Takes the
+   * capture's minute of retries, in real time.
+   */
+  @Test
+  void aCaptureThatKeepsFailingButWasMadeAfterAllGoesOnAsCaptured() {
+    stubEveryStep();
+    DOWNSTREAM.stubFor(post(CAPTURE).atPriority(1).willReturn(aResponse().withStatus(502)));
+    stubInSequence(
+        this::readPaymentsRequest,
+        okJson("[{\"id\": \"%s\", \"status\": \"AUTHORIZED\"}]".formatted(PAYMENT_ID)),
+        okJson("[{\"id\": \"%s\", \"status\": \"CAPTURED\"}]".formatted(PAYMENT_ID)));
+    paid();
+    awaitCalls(1);
+
+    shipment(3, "PACKED");
+
+    await()
+        .atMost(Duration.ofSeconds(120))
+        .untilAsserted(() -> assertThat(calls()).contains("POST " + DISPATCH));
+    assertThat(calls())
+        .containsSubsequence(
+            "GET " + readPayments(),
+            "POST " + CAPTURE,
+            "GET " + readPayments(),
+            "PATCH " + status() + " FULFILLED")
+        .doesNotContain("POST " + HOLD);
+  }
+
   @Test
   void anOrderManagementThatAnswers503OnFulfilledIsRetriedUntilItSucceeds() {
     stubEveryStep();

@@ -133,7 +133,9 @@ It answers `{"status", "shipmentId", "holdReason"}`, `status` being `DELIVERED`,
    step retried on its own. A `402 captureDeclined` **holds the Shipment** (`POST
    /shipments/{id}/hold`) with the reason `Capture declined: <declineReason>`; a capture that still
    fails after about a minute (the gateway's 502, say), or an Order with no authorized Payment,
-   holds it with `Capture failed: …`. Either way the outcome is `CAPTURE_REFUSED`: the Order stays
+   holds it with `Capture failed: …`. Since the hold is final, a failed capture is first checked:
+   the Payment is read again, retried until Payment answers, and when an attempt whose answer was
+   lost captured it after all, the Saga goes on as captured. Either way the outcome is `CAPTURE_REFUSED`: the Order stays
    `PAID` and the Payment `AUTHORIZED`. Resolving it is out of scope.
 4. **Mark the Order `FULFILLED`** (`PATCH /orders/{id}/status`).
 5. **Dispatch the Shipment** (`POST /shipments/{id}/dispatch`), which books it with its Carrier.
