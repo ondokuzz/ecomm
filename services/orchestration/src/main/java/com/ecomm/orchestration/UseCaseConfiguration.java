@@ -18,7 +18,8 @@ class UseCaseConfiguration {
   @Bean
   FulfillmentService fulfillmentService(
       FulfillmentWorkflows workflows,
-      @Value("${ecomm.orchestration.delivery-deadline}") Duration deliveryDeadline) {
-    return new FulfillmentService(workflows, deliveryDeadline);
+      @Value("${ecomm.orchestration.delivery-deadline}") Duration deliveryDeadline,
+      @Value("${ecomm.orchestration.packing-check}") Duration packingCheck) {
+    return new FulfillmentService(workflows, deliveryDeadline, packingCheck);
   }
 }

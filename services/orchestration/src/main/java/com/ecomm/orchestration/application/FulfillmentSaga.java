@@ -26,8 +26,13 @@ import org.slf4j.MDC;
  * this code only decides, and replays the same way every time.
  *
  * <p>It waits twice on the Order's Shipment, woken by its events: for Staff to pack it, with no
- * deadline, and for the Carrier to deliver it, for the request's delivery deadline. An event at a
- * version it has already seen, or an older one, is ignored.
+ * deadline but reading the Shipment again each packing check, and for the Carrier to deliver it,
+ * for the request's delivery deadline. An event at a version it has already seen, or an older one,
+ * is ignored.
+ *
+ * <p>A Shipment the Order has already, such as one a run that Temporal no longer keeps created, is
+ * taken up where it is: held, the run ends as that one did; packed, it is captured; shipped, only
+ * delivery is awaited; delivered, the Order is marked delivered unless it is already.
  *
  * <p>Once the Payment is captured nothing is undone: every later step is retried until it succeeds.
  * A capture the gateway declines, or one that can't be made, puts the Shipment on hold instead and
@@ -155,7 +160,7 @@ public class FulfillmentSaga implements FulfillmentWorkflow {
       log.info("Order {}'s Shipment {} is {} already", orderId, shipmentId, shipmentStatus);
     } else {
       log.info("Order {}'s Shipment {} awaits packing", orderId, shipmentId);
-      Workflow.await(() -> reached("PACKED"));
+      awaitPacking(orderId, request.packingCheck());
 
       var hold = capture(customerId, orderId);
       if (hold != null) {
@@ -194,6 +199,21 @@ public class FulfillmentSaga implements FulfillmentWorkflow {
       ordersUntilAnswered.markOrderDelivered(customerId, orderId);
     } catch (ActivityFailure e) {
       log.info("Order {} was marked delivered already, as its refusal says", orderId, e);
+    }
+  }
+
+  /**
+   * Awaits the Shipment's packing, with no deadline: picking and packing are Staff's work. Each
+   * time {@code checkEvery} passes without a PACKED event, the Shipment is read again, so a run
+   * whose event never comes, dead-lettered say, still goes on once it is packed.
+   */
+  private void awaitPacking(String orderId, Duration checkEvery) {
+    while (!Workflow.await(checkEvery, () -> reached("PACKED"))) {
+      try {
+        found(shipmentsUntilCreated.findShipment(orderId).status());
+      } catch (ActivityFailure e) {
+        log.warn("Order {}'s Shipment couldn't be read; still awaiting packing", orderId, e);
+      }
     }
   }
 

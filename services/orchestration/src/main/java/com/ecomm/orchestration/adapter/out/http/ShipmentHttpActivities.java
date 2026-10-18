@@ -55,18 +55,30 @@ class ShipmentHttpActivities implements ShipmentActivities {
                     .retrieve()
                     .body(ShipmentBody.class);
               } catch (HttpClientErrorException.Conflict e) {
-                return http.get()
-                    .uri("/shipments?orderId={orderId}", orderId)
-                    .retrieve()
-                    .body(ShipmentBody.class);
+                return shipmentOf(orderId);
               }
             });
+    return shipmentFrom(orderId, shipment);
+  }
+
+  @Override
+  public Shipment findShipment(String orderId) {
+    return shipmentFrom(orderId, Steps.call("findShipment", () -> shipmentOf(orderId)));
+  }
+
+  private ShipmentBody shipmentOf(String orderId) {
+    return http.get()
+        .uri("/shipments?orderId={orderId}", orderId)
+        .retrieve()
+        .body(ShipmentBody.class);
+  }
+
+  private static Shipment shipmentFrom(String orderId, ShipmentBody shipment) {
     if (shipment == null || shipment.id() == null || shipment.status() == null) {
       throw new IllegalStateException(
           "Fulfillment & Shipping answered for Order "
               + orderId
-              + " without a Shipment's ID and"
-              + " status");
+              + " without a Shipment's ID and status");
     }
     return new Shipment(shipment.id(), shipment.status(), shipment.holdReason());
   }

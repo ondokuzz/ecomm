@@ -20,11 +20,17 @@ public class FulfillmentService implements FulfillmentUseCase {
 
   private final FulfillmentWorkflows workflows;
   private final Duration deliveryDeadline;
+  private final Duration packingCheck;
 
-  /** {@code deliveryDeadline}: how long each fulfillment awaits delivery once it is shipped. */
-  public FulfillmentService(FulfillmentWorkflows workflows, Duration deliveryDeadline) {
+  /**
+   * {@code deliveryDeadline}: how long each fulfillment awaits delivery once it is shipped; {@code
+   * packingCheck}: how long it awaits packing before it reads the Shipment again.
+   */
+  public FulfillmentService(
+      FulfillmentWorkflows workflows, Duration deliveryDeadline, Duration packingCheck) {
     this.workflows = workflows;
     this.deliveryDeadline = deliveryDeadline;
+    this.packingCheck = packingCheck;
   }
 
   @Override
@@ -47,6 +53,7 @@ public class FulfillmentService implements FulfillmentUseCase {
                 order.shippingAddress(),
                 order.shippingOption(),
                 deliveryDeadline,
+                packingCheck,
                 order.correlationId()));
     if (started) {
       log.info("Started Order {}'s fulfillment", order.orderId());

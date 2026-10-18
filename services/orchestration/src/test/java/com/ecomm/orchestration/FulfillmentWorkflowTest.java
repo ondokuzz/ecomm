@@ -334,6 +334,39 @@ class FulfillmentWorkflowTest extends OrchestrationTest {
             "PATCH " + status() + " DELIVERED");
   }
 
+  /**
+   * Its PACKED event never comes, dead-lettered say: the Saga reads its Shipment again once each
+   * {@link #PACKING_CHECK} passes without packing, and goes on once the read says it is packed.
+   */
+  @Test
+  void aPackingWhoseEventNeverComesIsFoundByReadingTheShipmentAgain() {
+    stubEveryStep();
+    DOWNSTREAM.stubFor(
+        get(urlEqualTo("/shipments?orderId=" + orderId))
+            .willReturn(
+                okJson(
+                    "{\"id\": \"%s\", \"orderId\": \"%s\", \"status\": \"PACKED\"}"
+                        .formatted(SHIPMENT_ID, orderId))));
+    paid();
+    awaitCalls(1);
+    var created = Instant.now();
+
+    await()
+        .atMost(PACKING_CHECK.plusSeconds(30))
+        .untilAsserted(() -> assertThat(calls()).hasSizeGreaterThanOrEqualTo(7));
+    assertThat(calls())
+        .containsExactly(
+            "POST /shipments",
+            "GET /shipments?orderId=" + orderId,
+            "GET " + readPayments(),
+            "POST " + CAPTURE,
+            "PATCH " + status() + " FULFILLED",
+            "POST " + DISPATCH,
+            "PATCH " + status() + " SHIPPED");
+    assertThat(Duration.between(created, Instant.now()))
+        .isGreaterThanOrEqualTo(PACKING_CHECK.minusSeconds(1));
+  }
+
   @Test
   void aShipmentWhoseProductsAreNotKnownYetIsCreatedOnceTheyAre() {
     stubEveryStep();

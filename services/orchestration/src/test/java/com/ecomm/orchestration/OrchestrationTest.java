@@ -39,6 +39,12 @@ abstract class OrchestrationTest {
   static final java.time.Duration DELIVERY_DEADLINE = java.time.Duration.ofSeconds(10);
 
   /**
+   * How long the fulfillment Saga awaits packing before it reads the Shipment again here: far
+   * shorter than the stack's hour, and still longer than a test takes to send its PACKED event.
+   */
+  static final java.time.Duration PACKING_CHECK = java.time.Duration.ofSeconds(8);
+
+  /**
    * How long a call to another service may take here: shorter than the stack's 25 seconds, so a
    * test can outlast it without waiting as long, and still more than a cold service's first answer.
    */
@@ -84,6 +90,7 @@ abstract class OrchestrationTest {
     // Shorter than the stack's 10 minutes, so a test shows the setting is the one honoured.
     registry.add("ecomm.orchestration.settlement-deadline", () -> SETTLEMENT_DEADLINE);
     registry.add("ecomm.orchestration.delivery-deadline", DELIVERY_DEADLINE::toString);
+    registry.add("ecomm.orchestration.packing-check", PACKING_CHECK::toString);
     registry.add("ecomm.orchestration.read-timeout", READ_TIMEOUT::toString);
   }
 

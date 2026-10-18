@@ -29,6 +29,9 @@ public interface ShipmentActivities {
       ShippingAddress shippingAddress,
       ShippingOption shippingOption);
 
+  /** The Order's Shipment as it is now, read by Order. */
+  Shipment findShipment(String orderId);
+
   /** Books the packed Shipment with its Carrier: it is {@code SHIPPED}. */
   void dispatchShipment(String shipmentId);
 

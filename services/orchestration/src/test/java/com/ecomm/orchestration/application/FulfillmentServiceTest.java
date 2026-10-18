@@ -37,7 +37,8 @@ class FulfillmentServiceTest {
 
   @Test
   void aPaidOrdersFulfillmentAwaitsDeliveryForTheWholeDeadline() {
-    new FulfillmentService(workflows, Duration.ofMillis(1500)).orderChanged(paid());
+    new FulfillmentService(workflows, Duration.ofMillis(1500), Duration.ofHours(1))
+        .orderChanged(paid());
 
     assertThat(started)
         .singleElement()
@@ -47,7 +48,8 @@ class FulfillmentServiceTest {
 
   @Test
   void theRequestReachesTheWorkflowAsItWasStarted() {
-    new FulfillmentService(workflows, Duration.ofDays(30)).orderChanged(paid());
+    new FulfillmentService(workflows, Duration.ofDays(30), Duration.ofHours(1))
+        .orderChanged(paid());
     var request = started.getFirst();
 
     var converter = GlobalDataConverter.get();
