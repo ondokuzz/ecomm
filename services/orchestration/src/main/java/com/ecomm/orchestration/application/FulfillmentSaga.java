@@ -163,7 +163,8 @@ public class FulfillmentSaga implements FulfillmentWorkflow {
   private Hold capture(String customerId, String orderId) {
     Capture capture;
     try {
-      capture = captures.capturePayment(customerId, orderId);
+      var payment = captures.findPayment(customerId, orderId);
+      capture = captures.capturePayment(customerId, payment.id());
     } catch (ActivityFailure e) {
       log.error("Order {}'s Payment couldn't be captured", orderId, e);
       return new Hold(CAPTURE_FAILED, "Capture failed: the Payment couldn't be captured");

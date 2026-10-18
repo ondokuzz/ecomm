@@ -346,6 +346,29 @@ class FulfillmentWorkflowTest extends OrchestrationTest {
   }
 
   @Test
+  void aCaptureRetriedAfterAGatewayFailureFindsThePaymentOnce() {
+    stubEveryStep();
+    stubInSequence(
+        () -> post(urlEqualTo(CAPTURE)),
+        aResponse().withStatus(502),
+        okJson("{\"id\": \"%s\", \"status\": \"CAPTURED\"}".formatted(PAYMENT_ID)));
+    paid();
+    awaitCalls(1);
+
+    shipment(3, "PACKED");
+
+    awaitCalls(7);
+    assertThat(calls())
+        .startsWith(
+            "POST /shipments",
+            "GET " + readPayments(),
+            "POST " + CAPTURE,
+            "POST " + CAPTURE,
+            "PATCH " + status() + " FULFILLED");
+    assertThat(keys().get(2)).isEqualTo(keys().get(3)).isEqualTo(keyOf("capturePayment"));
+  }
+
+  @Test
   void anOrderManagementThatAnswers503OnFulfilledIsRetriedUntilItSucceeds() {
     stubEveryStep();
     stubInSequence(

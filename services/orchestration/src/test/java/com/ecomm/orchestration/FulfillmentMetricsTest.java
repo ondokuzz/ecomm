@@ -25,6 +25,7 @@ class FulfillmentMetricsTest extends OrchestrationTest {
   static final List<String> STEPS =
       List.of(
           "createShipment",
+          "findPayment",
           "capturePayment",
           "markOrderFulfilled",
           "dispatchShipment",
