@@ -4,12 +4,20 @@ import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMoc
 
 import com.ecomm.commons.security.FakeKeycloak;
 import com.github.tomakehurst.wiremock.WireMockServer;
+import com.google.protobuf.util.Durations;
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
+import io.temporal.api.testservice.v1.SleepRequest;
+import io.temporal.serviceclient.TestServiceStubs;
+import io.temporal.serviceclient.TestServiceStubsOptions;
 import io.temporal.testserver.TestServer;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.ServerSocket;
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureRestTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -92,6 +100,32 @@ abstract class OrchestrationTest {
     registry.add("ecomm.orchestration.delivery-deadline", DELIVERY_DEADLINE::toString);
     registry.add("ecomm.orchestration.packing-check", PACKING_CHECK::toString);
     registry.add("ecomm.orchestration.read-timeout", READ_TIMEOUT::toString);
+  }
+
+  /**
+   * Fails a class at once, rather than letting it hang, when the test server has stopped skipping
+   * time: an hour of the server's time must pass in moments.
+   */
+  @BeforeAll
+  static void timeSkips() {
+    var server =
+        TestServiceStubs.newServiceStubs(
+            TestServiceStubsOptions.newBuilder()
+                .setTarget("localhost:" + TEMPORAL_PORT)
+                .validateAndBuildWithDefaults());
+    try {
+      server
+          .blockingStub()
+          .withDeadlineAfter(15, TimeUnit.SECONDS)
+          .sleep(SleepRequest.newBuilder().setDuration(Durations.fromHours(1)).build());
+    } catch (StatusRuntimeException e) {
+      if (e.getStatus().getCode() == Status.Code.DEADLINE_EXCEEDED) {
+        throw new AssertionError("The test server no longer skips time", e);
+      }
+      throw e;
+    } finally {
+      server.shutdownNow();
+    }
   }
 
   @BeforeEach
