@@ -597,7 +597,7 @@
       "id": 15,
       "type": "timeseries",
       "title": "Event lag (Orchestration's consumers)",
-      "description": "Order and Shipment events not yet read by the groups that start and wake the fulfillment Saga, from the broker's committed offsets. It rises while Orchestration is down, then drains.",
+      "description": "Order and Shipment events not yet read by the groups that start and wake the fulfillment Saga, from the broker's committed offsets. It rises while Orchestration is down, then drains. A partition the group has never committed on reads -1 from the exporter and counts 0 here: the groups start from the latest offset, so it holds nothing for them.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -644,7 +644,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (group) (kafka_consumergroup_lag{group=~\"orchestration\\\\..*\"})",
+          "expr": "sum by (group) (clamp_min(kafka_consumergroup_lag{group=~\"orchestration\\\\..*\"}, 0))",
           "legendFormat": "{{group}}"
         }
       ]
