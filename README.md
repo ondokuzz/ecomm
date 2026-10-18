@@ -335,31 +335,36 @@ d=.secrets/ecomm; printf '{"dev": {"checkoutClientSecret": "%s", "orchestrationC
 Every checkout takes Stock, so after many smoke-test runs `make seed-reset` refills it. To wipe
 everything, Keycloak's users included, run `docker compose down -v`.
 
-### A stack from Sprint 3
+### A stack from Sprint 4
 
-`make up` on a stack from Sprint 3 brings it into Sprint 4 with nothing done by hand; the first
-build takes about half an hour. It adds Temporal and its UI, Orchestration, Recommendations,
-Prometheus and Grafana, and creates their databases in Postgres (`temporal`,
-`temporal_visibility` and `recommendations`), Temporal's schema and its `default` namespace. The
-topics init adds `payment.payment` and every consumer group's dead-letter and redrive topics
-([The event backbone](#the-event-backbone)). Then:
+`make up` on a stack from Sprint 4 brings it into Sprint 5 with nothing done by hand; building this
+tree's images takes about 20 minutes. It adds Fulfillment & Shipping and Returns & Warranty, and
+creates their databases in Postgres (`fulfillment_shipping`, `returns_warranty`). The topics init
+adds `fulfillment-shipping.shipment` and `returns-warranty.rma`, and the new groups' dead-letter and
+redrive topics ([The event backbone](#the-event-backbone)). Then:
 
-- **The realm gains Orchestration.** The `keycloak-realm` step adds the `orchestration` client and
-  the `ORCHESTRATION` role the realm file has and the running realm lacks, and changes nothing that
-  is already there ([Identity & Access README](./services/identity-access/README.md#adding-to-a-running-realm)).
-- **Payments get a ledger.** A migration turns each Payment into one backfilled `AUTHORIZATION`
-  Payment transaction, approved or declined with its reason as the Payment was, and Payment
-  publishes each once as `payment.payment` (`change: BACKFILLED`) when it starts.
-- **Recommendations starts complete.** Its consumer groups read `order-management.order` and
-  `catalog.product` from the start, so Orders placed before the upgrade count towards "Customers
-  also bought".
+- **Secrets become files.** `make secrets` writes the infrastructure passwords with the dev values
+  the stack's volumes were made with (`ecomm`, `password` and `admin`), so Postgres, Couchbase and
+  Keycloak keep them, and new client and webhook secrets ([Secrets](#secrets)).
+- **The realm takes the new client secrets.** The `keycloak-realm` step sets the `checkout` and
+  `orchestration` clients' secrets from their files, so Sprint 4's `checkout-dev-secret` and
+  `orchestration-dev-secret` stop working, and the services' tokens keep working with the new ones.
+- **Seeded Products gain Warranty terms and Serial tracking**, and publish `catalog.product` as
+  `UPDATED`; a Product Staff edited keeps their edits ([Catalog](./services/catalog/README.md)).
+- **Paid Orders stay Paid.** Orders paid before the upgrade have no Shipping address: they start no
+  fulfillment Saga, have no Shipment, and stay `PAID` with their authorized Payment, never captured
+  ([Orchestration](./services/orchestration/README.md)).
 - **Checkouts carry on.** A Checkout Session started before the upgrade can still be paid while it
-  lasts: paying it starts the checkout Saga like any other.
+  lasts, once it has a Shipping address and option (paying it first is a 409
+  `shippingIncomplete`); its Order is fulfilled like any other.
 
-A stack from Sprint 2 should need only `make up` too, since Sprint 3's migrations and backfills run
-first, but only the upgrade from Sprint 3 was checked. A stack from Sprint 1 also needs `make seed-reset` once for the multi-Variant Products, and
-the realm's `admin-console` client, or the Admin Console's sign-in fails with "Invalid parameter:
-redirect_uri" ([Identity & Access README](./services/identity-access/README.md#the-admin-console-client)).
+The upgrade from Sprint 4's definition-of-done commit was checked on 2026-10-17 and 18
+([Sprint 5's note](./docs/roadmap.md#sprint-5-weeks-910--fulfillment--returns-foundations)). A
+stack from Sprint 3 or earlier should need only `make up` too, since each sprint's migrations and
+backfills run in turn, but only the upgrade from Sprint 4 was checked. A stack from Sprint 1 also
+needs `make seed-reset` once for the multi-Variant Products, and the realm's `admin-console`
+client, or the Admin Console's sign-in fails with "Invalid parameter: redirect_uri"
+([Identity & Access README](./services/identity-access/README.md#the-admin-console-client)).
 
 ### Memory
 
