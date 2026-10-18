@@ -359,7 +359,10 @@ redrive topics ([The event backbone](#the-event-backbone)). Then:
   `shippingIncomplete`); its Order is fulfilled like any other.
 
 The upgrade from Sprint 4's definition-of-done commit was checked on 2026-10-17 and 18
-([Sprint 5's note](./docs/roadmap.md#sprint-5-weeks-910--fulfillment--returns-foundations)). A
+([Sprint 5's note](./docs/roadmap.md#sprint-5-weeks-910--fulfillment--returns-foundations)). Run the Playwright suites against an upgraded stack with `COMPOSE_PROJECT_NAME=ecomm-upgrade`;
+where host requests reach containers from a public address, its Keycloak's `master` realm first
+needs `sslRequired` set to `NONE` (`kcadm.sh update realms/master -s sslRequired=NONE`, run in the
+Keycloak container), or the suites' admin tokens are refused with "HTTPS required". A
 stack from Sprint 3 or earlier should need only `make up` too, since each sprint's migrations and
 backfills run in turn, but only the upgrade from Sprint 4 was checked. A stack from Sprint 1 also
 needs `make seed-reset` once for the multi-Variant Products, and the realm's `admin-console`
