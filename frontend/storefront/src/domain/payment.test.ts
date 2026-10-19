@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   type Payment,
   type PaymentStatus,
@@ -8,7 +8,6 @@ import {
   confirmation,
   confirmingAfter,
   defaultTestCard,
-  isConfirmingPayment,
   paymentFailure,
   paymentStatusLabel,
   paymentStatusNote,
@@ -16,6 +15,7 @@ import {
   paymentTransactionsOf,
   pollFor,
   testCards,
+  whenConfirmingPayment,
 } from './payment'
 
 describe('testCards', () => {
@@ -53,17 +53,40 @@ describe('testCards the bank confirms later', () => {
   })
 })
 
-describe('isConfirmingPayment', () => {
-  it('says a Pay still waiting after a moment is being confirmed', () => {
+describe('whenConfirmingPayment', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(10_000)
+  })
+  afterEach(() => vi.useRealTimers())
+
+  it('says a Pay is being confirmed exactly 2 seconds after it was sent', () => {
     expect(confirmingAfter).toBe(2000)
-    expect(isConfirmingPayment(10_000, 12_000)).toBe(true)
-    expect(isConfirmingPayment(10_000, 40_000)).toBe(true)
+    const onConfirming = vi.fn()
+    whenConfirmingPayment(10_000, onConfirming)
+    vi.advanceTimersByTime(1999)
+    expect(onConfirming).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(1)
+    expect(onConfirming).toHaveBeenCalledOnce()
   })
 
-  it('says nothing yet of a Pay just sent, or of none', () => {
-    expect(isConfirmingPayment(10_000, 10_000)).toBe(false)
-    expect(isConfirmingPayment(10_000, 11_999)).toBe(false)
-    expect(isConfirmingPayment(undefined, 40_000)).toBe(false)
+  it('counts from when the Pay was sent, not from when it is asked', () => {
+    vi.setSystemTime(11_500)
+    const onConfirming = vi.fn()
+    whenConfirmingPayment(10_000, onConfirming)
+    vi.advanceTimersByTime(499)
+    expect(onConfirming).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(1)
+    expect(onConfirming).toHaveBeenCalledOnce()
+  })
+
+  it('says nothing of a Pay answered first', () => {
+    const onConfirming = vi.fn()
+    const cancel = whenConfirmingPayment(10_000, onConfirming)
+    vi.advanceTimersByTime(1500)
+    cancel()
+    vi.advanceTimersByTime(10_000)
+    expect(onConfirming).not.toHaveBeenCalled()
   })
 })
 

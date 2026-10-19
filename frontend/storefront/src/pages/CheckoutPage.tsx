@@ -42,8 +42,8 @@ import {
   type TestCard,
   confirmation,
   defaultTestCard,
-  isConfirmingPayment,
   testCards,
+  whenConfirmingPayment,
 } from '../domain/payment'
 
 /**
@@ -73,6 +73,13 @@ export function CheckoutPage() {
   const [confirmingSince, setConfirmingSince] = useState<number | null>()
   // When the Pay waiting for its answer was sent; undefined when none is.
   const [payingSince, setPayingSince] = useState<number>()
+  // The Pay that has waited long enough to be one being confirmed, by when it was sent. A timer from
+  // the moment it was sent says so, rather than the next tick of the page's clock.
+  const [confirmingPay, setConfirmingPay] = useState<number>()
+  useEffect(() => {
+    if (payingSince === undefined) return
+    return whenConfirmingPayment(payingSince, () => setConfirmingPay(payingSince))
+  }, [payingSince])
   const [newReference, setReference] = useState<string>()
   const reference = newReference ?? rememberedPaymentReference(session.data?.id)
   const payment = usePaymentAttempt(session.data?.id, confirmingSince ?? undefined)
@@ -134,7 +141,7 @@ export function CheckoutPage() {
   }
   const busy = pay.isPending || paidOrderId !== undefined || confirming?.kind === 'confirming'
   const confirmingPayment =
-    (pay.isPending && isConfirmingPayment(payingSince, now)) || confirming?.kind === 'confirming'
+    (pay.isPending && payingSince !== undefined && confirmingPay === payingSince) || confirming?.kind === 'confirming'
   const payFailure = payFailureOf(pay.error)
   const shippable = hasShipping(session.data)
 

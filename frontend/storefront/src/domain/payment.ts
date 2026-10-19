@@ -131,11 +131,14 @@ export function attemptFailure(attempt: PaymentAttempt): PaymentFailure | undefi
 export const confirmingAfter = 2000
 
 /**
- * Whether a Pay sent at `payingSince` and still unanswered at `now` (both epoch ms) is being confirmed:
- * a payment the bank confirms later keeps the answer waiting for seconds, which a plain one doesn't.
+ * Calls `onConfirming` when a Pay sent at `payingSince` (epoch ms) and still unanswered becomes one
+ * being confirmed, `confirmingAfter` after it was sent: a payment the bank confirms later keeps the
+ * answer waiting for seconds, which a plain one doesn't. Returns what cancels it, for when the answer
+ * comes first.
  */
-export function isConfirmingPayment(payingSince: number | undefined, now: number): boolean {
-  return payingSince !== undefined && now - payingSince >= confirmingAfter
+export function whenConfirmingPayment(payingSince: number, onConfirming: () => void): () => void {
+  const timer = setTimeout(onConfirming, payingSince + confirmingAfter - Date.now())
+  return () => clearTimeout(timer)
 }
 
 /** How often the Storefront asks how a payment still being confirmed stands, in milliseconds. */

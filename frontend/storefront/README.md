@@ -294,8 +294,9 @@ declines** and **Charge refused**, sent as the Payment method `tok_approve`, `to
 `tok_insufficient_funds`, `tok_gateway_error`, `tok_async_approve`, `tok_async_decline` and
 `tok_capture_decline`. Charge refused pays like Approve, but the gateway refuses to capture the
 Payment when the Order ships, so its Shipment is held. Approve is chosen to begin with,
-and the drawn card shows the chosen one's last four digits. A Pay still unanswered after 2 seconds,
-as one the bank confirms later is, shows "Confirming your payment…" (`isConfirmingPayment`).
+and the drawn card shows the chosen one's last four digits. A Pay still unanswered 2 seconds after
+it was sent, as one the bank confirms later is, shows "Confirming your payment…" at that moment
+(`whenConfirmingPayment`).
 
 A declined card (402) shows "Your card was declined" inline, with a line for its `declineReason`;
 a payment that didn't go through (502) shows "The payment didn't go through" instead
