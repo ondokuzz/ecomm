@@ -6,6 +6,7 @@
 3718ab89cafb8986287568ba2d9c452faae47f37:services/inventory/src/main/resources/application.yml:password-or-secret-literal:8
 38b0922c5e7a6d25b31c5a193c01aa63f48c03f6:services/catalog/src/main/resources/application.yml:password-or-secret-literal:7
 505ee76d945ef90bbff490e3c187c15d858674cd:infra/docker/compose.yaml:password-or-secret-literal:64
+8d0f629a53555c8c323781afa54aca7d21956080:services/fulfillment-shipping/src/main/resources/application.yml:password-or-secret-literal:8
 98947514be4e5648a34094da07d266829d11faae:infra/docker/compose.yaml:password-or-secret-literal:589
 99e5eef39ee591ab3a364ed9b1655b7a2da43c75:infra/docker/compose.yaml:password-or-secret-literal:229
 a709b1a8351ea4eda09bc3b45d5e8d6ce980a69d:infra/docker/compose.yaml:password-or-secret-literal:55
