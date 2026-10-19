@@ -8,7 +8,8 @@ import java.util.List;
 /**
  * What the fulfillment Saga is started with: the paid Order, as its {@code PAID} event carried it,
  * with its lines, Shipping address and Shipping option; how long to await delivery once it is
- * shipped; and the Correlation ID of that event, which every step carries.
+ * shipped; how long to await packing before the Shipment is read again; and the Correlation ID of
+ * that event, which every step carries.
  */
 public record FulfillmentRequest(
     String orderId,
@@ -17,6 +18,7 @@ public record FulfillmentRequest(
     ShippingAddress shippingAddress,
     ShippingOption shippingOption,
     Duration deliveryDeadline,
+    Duration packingCheck,
     String correlationId) {
 
   /** A Variant and how many of it the Order holds. */

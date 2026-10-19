@@ -11,7 +11,7 @@ import org.springframework.web.client.RestClient;
 
 /**
  * Fulfillment & Shipping's {@code /shipments} commands. A 409 on creation says the Order's Shipment
- * exists already ({@code shipmentExists}), so it is read by Order and taken as created; a 503
+ * exists already ({@code shipmentExists}), so it is read by Order and answered as it is now; a 503
  * ({@code productsNotKnownYet}) is retried like any other failure.
  */
 @Component("shipmentActivities")
@@ -30,12 +30,12 @@ class ShipmentHttpActivities implements ShipmentActivities {
       AddressBody shippingAddress,
       ShippingOption shippingOption) {}
 
-  private record ShipmentBody(String id) {}
+  private record ShipmentBody(String id, String status, String holdReason) {}
 
   private record HoldBody(String reason) {}
 
   @Override
-  public String createShipment(
+  public Shipment createShipment(
       String orderId,
       String customerId,
       List<Line> lines,
@@ -55,17 +55,32 @@ class ShipmentHttpActivities implements ShipmentActivities {
                     .retrieve()
                     .body(ShipmentBody.class);
               } catch (HttpClientErrorException.Conflict e) {
-                return http.get()
-                    .uri("/shipments?orderId={orderId}", orderId)
-                    .retrieve()
-                    .body(ShipmentBody.class);
+                return shipmentOf(orderId);
               }
             });
-    if (shipment == null || shipment.id() == null) {
+    return shipmentFrom(orderId, shipment);
+  }
+
+  @Override
+  public Shipment findShipment(String orderId) {
+    return shipmentFrom(orderId, Steps.call("findShipment", () -> shipmentOf(orderId)));
+  }
+
+  private ShipmentBody shipmentOf(String orderId) {
+    return http.get()
+        .uri("/shipments?orderId={orderId}", orderId)
+        .retrieve()
+        .body(ShipmentBody.class);
+  }
+
+  private static Shipment shipmentFrom(String orderId, ShipmentBody shipment) {
+    if (shipment == null || shipment.id() == null || shipment.status() == null) {
       throw new IllegalStateException(
-          "Fulfillment & Shipping answered for Order " + orderId + " without a Shipment ID");
+          "Fulfillment & Shipping answered for Order "
+              + orderId
+              + " without a Shipment's ID and status");
     }
-    return shipment.id();
+    return new Shipment(shipment.id(), shipment.status(), shipment.holdReason());
   }
 
   @Override

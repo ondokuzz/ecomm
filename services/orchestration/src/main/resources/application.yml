@@ -55,6 +55,10 @@ ecomm:
     # DELIVERY_UNCONFIRMED. The Storefront's Order page stops asking after the same 30 days
     # (deliveryDeadlineMs in frontend/storefront/src/domain/shipment.ts); change both together.
     delivery-deadline: 30d
+    # How long the fulfillment Saga awaits its Shipment's PACKED event before it reads the
+    # Shipment again, in case the event never comes (dead-lettered, say). Each check adds a few
+    # events to the run's history.
+    packing-check: 1h
     # How long a step's call to another context may take to connect and to answer. The read timeout
     # stays under the Sagas' 30 seconds for an attempt (CheckoutSaga.ATTEMPT), so a slow call fails
     # in the worker and its retry replays with the same key.

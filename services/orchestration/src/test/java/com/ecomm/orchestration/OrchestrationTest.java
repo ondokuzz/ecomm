@@ -4,17 +4,26 @@ import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMoc
 
 import com.ecomm.commons.security.FakeKeycloak;
 import com.github.tomakehurst.wiremock.WireMockServer;
+import com.google.protobuf.util.Durations;
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
+import io.temporal.api.testservice.v1.SleepRequest;
+import io.temporal.serviceclient.TestServiceStubs;
+import io.temporal.serviceclient.TestServiceStubsOptions;
 import io.temporal.testserver.TestServer;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.ServerSocket;
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureRestTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.TestPropertySource;
 
 /**
  * Base for Orchestration's tests. The application runs against Temporal's own test server, reached
@@ -26,6 +35,10 @@ import org.springframework.test.context.DynamicPropertySource;
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureRestTestClient
+// Here rather than in infrastructure(), so that a class can name another test server: a subclass's
+// @TestPropertySource shadows this one, while a superclass's dynamic properties win over its own.
+@TestPropertySource(
+    properties = "spring.temporal.connection.target=localhost:${ecomm.test.temporal-port}")
 abstract class OrchestrationTest {
 
   /** How long the Saga awaits a pending authorization here. */
@@ -33,10 +46,16 @@ abstract class OrchestrationTest {
 
   /**
    * How long the fulfillment Saga awaits delivery here: far shorter than the stack's 30 days, so a
-   * test shows the setting is the one honoured. The fulfillment tests lock time skipping, so it
-   * passes in real time.
+   * test shows the setting is the one honoured. The fulfillment tests' test server doesn't skip
+   * time, so it passes in real time.
    */
   static final java.time.Duration DELIVERY_DEADLINE = java.time.Duration.ofSeconds(10);
+
+  /**
+   * How long the fulfillment Saga awaits packing before it reads the Shipment again here: far
+   * shorter than the stack's hour, and still longer than a test takes to send its PACKED event.
+   */
+  static final java.time.Duration PACKING_CHECK = java.time.Duration.ofSeconds(8);
 
   /**
    * How long a call to another service may take here: shorter than the stack's 25 seconds, so a
@@ -65,7 +84,7 @@ abstract class OrchestrationTest {
   static void infrastructure(DynamicPropertyRegistry registry) {
     FakeKeycloak.registerWith(registry);
     registry.add("spring.kafka.bootstrap-servers", Kafka::bootstrapServers);
-    registry.add("spring.temporal.connection.target", () -> "localhost:" + TEMPORAL_PORT);
+    registry.add("ecomm.test.temporal-port", () -> TEMPORAL_PORT);
     registry.add(
         "spring.security.oauth2.client.provider.keycloak.token-uri",
         () -> DOWNSTREAM.baseUrl() + TOKEN_PATH);
@@ -84,7 +103,34 @@ abstract class OrchestrationTest {
     // Shorter than the stack's 10 minutes, so a test shows the setting is the one honoured.
     registry.add("ecomm.orchestration.settlement-deadline", () -> SETTLEMENT_DEADLINE);
     registry.add("ecomm.orchestration.delivery-deadline", DELIVERY_DEADLINE::toString);
+    registry.add("ecomm.orchestration.packing-check", PACKING_CHECK::toString);
     registry.add("ecomm.orchestration.read-timeout", READ_TIMEOUT::toString);
+  }
+
+  /**
+   * Fails a class at once, rather than letting it hang, when the test server has stopped skipping
+   * time: an hour of the server's time must pass in moments.
+   */
+  @BeforeAll
+  static void timeSkips() {
+    var server =
+        TestServiceStubs.newServiceStubs(
+            TestServiceStubsOptions.newBuilder()
+                .setTarget("localhost:" + TEMPORAL_PORT)
+                .validateAndBuildWithDefaults());
+    try {
+      server
+          .blockingStub()
+          .withDeadlineAfter(15, TimeUnit.SECONDS)
+          .sleep(SleepRequest.newBuilder().setDuration(Durations.fromHours(1)).build());
+    } catch (StatusRuntimeException e) {
+      if (e.getStatus().getCode() == Status.Code.DEADLINE_EXCEEDED) {
+        throw new AssertionError("The test server no longer skips time", e);
+      }
+      throw e;
+    } finally {
+      server.shutdownNow();
+    }
   }
 
   @BeforeEach

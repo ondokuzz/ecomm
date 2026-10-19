@@ -125,8 +125,13 @@ It answers `{"status", "shipmentId", "holdReason"}`, `status` being `DELIVERED`,
    address and option. A failure, such as the `503 productsNotKnownYet` while Fulfillment & Shipping
    awaits Catalog's Products, is retried with backoff up to a minute until it succeeds. A `409`
    (`shipmentExists`) is read as success: the Order's Shipment is read (`GET /shipments?orderId=`)
-   and the Saga goes on with it. Any other 4xx ends it `FAILED`, with nothing charged.
-2. **Await `PACKED`**, with no deadline: picking and packing are Staff's work.
+   and the Saga takes it up from its status (see "A Shipment that exists already" below). Any
+   other 4xx ends it `FAILED`, with nothing charged.
+2. **Await `PACKED`**, with no deadline: picking and packing are Staff's work. Each time
+   `ecomm.orchestration.packing-check` (1 hour) passes without a `PACKED` event, the Shipment is
+   read again (step `findShipment`), so a run whose event never comes, dead-lettered say, goes on
+   once the read says it is packed. Each check adds a handful of events to the run's history, about
+   200 a day, well under Temporal's limit for anything Staff would leave unpacked.
 3. **Capture the Payment**: the Order's Payments are read (step `findPayment`, `GET
    /payments/by-order?orderId=&customerId=`, Payment's read for Orchestration), and the authorized
    one, or one captured already, is captured (step `capturePayment`, `POST /payments/{id}/capture`), each
@@ -150,6 +155,23 @@ until they succeed. Each attempt has the checkout Saga's 30 seconds. Each comman
 `holdShipment`, `markOrderFulfilled`, `dispatchShipment`, `markOrderShipped`,
 `markOrderDelivered`), and every call carries the Correlation ID of the Order event that started
 the Saga. Order Management records each status change as made by `ORCHESTRATION`.
+
+**A Shipment that exists already.** A second run of an Order's fulfillment starts when its `PAID`
+event is replayed after Temporal stopped keeping the first (7 days). Its keys carry its own run ID,
+so they replay nothing of the first run's, and Order Management refuses a status change the Order
+has made already (`409`). So the run takes the Shipment up from the status it reads, skipping what
+is done:
+
+| Shipment found | What the run does |
+| --- | --- |
+| `AWAITING_PICK`, `PICKED` | every step from 2 on |
+| `PACKED` | every step from 3 on, without awaiting an event (a capture made already is answered as captured) |
+| `SHIPPED` | steps 7 and 8 only: the run that dispatched it had captured the Payment and marked the Order `FULFILLED` and `SHIPPED` |
+| `DELIVERED` | step 8 only, where a `409` counts as done: the first run may have marked the Order `DELIVERED` already, or ended `DELIVERY_UNCONFIRMED` before the delivery |
+| `ON_HOLD` | nothing: it ends `CAPTURE_REFUSED` with the Shipment's hold reason, as the first run did |
+
+A status read this way carries no version, so it counts only when it is further along than the
+events seen so far.
 
 ### Changing the workflow
 
@@ -262,12 +284,18 @@ Orchestration calls:
   Shipment events ignored, a declined capture and an Order without an authorized Payment holding the
   Shipment with the Order untouched, a 503 on `FULFILLED` retried, delivery never confirmed ending
   `DELIVERY_UNCONFIRMED` at the delivery deadline (10 seconds here, so the test shows the setting is
-  the one honoured), and an event for no running Saga skipped, not dead-lettered. Time skipping is
-  off for its JVM (a JVM per test class), so the Saga waits for the test's events in real time
-  (a server that skips time ends up centuries ahead of the worker's clock, which Temporal's SDK
-  metrics can't measure, so no class shares one);
+  the one honoured), and an event for no running Saga skipped, not dead-lettered. It has a test
+  server of its own with time skipping off, so the Saga waits for the test's events in real time.
+  Its own, too, because a Saga terminated while a workflow task is outstanding leaves a test
+  server's time skipping locked for good (its completion is refused, and its lock never released):
+  on the shared server, later classes' retries would wait in real time;
 - `FulfillmentMetricsTest`: every fulfillment counter at 0 before any run;
 - `ServiceTokenTest`: the token's caching, renewal and retry on a 401;
 - `HealthApiTest`: health is public, and there is no API;
 - `ArchitectureTest`: the shared `HexagonalRules`, and workflow code reaching other contexts only
   through activities.
+
+Every class runs in one JVM, with one Spring context alive at a time
+(`spring.test.context.cache.maxSize=1`, build file), so no earlier context's worker or Kafka
+consumer takes a later class's tasks or events. Each class first checks that the shared test server
+still skips time, and fails at once if it doesn't, rather than hanging.

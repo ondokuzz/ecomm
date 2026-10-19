@@ -24,12 +24,10 @@ import com.github.tomakehurst.wiremock.client.WireMock;
 import com.github.tomakehurst.wiremock.verification.LoggedRequest;
 import io.grpc.StatusRuntimeException;
 import io.temporal.api.common.v1.WorkflowExecution;
-import io.temporal.api.testservice.v1.LockTimeSkippingRequest;
 import io.temporal.api.workflowservice.v1.DescribeWorkflowExecutionRequest;
 import io.temporal.client.WorkflowClient;
 import io.temporal.client.WorkflowException;
-import io.temporal.serviceclient.TestServiceStubs;
-import io.temporal.serviceclient.TestServiceStubsOptions;
+import io.temporal.testserver.TestServer;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -38,25 +36,33 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.TestPropertySource;
 
 /**
  * The fulfillment Saga, from Kafka in to HTTP out: Orchestration's real consumers read Order and
  * Shipment events from Kafka, and its real activities call WireMock stubs of Fulfillment &
  * Shipping, Payment and Order Management with Orchestration's own token.
  *
- * <p>Time skipping is off on its JVM's test server, so the Saga's waits pass in real time: its wait
- * for delivery, {@link #DELIVERY_DEADLINE} here, doesn't end before the test's Shipment events
- * arrive.
+ * <p>The class has a test server of its own, with time skipping off, so the Saga's waits pass in
+ * real time: its wait for delivery, {@link #DELIVERY_DEADLINE} here, doesn't end before the test's
+ * Shipment events arrive. Its own, too, because a run terminated while a workflow task is
+ * outstanding leaves the test server's time skipping locked for good (the task's completion is
+ * refused, and its lock never released): on the shared server, every later class's retries and
+ * timers would then wait in real time.
  *
  * <p>Each topic has one partition, consumed in order, so once a later event has visibly been
  * handled, every event sent before it has been too: that is how a test sees that an event started
  * or woke nothing.
  */
+// This class's Saga runs on its own test server, where time skipping is locked from the start.
+@TestPropertySource(
+    properties = "spring.temporal.connection.target=localhost:${ecomm.test.real-time-port}")
 class FulfillmentWorkflowTest extends OrchestrationTest {
 
   static final String CUSTOMER_ID = "customer-42";
@@ -67,15 +73,15 @@ class FulfillmentWorkflowTest extends OrchestrationTest {
   static final String HOLD = "/shipments/" + SHIPMENT_ID + "/hold";
   static final String CAPTURE = "/payments/" + PAYMENT_ID + "/capture";
 
-  /** Locks time skipping on this JVM's test server for good (a JVM per test class, build file). */
-  @BeforeAll
-  static void timeSkippingOff() {
-    var server =
-        TestServiceStubs.newServiceStubs(
-            TestServiceStubsOptions.newBuilder()
-                .setTarget("localhost:" + TEMPORAL_PORT)
-                .validateAndBuildWithDefaults());
-    server.blockingStub().lockTimeSkipping(LockTimeSkippingRequest.getDefaultInstance());
+  static final int REAL_TIME_PORT = freePort();
+
+  static {
+    TestServer.createPortBoundServer(REAL_TIME_PORT, true);
+  }
+
+  @DynamicPropertySource
+  static void realTimeServer(DynamicPropertyRegistry registry) {
+    registry.add("ecomm.test.real-time-port", () -> REAL_TIME_PORT);
   }
 
   @Autowired WorkflowClient temporal;
@@ -235,17 +241,7 @@ class FulfillmentWorkflowTest extends OrchestrationTest {
   @Test
   void aShipmentThatExistsAlreadyIsReadByOrderAndTakenAsCreated() {
     stubEveryStep();
-    DOWNSTREAM.stubFor(
-        post("/shipments")
-            .atPriority(1)
-            .willReturn(
-                aResponse()
-                    .withStatus(409)
-                    .withHeader("Content-Type", "application/problem+json")
-                    .withBody("{\"reason\": \"shipmentExists\"}")));
-    DOWNSTREAM.stubFor(
-        get(urlEqualTo("/shipments?orderId=" + orderId))
-            .willReturn(okJson("{\"id\": \"%s\"}".formatted(SHIPMENT_ID))));
+    stubShipmentExists("AWAITING_PICK", null);
     paid();
     awaitCalls(2);
 
@@ -253,6 +249,128 @@ class FulfillmentWorkflowTest extends OrchestrationTest {
 
     awaitCalls(7);
     assertThat(calls()).contains("POST " + DISPATCH);
+  }
+
+  /**
+   * A PAID event replayed once Temporal no longer keeps the first run (7 days) starts a second one,
+   * which finds the Shipment held by the first: it ends as that one did, and changes nothing.
+   */
+  @Test
+  void aShipmentFoundOnHoldEndsTheSagaAsCaptureRefusedWithItsReason() {
+    stubEveryStep();
+    stubShipmentExists("ON_HOLD", "Capture declined: authorization_expired");
+
+    paid();
+
+    assertThat(outcome())
+        .isEqualTo(
+            new FulfillmentOutcome(
+                Status.CAPTURE_REFUSED, SHIPMENT_ID, "Capture declined: authorization_expired"));
+    assertThat(calls()).containsExactly("POST /shipments", "GET /shipments?orderId=" + orderId);
+  }
+
+  /** One found packed, its PACKED event long consumed, goes on at once: it is captured once. */
+  @Test
+  void aShipmentFoundPackedIsCapturedFulfilledDispatchedAndShippedWithoutAnEvent() {
+    stubEveryStep();
+    stubShipmentExists("PACKED", null);
+
+    paid();
+
+    awaitCalls(7);
+    assertThat(calls())
+        .containsExactly(
+            "POST /shipments",
+            "GET /shipments?orderId=" + orderId,
+            "GET " + readPayments(),
+            "POST " + CAPTURE,
+            "PATCH " + status() + " FULFILLED",
+            "POST " + DISPATCH,
+            "PATCH " + status() + " SHIPPED");
+  }
+
+  /**
+   * One found shipped was dispatched once its Payment was captured, and its Order marked shipped,
+   * by a run that ended before delivery was confirmed: this one only awaits delivery.
+   */
+  @Test
+  void aShipmentFoundShippedOnlyAwaitsDeliveryThenMarksTheOrderDelivered() {
+    stubEveryStep();
+    stubShipmentExists("SHIPPED", null);
+    paid();
+    awaitCalls(2);
+
+    shipment(5, "DELIVERED");
+
+    assertThat(outcome()).isEqualTo(new FulfillmentOutcome(Status.DELIVERED, SHIPMENT_ID, null));
+    assertThat(calls())
+        .containsExactly(
+            "POST /shipments",
+            "GET /shipments?orderId=" + orderId,
+            "PATCH " + status() + " DELIVERED");
+  }
+
+  /**
+   * One found delivered may have been delivered after its first run's deadline, its Order still
+   * shipped, or within it, its Order delivered already: Order Management refuses to deliver it
+   * twice, and that refusal means it is.
+   */
+  @Test
+  void aShipmentFoundDeliveredMarksTheOrderDeliveredUnlessItIsAlready() {
+    stubEveryStep();
+    stubShipmentExists("DELIVERED", null);
+    DOWNSTREAM.stubFor(
+        statusChangeTo("DELIVERED")
+            .atPriority(1)
+            .willReturn(
+                aResponse()
+                    .withStatus(409)
+                    .withHeader("Content-Type", "application/problem+json")
+                    .withBody(
+                        "{\"status\": 409, \"detail\": \"an order can't go from DELIVERED to"
+                            + " DELIVERED\"}")));
+
+    paid();
+
+    assertThat(outcome()).isEqualTo(new FulfillmentOutcome(Status.DELIVERED, SHIPMENT_ID, null));
+    assertThat(calls())
+        .containsExactly(
+            "POST /shipments",
+            "GET /shipments?orderId=" + orderId,
+            "PATCH " + status() + " DELIVERED");
+  }
+
+  /**
+   * Its PACKED event never comes, dead-lettered say: the Saga reads its Shipment again once each
+   * {@link #PACKING_CHECK} passes without packing, and goes on once the read says it is packed.
+   */
+  @Test
+  void aPackingWhoseEventNeverComesIsFoundByReadingTheShipmentAgain() {
+    stubEveryStep();
+    DOWNSTREAM.stubFor(
+        get(urlEqualTo("/shipments?orderId=" + orderId))
+            .willReturn(
+                okJson(
+                    "{\"id\": \"%s\", \"orderId\": \"%s\", \"status\": \"PACKED\"}"
+                        .formatted(SHIPMENT_ID, orderId))));
+    paid();
+    awaitCalls(1);
+    var created = Instant.now();
+
+    await()
+        .atMost(PACKING_CHECK.plusSeconds(30))
+        .untilAsserted(() -> assertThat(calls()).hasSizeGreaterThanOrEqualTo(7));
+    assertThat(calls())
+        .containsExactly(
+            "POST /shipments",
+            "GET /shipments?orderId=" + orderId,
+            "GET " + readPayments(),
+            "POST " + CAPTURE,
+            "PATCH " + status() + " FULFILLED",
+            "POST " + DISPATCH,
+            "PATCH " + status() + " SHIPPED");
+    assertThat(Duration.between(created, Instant.now()))
+        .isGreaterThanOrEqualTo(PACKING_CHECK.minusSeconds(1));
   }
 
   @Test
@@ -465,6 +583,7 @@ class FulfillmentWorkflowTest extends OrchestrationTest {
   }
 
   FulfillmentOutcome outcome() {
+    await().atMost(Duration.ofSeconds(30)).until(() -> isStarted(workflowId()));
     try {
       return temporal
           .newUntypedWorkflowStub(workflowId())
@@ -525,6 +644,30 @@ class FulfillmentWorkflowTest extends OrchestrationTest {
     DOWNSTREAM.stubFor(
         post(DISPATCH).willReturn(okJson("{\"id\": \"%s\"}".formatted(SHIPMENT_ID))));
     DOWNSTREAM.stubFor(post(HOLD).willReturn(okJson("{\"id\": \"%s\"}".formatted(SHIPMENT_ID))));
+  }
+
+  /** The Order has its Shipment already, in {@code status}: creating one again is a 409. */
+  void stubShipmentExists(String status, String holdReason) {
+    DOWNSTREAM.stubFor(
+        post("/shipments")
+            .atPriority(1)
+            .willReturn(
+                aResponse()
+                    .withStatus(409)
+                    .withHeader("Content-Type", "application/problem+json")
+                    .withBody("{\"reason\": \"shipmentExists\"}")));
+    DOWNSTREAM.stubFor(
+        get(urlEqualTo("/shipments?orderId=" + orderId))
+            .willReturn(
+                okJson(
+                    """
+                    {"id": "%s", "orderId": "%s", "status": "%s", "holdReason": %s}
+                    """
+                        .formatted(
+                            SHIPMENT_ID,
+                            orderId,
+                            status,
+                            holdReason == null ? "null" : "\"" + holdReason + "\""))));
   }
 
   static com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder shipmentCreated() {

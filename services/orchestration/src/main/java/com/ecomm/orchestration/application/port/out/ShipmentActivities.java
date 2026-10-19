@@ -13,14 +13,24 @@ import java.util.List;
 public interface ShipmentActivities {
 
   /**
-   * Creates the Order's Shipment and returns its ID. When the Order has one already, that one's ID.
+   * The Order's Shipment: its ID, its status, such as {@code AWAITING_PICK} or {@code ON_HOLD}, and
+   * why it is held, null unless it is.
    */
-  String createShipment(
+  record Shipment(String id, String status, String holdReason) {}
+
+  /**
+   * Creates the Order's Shipment and returns it, awaiting pick. When the Order has one already,
+   * that one, as it is now.
+   */
+  Shipment createShipment(
       String orderId,
       String customerId,
       List<Line> lines,
       ShippingAddress shippingAddress,
       ShippingOption shippingOption);
+
+  /** The Order's Shipment as it is now, read by Order. */
+  Shipment findShipment(String orderId);
 
   /** Books the packed Shipment with its Carrier: it is {@code SHIPPED}. */
   void dispatchShipment(String shipmentId);

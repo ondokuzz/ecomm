@@ -26,8 +26,13 @@ import org.slf4j.MDC;
  * this code only decides, and replays the same way every time.
  *
  * <p>It waits twice on the Order's Shipment, woken by its events: for Staff to pack it, with no
- * deadline, and for the Carrier to deliver it, for the request's delivery deadline. An event at a
- * version it has already seen, or an older one, is ignored.
+ * deadline but reading the Shipment again each packing check, and for the Carrier to deliver it,
+ * for the request's delivery deadline. An event at a version it has already seen, or an older one,
+ * is ignored.
+ *
+ * <p>A Shipment the Order has already, such as one a run that Temporal no longer keeps created, is
+ * taken up where it is: held, the run ends as that one did; packed, it is captured; shipped, only
+ * delivery is awaited; delivered, the Order is marked delivered unless it is already.
  *
  * <p>Once the Payment is captured nothing is undone: every later step is retried until it succeeds.
  * A capture the gateway declines, or one that can't be made, puts the Shipment on hold instead and
@@ -57,9 +62,9 @@ public class FulfillmentSaga implements FulfillmentWorkflow {
           .build();
 
   /**
-   * Creating the Shipment, and reading the Payment again once its capture failed: retried until it
-   * succeeds, such as while Fulfillment & Shipping waits for Catalog's Products, but not when it is
-   * refused.
+   * Creating the Shipment, reading the Payment again once its capture failed, and marking delivered
+   * the Order of a Shipment an earlier run dispatched: retried until it succeeds, such as while
+   * Fulfillment & Shipping waits for Catalog's Products, but not when it is refused.
    */
   private static final ActivityOptions UNTIL_CREATED =
       ActivityOptions.newBuilder()
@@ -95,6 +100,8 @@ public class FulfillmentSaga implements FulfillmentWorkflow {
       Workflow.newActivityStub(CaptureActivities.class, UNTIL_CREATED);
   private final OrderFulfillmentActivities orders =
       Workflow.newActivityStub(OrderFulfillmentActivities.class, UNTIL_DONE);
+  private final OrderFulfillmentActivities ordersUntilAnswered =
+      Workflow.newActivityStub(OrderFulfillmentActivities.class, UNTIL_CREATED);
 
   /** The newest Shipment event seen: its version, and the Shipment's status at it. */
   private long shipmentVersion;
@@ -122,9 +129,9 @@ public class FulfillmentSaga implements FulfillmentWorkflow {
     var customerId = request.customerId();
     var orderId = request.orderId();
 
-    String shipmentId;
+    ShipmentActivities.Shipment shipment;
     try {
-      shipmentId =
+      shipment =
           shipmentsUntilCreated.createShipment(
               orderId,
               customerId,
@@ -135,19 +142,37 @@ public class FulfillmentSaga implements FulfillmentWorkflow {
       log.error("Order {}'s Shipment couldn't be created; nothing was charged", orderId, e);
       return ended(new FulfillmentOutcome(Status.FAILED, null, null));
     }
-    log.info("Order {}'s Shipment {} awaits packing", orderId, shipmentId);
-    Workflow.await(() -> reached("PACKED"));
-
-    var hold = capture(customerId, orderId);
-    if (hold != null) {
-      count("fulfillment_holds", "kind", hold.kind());
-      shipmentsUntilDone.holdShipment(shipmentId, hold.reason());
-      return ended(new FulfillmentOutcome(Status.CAPTURE_REFUSED, shipmentId, hold.reason()));
+    var shipmentId = shipment.id();
+    if ("ON_HOLD".equals(shipment.status())) {
+      log.info(
+          "Order {}'s Shipment {} is on hold already: {}",
+          orderId,
+          shipmentId,
+          shipment.holdReason());
+      return ended(
+          new FulfillmentOutcome(Status.CAPTURE_REFUSED, shipmentId, shipment.holdReason()));
     }
+    found(shipment.status());
+    var shippedBefore = reached("SHIPPED");
+    if (shippedBefore) {
+      // Dispatched by an earlier run, once it had captured the Payment and marked the Order
+      // fulfilled, and that run marked it shipped: only delivery is left.
+      log.info("Order {}'s Shipment {} is {} already", orderId, shipmentId, shipmentStatus);
+    } else {
+      log.info("Order {}'s Shipment {} awaits packing", orderId, shipmentId);
+      awaitPacking(orderId, request.packingCheck());
 
-    orders.markOrderFulfilled(customerId, orderId);
-    shipmentsUntilDone.dispatchShipment(shipmentId);
-    orders.markOrderShipped(customerId, orderId);
+      var hold = capture(customerId, orderId);
+      if (hold != null) {
+        count("fulfillment_holds", "kind", hold.kind());
+        shipmentsUntilDone.holdShipment(shipmentId, hold.reason());
+        return ended(new FulfillmentOutcome(Status.CAPTURE_REFUSED, shipmentId, hold.reason()));
+      }
+
+      orders.markOrderFulfilled(customerId, orderId);
+      shipmentsUntilDone.dispatchShipment(shipmentId);
+      orders.markOrderShipped(customerId, orderId);
+    }
 
     if (!Workflow.await(request.deliveryDeadline(), () -> reached("DELIVERED"))) {
       log.warn(
@@ -157,8 +182,39 @@ public class FulfillmentSaga implements FulfillmentWorkflow {
           request.deliveryDeadline());
       return ended(new FulfillmentOutcome(Status.DELIVERY_UNCONFIRMED, shipmentId, null));
     }
-    orders.markOrderDelivered(customerId, orderId);
+    if (shippedBefore) {
+      markDeliveredUnlessItIs(customerId, orderId);
+    } else {
+      orders.markOrderDelivered(customerId, orderId);
+    }
     return ended(new FulfillmentOutcome(Status.DELIVERED, shipmentId, null));
+  }
+
+  /**
+   * Marks delivered the Order of a Shipment an earlier run dispatched. That run may have marked it
+   * delivered already, so Order Management's refusal to deliver it twice counts as done.
+   */
+  private void markDeliveredUnlessItIs(String customerId, String orderId) {
+    try {
+      ordersUntilAnswered.markOrderDelivered(customerId, orderId);
+    } catch (ActivityFailure e) {
+      log.info("Order {} was marked delivered already, as its refusal says", orderId, e);
+    }
+  }
+
+  /**
+   * Awaits the Shipment's packing, with no deadline: picking and packing are Staff's work. Each
+   * time {@code checkEvery} passes without a PACKED event, the Shipment is read again, so a run
+   * whose event never comes, dead-lettered say, still goes on once it is packed.
+   */
+  private void awaitPacking(String orderId, Duration checkEvery) {
+    while (!Workflow.await(checkEvery, () -> reached("PACKED"))) {
+      try {
+        found(shipmentsUntilCreated.findShipment(orderId).status());
+      } catch (ActivityFailure e) {
+        log.warn("Order {}'s Shipment couldn't be read; still awaiting packing", orderId, e);
+      }
+    }
   }
 
   /** Why the Shipment is put on hold: its kind, one of {@link #HOLDS}, and the reason given. */
@@ -201,6 +257,17 @@ public class FulfillmentSaga implements FulfillmentWorkflow {
       return capturesUntilAnswered.findPayment(customerId, orderId).captured();
     } catch (ActivityFailure e) {
       return false;
+    }
+  }
+
+  /**
+   * Takes the Shipment's status as read from Fulfillment & Shipping, which carries no version: it
+   * counts only when it has come further than the events seen so far, so a read that crossed a
+   * newer event never takes the Saga back.
+   */
+  private void found(String status) {
+    if (shipmentStatus == null || ON_ITS_WAY.indexOf(status) > ON_ITS_WAY.indexOf(shipmentStatus)) {
+      shipmentStatus = status;
     }
   }
 
