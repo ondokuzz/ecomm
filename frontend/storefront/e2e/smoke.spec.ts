@@ -698,10 +698,11 @@ test.describe('Sprint 4', () => {
     await expect(page.getByRole('timer', { name: 'Time left' })).toBeVisible()
     await shipTo(page)
     await testCard(page, 'Bank confirms, approves').check()
+    const confirmingShown = await watchForStatus(page, 'Confirming your payment…')
     await page.getByRole('button', { name: /^Pay/ }).click()
 
-    await expect(page.getByRole('status').filter({ hasText: 'Confirming your payment…' })).toBeVisible()
     await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/)
+    expect(await confirmingShown(), 'Checkout said the payment was being confirmed').toBe(true)
     await expect(page.locator('.status-paid')).toHaveText('Paid')
     const orderId = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!)
     // Pending at first, then approved by the gateway's webhook.
@@ -729,11 +730,12 @@ test.describe('Sprint 4', () => {
     const sessionId = await currentSessionId(request, token)
     await shipTo(page)
     await testCard(page, 'Bank confirms, declines').check()
+    const confirmingShown = await watchForStatus(page, 'Confirming your payment…')
     await page.getByRole('button', { name: /^Pay/ }).click()
 
-    await expect(page.getByRole('status').filter({ hasText: 'Confirming your payment…' })).toBeVisible()
     const declined = page.getByRole('alert').filter({ hasText: 'Your card was declined' })
     await expect(declined).toContainText('Your bank declined the payment. Try another card.')
+    expect(await confirmingShown(), 'Checkout said the payment was being confirmed').toBe(true)
     expect(await currentSessionId(request, token)).toBe(sessionId)
 
     await testCard(page, 'Approve').check()
@@ -897,6 +899,30 @@ async function shipTo(page: Page) {
 }
 
 /** The checkout page's test card radio, named by its card. */
+/**
+ * Watches the page, from now on, for a status saying `text`, and answers whether one has shown. A
+ * status that shows only for a moment, as "Confirming your payment…" does before a quick answer, is
+ * still seen, which polling for it with `toBeVisible` can miss. The page must stay the same document
+ * (client-side navigation only).
+ */
+async function watchForStatus(page: Page, text: string): Promise<() => Promise<boolean>> {
+  const flag = `statusSeen:${text}`
+  await page.evaluate(
+    ({ flag, text }) => {
+      const flags = window as unknown as Record<string, boolean>
+      const check = () => {
+        if ([...document.querySelectorAll('[role="status"]')].some((el) => el.textContent?.includes(text))) {
+          flags[flag] = true
+        }
+      }
+      check()
+      new MutationObserver(check).observe(document.body, { childList: true, subtree: true, characterData: true })
+    },
+    { flag, text },
+  )
+  return () => page.evaluate((flag) => (window as unknown as Record<string, boolean>)[flag] === true, flag)
+}
+
 function testCard(page: Page, label: string) {
   return page.getByRole('group', { name: 'Test card' }).getByRole('radio', { name: label, exact: true })
 }
