@@ -125,14 +125,14 @@ gets 403, and no token gets 401.
 | `POST /payments/{id}/void` | Orchestration | Releases an authorized or pending Payment; 200 with the voided Payment |
 | `POST /payments/{id}/capture` | Orchestration | Charges an authorized Payment's full amount; 200 with the captured Payment, 402 when the gateway declines. Requires an `Idempotency-Key` |
 | `POST /webhooks/gateway` | the gateway | Settles a pending authorization; see [Gateway webhooks](#gateway-webhooks) |
-| `GET /payments/{id}` | Customer | The Customer's Payment; 404 for an unknown ID or another Customer's |
-| `GET /payments/{id}?customerId=` | Orchestration | The named Customer's Payment, as the Saga awaits its settlement; 404 as above |
+| `GET /payments/{id}` | Customer | The Customer's Payment; 404 for an unknown ID or another Customer's. A `customerId` parameter is ignored |
+| `GET /payments/{id}/for-customer?customerId=` | Orchestration | The named Customer's Payment, as the Saga awaits its settlement; 404 as above. A path of its own, so it never shadows the Customer's read above |
 | `GET /payments/by-order?orderId=&customerId=` | Orchestration | The named Customer's Payments for an Order, newest first, as the fulfillment Saga finds the one to capture; empty for anyone else's. A path of its own, so it never shadows the Customer's read below |
 | `GET /payments?orderId=` | Customer | The Customer's Payments for one of their Orders, newest first; an empty list for anyone else's Order. A `customerId` parameter is ignored |
 | `GET /staff/payments?orderId=` | Staff | Every Payment for an Order, newest first |
 
 The API gateway routes the reads and the webhook, as `/api/payment/…`, and hides the three commands
-and Orchestration's read by Order.
+and Orchestration's two reads.
 
 An authorization looks like
 

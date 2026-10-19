@@ -30,8 +30,10 @@ ecomm:
       payment:
         uri: http://localhost:8084
         # The Customer's and Staff's reads are routed; only Orchestration authorizes, voids and
-        # captures, and reads a named Customer's Payments by Order.
-        internal: [POST /payments, POST /payments/*/void, POST /payments/*/capture, GET /payments/by-order]
+        # captures, and reads a named Customer's Payment, or their Payments by Order.
+        internal:
+          [POST /payments, POST /payments/*/void, POST /payments/*/capture, GET /payments/by-order,
+           GET /payments/*/for-customer]
         # The payment gateway settles pending authorizations from outside; Payment checks the
         # webhook's signature.
         webhooks: [POST /webhooks/gateway]

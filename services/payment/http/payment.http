@@ -214,11 +214,11 @@ GET {{payment}}/payments/by-order?orderId=order-saga-1&customerId={{customerId}}
 Authorization: Bearer {{orchestrationToken}}
 
 ### Orchestration reads it, naming the Customer, as the Saga does while it awaits settlement
-GET {{payment}}/payments/{{sagaPaymentId}}?customerId={{customerId}}
+GET {{payment}}/payments/{{sagaPaymentId}}/for-customer?customerId={{customerId}}
 Authorization: Bearer {{orchestrationToken}}
 
 ### Naming another Customer: 404
-GET {{payment}}/payments/{{sagaPaymentId}}?customerId=someone-else
+GET {{payment}}/payments/{{sagaPaymentId}}/for-customer?customerId=someone-else
 Authorization: Bearer {{orchestrationToken}}
 
 ### Orchestration voids it: 200, VOIDED; voiding again is the same 200
@@ -229,7 +229,11 @@ Content-Type: application/json
 {"customerId": "{{customerId}}"}
 
 ### A Customer can't read as Orchestration does: 403
-GET {{payment}}/payments/{{sagaPaymentId}}?customerId={{customerId}}
+GET {{payment}}/payments/{{sagaPaymentId}}/for-customer?customerId={{customerId}}
+Authorization: Bearer {{customerToken}}
+
+### A Customer naming a customer still reads their own Payment: 200
+GET {{payment}}/payments/{{sagaPaymentId}}?customerId=someone-else
 Authorization: Bearer {{customerToken}}
 
 ### A card the bank confirms later: 201, PENDING, until the mock's webhook settles it ~3 seconds on
@@ -246,7 +250,7 @@ Content-Type: application/json
 %}
 
 ### A few seconds later: AUTHORIZED, its second AUTHORIZATION carrying the webhook's event ID
-GET {{payment}}/payments/{{asyncPaymentId}}?customerId={{customerId}}
+GET {{payment}}/payments/{{asyncPaymentId}}/for-customer?customerId={{customerId}}
 Authorization: Bearer {{orchestrationToken}}
 
 ### The gateway's webhook, signed as the mock signs it, with the stack's webhook secret, through the API

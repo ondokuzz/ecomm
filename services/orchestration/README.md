@@ -62,9 +62,9 @@ It answers `{"status", "orderId", "declineReason"}`, `status` being `PAID`, `DEC
    `AUTHORIZED` goes on. `DECLINED` cancels the Order: `DECLINED`, with the gateway's reason. A
    failure, the gateway's 502 included, is tried 4 times in all over about 10 seconds with the same
    key, then cancels the Order: `FAILED`. `PENDING`, a card the Customer's bank confirms later, is
-   awaited: the Payment is read (`GET /payments/{id}?customerId=`), backing off from 1 to 5
-   seconds, until a Gateway webhook has settled it, for up to `ecomm.orchestration.settlement-deadline`
-   (10 minutes). Approved goes on; declined cancels the Order, `DECLINED`; still pending at the
+   awaited: the Payment is read (`GET /payments/{id}/for-customer?customerId=`), backing off from 1
+   to 5 seconds, until a Gateway webhook has settled it, for up to
+   `ecomm.orchestration.settlement-deadline` (10 minutes). Approved goes on; declined cancels the Order, `DECLINED`; still pending at the
    deadline voids the Payment and cancels the Order, `FAILED`. A read that finds it pending isn't
    counted as a step failure.
 3. **Commit the Reservation** (`POST /reservations/{id}/commit`), retried as step 1. A 409

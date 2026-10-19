@@ -137,7 +137,7 @@ class PaymentController {
 
   /**
    * 404 for an unknown ID, one that isn't a UUID, or another Customer's Payment, so the answer
-   * never reveals that someone else's Payment exists.
+   * never reveals that someone else's Payment exists. A {@code customerId} parameter is ignored.
    */
   @GetMapping("/{id}")
   @PreAuthorize("hasRole('CUSTOMER')")
@@ -147,9 +147,10 @@ class PaymentController {
 
   /**
    * The named Customer's Payment, as the checkout Saga reads it while it awaits settlement; 404 as
-   * for the Customer's own read.
+   * for the Customer's own read. A path of its own, so it never shadows the Customer's {@code GET
+   * /payments/{id}} when a request names a customer.
    */
-  @GetMapping(path = "/{id}", params = "customerId")
+  @GetMapping("/{id}/for-customer")
   @PreAuthorize("hasRole('ORCHESTRATION')")
   PaymentResponse customersPayment(@PathVariable String id, @RequestParam String customerId) {
     return ownedPayment(customerId, id);

@@ -65,7 +65,10 @@ class PaymentHttpActivities implements PaymentActivities {
             "awaitSettlement",
             () ->
                 http.get()
-                    .uri("/payments/{id}?customerId={customerId}", paymentId, customerId)
+                    .uri(
+                        "/payments/{id}/for-customer?customerId={customerId}",
+                        paymentId,
+                        customerId)
                     .retrieve()
                     .body(PaymentBody.class));
     if (payment == null || payment.status() == null) {

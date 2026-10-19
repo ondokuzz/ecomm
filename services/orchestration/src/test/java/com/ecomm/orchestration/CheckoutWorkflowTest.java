@@ -59,7 +59,8 @@ class CheckoutWorkflowTest extends OrchestrationTest {
   static final String COMMIT = "/reservations/" + RESERVATION_ID + "/commit";
   static final String STATUS = "/orders/" + ORDER_ID + "/status";
   static final String VOID = "/payments/" + PAYMENT_ID + "/void";
-  static final String READ_PAYMENT = "/payments/" + PAYMENT_ID + "?customerId=" + CUSTOMER_ID;
+  static final String READ_PAYMENT =
+      "/payments/" + PAYMENT_ID + "/for-customer?customerId=" + CUSTOMER_ID;
 
   @Autowired WorkflowClient temporal;
   @Autowired RestTestClient http;

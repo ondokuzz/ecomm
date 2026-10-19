@@ -38,6 +38,27 @@ class ReadPaymentApiTest extends PaymentApiTest {
     assertThat(payment.status()).isEqualTo("AUTHORIZED");
   }
 
+  @Test
+  void aCustomerNamingACustomerStillReadsTheirOwnPayment() {
+    var payment =
+        authorize(
+                """
+                {"customerId": "customer-42", "orderId": "order-read-named", "paymentMethod": "tok_approve", "amount": {"amountMinor": 4250, "currency": "USD"}}
+                """)
+            .expectBody(PaymentView.class)
+            .returnResult()
+            .getResponseBody();
+
+    http.get()
+        .uri("/payments/{id}?customerId=customer-7", payment.id())
+        .headers(h -> h.setBearerAuth(customerToken()))
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody(PaymentView.class)
+        .isEqualTo(payment);
+  }
+
   @ParameterizedTest
   @ValueSource(strings = {"6f1c2d3e-0000-4000-8000-000000000000", "not-a-payment-id"})
   void anUnknownPaymentIsNotFound(String id) {
