@@ -5,6 +5,7 @@ import {
   paymentStatusLabel,
   paymentStatusNote,
   paymentTransactionsOf,
+  refundedOf,
 } from '../domain/payment'
 import { Badge, type Tone } from './ui/Badge'
 
@@ -14,11 +15,14 @@ const paymentStatusTones: Record<PaymentStatus, Tone> = {
   DECLINED: 'danger',
   VOIDED: 'neutral',
   CAPTURED: 'success',
+  PARTIALLY_REFUNDED: 'neutral',
+  REFUNDED: 'neutral',
 }
 
 /**
  * An Order's Payments, newest first: each one's status, what it means for the Customer's money, its
- * amount, and its Payment transactions, oldest first, such as the amount held and then charged.
+ * amount, what its Refunds gave back, and its Payment transactions, oldest first, such as the amount
+ * held, then charged, then refunded.
  * Read only. An Order can have none, when the payment gateway never answered.
  */
 export function OrderPayments({ payments }: { payments: readonly Payment[] }) {
@@ -38,6 +42,11 @@ export function OrderPayments({ payments }: { payments: readonly Payment[] }) {
             <strong className="order-payment-amount">{formatMoney(payment.amount)}</strong>
           </div>
           <p className="muted">{paymentStatusNote(payment)}</p>
+          {payment.status === 'PARTIALLY_REFUNDED' && (
+            <p className="order-payment-refunded">
+              Refunded {formatMoney(refundedOf(payment))} of {formatMoney(payment.amount)}
+            </p>
+          )}
           {payment.transactions.length > 0 && (
             <ol className="order-payment-transactions" aria-label="Payment activity">
               {paymentTransactionsOf(payment).map((row, i) => (

@@ -14,7 +14,7 @@ import { Badge, type Tone } from '../components/ui/Badge'
 import { Icon } from '../components/ui/Icon'
 import { type Currencies, type Money, formatMoney } from '../domain/money'
 import { type Order, discountLabel, formatTime, historyRowsOf, orderReference } from '../domain/order'
-import { type Payment, type PaymentStatus, paymentStatusLabel, transactionRowsOf } from '../domain/payment'
+import { type Payment, type PaymentStatus, paymentStatusLabel, refundedOf, transactionRowsOf } from '../domain/payment'
 import { rmaKindLabel } from '../domain/rma'
 import type { FromListState } from './OrderListPage'
 
@@ -356,6 +356,8 @@ const paymentTones: Record<PaymentStatus, Tone> = {
   DECLINED: 'danger',
   VOIDED: 'neutral',
   CAPTURED: 'success',
+  PARTIALLY_REFUNDED: 'neutral',
+  REFUNDED: 'neutral',
 }
 
 /**
@@ -407,6 +409,14 @@ function PaymentDetail({ payment, money }: { payment: Payment; money: (amount: M
           <dt>Amount</dt>
           <dd>{money(payment.amount)}</dd>
         </div>
+        {payment.status === 'PARTIALLY_REFUNDED' && (
+          <div>
+            <dt>Refunded</dt>
+            <dd>
+              {money(refundedOf(payment))} of {money(payment.amount)}
+            </dd>
+          </div>
+        )}
         <div>
           <dt>Gateway reference</dt>
           <dd>
@@ -445,6 +455,7 @@ function PaymentDetail({ payment, money }: { payment: Payment; money: (amount: M
                 <td className="num">{money(row.amount)}</td>
                 <td>
                   <code>{row.reference}</code>
+                  {row.refundFor && <small className="hint">For {row.refundFor}</small>}
                 </td>
                 <td>{row.declineReason ?? <span className="muted">—</span>}</td>
                 <td>

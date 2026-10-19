@@ -191,4 +191,50 @@ class PaymentEventsApiTest extends PaymentApiTest {
         .extracting(r -> PaymentEvents.valueOf(r).get("change").asText())
         .containsExactly("DECLINED");
   }
+
+  @Test
+  void aRefundPublishesThePaymentWithWhatTheRefundIsFor() {
+    var payment = captured("order-events-refund");
+    refund(payment.id(), 30000, "RMA-3F2A9C1B").expectStatus().isOk();
+
+    var records = PaymentEvents.keyed(payment.id(), 3);
+
+    assertThat(records).hasSize(3);
+    assertThat(records).allSatisfy(r -> assertThat(PaymentEvents.schemaViolationsOf(r)).isEmpty());
+    var event = PaymentEvents.valueOf(records.getLast());
+    assertThat(event.get("change").asText()).isEqualTo("REFUNDED");
+    assertThat(event.get("version").asLong()).isEqualTo(3);
+    assertThat(event.at("/payment/status").asText()).isEqualTo("PARTIALLY_REFUNDED");
+    var refund = event.at("/payment/transactions/2");
+    assertThat(refund.get("kind").asText()).isEqualTo("REFUND");
+    assertThat(refund.get("outcome").asText()).isEqualTo("APPROVED");
+    assertThat(refund.at("/amount/amountMinor").asLong()).isEqualTo(30000);
+    assertThat(refund.get("reference").asText()).isEqualTo("RMA-3F2A9C1B");
+    assertThat(event.at("/payment/transactions/0").has("reference")).isFalse();
+  }
+
+  @Test
+  void aDeclinedRefundPublishesThePaymentAsItWas() {
+    var payment = captured("order-events-refund-declined", "tok_refund_decline");
+    refund(payment.id(), 30000, "RMA-3F2A9C1B").expectStatus().isEqualTo(402);
+
+    var records = PaymentEvents.keyed(payment.id(), 3);
+
+    var event = PaymentEvents.valueOf(records.getLast());
+    assertThat(PaymentEvents.schemaViolationsOf(records.getLast())).isEmpty();
+    assertThat(event.get("change").asText()).isEqualTo("REFUND_DECLINED");
+    assertThat(event.at("/payment/status").asText()).isEqualTo("CAPTURED");
+    assertThat(event.at("/payment/transactions/2/declineReason").asText())
+        .isEqualTo("refund_window_closed");
+  }
+
+  @Test
+  void aRefusedRefundPublishesNothing() {
+    var payment = captured("order-events-refund-refused");
+    refund(payment.id(), 79901, "RMA-3F2A9C1B").expectStatus().isEqualTo(422);
+
+    assertThat(PaymentEvents.keyed(payment.id(), 2))
+        .extracting(r -> PaymentEvents.valueOf(r).get("change").asText())
+        .containsExactly("AUTHORIZED", "CAPTURED");
+  }
 }

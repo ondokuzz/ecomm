@@ -16,7 +16,7 @@ export interface TestCard {
 
 /**
  * One card per outcome of the mock gateway, the approving one first, then the ones the bank confirms
- * later, then the one whose capture is refused.
+ * later, then the one whose capture is refused, then the one whose refunds are refused.
  */
 export const testCards: readonly TestCard[] = [
   { token: 'tok_approve', label: 'Approve', outcome: 'The payment goes through.', last4: '4242' },
@@ -50,6 +50,12 @@ export const testCards: readonly TestCard[] = [
     label: 'Charge refused',
     outcome: 'The payment goes through, but the charge is refused when the order ships.',
     last4: '0069',
+  },
+  {
+    token: 'tok_refund_decline',
+    label: 'Refund refused',
+    outcome: 'The payment goes through, but any refund of it is refused.',
+    last4: '0077',
   },
 ]
 
@@ -173,16 +179,25 @@ export function confirmation(
 
 /**
  * A Payment's status, worked out from its Payment transactions: its authorization awaits the bank,
- * the amount is held, the gateway declined it, the hold was released by a Void, or the amount was
- * charged by a Capture.
+ * the amount is held, the gateway declined it, the hold was released by a Void, the amount was
+ * charged by a Capture, or Refunds gave back part or all of it.
  */
-export type PaymentStatus = 'PENDING' | 'AUTHORIZED' | 'DECLINED' | 'VOIDED' | 'CAPTURED'
+export type PaymentStatus =
+  'PENDING' | 'AUTHORIZED' | 'DECLINED' | 'VOIDED' | 'CAPTURED' | 'PARTIALLY_REFUNDED' | 'REFUNDED'
 
-export const paymentStatuses: readonly PaymentStatus[] = ['PENDING', 'AUTHORIZED', 'DECLINED', 'VOIDED', 'CAPTURED']
+export const paymentStatuses: readonly PaymentStatus[] = [
+  'PENDING',
+  'AUTHORIZED',
+  'DECLINED',
+  'VOIDED',
+  'CAPTURED',
+  'PARTIALLY_REFUNDED',
+  'REFUNDED',
+]
 
 /** One interaction with the payment gateway on a Payment, as the Customer reads it. */
 export interface PaymentTransaction {
-  kind: 'AUTHORIZATION' | 'VOID' | 'CAPTURE'
+  kind: 'AUTHORIZATION' | 'VOID' | 'CAPTURE' | 'REFUND'
   outcome: 'APPROVED' | 'DECLINED' | 'PENDING'
   amount: Money
   declineReason: string | null
@@ -208,6 +223,8 @@ const paymentStatusLabels: Record<PaymentStatus, string> = {
   DECLINED: 'Declined',
   VOIDED: 'Released',
   CAPTURED: 'Charged',
+  PARTIALLY_REFUNDED: 'Partly refunded',
+  REFUNDED: 'Refunded',
 }
 
 /** A Payment status as the Customer reads it. */
@@ -232,6 +249,10 @@ export function paymentStatusNote({ status, declineReason }: Pick<Payment, 'stat
       return 'The hold on your card was released. Nothing was charged.'
     case 'CAPTURED':
       return 'The amount was charged to your card.'
+    case 'PARTIALLY_REFUNDED':
+      return 'Part of the amount was refunded to your card.'
+    case 'REFUNDED':
+      return 'The whole amount was refunded to your card.'
     case 'DECLINED':
       if (!declineReason) return 'The payment was declined.'
       return Object.hasOwn(declineReasons, declineReason)
@@ -256,7 +277,20 @@ function transactionLabel({ kind, outcome }: Pick<PaymentTransaction, 'kind' | '
       return outcome === 'APPROVED' ? 'Charged' : 'Charge refused'
     case 'VOID':
       return 'Hold released'
+    case 'REFUND':
+      return outcome === 'APPROVED' ? 'Refunded' : 'Refund refused'
   }
+}
+
+/** What a Payment's Refunds gave back: the approved ones, in the Payment's Currency. */
+export function refundedOf(payment: {
+  amount: Money
+  transactions: readonly Pick<PaymentTransaction, 'kind' | 'outcome' | 'amount'>[]
+}): Money {
+  const amountMinor = payment.transactions
+    .filter((transaction) => transaction.kind === 'REFUND' && transaction.outcome === 'APPROVED')
+    .reduce((sum, transaction) => sum + transaction.amount.amountMinor, 0)
+  return { amountMinor, currency: payment.amount.currency }
 }
 
 /** A Payment's transactions for the Customer, oldest first. */

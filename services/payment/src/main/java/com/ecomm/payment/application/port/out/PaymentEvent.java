@@ -23,6 +23,8 @@ public record PaymentEvent(String paymentId, long version, Change change, Snapsh
     VOIDED,
     CAPTURED,
     CAPTURE_DECLINED,
+    REFUNDED,
+    REFUND_DECLINED,
     BACKFILLED
   }
 
@@ -35,7 +37,10 @@ public record PaymentEvent(String paymentId, long version, Change change, Snapsh
       String declineReason,
       List<PaymentTransaction> transactions) {}
 
-  /** One Payment transaction; the null fields are left out. */
+  /**
+   * One Payment transaction; the null fields are left out. {@code reference} is what a Refund is
+   * for.
+   */
   public record PaymentTransaction(
       String kind,
       Amount amount,
@@ -44,7 +49,8 @@ public record PaymentEvent(String paymentId, long version, Change change, Snapsh
       String declineReason,
       String gatewayEventId,
       String at,
-      boolean backfilled) {}
+      boolean backfilled,
+      String reference) {}
 
   public record Amount(long amountMinor, String currency) {
 
@@ -75,7 +81,8 @@ public record PaymentEvent(String paymentId, long version, Change change, Snapsh
                             t.declineReason(),
                             t.gatewayEventId(),
                             t.at().toString(),
-                            t.backfilled()))
+                            t.backfilled(),
+                            t.refundFor()))
                 .toList()));
   }
 

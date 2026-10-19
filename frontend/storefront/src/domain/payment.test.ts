@@ -14,6 +14,7 @@ import {
   paymentStatuses,
   paymentTransactionsOf,
   pollFor,
+  refundedOf,
   testCards,
   whenConfirmingPayment,
 } from './payment'
@@ -28,6 +29,7 @@ describe('testCards', () => {
       'tok_async_approve',
       'tok_async_decline',
       'tok_capture_decline',
+      'tok_refund_decline',
     ])
     expect(defaultTestCard).toBe(testCards[0])
   })
@@ -36,6 +38,13 @@ describe('testCards', () => {
     expect(testCards.find((card) => card.token === 'tok_capture_decline')).toMatchObject({
       label: 'Charge refused',
       outcome: 'The payment goes through, but the charge is refused when the order ships.',
+    })
+  })
+
+  it('offers a card that pays but whose refunds are refused', () => {
+    expect(testCards.find((card) => card.token === 'tok_refund_decline')).toMatchObject({
+      label: 'Refund refused',
+      outcome: 'The payment goes through, but any refund of it is refused.',
     })
   })
 
@@ -207,6 +216,8 @@ describe('paymentStatusLabel', () => {
       'Declined',
       'Released',
       'Charged',
+      'Partly refunded',
+      'Refunded',
     ])
   })
 })
@@ -217,6 +228,8 @@ describe('paymentStatusNote', () => {
     expect(paymentStatusNote(payment('AUTHORIZED'))).toBe('The amount is held on your card.')
     expect(paymentStatusNote(payment('VOIDED'))).toBe('The hold on your card was released. Nothing was charged.')
     expect(paymentStatusNote(payment('CAPTURED'))).toBe('The amount was charged to your card.')
+    expect(paymentStatusNote(payment('PARTIALLY_REFUNDED'))).toBe('Part of the amount was refunded to your card.')
+    expect(paymentStatusNote(payment('REFUNDED'))).toBe('The whole amount was refunded to your card.')
   })
 
   it('says why a declined Payment was declined, in words for the reasons it knows', () => {
@@ -286,6 +299,43 @@ describe('paymentTransactionsOf', () => {
     })
 
     expect(rows.map((row) => row.label)).toEqual(['Declined', 'Charge refused', 'Hold released'])
+  })
+
+  it('names a refund, and a refused one', () => {
+    const rows = paymentTransactionsOf({
+      transactions: [
+        transaction('REFUND', 'APPROVED', '2026-10-20T09:00:00Z'),
+        transaction('REFUND', 'DECLINED', '2026-10-20T09:01:00Z', 'refund_window_closed'),
+      ],
+    })
+
+    expect(rows.map((row) => row.label)).toEqual(['Refunded', 'Refund refused'])
+  })
+})
+
+describe('refundedOf', () => {
+  const refund = (amountMinor: number, outcome: PaymentTransaction['outcome']): PaymentTransaction => ({
+    kind: 'REFUND',
+    outcome,
+    amount: { amountMinor, currency: 'EUR' },
+    declineReason: null,
+    at: '2026-10-20T09:00:00Z',
+  })
+
+  it('adds up the approved refunds, leaving out refused ones', () => {
+    expect(
+      refundedOf({
+        amount: { amountMinor: 79900, currency: 'EUR' },
+        transactions: [refund(30000, 'APPROVED'), refund(10000, 'DECLINED'), refund(5000, 'APPROVED')],
+      }),
+    ).toEqual({ amountMinor: 35000, currency: 'EUR' })
+  })
+
+  it('is nothing in the Payment’s Currency when nothing was refunded', () => {
+    expect(refundedOf({ amount: { amountMinor: 79900, currency: 'EUR' }, transactions: [] })).toEqual({
+      amountMinor: 0,
+      currency: 'EUR',
+    })
   })
 })
 

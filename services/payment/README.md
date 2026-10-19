@@ -1,6 +1,6 @@
 # Payment
 
-Payment authorization and capture for an Order, through a payment gateway, kept as a ledger of Payment
+Payment authorization, capture and refund for an Order, through a payment gateway, kept as a ledger of Payment
 transactions ([ADR 0002](../../docs/adr/0002-ledgers-and-outboxes-not-event-sourcing.md)). Built
 from [`platform/service-template`](../../platform/service-template/README.md), so its layout,
 security and testing conventions apply here. Data lives in the `payment` database on the shared
@@ -8,15 +8,16 @@ Postgres, with the schema under Flyway ([`db/migration`](./src/main/resources/db
 
 The gateway sits behind `PaymentGatewayPort`
 ([ADR 0005](../../docs/adr/0005-localization-compliance-abstracted.md)), so a real gateway joins the
-mock without touching the use cases. Refund comes with returns (Sprint 6).
+mock without touching the use cases.
 
 ## The ledger
 
 A Payment is an Order's amount for one Customer. Each interaction with the gateway is one Payment
 transaction, recorded for good: Payment never changes or deletes one, and the database refuses to.
-A transaction is an `AUTHORIZATION`, a `VOID` or a `CAPTURE`, with its amount, its outcome (`APPROVED`,
-`DECLINED` or `PENDING`), the gateway's reference and decline reason, the gateway's event ID when a
-webhook recorded it, when it happened, and whether it was backfilled.
+A transaction is an `AUTHORIZATION`, a `VOID`, a `CAPTURE` or a `REFUND`, with its amount, its outcome
+(`APPROVED`, `DECLINED` or `PENDING`), the gateway's reference and decline reason, the gateway's
+event ID when a webhook recorded it, when it happened, whether it was backfilled, and, for a
+`REFUND`, its `reference`: what it was for, such as an RMA reference.
 
 A Payment's status is worked out from its transactions, oldest first (`PaymentStatus`):
 
@@ -26,11 +27,15 @@ A Payment's status is worked out from its transactions, oldest first (`PaymentSt
 | a declined authorization | `DECLINED`, final, with the gateway's reason |
 | a pending authorization | `PENDING`, until the gateway settles it with an approved or declined one |
 | an authorized or pending one, then a void | `VOIDED`, final |
-| an authorized one, then an approved capture | `CAPTURED`, final until refunds come |
+| an authorized one, then an approved capture | `CAPTURED` |
 | an authorized one, then a declined capture | still `AUTHORIZED`, to be captured again or voided |
+| a captured one, then approved Refunds of part of the amount captured | `PARTIALLY_REFUNDED` |
+| a captured one, then approved Refunds of the whole amount captured | `REFUNDED`, final |
+| a captured or partly refunded one, then a declined Refund | as it was |
 
-Nothing else is a Payment: a pure domain test, `PaymentStatusTest`, tries every sequence of up to
-three transactions. The status is kept on the Payment's row beside its transactions, written in
+A Refund is in the captured amount's Currency, and the approved ones never come to more than the
+amount captured. Nothing else is a Payment: a pure domain test, `PaymentStatusTest`, tries every
+sequence of up to three transactions, and the refunds' sums beyond that. The status is kept on the Payment's row beside its transactions, written in
 the same database transaction as each one from the status they give, so a read stays one query.
 A pending authorization is settled by a [Gateway webhook](#gateway-webhooks), whose authorization
 transaction carries the webhook's event ID.
@@ -41,8 +46,9 @@ transaction carries the webhook's event ID.
 defaults to `mock`, the only one so far; any other value fails at startup, so the service never
 runs without a gateway.
 
-Every call to the gateway carries an idempotency key, so a retried call never authorizes, voids or
-captures twice: an authorization and a capture pass on the caller's `Idempotency-Key`, and a void
+Every call to the gateway carries an idempotency key, so a retried call never authorizes, voids,
+captures or refunds twice: an authorization, a capture and a Refund pass on the caller's
+`Idempotency-Key`, and a void
 uses `void:<paymentId>`, since a Payment is voided at most once. A capture always asks for the full
 authorized amount.
 
@@ -57,6 +63,7 @@ The mock, `MockPaymentGatewayAdapter`, reads the request's `paymentMethod` as a 
 | `tok_async_approve` | `PENDING`; a webhook a few seconds later settles it as `AUTHORIZED` |
 | `tok_async_decline` | `PENDING`; a webhook a few seconds later settles it as `DECLINED`, `declineReason` `card_declined` |
 | `tok_capture_decline` | `AUTHORIZED`, but every capture of it is declined as `authorization_expired` |
+| `tok_refund_decline` | `AUTHORIZED`, and captured, but every Refund of it is declined as `refund_window_closed` |
 | anything else | `DECLINED`, `declineReason` `unknown_payment_method` |
 
 Each answer carries a fresh `mock-…` reference, a decline's too. A key the mock has seen gets its
@@ -65,7 +72,9 @@ failure to answer isn't remembered, so a retry can succeed. Every void succeeds,
 `mock-void-…` reference. A capture is approved with a `mock-capture-…` reference, unless the
 authorization was made with `tok_capture_decline`: the mock keeps no record of its authorizations,
 so it gives that one a `mock-capture-decline-…` reference and declines any capture of a reference
-that starts so, even after a restart.
+that starts so, even after a restart. A Refund is approved with a `mock-refund-…` reference, unless
+the authorization was made with `tok_refund_decline`, whose `mock-refund-decline-…` reference makes
+the mock decline every Refund of it the same way.
 
 The two async tokens stand for a card the Customer's bank confirms later, as 3-D Secure does. The
 mock answers them `PENDING`, and `payment.mock-gateway.webhook-delay` later (3 seconds unless set)
@@ -108,7 +117,8 @@ one Payment are applied one after the other.
 
 ## API
 
-The checkout Saga authorizes, voids and reads Payments, and the fulfillment Saga captures them, with Orchestration's own token, with the
+The checkout Saga authorizes, voids and reads Payments, the fulfillment Saga captures them, and the
+returns Saga refunds them, with Orchestration's own token, with the
 `ORCHESTRATION` role
 ([ADR 0002](../identity-access/docs/adr/0002-service-identity-by-client-credentials.md)), and names
 the Customer the Payment is for: in the body of a command, and as `customerId` when it reads one,
@@ -124,6 +134,7 @@ gets 403, and no token gets 401.
 | `POST /payments` | Orchestration | Authorizes an Order's amount; 201 with the Payment, authorized, declined or pending, its URL in `Location`. Requires an `Idempotency-Key` |
 | `POST /payments/{id}/void` | Orchestration | Releases an authorized or pending Payment; 200 with the voided Payment |
 | `POST /payments/{id}/capture` | Orchestration | Charges an authorized Payment's full amount; 200 with the captured Payment, 402 when the gateway declines. Requires an `Idempotency-Key` |
+| `POST /payments/{id}/refunds` | Orchestration | Gives back part or all of a captured Payment; 200 with the Payment, 402 when the gateway declines. Requires an `Idempotency-Key` |
 | `POST /webhooks/gateway` | the gateway | Settles a pending authorization; see [Gateway webhooks](#gateway-webhooks) |
 | `GET /payments/{id}` | Customer | The Customer's Payment; 404 for an unknown ID or another Customer's. A `customerId` parameter is ignored |
 | `GET /payments/{id}/for-customer?customerId=` | Orchestration | The named Customer's Payment, as the Saga awaits its settlement; 404 as above. A path of its own, so it never shadows the Customer's read above |
@@ -131,7 +142,7 @@ gets 403, and no token gets 401.
 | `GET /payments?orderId=` | Customer | The Customer's Payments for one of their Orders, newest first; an empty list for anyone else's Order. A `customerId` parameter is ignored |
 | `GET /staff/payments?orderId=` | Staff | Every Payment for an Order, newest first |
 
-The API gateway routes the reads and the webhook, as `/api/payment/…`, and hides the three commands
+The API gateway routes the reads and the webhook, as `/api/payment/…`, and hides the four commands
 and Orchestration's two reads.
 
 An authorization looks like
@@ -168,8 +179,8 @@ more is authorized; the same key with another body is a 422; no key is a 400 wit
 
 A void names the Customer, `{"customerId": "…"}`, and needs no key: voiding a `VOIDED` Payment
 changes nothing and answers the same 200. Voiding a `DECLINED` Payment is a 409 with `reason`
-`paymentNotVoidable`, and voiding a `CAPTURED` one a 409 with `alreadyCaptured`, since only a refund
-returns captured money. A gateway that fails to answer is a 502, and the Payment stays authorized.
+`paymentNotVoidable`, and voiding a `CAPTURED` or refunded one a 409 with `alreadyCaptured`, since
+only a Refund returns captured money. A gateway that fails to answer is a 502, and the Payment stays authorized.
 
 A capture names the Customer, `{"customerId": "…"}`, with an `Idempotency-Key`, which is passed on
 to the gateway. The Payment is locked
@@ -179,7 +190,7 @@ while the gateway is asked, so two captures of one Payment ask it once.
 |---|---|---|
 | `AUTHORIZED`, the gateway approves | 200 | records an approved `CAPTURE` transaction; the Payment is `CAPTURED` |
 | `AUTHORIZED`, the gateway declines | 402 | records a declined `CAPTURE` transaction with the gateway's reason; the Payment stays `AUTHORIZED`. The problem detail has `reason` `captureDeclined` and the gateway's `declineReason`, such as `authorization_expired` |
-| `CAPTURED` | 200 | the Payment as it is; nothing is recorded, and the gateway isn't asked |
+| `CAPTURED`, `PARTIALLY_REFUNDED` or `REFUNDED` | 200 | the Payment as it is; nothing is recorded, and the gateway isn't asked |
 | `PENDING`, `DECLINED` or `VOIDED` | 409 | `reason` `paymentNotCapturable`; nothing is recorded |
 | the gateway fails to answer | 502 | nothing is recorded, so the capture can be retried |
 
@@ -187,12 +198,45 @@ Only a 200 is replayed for a repeated key. A declined capture isn't, so asking a
 key reaches the gateway again, which answers as it did the first time, and records that answer
 again.
 
+A Refund names the Customer, how much, and what it is for, with an `Idempotency-Key`, which is
+passed on to the gateway:
+
+```json
+{"customerId": "…", "amount": {"amountMinor": 30000, "currency": "EUR"}, "reference": "RMA-3F2A9C1B"}
+```
+
+The Payment is locked while the gateway is asked, so two Refunds of one Payment are checked against
+what is left one after the other.
+
+| Payment | Answer | |
+|---|---|---|
+| `CAPTURED` or `PARTIALLY_REFUNDED`, the gateway approves | 200 | records an approved `REFUND` transaction; the Payment is `PARTIALLY_REFUNDED`, or `REFUNDED` once the Refunds reach the amount captured |
+| `CAPTURED` or `PARTIALLY_REFUNDED`, the gateway declines | 402 | records a declined `REFUND` transaction with the gateway's reason; the Payment is as it was. The problem detail has `reason` `refundDeclined` and the gateway's `declineReason`, such as `refund_window_closed` |
+| `CAPTURED` or `PARTIALLY_REFUNDED`, more than is left or another Currency | 422 | `reason` `refundExceedsCaptured`; nothing is recorded, and the gateway isn't asked |
+| any other status | 409 | `reason` `paymentNotRefundable`; nothing is recorded |
+| the gateway fails to answer | 502 | nothing is recorded, so the Refund can be retried |
+
+As for a capture, only a 200 is replayed for a repeated key: a Refund sent twice with the same key
+refunds once. A missing `customerId`, an
+amount that isn't a positive integer with an ISO 4217 code, or a missing or blank `reference` or one
+past 64 characters is a 400.
+
 A missing or blank `customerId` or one past 255 characters, a missing or blank `orderId` or one past
 64 characters, a missing or blank `paymentMethod`, one that isn't a string or one past 255
 characters, or an amount that isn't a positive integer with a known currency is a 400, as is a read
 of an Order's Payments without `orderId`. Every error is a problem detail.
 
 [`http/payment.http`](./http/payment.http) exercises every endpoint against the compose stack.
+
+### Changes in Sprint 6
+
+- `POST /payments/{id}/refunds`, for Orchestration.
+- A Payment's `status` may be `PARTIALLY_REFUNDED` or `REFUNDED`, and a transaction's `kind`
+  `REFUND`, with its `reference`. Every transaction gains `reference`, null except on a `REFUND`.
+- Capturing a refunded Payment answers it as it is, as for a captured one, and voiding one is a 409
+  with `alreadyCaptured`.
+- The mock gateway takes `tok_refund_decline`.
+- `payment.payment` gains the changes `REFUNDED` and `REFUND_DECLINED`.
 
 ### Changes in Sprint 5
 
@@ -215,10 +259,13 @@ of an Order's Payments without `orderId`. Every error is a problem detail.
 Each change publishes one `payment.payment` event through the outbox, in the transaction that made
 it, keyed by the Payment's ID. Its `change` is the status the transaction left the Payment in
 (`AUTHORIZED`, `DECLINED`, `PENDING`, `VOIDED` or `CAPTURED`), `CAPTURE_DECLINED` for a capture the
-gateway declined, which leaves it `AUTHORIZED`, or `BACKFILLED`; its `version` is the number of
+gateway declined, which leaves it `AUTHORIZED`, `REFUNDED` for an approved Refund, which leaves it
+`PARTIALLY_REFUNDED` or `REFUNDED`, `REFUND_DECLINED` for a Refund the gateway declined, which leaves
+it as it was, or `BACKFILLED`; its `version` is the number of
 transactions; and its `payment` is the snapshot, with the Order, the Customer, the amount, the
-status, the decline reason and every transaction. A request that changes nothing, such as a
-replayed authorization, a second void or a second capture, publishes nothing. Its schema,
+status, the decline reason and every transaction, a Refund's with its `reference`. A request that
+changes nothing, such as a replayed authorization, a second void, a second capture or a Refund
+refused before the gateway is asked, publishes nothing. Its schema,
 [`payment.payment.json`](../../platform/event-schemas/schemas/payment.payment.json), is the
 definition. Nothing consumes it yet.
 

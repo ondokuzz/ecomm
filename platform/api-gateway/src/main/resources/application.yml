@@ -29,11 +29,11 @@ ecomm:
         internal: [POST /orders, PATCH /orders/*/status]
       payment:
         uri: http://localhost:8084
-        # The Customer's and Staff's reads are routed; only Orchestration authorizes, voids and
-        # captures, and reads a named Customer's Payment, or their Payments by Order.
+        # The Customer's and Staff's reads are routed; only Orchestration authorizes, voids,
+        # captures and refunds, and reads a named Customer's Payment, or their Payments by Order.
         internal:
-          [POST /payments, POST /payments/*/void, POST /payments/*/capture, GET /payments/by-order,
-           GET /payments/*/for-customer]
+          [POST /payments, POST /payments/*/void, POST /payments/*/capture, POST /payments/*/refunds,
+           GET /payments/by-order, GET /payments/*/for-customer]
         # The payment gateway settles pending authorizations from outside; Payment checks the
         # webhook's signature.
         webhooks: [POST /webhooks/gateway]

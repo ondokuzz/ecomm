@@ -175,10 +175,10 @@ class PostgresPaymentRepository implements PaymentRepository {
             """
             INSERT INTO payment_transaction
               (payment_id, position, kind, amount_minor, currency, outcome, gateway_reference,
-               decline_reason, gateway_event_id, at, backfilled)
+               decline_reason, gateway_event_id, at, backfilled, refund_for)
             VALUES
               (:paymentId, :position, :kind, :amountMinor, :currency, :outcome, :gatewayReference,
-               :declineReason, :gatewayEventId, :at, :backfilled)
+               :declineReason, :gatewayEventId, :at, :backfilled, :refundFor)
             """)
         .param("paymentId", paymentId)
         .param("position", position)
@@ -191,6 +191,7 @@ class PostgresPaymentRepository implements PaymentRepository {
         .param("gatewayEventId", transaction.gatewayEventId())
         .param("at", Timestamp.from(transaction.at()))
         .param("backfilled", transaction.backfilled())
+        .param("refundFor", transaction.refundFor())
         .update();
   }
 
@@ -214,7 +215,7 @@ class PostgresPaymentRepository implements PaymentRepository {
     jdbc.sql(
             """
             SELECT payment_id, kind, amount_minor, currency, outcome, gateway_reference,
-                   decline_reason, gateway_event_id, at, backfilled
+                   decline_reason, gateway_event_id, at, backfilled, refund_for
             FROM payment_transaction
             WHERE payment_id IN (:ids)
             ORDER BY payment_id, position
@@ -233,7 +234,8 @@ class PostgresPaymentRepository implements PaymentRepository {
                           rs.getString("decline_reason"),
                           rs.getString("gateway_event_id"),
                           rs.getTimestamp("at").toInstant(),
-                          rs.getBoolean("backfilled")));
+                          rs.getBoolean("backfilled"),
+                          rs.getString("refund_for")));
             });
     return headers.stream()
         .map(

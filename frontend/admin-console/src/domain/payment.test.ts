@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { type Payment, paymentStatusLabel, paymentStatuses, transactionRowsOf } from './payment'
+import { type Payment, paymentStatusLabel, paymentStatuses, refundedOf, transactionRowsOf } from './payment'
 
 const eur = (amountMinor: number) => ({ amountMinor, currency: 'EUR' })
 
@@ -20,6 +20,7 @@ const payment: Payment = {
       gatewayEventId: null,
       at: '2026-10-03T12:00:00Z',
       backfilled: false,
+      reference: null,
     },
     {
       kind: 'AUTHORIZATION',
@@ -30,6 +31,7 @@ const payment: Payment = {
       gatewayEventId: 'evt_1',
       at: '2026-10-03T12:00:03Z',
       backfilled: false,
+      reference: null,
     },
     {
       kind: 'VOID',
@@ -40,13 +42,22 @@ const payment: Payment = {
       gatewayEventId: null,
       at: '2026-10-03T12:00:09Z',
       backfilled: false,
+      reference: null,
     },
   ],
 }
 
 describe('paymentStatusLabel', () => {
   it('names each Payment status as Staff read it', () => {
-    expect(paymentStatuses.map(paymentStatusLabel)).toEqual(['Pending', 'Authorized', 'Declined', 'Voided', 'Charged'])
+    expect(paymentStatuses.map(paymentStatusLabel)).toEqual([
+      'Pending',
+      'Authorized',
+      'Declined',
+      'Voided',
+      'Charged',
+      'Partly refunded',
+      'Refunded',
+    ])
   })
 })
 
@@ -87,6 +98,25 @@ describe('transactionRowsOf', () => {
     ])
   })
 
+  it('lists a refund, approved or declined, with what it was for', () => {
+    const refund = {
+      ...payment.transactions[2],
+      kind: 'REFUND' as const,
+      amount: eur(30000),
+      gatewayReference: 'mock-refund-1',
+      reference: 'RMA-3F2A9C1B',
+    }
+    const rows = transactionRowsOf({
+      transactions: [refund, { ...refund, outcome: 'DECLINED', declineReason: 'refund_window_closed' }],
+    })
+
+    expect(rows.map((row) => [row.kind, row.outcome, row.refundFor, row.declineReason])).toEqual([
+      ['Refund', 'Approved', 'RMA-3F2A9C1B', undefined],
+      ['Refund', 'Declined', 'RMA-3F2A9C1B', 'refund_window_closed'],
+    ])
+    expect(transactionRowsOf(payment)[0].refundFor).toBeUndefined()
+  })
+
   it('gives a declined transaction its reason', () => {
     const [row] = transactionRowsOf({
       transactions: [{ ...payment.transactions[0], outcome: 'DECLINED', declineReason: 'insufficient_funds' }],
@@ -102,5 +132,21 @@ describe('transactionRowsOf', () => {
   it('shows a reference the gateway never gave as missing', () => {
     const [row] = transactionRowsOf({ transactions: [{ ...payment.transactions[0], gatewayReference: null }] })
     expect(row.reference).toBe('—')
+  })
+})
+
+describe('refundedOf', () => {
+  it('adds up the approved refunds, leaving out refused ones, in the Payment’s Currency', () => {
+    const refund = (amountMinor: number, outcome: 'APPROVED' | 'DECLINED') => ({
+      ...payment.transactions[2],
+      kind: 'REFUND' as const,
+      outcome,
+      amount: eur(amountMinor),
+    })
+
+    expect(
+      refundedOf({ amount: eur(79900), transactions: [refund(30000, 'APPROVED'), refund(100, 'DECLINED')] }),
+    ).toEqual(eur(30000))
+    expect(refundedOf(payment)).toEqual(eur(0))
   })
 })

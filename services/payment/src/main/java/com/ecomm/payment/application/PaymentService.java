@@ -1,11 +1,13 @@
 package com.ecomm.payment.application;
 
 import com.ecomm.commons.events.IntegrationEventPublisher;
+import com.ecomm.commons.money.Money;
 import com.ecomm.payment.application.port.in.AuthorizePaymentUseCase;
 import com.ecomm.payment.application.port.in.BrowsePaymentsUseCase;
 import com.ecomm.payment.application.port.in.CapturePaymentUseCase;
 import com.ecomm.payment.application.port.in.FindPaymentUseCase;
 import com.ecomm.payment.application.port.in.PublishBackfillUseCase;
+import com.ecomm.payment.application.port.in.RefundPaymentUseCase;
 import com.ecomm.payment.application.port.in.SettleAuthorizationUseCase;
 import com.ecomm.payment.application.port.in.VoidPaymentUseCase;
 import com.ecomm.payment.application.port.out.PaymentEvent;
@@ -16,6 +18,7 @@ import com.ecomm.payment.application.port.out.TimeSource;
 import com.ecomm.payment.application.port.out.Transactions;
 import com.ecomm.payment.domain.AuthorizationRequest;
 import com.ecomm.payment.domain.GatewayCapture;
+import com.ecomm.payment.domain.GatewayRefund;
 import com.ecomm.payment.domain.GatewaySettlement;
 import com.ecomm.payment.domain.Payment;
 import com.ecomm.payment.domain.PaymentNotCapturableException;
@@ -29,6 +32,7 @@ public class PaymentService
     implements AuthorizePaymentUseCase,
         VoidPaymentUseCase,
         CapturePaymentUseCase,
+        RefundPaymentUseCase,
         FindPaymentUseCase,
         BrowsePaymentsUseCase,
         PublishBackfillUseCase,
@@ -98,8 +102,9 @@ public class PaymentService
 
   /**
    * The Payment stays locked while the gateway is asked, so two captures of one Payment ask it
-   * once. A declined capture is recorded and published, and the Payment stays authorized; asked
-   * again with the same key, the gateway gives the same answer, which is recorded again.
+   * once. A Payment captured already, and perhaps refunded since, is answered as it is. A declined
+   * capture is recorded and published, and the Payment stays authorized; asked again with the same
+   * key, the gateway gives the same answer, which is recorded again.
    */
   @Override
   public Optional<Capture> capture(String customerId, UUID id, String idempotencyKey) {
@@ -110,7 +115,7 @@ public class PaymentService
                 .filter(payment -> payment.belongsTo(customerId))
                 .map(
                     payment -> {
-                      if (payment.status() == PaymentStatus.CAPTURED) {
+                      if (payment.status().wasCaptured()) {
                         return new Capture(payment, CaptureOutcome.CAPTURED, null);
                       }
                       if (payment.status() != PaymentStatus.AUTHORIZED) {
@@ -141,6 +146,54 @@ public class PaymentService
                                   ? Change.CAPTURED
                                   : Change.CAPTURE_DECLINED));
                       return capture;
+                    }));
+  }
+
+  /**
+   * The Payment stays locked while the gateway is asked, so two Refunds of one Payment are checked
+   * against what is left one after the other. A Refund of more than is left is refused before the
+   * gateway is asked. A declined Refund is recorded and published, and the Payment stays as it was.
+   */
+  @Override
+  public Optional<Refund> refund(
+      String customerId, UUID id, Money amount, String refundFor, String idempotencyKey) {
+    return transactions.inTransaction(
+        () ->
+            payments
+                .lockToChange(id)
+                .filter(payment -> payment.belongsTo(customerId))
+                .map(
+                    payment -> {
+                      payment.checkRefundable(amount);
+                      var answer =
+                          gateway.refund(payment.gatewayReference(), amount, idempotencyKey);
+                      var refund =
+                          switch (answer) {
+                            case GatewayRefund.Approved approved ->
+                                new Refund(
+                                    payment.refunded(
+                                        amount, approved.reference(), refundFor, time.now()),
+                                    RefundOutcome.REFUNDED,
+                                    null);
+                            case GatewayRefund.Declined declined ->
+                                new Refund(
+                                    payment.refundDeclined(
+                                        amount,
+                                        declined.reference(),
+                                        declined.reason(),
+                                        refundFor,
+                                        time.now()),
+                                    RefundOutcome.DECLINED,
+                                    declined.reason());
+                          };
+                      payments.recordLatestTransaction(refund.payment());
+                      events.publish(
+                          PaymentEvent.of(
+                              refund.payment(),
+                              refund.outcome() == RefundOutcome.REFUNDED
+                                  ? Change.REFUNDED
+                                  : Change.REFUND_DECLINED));
+                      return refund;
                     }));
   }
 
@@ -212,8 +265,9 @@ public class PaymentService
       case AUTHORIZED -> Change.AUTHORIZED;
       case DECLINED -> Change.DECLINED;
       case PENDING -> Change.PENDING;
-      case VOIDED, CAPTURED ->
-          throw new IllegalStateException("An authorization can't void or capture a Payment");
+      case VOIDED, CAPTURED, PARTIALLY_REFUNDED, REFUNDED ->
+          throw new IllegalStateException(
+              "An authorization can't void, capture or refund a Payment");
     };
   }
 }

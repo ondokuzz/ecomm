@@ -6,12 +6,15 @@ import com.ecomm.payment.application.port.in.AuthorizePaymentUseCase;
 import com.ecomm.payment.application.port.in.CapturePaymentUseCase;
 import com.ecomm.payment.application.port.in.CapturePaymentUseCase.CaptureOutcome;
 import com.ecomm.payment.application.port.in.FindPaymentUseCase;
+import com.ecomm.payment.application.port.in.RefundPaymentUseCase;
+import com.ecomm.payment.application.port.in.RefundPaymentUseCase.RefundOutcome;
 import com.ecomm.payment.application.port.in.VoidPaymentUseCase;
 import com.ecomm.payment.domain.InvalidPaymentException;
 import com.ecomm.payment.domain.PaymentGatewayUnavailableException;
 import com.ecomm.payment.domain.PaymentNotCapturableException;
+import com.ecomm.payment.domain.PaymentNotRefundableException;
 import com.ecomm.payment.domain.PaymentNotVoidableException;
-import com.ecomm.payment.domain.PaymentStatus;
+import com.ecomm.payment.domain.RefundExceedsCapturedException;
 import java.net.URI;
 import java.util.List;
 import java.util.Optional;
@@ -33,11 +36,11 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The checkout Saga authorizes, voids and reads a Customer's Payments, and the fulfillment Saga
- * captures them, with Orchestration's own {@code ORCHESTRATION} token, naming the Customer in the
- * body, or as {@code customerId} when it reads one. The Customer reads them back with a {@code
- * CUSTOMER} token, whose {@code sub} must own the Payment; Staff read them under {@code
- * /staff/payments}.
+ * The checkout Saga authorizes, voids and reads a Customer's Payments, the fulfillment Saga
+ * captures them, and the returns Saga refunds them, with Orchestration's own {@code ORCHESTRATION}
+ * token, naming the Customer in the body, or as {@code customerId} when it reads one. The Customer
+ * reads them back with a {@code CUSTOMER} token, whose {@code sub} must own the Payment; Staff read
+ * them under {@code /staff/payments}.
  */
 @RestController
 @RequestMapping("/payments")
@@ -48,16 +51,19 @@ class PaymentController {
   private final AuthorizePaymentUseCase authorize;
   private final VoidPaymentUseCase voidPayment;
   private final CapturePaymentUseCase capture;
+  private final RefundPaymentUseCase refund;
   private final FindPaymentUseCase find;
 
   PaymentController(
       AuthorizePaymentUseCase authorize,
       VoidPaymentUseCase voidPayment,
       CapturePaymentUseCase capture,
+      RefundPaymentUseCase refund,
       FindPaymentUseCase find) {
     this.authorize = authorize;
     this.voidPayment = voidPayment;
     this.capture = capture;
+    this.refund = refund;
     this.find = find;
   }
 
@@ -84,12 +90,12 @@ class PaymentController {
   }
 
   /**
-   * 200 with the captured Payment, whether this capture charged it or an earlier one did; 402
-   * {@code captureDeclined} with the gateway's {@code declineReason} when the gateway refuses, the
-   * refusal recorded and the Payment still authorized; 409 {@code paymentNotCapturable} for a
-   * pending, declined or voided Payment; 404 for an unknown one or another Customer's; 502 when the
-   * gateway fails to answer, with nothing recorded. The {@code Idempotency-Key} is required, and is
-   * passed on to the gateway.
+   * 200 with the captured Payment, whether this capture charged it or an earlier one did, even if
+   * it has been refunded since; 402 {@code captureDeclined} with the gateway's {@code
+   * declineReason} when the gateway refuses, the refusal recorded and the Payment still authorized;
+   * 409 {@code paymentNotCapturable} for a pending, declined or voided Payment; 404 for an unknown
+   * one or another Customer's; 502 when the gateway fails to answer, with nothing recorded. The
+   * {@code Idempotency-Key} is required, and is passed on to the gateway.
    */
   @PostMapping("/{id}/capture")
   @PreAuthorize("hasRole('ORCHESTRATION')")
@@ -119,9 +125,56 @@ class PaymentController {
   }
 
   /**
+   * 200 with the Payment the Refund left, {@code PARTIALLY_REFUNDED} or {@code REFUNDED}; 402
+   * {@code refundDeclined} with the gateway's {@code declineReason} when the gateway refuses, the
+   * refusal recorded and the Payment as it was; 409 {@code paymentNotRefundable} unless the Payment
+   * is captured or partly refunded; 422 {@code refundExceedsCaptured} for more than is left to
+   * refund, or another Currency, with nothing asked of the gateway; 404 for an unknown Payment or
+   * another Customer's; 502 when the gateway fails to answer, with nothing recorded. The {@code
+   * Idempotency-Key} is required, and is passed on to the gateway; a repeat replays the first
+   * response and refunds nothing more.
+   */
+  @PostMapping("/{id}/refunds")
+  @PreAuthorize("hasRole('ORCHESTRATION')")
+  @IdempotentCommand
+  ResponseEntity<?> refund(
+      @PathVariable String id,
+      // Never null here: @IdempotentCommand refuses a request without one.
+      @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
+      @RequestBody RefundPaymentRequest request) {
+    var customerId = request.customer();
+    var amount = request.money();
+    var refundFor = request.refundFor();
+    var result =
+        parse(id)
+            .flatMap(
+                paymentId ->
+                    refund.refund(customerId, paymentId, amount, refundFor, idempotencyKey))
+            .orElseThrow(() -> new PaymentNotFoundException(id));
+    var payment = result.payment();
+    log.info(
+        "Payment {} for Order {} is {} after a Refund for {}",
+        payment.id(),
+        payment.orderId(),
+        payment.status(),
+        refundFor);
+    if (result.outcome() == RefundOutcome.DECLINED) {
+      var problem =
+          ProblemDetail.forStatusAndDetail(
+              HttpStatus.PAYMENT_REQUIRED,
+              "The gateway declined to refund Payment " + payment.id() + "; it is as it was.");
+      problem.setProperty("reason", "refundDeclined");
+      problem.setProperty("declineReason", result.declineReason());
+      return ResponseEntity.of(problem).build();
+    }
+    return ResponseEntity.ok(PaymentResponse.of(payment));
+  }
+
+  /**
    * 200 with the voided Payment, whether this void released it or an earlier one did; 409 {@code
-   * alreadyCaptured} for a captured Payment and {@code paymentNotVoidable} for a declined one; 404
-   * for an unknown one or another Customer's; 502 when the gateway fails to answer.
+   * alreadyCaptured} for a captured or refunded Payment and {@code paymentNotVoidable} for a
+   * declined one; 404 for an unknown one or another Customer's; 502 when the gateway fails to
+   * answer.
    */
   @PostMapping("/{id}/void")
   @PreAuthorize("hasRole('ORCHESTRATION')")
@@ -199,7 +252,7 @@ class PaymentController {
   ProblemDetail notVoidable(PaymentNotVoidableException e) {
     var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
     problem.setProperty(
-        "reason", e.status() == PaymentStatus.CAPTURED ? "alreadyCaptured" : "paymentNotVoidable");
+        "reason", e.status().wasCaptured() ? "alreadyCaptured" : "paymentNotVoidable");
     return problem;
   }
 
@@ -207,6 +260,21 @@ class PaymentController {
   ProblemDetail notCapturable(PaymentNotCapturableException e) {
     var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
     problem.setProperty("reason", "paymentNotCapturable");
+    return problem;
+  }
+
+  @ExceptionHandler(PaymentNotRefundableException.class)
+  ProblemDetail notRefundable(PaymentNotRefundableException e) {
+    var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
+    problem.setProperty("reason", "paymentNotRefundable");
+    return problem;
+  }
+
+  @ExceptionHandler(RefundExceedsCapturedException.class)
+  ProblemDetail refundExceedsCaptured(RefundExceedsCapturedException e) {
+    var problem =
+        ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, e.getMessage());
+    problem.setProperty("reason", "refundExceedsCaptured");
     return problem;
   }
 

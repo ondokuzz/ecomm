@@ -3,20 +3,30 @@ import { formatTime } from './order'
 
 /**
  * A Payment's status, worked out from its Payment transactions: its authorization awaits the
- * gateway, the amount is authorized, the gateway declined it, a Void released it, or a Capture
- * charged it.
+ * gateway, the amount is authorized, the gateway declined it, a Void released it, a Capture
+ * charged it, or Refunds gave back part or all of it.
  */
-export type PaymentStatus = 'PENDING' | 'AUTHORIZED' | 'DECLINED' | 'VOIDED' | 'CAPTURED'
+export type PaymentStatus =
+  'PENDING' | 'AUTHORIZED' | 'DECLINED' | 'VOIDED' | 'CAPTURED' | 'PARTIALLY_REFUNDED' | 'REFUNDED'
 
-export const paymentStatuses: readonly PaymentStatus[] = ['PENDING', 'AUTHORIZED', 'DECLINED', 'VOIDED', 'CAPTURED']
+export const paymentStatuses: readonly PaymentStatus[] = [
+  'PENDING',
+  'AUTHORIZED',
+  'DECLINED',
+  'VOIDED',
+  'CAPTURED',
+  'PARTIALLY_REFUNDED',
+  'REFUNDED',
+]
 
 /**
  * One interaction with the payment gateway, recorded for good. `declineReason` and `gatewayEventId`
  * are null unless the gateway declined it or a webhook recorded it; a backfilled one was
- * reconstructed from a Payment recorded before the ledger, and its `at` is approximate.
+ * reconstructed from a Payment recorded before the ledger, and its `at` is approximate; `reference`
+ * is what a Refund was for, such as an RMA reference, and null for any other kind.
  */
 export interface PaymentTransaction {
-  kind: 'AUTHORIZATION' | 'VOID' | 'CAPTURE'
+  kind: 'AUTHORIZATION' | 'VOID' | 'CAPTURE' | 'REFUND'
   amount: Money
   outcome: 'APPROVED' | 'DECLINED' | 'PENDING'
   gatewayReference: string | null
@@ -24,6 +34,7 @@ export interface PaymentTransaction {
   gatewayEventId: string | null
   at: string
   backfilled: boolean
+  reference: string | null
 }
 
 /** A Payment as Payment shows it to Staff, with its Payment transactions oldest first. */
@@ -46,7 +57,22 @@ function labelOf(code: string): string {
 
 /** A Payment status as Staff read it; a captured Payment is "Charged", as the Customer sees it. */
 export function paymentStatusLabel(status: PaymentStatus): string {
-  return status === 'CAPTURED' ? 'Charged' : labelOf(status)
+  switch (status) {
+    case 'CAPTURED':
+      return 'Charged'
+    case 'PARTIALLY_REFUNDED':
+      return 'Partly refunded'
+    default:
+      return labelOf(status)
+  }
+}
+
+/** What a Payment's Refunds gave back: the approved ones, in the Payment's Currency. */
+export function refundedOf(payment: Pick<Payment, 'amount' | 'transactions'>): Money {
+  const amountMinor = payment.transactions
+    .filter((transaction) => transaction.kind === 'REFUND' && transaction.outcome === 'APPROVED')
+    .reduce((sum, transaction) => sum + transaction.amount.amountMinor, 0)
+  return { amountMinor, currency: payment.amount.currency }
 }
 
 /** One Payment transaction as the Order page lists it. */
@@ -57,6 +83,8 @@ export interface TransactionRow {
   /** The gateway's reference, or a dash when it gave none. */
   reference: string
   declineReason?: string
+  /** What a Refund was for, such as an RMA reference. */
+  refundFor?: string
   /** The instant, for `<time dateTime>`. */
   at: string
   /** When, in the Staff member's own time zone, to the second. */
@@ -73,6 +101,7 @@ export function transactionRowsOf(payment: Pick<Payment, 'transactions'>, locale
     amount: transaction.amount,
     reference: transaction.gatewayReference ?? '—',
     ...(transaction.declineReason ? { declineReason: transaction.declineReason } : {}),
+    ...(transaction.reference ? { refundFor: transaction.reference } : {}),
     at: transaction.at,
     time: formatTime(transaction.at, locale),
     ...(transaction.backfilled ? { note: 'Backfilled from before the ledger: the time is approximate' } : {}),

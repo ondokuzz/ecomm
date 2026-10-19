@@ -25,8 +25,8 @@ public interface CapturePaymentUseCase {
   /**
    * Charges the Customer's authorized Payment for its full amount through the gateway, passing it
    * {@code idempotencyKey}, and records the gateway's answer as a {@code CAPTURE} transaction. A
-   * Payment that is already captured is returned as it is, so capturing is naturally idempotent.
-   * Empty unless the Payment exists and belongs to this Customer.
+   * Payment that is already captured, even one refunded since, is returned as it is, so capturing
+   * is naturally idempotent. Empty unless the Payment exists and belongs to this Customer.
    *
    * @throws PaymentNotCapturableException when the Payment is pending, declined or voided
    * @throws PaymentGatewayUnavailableException when the gateway fails to answer; nothing is

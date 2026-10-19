@@ -42,9 +42,11 @@
         "VOIDED",
         "BACKFILLED",
         "CAPTURED",
-        "CAPTURE_DECLINED"
+        "CAPTURE_DECLINED",
+        "REFUNDED",
+        "REFUND_DECLINED"
       ],
-      "description": "Why the event was published: the status a transaction left the Payment in, CAPTURE_DECLINED for a capture the gateway refused (the Payment stays AUTHORIZED), or BACKFILLED for a Payment recorded before Payment events."
+      "description": "Why the event was published: the status a transaction left the Payment in, CAPTURE_DECLINED for a capture the gateway refused (the Payment stays AUTHORIZED), REFUNDED for an approved Refund (the Payment PARTIALLY_REFUNDED or REFUNDED), REFUND_DECLINED for a Refund the gateway refused (the Payment as it was), or BACKFILLED for a Payment recorded before Payment events."
     },
     "payment": {
       "type": "object",
@@ -77,9 +79,11 @@
             "AUTHORIZED",
             "DECLINED",
             "VOIDED",
-            "CAPTURED"
+            "CAPTURED",
+            "PARTIALLY_REFUNDED",
+            "REFUNDED"
           ],
-          "description": "Worked out from the transactions."
+          "description": "Worked out from the transactions: PARTIALLY_REFUNDED once approved Refunds give back part of the captured amount, REFUNDED once they give back all of it."
         },
         "declineReason": {
           "type": "string",
@@ -106,7 +110,8 @@
                 "enum": [
                   "AUTHORIZATION",
                   "VOID",
-                  "CAPTURE"
+                  "CAPTURE",
+                  "REFUND"
                 ]
               },
               "amount": {
@@ -140,6 +145,12 @@
               "backfilled": {
                 "type": "boolean",
                 "description": "True for an authorization reconstructed from a Payment recorded before the ledger; its at is when it was reconstructed."
+              },
+              "reference": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "description": "What a REFUND is for, such as an RMA reference. Absent for every other kind."
               }
             }
           }

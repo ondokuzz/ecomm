@@ -29,7 +29,8 @@ record PaymentResponse(
   /**
    * One Payment transaction: {@code declineReason} and {@code gatewayEventId} are null unless the
    * gateway declined it or a webhook recorded it; {@code backfilled} marks one reconstructed from
-   * before the ledger, whose {@code at} is approximate.
+   * before the ledger, whose {@code at} is approximate; {@code reference} is what a Refund is for,
+   * and null for any other kind.
    */
   record PaymentTransactionResponse(
       String kind,
@@ -39,7 +40,8 @@ record PaymentResponse(
       String declineReason,
       String gatewayEventId,
       String at,
-      boolean backfilled) {
+      boolean backfilled,
+      String reference) {
 
     static PaymentTransactionResponse of(PaymentTransaction transaction) {
       return new PaymentTransactionResponse(
@@ -50,7 +52,8 @@ record PaymentResponse(
           transaction.declineReason(),
           transaction.gatewayEventId(),
           transaction.at().toString(),
-          transaction.backfilled());
+          transaction.backfilled(),
+          transaction.refundFor());
     }
   }
 

@@ -123,6 +123,64 @@ public record Payment(
     return new Payment(id, customerId, orderId, amount, appended);
   }
 
+  /**
+   * What is left to refund of the amount captured; null unless it is captured or partly refunded.
+   */
+  public Money refundable() {
+    return PaymentStatus.Ledger.of(transactions).refundable();
+  }
+
+  /**
+   * This Payment with a {@code REFUND} of {@code refund}, for {@code refundFor}, the gateway
+   * approved with {@code reference}: {@code PARTIALLY_REFUNDED}, or {@code REFUNDED} once nothing
+   * is left.
+   *
+   * @throws PaymentNotRefundableException unless it is captured or partly refunded
+   * @throws RefundExceedsCapturedException when {@code refund} is more than {@link #refundable()},
+   *     or in another Currency
+   */
+  public Payment refunded(Money refund, String reference, String refundFor, Instant at) {
+    return withRefund(PaymentTransaction.refundOf(refund, reference, refundFor, at));
+  }
+
+  /**
+   * This Payment with a {@code REFUND} of {@code refund}, for {@code refundFor}, the gateway
+   * declined with {@code reference} for {@code reason}: its status unchanged.
+   *
+   * @throws PaymentNotRefundableException unless it is captured or partly refunded
+   * @throws RefundExceedsCapturedException as for {@link #refunded}
+   */
+  public Payment refundDeclined(
+      Money refund, String reference, String reason, String refundFor, Instant at) {
+    return withRefund(
+        PaymentTransaction.declinedRefundOf(refund, reference, reason, refundFor, at));
+  }
+
+  /**
+   * Checks a Refund of {@code refund} could be made: refused, with nothing asked of the gateway,
+   * when it couldn't.
+   *
+   * @throws PaymentNotRefundableException unless it is captured or partly refunded
+   * @throws RefundExceedsCapturedException when {@code refund} is more than {@link #refundable()},
+   *     or in another Currency
+   */
+  public void checkRefundable(Money refund) {
+    var left = refundable();
+    if (left == null) {
+      throw new PaymentNotRefundableException(id, status());
+    }
+    if (!refund.currency().equals(left.currency()) || refund.amountMinor() > left.amountMinor()) {
+      throw new RefundExceedsCapturedException(id, refund, left);
+    }
+  }
+
+  private Payment withRefund(PaymentTransaction refund) {
+    checkRefundable(refund.amount());
+    var appended = new ArrayList<>(transactions);
+    appended.add(refund);
+    return new Payment(id, customerId, orderId, amount, appended);
+  }
+
   public boolean belongsTo(String customerId) {
     return this.customerId.equals(customerId);
   }

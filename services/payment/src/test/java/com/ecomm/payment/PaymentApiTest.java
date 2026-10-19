@@ -164,6 +164,62 @@ abstract class PaymentApiTest {
         .exchange();
   }
 
+  /**
+   * A Payment of {@code orderId} for {@code customer-42}, paid with {@code tok_approve}, captured.
+   */
+  PaymentView captured(String orderId) {
+    return captured(orderId, "tok_approve");
+  }
+
+  /**
+   * A Payment of {@code orderId} for {@code customer-42}, paid with {@code paymentMethod},
+   * captured.
+   */
+  PaymentView captured(String orderId, String paymentMethod) {
+    var payment =
+        authorize(orderId, paymentMethod)
+            .expectStatus()
+            .isCreated()
+            .expectBody(PaymentView.class)
+            .returnResult()
+            .getResponseBody();
+    return capture(payment.id(), "customer-42")
+        .expectStatus()
+        .isOk()
+        .expectBody(PaymentView.class)
+        .returnResult()
+        .getResponseBody();
+  }
+
+  /**
+   * Refunds {@code amountMinor} EUR of the Payment as the returns Saga, for {@code reference}, with
+   * a fresh key.
+   */
+  RestTestClient.ResponseSpec refund(String id, long amountMinor, String reference) {
+    return refundWithKey(
+        id, UUID.randomUUID().toString(), refundBody(amountMinor, "EUR", reference));
+  }
+
+  /** Refunds the Payment as the returns Saga, with {@code key} and {@code body}. */
+  RestTestClient.ResponseSpec refundWithKey(String id, String key, String body) {
+    return http.post()
+        .uri("/payments/{id}/refunds", id)
+        .headers(h -> h.setBearerAuth(orchestrationToken()))
+        .header("Idempotency-Key", key)
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(body)
+        .exchange();
+  }
+
+  /** A Refund's body for {@code customer-42}. */
+  static String refundBody(long amountMinor, String currency, String reference) {
+    return """
+        {"customerId": "customer-42", "amount": {"amountMinor": %d, "currency": "%s"},
+         "reference": "%s"}
+        """
+        .formatted(amountMinor, currency, reference);
+  }
+
   /** Every Payment for the Order, as Staff read them. */
   List<PaymentView> staffPayments(String orderId) {
     return http.get()
@@ -195,7 +251,8 @@ abstract class PaymentApiTest {
       String declineReason,
       String gatewayEventId,
       String at,
-      boolean backfilled) {}
+      boolean backfilled,
+      String reference) {}
 
   record AmountView(long amountMinor, String currency) {}
 }

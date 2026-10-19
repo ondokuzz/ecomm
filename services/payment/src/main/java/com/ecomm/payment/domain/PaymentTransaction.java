@@ -14,6 +14,7 @@ import java.util.Objects;
  * @param gatewayEventId the gateway's event ID when a webhook recorded it; null otherwise
  * @param backfilled true for an authorization reconstructed from a Payment recorded before the
  *     ledger, whose time is when it was reconstructed, not when it happened
+ * @param refundFor what a Refund is for, such as an RMA reference; null for any other kind
  */
 public record PaymentTransaction(
     Kind kind,
@@ -23,13 +24,15 @@ public record PaymentTransaction(
     String declineReason,
     String gatewayEventId,
     Instant at,
-    boolean backfilled) {
+    boolean backfilled,
+    String refundFor) {
 
-  /** What the gateway was asked to do. Refund comes with returns. */
+  /** What the gateway was asked to do. */
   public enum Kind {
     AUTHORIZATION,
     VOID,
-    CAPTURE
+    CAPTURE,
+    REFUND
   }
 
   /** What the gateway answered: {@code PENDING} until it settles the answer later. */
@@ -62,19 +65,20 @@ public record PaymentTransaction(
         answer.declineReason(),
         gatewayEventId,
         at,
-        false);
+        false,
+        null);
   }
 
   /** A void of {@code amount} the gateway confirmed with {@code reference}. */
   static PaymentTransaction voidOf(Money amount, String reference, Instant at) {
     return new PaymentTransaction(
-        Kind.VOID, amount, Outcome.APPROVED, reference, null, null, at, false);
+        Kind.VOID, amount, Outcome.APPROVED, reference, null, null, at, false, null);
   }
 
   /** A capture of {@code amount} the gateway approved with {@code reference}. */
   static PaymentTransaction captureOf(Money amount, String reference, Instant at) {
     return new PaymentTransaction(
-        Kind.CAPTURE, amount, Outcome.APPROVED, reference, null, null, at, false);
+        Kind.CAPTURE, amount, Outcome.APPROVED, reference, null, null, at, false, null);
   }
 
   /**
@@ -83,6 +87,24 @@ public record PaymentTransaction(
   static PaymentTransaction declinedCaptureOf(
       Money amount, String reference, String reason, Instant at) {
     return new PaymentTransaction(
-        Kind.CAPTURE, amount, Outcome.DECLINED, reference, reason, null, at, false);
+        Kind.CAPTURE, amount, Outcome.DECLINED, reference, reason, null, at, false, null);
+  }
+
+  /**
+   * A Refund of {@code amount}, for {@code refundFor}, the gateway approved with {@code reference}.
+   */
+  static PaymentTransaction refundOf(Money amount, String reference, String refundFor, Instant at) {
+    return new PaymentTransaction(
+        Kind.REFUND, amount, Outcome.APPROVED, reference, null, null, at, false, refundFor);
+  }
+
+  /**
+   * A Refund of {@code amount}, for {@code refundFor}, the gateway declined with {@code reference},
+   * for {@code reason}.
+   */
+  static PaymentTransaction declinedRefundOf(
+      Money amount, String reference, String reason, String refundFor, Instant at) {
+    return new PaymentTransaction(
+        Kind.REFUND, amount, Outcome.DECLINED, reference, reason, null, at, false, refundFor);
   }
 }
