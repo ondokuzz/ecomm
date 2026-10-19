@@ -23,8 +23,11 @@ dependencies {
   testImplementation("org.awaitility:awaitility")
 }
 
-// A JVM per test class, so each has Temporal test servers of its own. Time skipping moves a test
-// server's clock ahead of the worker's; once it is centuries ahead, past what Temporal's SDK
-// metrics can measure ("Duration of this magnitude not supported"), no workflow on it can complete,
-// so one class's skipping must not reach another's server.
-tasks.test { forkEvery = 1 }
+// One JVM for every test class, and one Spring context alive at a time: when a class needs another
+// context, the last one is closed, so no earlier context's Temporal worker or Kafka consumer takes
+// a later class's tasks or events. FulfillmentWorkflowTest runs on a test server of its own,
+// without time skipping: a Saga it terminates while a workflow task is outstanding leaves that
+// server's time skipping locked for good, which on the shared server made CheckoutWorkflowTest's
+// hour of retries wait in real time. Each class first checks that the shared server still skips
+// time (OrchestrationTest.timeSkips).
+tasks.test { systemProperty("spring.test.context.cache.maxSize", "1") }

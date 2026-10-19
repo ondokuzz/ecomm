@@ -23,6 +23,7 @@ import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureRestTe
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.TestPropertySource;
 
 /**
  * Base for Orchestration's tests. The application runs against Temporal's own test server, reached
@@ -34,6 +35,10 @@ import org.springframework.test.context.DynamicPropertySource;
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureRestTestClient
+// Here rather than in infrastructure(), so that a class can name another test server: a subclass's
+// @TestPropertySource shadows this one, while a superclass's dynamic properties win over its own.
+@TestPropertySource(
+    properties = "spring.temporal.connection.target=localhost:${ecomm.test.temporal-port}")
 abstract class OrchestrationTest {
 
   /** How long the Saga awaits a pending authorization here. */
@@ -41,8 +46,8 @@ abstract class OrchestrationTest {
 
   /**
    * How long the fulfillment Saga awaits delivery here: far shorter than the stack's 30 days, so a
-   * test shows the setting is the one honoured. The fulfillment tests lock time skipping, so it
-   * passes in real time.
+   * test shows the setting is the one honoured. The fulfillment tests' test server doesn't skip
+   * time, so it passes in real time.
    */
   static final java.time.Duration DELIVERY_DEADLINE = java.time.Duration.ofSeconds(10);
 
@@ -79,7 +84,7 @@ abstract class OrchestrationTest {
   static void infrastructure(DynamicPropertyRegistry registry) {
     FakeKeycloak.registerWith(registry);
     registry.add("spring.kafka.bootstrap-servers", Kafka::bootstrapServers);
-    registry.add("spring.temporal.connection.target", () -> "localhost:" + TEMPORAL_PORT);
+    registry.add("ecomm.test.temporal-port", () -> TEMPORAL_PORT);
     registry.add(
         "spring.security.oauth2.client.provider.keycloak.token-uri",
         () -> DOWNSTREAM.baseUrl() + TOKEN_PATH);

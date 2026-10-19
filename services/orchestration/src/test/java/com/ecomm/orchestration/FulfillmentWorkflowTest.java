@@ -24,12 +24,10 @@ import com.github.tomakehurst.wiremock.client.WireMock;
 import com.github.tomakehurst.wiremock.verification.LoggedRequest;
 import io.grpc.StatusRuntimeException;
 import io.temporal.api.common.v1.WorkflowExecution;
-import io.temporal.api.testservice.v1.LockTimeSkippingRequest;
 import io.temporal.api.workflowservice.v1.DescribeWorkflowExecutionRequest;
 import io.temporal.client.WorkflowClient;
 import io.temporal.client.WorkflowException;
-import io.temporal.serviceclient.TestServiceStubs;
-import io.temporal.serviceclient.TestServiceStubsOptions;
+import io.temporal.testserver.TestServer;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -38,25 +36,33 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.TestPropertySource;
 
 /**
  * The fulfillment Saga, from Kafka in to HTTP out: Orchestration's real consumers read Order and
  * Shipment events from Kafka, and its real activities call WireMock stubs of Fulfillment &
  * Shipping, Payment and Order Management with Orchestration's own token.
  *
- * <p>Time skipping is off on its JVM's test server, so the Saga's waits pass in real time: its wait
- * for delivery, {@link #DELIVERY_DEADLINE} here, doesn't end before the test's Shipment events
- * arrive.
+ * <p>The class has a test server of its own, with time skipping off, so the Saga's waits pass in
+ * real time: its wait for delivery, {@link #DELIVERY_DEADLINE} here, doesn't end before the test's
+ * Shipment events arrive. Its own, too, because a run terminated while a workflow task is
+ * outstanding leaves the test server's time skipping locked for good (the task's completion is
+ * refused, and its lock never released): on the shared server, every later class's retries and
+ * timers would then wait in real time.
  *
  * <p>Each topic has one partition, consumed in order, so once a later event has visibly been
  * handled, every event sent before it has been too: that is how a test sees that an event started
  * or woke nothing.
  */
+// This class's Saga runs on its own test server, where time skipping is locked from the start.
+@TestPropertySource(
+    properties = "spring.temporal.connection.target=localhost:${ecomm.test.real-time-port}")
 class FulfillmentWorkflowTest extends OrchestrationTest {
 
   static final String CUSTOMER_ID = "customer-42";
@@ -67,15 +73,15 @@ class FulfillmentWorkflowTest extends OrchestrationTest {
   static final String HOLD = "/shipments/" + SHIPMENT_ID + "/hold";
   static final String CAPTURE = "/payments/" + PAYMENT_ID + "/capture";
 
-  /** Locks time skipping on this JVM's test server for good (a JVM per test class, build file). */
-  @BeforeAll
-  static void timeSkippingOff() {
-    var server =
-        TestServiceStubs.newServiceStubs(
-            TestServiceStubsOptions.newBuilder()
-                .setTarget("localhost:" + TEMPORAL_PORT)
-                .validateAndBuildWithDefaults());
-    server.blockingStub().lockTimeSkipping(LockTimeSkippingRequest.getDefaultInstance());
+  static final int REAL_TIME_PORT = freePort();
+
+  static {
+    TestServer.createPortBoundServer(REAL_TIME_PORT, true);
+  }
+
+  @DynamicPropertySource
+  static void realTimeServer(DynamicPropertyRegistry registry) {
+    registry.add("ecomm.test.real-time-port", () -> REAL_TIME_PORT);
   }
 
   @Autowired WorkflowClient temporal;

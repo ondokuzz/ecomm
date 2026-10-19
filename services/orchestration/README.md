@@ -284,12 +284,18 @@ Orchestration calls:
   Shipment events ignored, a declined capture and an Order without an authorized Payment holding the
   Shipment with the Order untouched, a 503 on `FULFILLED` retried, delivery never confirmed ending
   `DELIVERY_UNCONFIRMED` at the delivery deadline (10 seconds here, so the test shows the setting is
-  the one honoured), and an event for no running Saga skipped, not dead-lettered. Time skipping is
-  off for its JVM (a JVM per test class), so the Saga waits for the test's events in real time
-  (a server that skips time ends up centuries ahead of the worker's clock, which Temporal's SDK
-  metrics can't measure, so no class shares one);
+  the one honoured), and an event for no running Saga skipped, not dead-lettered. It has a test
+  server of its own with time skipping off, so the Saga waits for the test's events in real time.
+  Its own, too, because a Saga terminated while a workflow task is outstanding leaves a test
+  server's time skipping locked for good (its completion is refused, and its lock never released):
+  on the shared server, later classes' retries would wait in real time;
 - `FulfillmentMetricsTest`: every fulfillment counter at 0 before any run;
 - `ServiceTokenTest`: the token's caching, renewal and retry on a 401;
 - `HealthApiTest`: health is public, and there is no API;
 - `ArchitectureTest`: the shared `HexagonalRules`, and workflow code reaching other contexts only
   through activities.
+
+Every class runs in one JVM, with one Spring context alive at a time
+(`spring.test.context.cache.maxSize=1`, build file), so no earlier context's worker or Kafka
+consumer takes a later class's tasks or events. Each class first checks that the shared test server
+still skips time, and fails at once if it doesn't, rather than hanging.
