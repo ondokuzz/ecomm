@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "fulfillment-shipping.shipment",
-  "description": "A snapshot of a Shipment, one Order's parcel, published whenever it is created, its status changes, or a Tracking event is recorded. Keyed by shipmentId.",
+  "description": "A snapshot of a Shipment, one Order's parcel or a replacement for an RMA's units, published whenever it is created, its status changes, or a Tracking event is recorded. Keyed by shipmentId.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -60,9 +60,23 @@
         "createdAt"
       ],
       "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "ORDER",
+            "REPLACEMENT"
+          ],
+          "description": "An Order's Shipment, or a replacement for an RMA's units. Left out of events published before replacements existed: read a missing kind as ORDER."
+        },
+        "rmaId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The RMA a REPLACEMENT is for; left out for an ORDER Shipment."
+        },
         "orderId": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "description": "The Order it ships, or whose RMA a REPLACEMENT is for."
         },
         "customerId": {
           "type": "string",

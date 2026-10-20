@@ -3,6 +3,7 @@ package com.ecomm.fulfillmentshipping.adapter.in.web;
 import com.ecomm.commons.money.Money;
 import com.ecomm.fulfillmentshipping.application.port.in.CreateShipmentUseCase.NewShipment;
 import com.ecomm.fulfillmentshipping.domain.Line;
+import com.ecomm.fulfillmentshipping.domain.ShipmentKind;
 import com.ecomm.fulfillmentshipping.domain.ShippingAddress;
 import com.ecomm.fulfillmentshipping.domain.ShippingOption;
 import java.util.ArrayList;
@@ -13,13 +14,17 @@ import java.util.Locale;
 import java.util.Set;
 
 /**
- * An Order to ship, as the fulfillment Saga sends it from the Order: {@code {"orderId",
- * "customerId", "lines": [{"variantId", "quantity"}], "shippingAddress": {"recipientName", "line1",
- * "line2"?, "postcode", "city", "region"?, "country", "phone"?}, "shippingOption": {"id",
- * "carrier", "cost": {"amountMinor", "currency"}, "estimatedDays"?}}}. Checkout validated the
- * address when the Order was placed, so only what a Shipment can't do without is checked here.
+ * What to ship: an Order, as the fulfillment Saga sends it from the Order, {@code {"kind"?:
+ * "ORDER", "orderId", "customerId", "lines": [{"variantId", "quantity"}], "shippingAddress":
+ * {"recipientName", "line1", "line2"?, "postcode", "city", "region"?, "country", "phone"?},
+ * "shippingOption": {"id", "carrier", "cost": {"amountMinor", "currency"}, "estimatedDays"?}}}, or
+ * a replacement, as the returns Saga sends it, with {@code "kind": "REPLACEMENT"} and the {@code
+ * "rmaId"} it replaces units for, and the Order Shipment's address and option. Checkout validated
+ * the address when the Order was placed, so only what a Shipment can't do without is checked here.
  */
 record CreateShipmentRequest(
+    String kind,
+    String rmaId,
     String orderId,
     String customerId,
     List<LineRequest> lines,
@@ -48,9 +53,31 @@ record CreateShipmentRequest(
    * @throws InvalidRequestException naming the first field that's missing or malformed
    */
   NewShipment toNewShipment() {
+    var kind = toKind();
+    if (kind == ShipmentKind.REPLACEMENT) {
+      required("rmaId", rmaId);
+    } else if (rmaId != null) {
+      throw new InvalidRequestException("rmaId", "must be left out of an Order's Shipment");
+    }
     required("orderId", orderId);
     required("customerId", customerId);
-    return new NewShipment(orderId, customerId, toLines(), toAddress(), toOption());
+    return new NewShipment(kind, rmaId, orderId, customerId, toLines(), toAddress(), toOption());
+  }
+
+  /** An Order's Shipment unless it says otherwise. */
+  private ShipmentKind toKind() {
+    return kind == null ? ShipmentKind.ORDER : kindOf(kind);
+  }
+
+  /**
+   * @throws InvalidRequestException naming {@code kind}, for a value that isn't a Shipment kind
+   */
+  static ShipmentKind kindOf(String value) {
+    try {
+      return ShipmentKind.valueOf(value);
+    } catch (IllegalArgumentException e) {
+      throw new InvalidRequestException("kind", "must be one of " + List.of(ShipmentKind.values()));
+    }
   }
 
   private List<Line> toLines() {

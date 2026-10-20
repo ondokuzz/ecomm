@@ -34,17 +34,25 @@ final class Shipments {
 
   /** A Shipment of a new Order of the Customer's, with no lines yet. */
   static Shipment shipment(String customerId) {
-    return new Shipment(customerId);
+    return new Shipment(customerId, UUID.randomUUID().toString(), null);
+  }
+
+  /** A replacement Shipment for an RMA on {@code order}'s Order, with no lines yet. */
+  static Shipment replacementFor(Shipment order) {
+    return new Shipment(order.customerId, order.orderId, UUID.randomUUID().toString());
   }
 
   static final class Shipment {
     private final String id = UUID.randomUUID().toString();
-    private final String orderId = UUID.randomUUID().toString();
+    private final String orderId;
     private final String customerId;
+    private final String rmaId;
     private final List<Map<String, Object>> lines = new ArrayList<>();
 
-    private Shipment(String customerId) {
+    private Shipment(String customerId, String orderId, String rmaId) {
       this.customerId = customerId;
+      this.orderId = orderId;
+      this.rmaId = rmaId;
     }
 
     /** A line of {@code quantity} units, with a Serial number for each when serial-tracked. */
@@ -89,6 +97,10 @@ final class Shipments {
 
     private Shipment publish(long version, String status, String change, Instant deliveredAt) {
       var shipment = new LinkedHashMap<String, Object>();
+      if (rmaId != null) {
+        shipment.put("kind", "REPLACEMENT");
+        shipment.put("rmaId", rmaId);
+      }
       shipment.put("orderId", orderId);
       shipment.put("customerId", customerId);
       shipment.put("warehouseId", "WH-BER");

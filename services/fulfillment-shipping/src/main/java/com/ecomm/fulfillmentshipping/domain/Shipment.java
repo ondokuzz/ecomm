@@ -10,10 +10,11 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * One Order's parcel, from its Warehouse to its Shipping address. Each change gives a new Shipment,
- * one version on, with an entry appended to its status history when its status moves (see {@link
- * ShipmentStatus}).
+ * One parcel from a Warehouse to a Shipping address: an Order's, or a replacement for an RMA's
+ * units. Each change gives a new Shipment, one version on, with an entry appended to its status
+ * history when its status moves (see {@link ShipmentStatus}).
  *
+ * @param rmaId the RMA a {@code REPLACEMENT} is for; null for an {@code ORDER} Shipment
  * @param warehouseId the Warehouse it ships from
  * @param carrier who carries it, once booked; null before
  * @param trackingNumber the Carrier's, once booked; null before
@@ -24,6 +25,8 @@ import java.util.UUID;
  */
 public record Shipment(
     UUID id,
+    ShipmentKind kind,
+    String rmaId,
     String orderId,
     String customerId,
     String warehouseId,
@@ -41,14 +44,22 @@ public record Shipment(
     long version) {
 
   public Shipment {
+    if ((kind == ShipmentKind.REPLACEMENT) != (rmaId != null)) {
+      throw new IllegalArgumentException("A replacement, and only a replacement, names its RMA");
+    }
     lines = List.copyOf(lines);
     statusHistory = List.copyOf(statusHistory);
     trackingEvents = trackingEvents.stream().sorted(TrackingEvent.IN_TIME_ORDER).toList();
   }
 
-  /** A new Shipment awaiting pick, created by the fulfillment Saga. */
+  /**
+   * A new Shipment awaiting pick: an Order's, created by the fulfillment Saga, or with {@code
+   * rmaId} a replacement for that RMA, created by the returns Saga.
+   */
   public static Shipment create(
       UUID id,
+      ShipmentKind kind,
+      String rmaId,
       String orderId,
       String customerId,
       Warehouse warehouse,
@@ -58,6 +69,8 @@ public record Shipment(
       Instant at) {
     return new Shipment(
         id,
+        kind,
+        rmaId,
         orderId,
         customerId,
         warehouse.id(),
@@ -149,6 +162,8 @@ public record Shipment(
     var moved = movedTo(ShipmentStatus.SHIPPED, at, StatusChange.ORCHESTRATION);
     return new Shipment(
         id,
+        kind,
+        rmaId,
         orderId,
         customerId,
         warehouseId,
@@ -171,6 +186,8 @@ public record Shipment(
     var moved = movedTo(ShipmentStatus.ON_HOLD, at, StatusChange.ORCHESTRATION);
     return new Shipment(
         id,
+        kind,
+        rmaId,
         orderId,
         customerId,
         warehouseId,
@@ -205,6 +222,8 @@ public record Shipment(
     }
     return new Shipment(
         id,
+        kind,
+        rmaId,
         orderId,
         customerId,
         warehouseId,
@@ -230,6 +249,8 @@ public record Shipment(
     history.add(new StatusChange(next, at, by));
     return new Shipment(
         id,
+        kind,
+        rmaId,
         orderId,
         customerId,
         warehouseId,
@@ -250,6 +271,8 @@ public record Shipment(
   private Shipment with(List<ShipmentLine> newLines) {
     return new Shipment(
         id,
+        kind,
+        rmaId,
         orderId,
         customerId,
         warehouseId,

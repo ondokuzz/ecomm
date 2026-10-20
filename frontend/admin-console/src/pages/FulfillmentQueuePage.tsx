@@ -11,6 +11,7 @@ import {
   queueOf,
   queueSearchOf,
   queuedStatuses,
+  replacementOf,
   shipmentStatusLabel,
   shipmentsPageSize,
   shipmentsQueryOf,
@@ -29,8 +30,9 @@ export interface FromQueueState {
 
 /**
  * The fulfillment queue: Shipments awaiting pick, picked, packed or on hold, each tab with its
- * count, oldest first so Orders are worked in the order they were paid. The tab and page live in
- * the URL (`?status=&page=`); the Warehouse filter is remembered by the browser.
+ * count, oldest first so Orders are worked in the order they were paid. A replacement for an RMA's
+ * units is marked "Replacement · RMA-…", linking to the RMA. The tab, page and kind live in the URL
+ * (`?status=&page=&kind=`); the Warehouse filter is remembered by the browser.
  */
 export function FulfillmentQueuePage() {
   const [params, setParams] = useSearchParams()
@@ -56,7 +58,7 @@ export function FulfillmentQueuePage() {
         {queuedStatuses.map((status) => (
           <Link
             key={status}
-            to={`/fulfillment${queueSearchOf({ status, page: 0 })}`}
+            to={`/fulfillment${queueSearchOf({ status, page: 0, kind: queue.kind })}`}
             className={status === queue.status ? 'subnav-link active' : 'subnav-link'}
             aria-current={status === queue.status ? 'page' : undefined}
           >
@@ -88,6 +90,18 @@ export function FulfillmentQueuePage() {
             {warehouseId && warehouses.data && !warehouses.data.some((w) => w.id === warehouseId) && (
               <option value={warehouseId}>{warehouseId}</option>
             )}
+          </select>
+        </label>
+        <label className="field">
+          Kind
+          <select
+            className="input"
+            value={queue.kind ?? ''}
+            onChange={(e) => show({ ...queue, page: 0, kind: (e.target.value || undefined) as Queue['kind'] })}
+          >
+            <option value="">Orders and replacements</option>
+            <option value="ORDER">Orders</option>
+            <option value="REPLACEMENT">Replacements</option>
           </select>
         </label>
       </div>
@@ -138,26 +152,34 @@ export function FulfillmentQueuePage() {
                       </td>
                     </tr>
                   )}
-                  {page.items.map((shipment) => (
-                    <tr key={shipment.id}>
-                      <th scope="row">
-                        <Link
-                          to={`/fulfillment/${shipment.id}`}
-                          state={{ queue: location.search } satisfies FromQueueState}
-                        >
-                          <code>#{orderReference({ id: shipment.orderId })}</code>
-                        </Link>
-                      </th>
-                      <td>
-                        <time dateTime={shipment.createdAt}>{formatAgo(shipment.createdAt, now)}</time>
-                      </td>
-                      <td>
-                        <code>{shipment.warehouseId}</code>
-                      </td>
-                      <td>{shipment.shippingAddress.country}</td>
-                      <td className="num">{unitsOf(shipment)}</td>
-                    </tr>
-                  ))}
+                  {page.items.map((shipment) => {
+                    const replacement = replacementOf(shipment)
+                    return (
+                      <tr key={shipment.id}>
+                        <th scope="row">
+                          <Link
+                            to={`/fulfillment/${shipment.id}`}
+                            state={{ queue: location.search } satisfies FromQueueState}
+                          >
+                            <code>#{orderReference({ id: shipment.orderId })}</code>
+                          </Link>
+                          {replacement && (
+                            <small className="hint">
+                              <Link to={`/rmas/${replacement.rmaId}`}>{replacement.label}</Link>
+                            </small>
+                          )}
+                        </th>
+                        <td>
+                          <time dateTime={shipment.createdAt}>{formatAgo(shipment.createdAt, now)}</time>
+                        </td>
+                        <td>
+                          <code>{shipment.warehouseId}</code>
+                        </td>
+                        <td>{shipment.shippingAddress.country}</td>
+                        <td className="num">{unitsOf(shipment)}</td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               ) : (
                 <SkeletonRows rows={5} columns={columns} />

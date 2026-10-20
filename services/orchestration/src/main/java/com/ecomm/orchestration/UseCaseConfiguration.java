@@ -1,7 +1,9 @@
 package com.ecomm.orchestration;
 
 import com.ecomm.orchestration.application.FulfillmentService;
+import com.ecomm.orchestration.application.ReturnsService;
 import com.ecomm.orchestration.application.port.out.FulfillmentWorkflows;
+import com.ecomm.orchestration.application.port.out.ReturnsWorkflows;
 import java.time.Duration;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -21,5 +23,11 @@ class UseCaseConfiguration {
       @Value("${ecomm.orchestration.delivery-deadline}") Duration deliveryDeadline,
       @Value("${ecomm.orchestration.packing-check}") Duration packingCheck) {
     return new FulfillmentService(workflows, deliveryDeadline, packingCheck);
+  }
+
+  /** Wakes the returns Saga with its replacement Shipment's events. */
+  @Bean
+  ReturnsService returnsService(ReturnsWorkflows workflows) {
+    return new ReturnsService(workflows);
   }
 }

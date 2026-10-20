@@ -103,7 +103,35 @@ final class FulfillmentEvents {
    */
   static void shipment(
       String shipmentId, String orderId, String customerId, long version, String status) {
+    shipment(shipmentId, null, orderId, customerId, version, status);
+  }
+
+  /**
+   * A replacement Shipment event: the replacement {@code shipmentId} for the RMA {@code rmaId} on
+   * the Order {@code orderId}, at {@code version}, in {@code status}.
+   */
+  static void replacement(
+      String shipmentId,
+      String rmaId,
+      String orderId,
+      String customerId,
+      long version,
+      String status) {
+    shipment(shipmentId, rmaId, orderId, customerId, version, status);
+  }
+
+  private static void shipment(
+      String shipmentId,
+      String rmaId,
+      String orderId,
+      String customerId,
+      long version,
+      String status) {
     var shipment = new LinkedHashMap<String, Object>();
+    if (rmaId != null) {
+      shipment.put("kind", "REPLACEMENT");
+      shipment.put("rmaId", rmaId);
+    }
     shipment.put("orderId", orderId);
     shipment.put("customerId", customerId);
     shipment.put("warehouseId", "WH-BER");

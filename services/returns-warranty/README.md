@@ -104,7 +104,9 @@ such as `returns-warranty.shipments.dlt`, after its retries, or at once if it ca
 | `fulfillment-shipping.shipment` | `returns-warranty.shipments` | A row in `shipment` per Shipment: its version, Order, Customer, status and `deliveredAt`; and a row in `shipment_line` per line, with its Product name, quantity, Serial tracking and Serial numbers |
 | `catalog.product` | `returns-warranty.products` | A row in `product` per SKU: its version, Serial tracking and Warranty terms; and its Variant IDs in `product_variant` |
 
-Only a Shipment whose status is `DELIVERED` can be claimed against. The two projections are
+Only an Order's Shipment is projected: a replacement Shipment (`kind` `REPLACEMENT`) is skipped and
+logged, as RMAs on replacement units are out of scope; an event without `kind` is an Order's. Only
+a Shipment whose status is `DELIVERED` can be claimed against. The two projections are
 independent, so a Shipment and its Products may arrive in either order: until a warranty claim's
 Product arrives, the claim is a 503 to retry. A return needs no Product. A Product keeps every
 Variant it has ever had, and events from before Warranty terms and Serial tracking read as none and
@@ -151,8 +153,8 @@ root README's "Secrets").
   `ProjectionApiTest` publish Shipment and Product events as Fulfillment & Shipping and Catalog
   would, each checked against its schema first, and use the API over HTTP with `FakeKeycloak`
   tokens: accepted returns and warranty claims, every refusal, the recorded window surviving a
-  Catalog change, decisions and their history, reads by owner and Staff, events per change, and
-  projections by version in either order. The clock is a fixed `TestTimeSource`. Postgres, Kafka
+  Catalog change, decisions and their history, reads by owner and Staff, events per change,
+  projections by version in either order, and replacement Shipments skipped. The clock is a fixed `TestTimeSource`. Postgres, Kafka
   and the registry run in Testcontainers, each test topic with one partition, so a later event
   applied means the earlier ones are.
 - `WindowTest` and `RmaRequestTest` are pure domain tests: the windows' arithmetic at month ends

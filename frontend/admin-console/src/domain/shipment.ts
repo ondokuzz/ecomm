@@ -39,9 +39,16 @@ export interface ShipmentHistoryEntry {
   by: string
 }
 
-/** One Order's parcel, as Fulfillment & Shipping shows it to Staff. */
+/** What a Shipment is for: an Order's units, or a replacement for an RMA's, which nothing captures a Payment for. */
+export type ShipmentKind = 'ORDER' | 'REPLACEMENT'
+
+/** One parcel, an Order's or a replacement for an RMA's units, as Fulfillment & Shipping shows it to Staff. */
 export interface Shipment {
   id: string
+  kind: ShipmentKind
+  /** The RMA a replacement is for; null for an Order's Shipment. */
+  rmaId: string | null
+  /** The Order it ships, or whose RMA a replacement is for. */
   orderId: string
   customerId: string
   warehouseId: string
@@ -59,7 +66,7 @@ export interface Shipment {
   holdReason: string | null
   /** Oldest first. */
   statusHistory: ShipmentHistoryEntry[]
-  /** When the fulfillment Saga created it, as soon as its Order was paid. */
+  /** When a Saga created it: the fulfillment Saga as soon as its Order was paid, or the returns Saga. */
   createdAt: string
 }
 
@@ -82,6 +89,21 @@ const statusLabels: Record<ShipmentStatus, string> = {
 /** A Shipment status as Staff read it: "Awaiting pick", "On hold". */
 export function shipmentStatusLabel(status: ShipmentStatus): string {
   return statusLabels[status]
+}
+
+/** What the queue and the Shipment page say of a replacement: the RMA it is for, as the Customer quotes it. */
+export interface Replacement {
+  /** "Replacement · RMA-3F2A9C1B". */
+  label: string
+  rmaReference: string
+  rmaId: string
+}
+
+/** A replacement's label and RMA, or null for an Order's Shipment. */
+export function replacementOf(shipment: Pick<Shipment, 'kind' | 'rmaId'>): Replacement | null {
+  if (shipment.kind !== 'REPLACEMENT' || !shipment.rmaId) return null
+  const rmaReference = `RMA-${shipment.rmaId.slice(0, 8).toUpperCase()}`
+  return { label: `Replacement · ${rmaReference}`, rmaReference, rmaId: shipment.rmaId }
 }
 
 /** A Tracking event's status as Staff read it: "In transit", "Out for delivery", "Delivered". */
@@ -136,19 +158,27 @@ export const queuedStatuses: readonly QueuedStatus[] = ['AWAITING_PICK', 'PICKED
 /** How many Shipments a page of the queue shows. */
 export const shipmentsPageSize = 20
 
-/** The fulfillment queue's tab and its page, counting from 0. */
+/** The fulfillment queue's tab, its page counting from 0, and the kind of Shipment shown, or every kind. */
 export interface Queue {
   status: QueuedStatus
   page: number
+  kind?: ShipmentKind
 }
 
-/** The queue a URL's query names: its `status` (awaiting pick unless another tab is named), and its `page`, from 1. */
+const shipmentKinds: readonly ShipmentKind[] = ['ORDER', 'REPLACEMENT']
+
+/**
+ * The queue a URL's query names: its `status` (awaiting pick unless another tab is named), its
+ * `page`, from 1, and its `kind`, every kind unless one is named.
+ */
 export function queueOf(params: URLSearchParams): Queue {
   const status = params.get('status') as QueuedStatus
   const page = Number(params.get('page'))
+  const kind = params.get('kind') as ShipmentKind
   return {
     status: queuedStatuses.includes(status) ? status : 'AWAITING_PICK',
     page: Number.isInteger(page) && page >= 1 ? page - 1 : 0,
+    ...(shipmentKinds.includes(kind) && { kind }),
   }
 }
 
@@ -157,17 +187,19 @@ export function queueSearchOf(queue: Queue): string {
   const params = new URLSearchParams()
   if (queue.status !== 'AWAITING_PICK') params.set('status', queue.status)
   if (queue.page > 0) params.set('page', String(queue.page + 1))
+  if (queue.kind) params.set('kind', queue.kind)
   const search = params.toString()
   return search && `?${search}`
 }
 
 /**
  * The query for `GET /shipments` that a tab stands for, from one Warehouse or, without one, from
- * all; Fulfillment & Shipping lists them oldest first.
+ * all, of the queue's kind or every kind; Fulfillment & Shipping lists them oldest first.
  */
 export function shipmentsQueryOf(queue: Queue, warehouseId: string | undefined, size: number): string {
   const params = new URLSearchParams({ status: queue.status, page: String(queue.page), size: String(size) })
   if (warehouseId) params.set('warehouseId', warehouseId)
+  if (queue.kind) params.set('kind', queue.kind)
   return `?${params}`
 }
 
@@ -177,23 +209,27 @@ export interface ShipmentHistoryRow {
   /** The instant, for `<time dateTime>`, and as Staff read it, to the second. */
   at: string
   time: string
-  /** "Fulfillment Saga", "Carrier", or the Staff member's ID. */
+  /** "Fulfillment Saga", "Returns Saga", "Carrier", or the Staff member's ID. */
   by: string
   /** Whether `by` is a Staff member's ID. */
   staff?: true
 }
 
-const changedBy: Record<string, string> = { ORCHESTRATION: 'Fulfillment Saga', CARRIER: 'Carrier' }
+const changedBy: Record<string, string> = { CARRIER: 'Carrier' }
 
-/** A Shipment's status history for Staff, newest first, each change with when and who made it. */
+/**
+ * A Shipment's status history for Staff, newest first, each change with when and who made it:
+ * Orchestration's are the fulfillment Saga's, or a replacement's the returns Saga's.
+ */
 export function shipmentHistoryRowsOf(
-  shipment: Pick<Shipment, 'statusHistory'>,
+  shipment: Pick<Shipment, 'statusHistory'> & Partial<Pick<Shipment, 'kind'>>,
   locale?: string,
 ): ShipmentHistoryRow[] {
+  const saga = shipment.kind === 'REPLACEMENT' ? 'Returns Saga' : 'Fulfillment Saga'
   return shipment.statusHistory
     .map((entry): ShipmentHistoryRow => {
       const row = { status: shipmentStatusLabel(entry.status), at: entry.at, time: formatTime(entry.at, locale) }
-      const caller = changedBy[entry.by]
+      const caller = entry.by === 'ORCHESTRATION' ? saga : changedBy[entry.by]
       return caller ? { ...row, by: caller } : { ...row, by: entry.by, staff: true }
     })
     .reverse()

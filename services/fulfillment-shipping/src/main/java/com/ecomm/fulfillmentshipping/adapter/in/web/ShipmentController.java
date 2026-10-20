@@ -11,6 +11,7 @@ import com.ecomm.fulfillmentshipping.domain.ShipmentExceptions.InvalidSerialNumb
 import com.ecomm.fulfillmentshipping.domain.ShipmentExceptions.ProductsNotKnownYetException;
 import com.ecomm.fulfillmentshipping.domain.ShipmentExceptions.SerialNumberAlreadyShippedException;
 import com.ecomm.fulfillmentshipping.domain.ShipmentExceptions.ShipmentExistsException;
+import com.ecomm.fulfillmentshipping.domain.ShipmentKind;
 import com.ecomm.fulfillmentshipping.domain.ShipmentStatus;
 import java.net.URI;
 import java.util.List;
@@ -40,9 +41,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Shipments. The fulfillment Saga creates, dispatches and holds them with Orchestration's {@code
- * ORCHESTRATION} token and an {@code Idempotency-Key}; the gateway routes none of these. Staff pick
- * and pack them and read the queue with a {@code STAFF} token, as Orchestration reads. A Customer
- * reads their own Order's Shipment.
+ * ORCHESTRATION} token and an {@code Idempotency-Key}, and the returns Saga creates and dispatches
+ * replacements; the gateway routes none of these. Staff pick and pack them and read the queue with
+ * a {@code STAFF} token, as Orchestration reads. A Customer reads their own Order's Shipment and
+ * their own RMA's replacement.
  */
 @RestController
 @RequestMapping("/shipments")
@@ -73,8 +75,9 @@ class ShipmentController {
 
   /**
    * 201 with the Shipment, awaiting pick, and its URL in {@code Location}; 409 {@code
-   * shipmentExists} when the Order already has one; 503 {@code productsNotKnownYet}, with {@code
-   * Retry-After}, until Catalog's events have brought every Variant's Product.
+   * shipmentExists}, with the existing one in {@code shipment}, when the Order already has its
+   * {@code ORDER} Shipment or the RMA its {@code REPLACEMENT}; 503 {@code productsNotKnownYet},
+   * with {@code Retry-After}, until Catalog's events have brought every Variant's Product.
    */
   @PostMapping
   @PreAuthorize("hasRole('ORCHESTRATION')")
@@ -82,9 +85,11 @@ class ShipmentController {
   ResponseEntity<ShipmentResponse> create(@RequestBody CreateShipmentRequest request) {
     var shipment = create.create(request.toNewShipment());
     log.info(
-        "Created Shipment {} for Order {} from {}",
+        "Created {} Shipment {} for Order {}{} from {}",
+        shipment.kind(),
         shipment.id(),
         shipment.orderId(),
+        shipment.rmaId() == null ? "" : " and RMA " + shipment.rmaId(),
         shipment.warehouseId());
     return ResponseEntity.created(URI.create("/shipments/" + shipment.id()))
         .body(ShipmentResponse.of(shipment));
@@ -154,8 +159,8 @@ class ShipmentController {
   }
 
   /**
-   * The Order's Shipment. A Customer reads only their own: another's, like an Order without one, is
-   * a 404.
+   * The Order's {@code ORDER} Shipment. A Customer reads only their own: another's, like an Order
+   * without one, is a 404.
    */
   @GetMapping(params = "orderId")
   @PreAuthorize("hasAnyRole('CUSTOMER', 'STAFF', 'ORCHESTRATION')")
@@ -167,15 +172,29 @@ class ShipmentController {
   }
 
   /**
-   * The fulfillment queue: a page of Shipments, oldest first, in {@code status} and from {@code
-   * warehouseId} when given. {@code page} counts from 0; {@code size} is 1 to {@value
-   * #MAX_PAGE_SIZE}.
+   * The RMA's replacement Shipment. A Customer reads only their own: another's, like an RMA without
+   * one, is a 404.
    */
-  @GetMapping(params = "!orderId")
+  @GetMapping(params = "rmaId")
+  @PreAuthorize("hasAnyRole('CUSTOMER', 'STAFF', 'ORCHESTRATION')")
+  ShipmentResponse replacementOf(@RequestParam String rmaId, Authentication caller) {
+    return find.replacementOf(rmaId)
+        .filter(shipment -> readsAny(caller) || shipment.belongsTo(caller.getName()))
+        .map(ShipmentResponse::of)
+        .orElseThrow(() -> new ShipmentNotFoundException("replacing for RMA " + rmaId));
+  }
+
+  /**
+   * The fulfillment queue: a page of Shipments, oldest first, in {@code status}, from {@code
+   * warehouseId} and of {@code kind} when given. {@code page} counts from 0; {@code size} is 1 to
+   * {@value #MAX_PAGE_SIZE}.
+   */
+  @GetMapping(params = {"!orderId", "!rmaId"})
   @PreAuthorize("hasAnyRole('STAFF', 'ORCHESTRATION')")
   Page<ShipmentResponse> shipments(
       @RequestParam(required = false) String status,
       @RequestParam(required = false) String warehouseId,
+      @RequestParam(required = false) String kind,
       @RequestParam(defaultValue = "0") int page,
       @RequestParam(defaultValue = "20") int size) {
     if (page < 0) {
@@ -184,7 +203,9 @@ class ShipmentController {
     if (size < 1 || size > MAX_PAGE_SIZE) {
       throw new InvalidRequestException("size", "is 1 to " + MAX_PAGE_SIZE);
     }
-    return find.shipments(status(status), warehouseId, page, size).map(ShipmentResponse::of);
+    var shipmentKind = kind == null ? null : CreateShipmentRequest.kindOf(kind);
+    return find.shipments(status(status), warehouseId, shipmentKind, page, size)
+        .map(ShipmentResponse::of);
   }
 
   private static ShipmentStatus status(String value) {
@@ -232,9 +253,15 @@ class ShipmentController {
     return problem(HttpStatus.CONFLICT, e, "illegalTransition");
   }
 
+  /** Answers the Shipment there is already, read after the refused transaction ended. */
   @ExceptionHandler(ShipmentExistsException.class)
   ProblemDetail exists(ShipmentExistsException e) {
-    return problem(HttpStatus.CONFLICT, e, "shipmentExists");
+    var problem = problem(HttpStatus.CONFLICT, e, "shipmentExists");
+    (e.kind() == ShipmentKind.REPLACEMENT
+            ? find.replacementOf(e.rmaId())
+            : find.shipmentOf(e.orderId()))
+        .ifPresent(existing -> problem.setProperty("shipment", ShipmentResponse.of(existing)));
+    return problem;
   }
 
   @ExceptionHandler(SerialNumberAlreadyShippedException.class)

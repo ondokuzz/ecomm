@@ -10,8 +10,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.core.ParameterizedTypeReference;
 
 /**
- * A Customer reads their own Order's Shipment, and nobody else's. Staff, and Orchestration as Staff
- * do, read any one, and list them by status and Warehouse, oldest first, a page at a time.
+ * A Customer reads their own Order's Shipment, and their own RMA's replacement, and nobody else's.
+ * Staff, and Orchestration as Staff do, read any one, and list them by status, Warehouse and kind,
+ * oldest first, a page at a time.
  */
 class ReadShipmentsApiTest extends ShipmentsApiTest {
 
@@ -116,7 +117,7 @@ class ReadShipmentsApiTest extends ShipmentsApiTest {
 
   @Test
   void anUnknownStatusOrABadPageIsABadRequest() {
-    for (var query : List.of("status=LOST", "size=0", "size=101", "page=-1")) {
+    for (var query : List.of("status=LOST", "kind=RETURN", "size=0", "size=101", "page=-1")) {
       http.get()
           .uri("/shipments?" + query)
           .headers(h -> h.setBearerAuth(STAFF))
@@ -124,6 +125,84 @@ class ReadShipmentsApiTest extends ShipmentsApiTest {
           .expectStatus()
           .isBadRequest();
     }
+  }
+
+  @Test
+  void anOrdersShipmentIsStillReadByOrderOnceItHasAReplacement() {
+    var shipment = created();
+    createdFrom(
+        replacementRequest(
+            UUID.randomUUID().toString(),
+            shipment.orderId(),
+            "customer-42",
+            "DE",
+            lines(Map.of(PHONE, 1))));
+
+    assertThat(byOrder(CUSTOMER, shipment.orderId())).isEqualTo(shipment);
+  }
+
+  @Test
+  void anRmasReplacementIsReadByItsCustomerStaffAndOrchestration() {
+    var replacement = replacement();
+
+    for (var token : List.of(CUSTOMER, STAFF, ORCHESTRATION)) {
+      assertThat(byRma(token, replacement.rmaId())).isEqualTo(replacement);
+    }
+  }
+
+  @Test
+  void anotherCustomersReplacementLikeAnRmaWithoutOneIsNotFound() {
+    var replacement = replacement();
+
+    for (var rmaId : List.of(replacement.rmaId(), UUID.randomUUID().toString())) {
+      http.get()
+          .uri("/shipments?rmaId={rmaId}", rmaId)
+          .headers(
+              h ->
+                  h.setBearerAuth(
+                      rmaId.equals(replacement.rmaId())
+                          ? FakeKeycloak.token("customer-99", "CUSTOMER")
+                          : CUSTOMER))
+          .exchange()
+          .expectStatus()
+          .isNotFound();
+    }
+  }
+
+  @Test
+  void theQueueListsByKind() {
+    var shipment = created("NL", Map.of(CASE, 1));
+    var replacement =
+        createdFrom(
+            replacementRequest(
+                UUID.randomUUID().toString(),
+                shipment.orderId(),
+                "customer-42",
+                "NL",
+                lines(Map.of(CASE, 1))));
+
+    var replacements = queue("kind=REPLACEMENT&warehouseId=WH-AMS&size=100").items();
+    var orders = queue("kind=ORDER&warehouseId=WH-AMS&size=100").items();
+
+    assertThat(replacements).extracting(ShipmentView::id).contains(replacement.id());
+    assertThat(replacements).extracting(ShipmentView::kind).containsOnly("REPLACEMENT");
+    assertThat(orders).extracting(ShipmentView::id).contains(shipment.id());
+    assertThat(orders).extracting(ShipmentView::kind).containsOnly("ORDER");
+    assertThat(queue("warehouseId=WH-AMS&size=100").items())
+        .extracting(ShipmentView::id)
+        .contains(shipment.id(), replacement.id());
+  }
+
+  private ShipmentView byRma(String token, String rmaId) {
+    return http.get()
+        .uri("/shipments?rmaId={rmaId}", rmaId)
+        .headers(h -> h.setBearerAuth(token))
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody(ShipmentView.class)
+        .returnResult()
+        .getResponseBody();
   }
 
   private ShipmentView byOrder(String token, String orderId) {

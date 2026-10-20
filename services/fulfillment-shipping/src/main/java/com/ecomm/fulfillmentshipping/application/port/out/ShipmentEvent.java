@@ -38,8 +38,10 @@ public record ShipmentEvent(String shipmentId, long version, Change change, Snap
     }
   }
 
-  /** The null fields are left out. */
+  /** The null fields are left out, {@code rmaId} among them for an {@code ORDER} Shipment. */
   public record Snapshot(
+      String kind,
+      String rmaId,
       String orderId,
       String customerId,
       String warehouseId,
@@ -70,6 +72,8 @@ public record ShipmentEvent(String shipmentId, long version, Change change, Snap
         shipment.version(),
         change,
         new Snapshot(
+            shipment.kind().name(),
+            shipment.rmaId(),
             shipment.orderId(),
             shipment.customerId(),
             shipment.warehouseId(),

@@ -29,6 +29,11 @@ class UnconfiguredWarehouseApiTest extends ShipmentsApiTest {
                             "--ecomm.fulfillment-shipping.warehouses[0].id=WH-BER",
                             "--ecomm.fulfillment-shipping.warehouses[0].name=Berlin",
                             "--ecomm.fulfillment-shipping.warehouses[0].address.country=DE",
+                            "--ecomm.fulfillment-shipping.warehouses[0].return-address.name=R",
+                            "--ecomm.fulfillment-shipping.warehouses[0].return-address.street=S",
+                            "--ecomm.fulfillment-shipping.warehouses[0].return-address.postcode=1",
+                            "--ecomm.fulfillment-shipping.warehouses[0].return-address.city=C",
+                            "--ecomm.fulfillment-shipping.warehouses[0].return-address.country=DE",
                             "--ecomm.fulfillment-shipping.warehouses[0].is-default=true"))
                     .close())
         .hasMessageContaining("name a Warehouse that isn't configured")

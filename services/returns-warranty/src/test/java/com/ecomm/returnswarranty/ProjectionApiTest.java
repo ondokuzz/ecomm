@@ -31,6 +31,23 @@ class ProjectionApiTest extends RmasApiTest {
   }
 
   @Test
+  void aReplacementIsSkippedSoItsOrdersShipmentIsStillProjected() {
+    var phone = newVariant("PHONE");
+    Products.product("Pixel 9", phone).tracked("IMEI").publish();
+    var shipped = newImei();
+    var replacing = newImei();
+    var shipment = Shipments.shipment(CUSTOMER_ID).line(phone, "Pixel 9", 1, "IMEI", shipped);
+    // The replacement's events come first, and name the same Order.
+    Shipments.replacementFor(shipment)
+        .line(phone, "Pixel 9", 1, "IMEI", replacing)
+        .delivered(RECENTLY);
+    shipment.delivered(RECENTLY);
+
+    assertThat(requested(rma(shipment.orderId(), phone, 1, "RETURN", shipped)).status())
+        .isEqualTo("REQUESTED");
+  }
+
+  @Test
   void aShipmentIsClaimableOnlyOnceItsDeliveryArrives() {
     var charger = newVariant("CHARGER");
     var shipment = Shipments.shipment(CUSTOMER_ID).line(charger, "Charger", 1, "NONE");

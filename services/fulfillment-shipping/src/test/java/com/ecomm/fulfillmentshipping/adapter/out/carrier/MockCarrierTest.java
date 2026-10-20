@@ -23,7 +23,11 @@ class MockCarrierTest {
 
   private static final Warehouse VIENNA =
       new Warehouse(
-          "WH-VIE", "Vienna", new Warehouse.Address("Lager 1", "1010", "Wien", "AT"), true);
+          "WH-VIE",
+          "Vienna",
+          new Warehouse.Address("Lager 1", "1010", "Wien", "AT"),
+          new Warehouse.ReturnAddress("Returns Vienna", "Lager 3", "1010", "Wien", "AT"),
+          true);
 
   private static final List<Line> LINES = List.of(new Line("V-1", 3));
 

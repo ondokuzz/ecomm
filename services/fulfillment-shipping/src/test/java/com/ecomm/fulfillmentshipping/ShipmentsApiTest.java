@@ -3,6 +3,7 @@ package com.ecomm.fulfillmentshipping;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
+import com.ecomm.fulfillmentshipping.adapter.out.carrier.CarrierWebhookDelivery.SignedWebhook;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -85,6 +86,27 @@ abstract class ShipmentsApiTest extends FulfillmentShippingApiTest {
          "shippingOption": %s}
         """
         .formatted(orderId, customerId, lines, address(country), EXPRESS);
+  }
+
+  /** A replacement for the RMA, of the Order's units, as the returns Saga creates it. */
+  static String replacementRequest(
+      String rmaId, String orderId, String customerId, String country, String lines) {
+    return """
+        {"kind": "REPLACEMENT", "rmaId": "%s", "orderId": "%s", "customerId": "%s", "lines": %s,
+         "shippingAddress": %s, "shippingOption": %s}
+        """
+        .formatted(rmaId, orderId, customerId, lines, address(country), EXPRESS);
+  }
+
+  /** A new replacement of a phone for a new RMA on a new Order of {@code customer-42}. */
+  ShipmentView replacement() {
+    return createdFrom(
+        replacementRequest(
+            UUID.randomUUID().toString(),
+            UUID.randomUUID().toString(),
+            "customer-42",
+            "DE",
+            lines(Map.of(PHONE, 1))));
   }
 
   /** Creates the Shipment as the fulfillment Saga does, with a fresh key. */
@@ -209,6 +231,21 @@ abstract class ShipmentsApiTest extends FulfillmentShippingApiTest {
         .getResponseBody();
   }
 
+  /** Posts the Carrier webhook as the Carrier sent it, signed. */
+  RestTestClient.ResponseSpec deliver(SignedWebhook webhook) {
+    return http.post()
+        .uri("/webhooks/carrier")
+        .headers(
+            h -> {
+              if (webhook.signature() != null) {
+                h.set("Carrier-Signature", webhook.signature());
+              }
+            })
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(webhook.body())
+        .exchange();
+  }
+
   ShipmentView read(String token, String id) {
     return http.get()
         .uri("/shipments/{id}", id)
@@ -229,6 +266,8 @@ abstract class ShipmentsApiTest extends FulfillmentShippingApiTest {
   /** The parts of a Shipment a client reads, independent of the service's classes. */
   record ShipmentView(
       String id,
+      String kind,
+      String rmaId,
       String orderId,
       String customerId,
       String warehouseId,

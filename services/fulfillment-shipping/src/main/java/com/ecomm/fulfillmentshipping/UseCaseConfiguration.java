@@ -5,9 +5,9 @@ import com.ecomm.fulfillmentshipping.application.ProductProjectionService;
 import com.ecomm.fulfillmentshipping.application.ShipmentService;
 import com.ecomm.fulfillmentshipping.application.ShippingQuoteService;
 import com.ecomm.fulfillmentshipping.application.WarehouseService;
-import com.ecomm.fulfillmentshipping.application.port.in.ListWarehousesUseCase;
 import com.ecomm.fulfillmentshipping.application.port.in.ProjectProductUseCase;
 import com.ecomm.fulfillmentshipping.application.port.in.QuoteShippingUseCase;
+import com.ecomm.fulfillmentshipping.application.port.in.ReadWarehousesUseCase;
 import com.ecomm.fulfillmentshipping.application.port.out.ProductStore;
 import com.ecomm.fulfillmentshipping.application.port.out.ShipmentRepository;
 import com.ecomm.fulfillmentshipping.application.port.out.ShippingProvider;
@@ -25,7 +25,7 @@ import org.springframework.context.annotation.Configuration;
 class UseCaseConfiguration {
 
   @Bean
-  ListWarehousesUseCase listWarehousesUseCase(Warehouses warehouses) {
+  ReadWarehousesUseCase readWarehousesUseCase(Warehouses warehouses) {
     return new WarehouseService(warehouses);
   }
 

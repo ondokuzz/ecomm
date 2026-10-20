@@ -188,8 +188,12 @@ The process that takes a Paid Order to the Customer, run as the fulfillment Saga
 _Avoid_: Shipping — that's the carrier hand-off specifically, one step inside Fulfillment
 
 **Warehouse**:
-A place Orders ship from, such as `WH-BER` in Berlin: an ID, a name and an address with its country. Warehouses are configuration in Fulfillment & Shipping, not data Staff edit. Exactly one is the default, and a country has at most one. An Order ships from the Warehouse in its destination's country, or else from the default, and a Shipping quote uses the same rule, so what was quoted is what ships. Stock is one pool per Variant, not held per Warehouse.
+A place Orders ship from, such as `WH-BER` in Berlin: an ID, a name, an address with its country, and a Return address. Warehouses are configuration in Fulfillment & Shipping, not data Staff edit. Exactly one is the default, and a country has at most one. An Order ships from the Warehouse in its destination's country, or else from the default, and a Shipping quote uses the same rule, so what was quoted is what ships. Stock is one pool per Variant, not held per Warehouse.
 _Avoid_: Depot, Fulfillment center, Location
+
+**Return address**:
+Where Customers send an RMA's units back to a Warehouse: a name to address the parcel to, a street, a postcode, a city and a country. Each Warehouse's configuration has one, and the service doesn't start without it. Any signed-in Customer may read a Warehouse's name and return address.
+_Avoid_: Returns address, Return location, Warehouse address (where it ships from)
 
 **Carrier**:
 The company that takes a parcel from a Warehouse to the Customer: it quotes Shipping options, books a Shipment and reports its progress. Fulfillment & Shipping reaches it through its `ShippingProvider` port (ADR 0005); only the mock carrier exists, which ships within the EU.
@@ -208,8 +212,12 @@ The cost of the Shipping option chosen for a Checkout Session, as it was quoted 
 _Avoid_: Delivery fee, Postage
 
 **Shipment**:
-One Order's parcel, in Fulfillment & Shipping: its Warehouse, its Shipping address and Shipping option, its lines (Variant, Product name, quantity, Serial tracking, and the Serial numbers once packed), its Carrier and tracking number once booked, and its Tracking events. One Order has one Shipment. Its status moves `AWAITING_PICK → PICKED → PACKED → SHIPPED → DELIVERED`, or `PACKED → ON_HOLD` when its Payment can't be captured, which is final. The fulfillment Saga creates, dispatches and holds it, Staff pick and pack it, and the Carrier's webhook delivers it. Each move appends to its status history: the status, when, and by whom (a Staff member's ID, `ORCHESTRATION` or `CARRIER`).
+One parcel, in Fulfillment & Shipping: its kind, its Warehouse, its Shipping address and Shipping option, its lines (Variant, Product name, quantity, Serial tracking, and the Serial numbers once packed), its Carrier and tracking number once booked, and its Tracking events. Its kind is `ORDER`, an Order's units, or `REPLACEMENT`, a Replacement Shipment; every Shipment from before replacements is an Order's. One Order has one `ORDER` Shipment. Its status moves `AWAITING_PICK → PICKED → PACKED → SHIPPED → DELIVERED`, or `PACKED → ON_HOLD` when its Payment can't be captured, which is final. The fulfillment Saga creates, dispatches and holds an Order's, Staff pick and pack it, and the Carrier's webhook delivers it. Each move appends to its status history: the status, when, and by whom (a Staff member's ID, `ORCHESTRATION` or `CARRIER`).
 _Avoid_: Parcel, Package, Consignment, Delivery
+
+**Replacement Shipment**:
+A Shipment of kind `REPLACEMENT`, of new units replacing an RMA's faulty ones: it names its RMA and the RMA's Order, and goes to the Order Shipment's Shipping address from the Warehouse that serves it. An RMA has at most one. The returns Saga creates and dispatches it, Staff pick and pack it from the fulfillment queue, where it is marked "Replacement · RMA-…", with new Serial numbers, and the Carrier delivers it, as any Shipment. Nothing captures a Payment for it, its events wake the returns Saga and never the fulfillment Saga, and Returns & Warranty doesn't project it: RMAs on replacement units are out of scope.
+_Avoid_: Exchange (the RMA's resolution, `EXCHANGED`), Reshipment, Second Shipment
 
 **Serial number**:
 What tells one unit of a serial-tracked Variant from another, entered by Staff for each unit as they pack a Shipment. An IMEI is the kind for phones: 15 digits, the last a Luhn check digit. Any other is 4 to 40 letters, digits and hyphens, kept upper-cased. A Serial number ships on one Shipment only, and is unique for its Product, not across Products; a Shipment put on hold gives its numbers back for another to pack. Returns & Warranty checks an RMA's units against them.

@@ -41,6 +41,8 @@ class ShipmentEventsApiTest extends ShipmentsApiTest {
         .extracting(e -> e.get("version").asLong())
         .containsExactly(1L, 2L, 3L, 4L, 5L, 6L, 7L);
     var last = events.getLast().get("shipment");
+    assertThat(last.get("kind").asString()).isEqualTo("ORDER");
+    assertThat(last.get("rmaId")).isNull();
     assertThat(last.get("orderId").asString()).isEqualTo(shipment.orderId());
     assertThat(last.get("customerId").asString()).isEqualTo("customer-42");
     assertThat(last.get("warehouseId").asString()).isEqualTo("WH-BER");
@@ -62,6 +64,25 @@ class ShipmentEventsApiTest extends ShipmentsApiTest {
     assertThat(held.get("change").asString()).isEqualTo("ON_HOLD");
     assertThat(held.at("/shipment/holdReason").asString()).isEqualTo("authorization_expired");
     assertThat(held.at("/shipment/carrier").isMissingNode()).isTrue();
+  }
+
+  @Test
+  void aReplacementIsPublishedWithItsKindAndRma() {
+    var replacement = replacement();
+    pick(replacement.id()).expectStatus().isOk();
+
+    var events = ShipmentEvents.keyed(replacement.id(), 2);
+
+    assertThat(events)
+        .extracting(e -> e.get("change").asString())
+        .containsExactly("CREATED", "PICKED");
+    assertThat(events)
+        .allSatisfy(
+            e -> {
+              assertThat(e.at("/shipment/kind").asString()).isEqualTo("REPLACEMENT");
+              assertThat(e.at("/shipment/rmaId").asString()).isEqualTo(replacement.rmaId());
+              assertThat(e.at("/shipment/orderId").asString()).isEqualTo(replacement.orderId());
+            });
   }
 
   @Test

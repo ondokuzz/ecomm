@@ -26,9 +26,12 @@ class ProjectionListener {
 
   private static final Logger log = LoggerFactory.getLogger(ProjectionListener.class);
 
+  private static final String REPLACEMENT = "REPLACEMENT";
+
   /**
    * The fields of a {@code fulfillment-shipping.shipment} event Returns & Warranty needs. The
-   * status is read as text, so a new one doesn't break the projection.
+   * status is read as text, so a new one doesn't break the projection. A missing kind, from before
+   * replacements, is an Order's Shipment.
    */
   record ShipmentEvent(
       @JsonProperty(required = true) UUID shipmentId,
@@ -36,6 +39,7 @@ class ProjectionListener {
       @JsonProperty(required = true) ShipmentState shipment) {
 
     record ShipmentState(
+        String kind,
         @JsonProperty(required = true) String orderId,
         @JsonProperty(required = true) String customerId,
         @JsonProperty(required = true) String status,
@@ -81,6 +85,11 @@ class ProjectionListener {
   @KafkaListener(topics = "fulfillment-shipping.shipment", groupId = "returns-warranty.shipments")
   void on(ShipmentEvent event) {
     var shipment = event.shipment();
+    // RMAs are on an Order's units; RMAs on replacement units are out of scope.
+    if (REPLACEMENT.equals(shipment.kind())) {
+      log.info("Skipped replacement Shipment {} version {}", event.shipmentId(), event.version());
+      return;
+    }
     var applied =
         projection.apply(
             new Shipment(

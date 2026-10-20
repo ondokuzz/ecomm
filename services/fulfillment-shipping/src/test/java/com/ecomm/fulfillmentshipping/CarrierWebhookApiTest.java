@@ -10,8 +10,6 @@ import java.util.List;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.Test;
-import org.springframework.http.MediaType;
-import org.springframework.test.web.servlet.client.RestTestClient;
 
 /**
  * Once it books a Shipment, the mock carrier sends signed Carrier webhooks to {@code POST
@@ -136,20 +134,6 @@ class CarrierWebhookApiTest extends ShipmentsApiTest {
                 + " \"occurredAt\": \"yesterday\"}")) {
       deliver(signed(body)).expectStatus().isBadRequest();
     }
-  }
-
-  private RestTestClient.ResponseSpec deliver(SignedWebhook webhook) {
-    return http.post()
-        .uri("/webhooks/carrier")
-        .headers(
-            h -> {
-              if (webhook.signature() != null) {
-                h.set("Carrier-Signature", webhook.signature());
-              }
-            })
-        .contentType(MediaType.APPLICATION_JSON)
-        .body(webhook.body())
-        .exchange();
   }
 
   private static SignedWebhook signed(String body) {

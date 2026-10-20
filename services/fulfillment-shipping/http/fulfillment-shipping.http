@@ -1,6 +1,7 @@
 # Exercises Fulfillment & Shipping against the compose stack (`make up`): Staff read the Warehouses,
-# Checkout asks for Shipping quotes, and a Shipment goes from creation through pick and pack to
-# delivery by the mock carrier's webhooks. Run the requests top to bottom in the IntelliJ HTTP
+# Checkout asks for Shipping quotes, a Shipment goes from creation through pick and pack to
+# delivery by the mock carrier's webhooks, a replacement is made for an RMA on its Order, and a
+# Customer reads a Warehouse's return address. Run the requests top to bottom in the IntelliJ HTTP
 # client; the token requests store tokens for the ones after them.
 # Checkout's and Orchestration's client secrets and the carrier webhook secret are the stack's own:
 # run it in the `dev` environment, whose http-client.private.env.json holds them (the root README's
@@ -233,3 +234,65 @@ Content-Type: application/json
 ### The Order's Shipment as Staff read it by Order
 GET {{gateway}}/api/fulfillment-shipping/shipments?orderId={{shipmentOrderId}}
 Authorization: Bearer {{staffToken}}
+
+### Replacements. As the returns Saga: a replacement phone for an RMA on that Order, to the Order Shipment's
+### address. 201, kind REPLACEMENT naming the RMA, AWAITING_PICK from WH-BER
+< {%
+  request.variables.set("rmaId", $random.uuid);
+%}
+POST {{fulfillment}}/shipments
+Authorization: Bearer {{orchestrationToken}}
+Idempotency-Key: {{$random.uuid}}
+Content-Type: application/json
+
+{"kind": "REPLACEMENT", "rmaId": "{{rmaId}}", "orderId": "{{shipmentOrderId}}", "customerId": "http-demo-customer",
+ "lines": [{"variantId": "PHN-PIXEL-9", "quantity": 1}],
+ "shippingAddress": {"recipientName": "Erika Mustermann", "line1": "Hauptstraße 5", "postcode": "10115",
+                     "city": "Berlin", "country": "DE"},
+ "shippingOption": {"id": "EXPRESS", "carrier": "Mock Carrier", "cost": {"amountMinor": 999, "currency": "EUR"},
+                    "estimatedDays": 1}}
+
+> {%
+  client.global.set("replacementId", response.body.id);
+  client.global.set("replacementRmaId", response.body.rmaId);
+%}
+
+### A second replacement for the same RMA: 409, reason shipmentExists, with the first in shipment
+POST {{fulfillment}}/shipments
+Authorization: Bearer {{orchestrationToken}}
+Idempotency-Key: {{$random.uuid}}
+Content-Type: application/json
+
+{"kind": "REPLACEMENT", "rmaId": "{{replacementRmaId}}", "orderId": "{{shipmentOrderId}}",
+ "customerId": "http-demo-customer", "lines": [{"variantId": "PHN-PIXEL-9", "quantity": 1}],
+ "shippingAddress": {"recipientName": "Erika Mustermann", "line1": "Hauptstraße 5", "postcode": "10115",
+                     "city": "Berlin", "country": "DE"},
+ "shippingOption": {"id": "EXPRESS", "carrier": "Mock Carrier", "cost": {"amountMinor": 999, "currency": "EUR"}}}
+
+### The Order's own Shipment is still what its Order reads: kind ORDER
+GET {{gateway}}/api/fulfillment-shipping/shipments?orderId={{shipmentOrderId}}
+Authorization: Bearer {{staffToken}}
+
+### The RMA's replacement, as Staff read it by RMA
+GET {{gateway}}/api/fulfillment-shipping/shipments?rmaId={{replacementRmaId}}
+Authorization: Bearer {{staffToken}}
+
+### Staff's queue of replacements awaiting pick, through the gateway
+GET {{gateway}}/api/fulfillment-shipping/shipments?status=AWAITING_PICK&kind=REPLACEMENT
+Authorization: Bearer {{staffToken}}
+
+### The demo Customer's token
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=dev-cli&username=demo@ecomm.local&password=demo
+
+> {% client.global.set("customerToken", response.body.access_token); %}
+
+### A Warehouse's name and return address, as any signed-in Customer reads it, through the gateway
+GET {{gateway}}/api/fulfillment-shipping/warehouses/WH-AMS
+Authorization: Bearer {{customerToken}}
+
+### A Warehouse that isn't configured: 404
+GET {{gateway}}/api/fulfillment-shipping/warehouses/WH-XXX
+Authorization: Bearer {{customerToken}}

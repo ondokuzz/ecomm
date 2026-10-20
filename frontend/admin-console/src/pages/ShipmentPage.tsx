@@ -14,6 +14,7 @@ import {
   type Shipment,
   type ShipmentLine,
   packRequestOf,
+  replacementOf,
   serialCheckOf,
   serialFieldOf,
   shipmentHistoryRowsOf,
@@ -24,7 +25,8 @@ import type { FromQueueState } from './FulfillmentQueuePage'
 /**
  * `/fulfillment/:id`: one Shipment, with where it goes, what to pick and its status history. Staff
  * pick it, then pack it with one Serial number per unit of each serial-tracked line; the fulfillment
- * Saga takes it from there, to the Carrier or on hold.
+ * Saga takes it from there, to the Carrier or on hold. A replacement shows its RMA instead of the
+ * Order's Payment, and the returns Saga takes it to the Carrier.
  */
 export function ShipmentPage() {
   const { id } = useParams()
@@ -71,12 +73,21 @@ function ShipmentDetail({ shipment }: { shipment: Shipment }) {
   const address = shipment.shippingAddress
   const option = shipment.shippingOption
   const history = shipmentHistoryRowsOf(shipment)
+  const replacement = replacementOf(shipment)
   return (
     <>
       <BackLink />
       <div className="page-heading">
         <h1>
-          Shipment for Order <code>#{orderReference({ id: shipment.orderId })}</code>
+          {replacement ? (
+            <>
+              Replacement for <code>{replacement.rmaReference}</code>
+            </>
+          ) : (
+            <>
+              Shipment for Order <code>#{orderReference({ id: shipment.orderId })}</code>
+            </>
+          )}
         </h1>
         <ShipmentStatusBadge status={shipment.status} />
       </div>
@@ -97,6 +108,17 @@ function ShipmentDetail({ shipment }: { shipment: Shipment }) {
           About this Shipment
         </h2>
         <dl className="facts">
+          {replacement && (
+            <div>
+              <dt>RMA</dt>
+              <dd>
+                <Link to={`/rmas/${replacement.rmaId}`}>
+                  <code>{replacement.rmaReference}</code>
+                </Link>
+                <small className="hint">A replacement: no Payment is captured for it.</small>
+              </dd>
+            </div>
+          )}
           <div>
             <dt>Order</dt>
             <dd>
@@ -123,7 +145,7 @@ function ShipmentDetail({ shipment }: { shipment: Shipment }) {
             </dd>
           </div>
           <div>
-            <dt>Paid</dt>
+            <dt>{replacement ? 'Created' : 'Paid'}</dt>
             <dd>
               <time dateTime={shipment.createdAt}>{formatTime(shipment.createdAt)}</time>
             </dd>
@@ -200,7 +222,9 @@ function ShipmentDetail({ shipment }: { shipment: Shipment }) {
       {shipment.status === 'PICKED' && <Pack shipment={shipment} />}
       {shipment.status === 'PACKED' && (
         <p className="alert alert-info" role="status">
-          Packed. It goes to the Carrier by itself once its Payment is captured.
+          {replacement
+            ? 'Packed. The returns Saga hands it to the Carrier by itself.'
+            : 'Packed. It goes to the Carrier by itself once its Payment is captured.'}
         </p>
       )}
       {shipment.trackingNumber && <Tracking shipment={shipment} />}

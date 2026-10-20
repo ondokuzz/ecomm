@@ -24,9 +24,11 @@ import com.github.tomakehurst.wiremock.client.WireMock;
 import com.github.tomakehurst.wiremock.verification.LoggedRequest;
 import io.grpc.StatusRuntimeException;
 import io.temporal.api.common.v1.WorkflowExecution;
+import io.temporal.api.history.v1.HistoryEvent;
 import io.temporal.api.workflowservice.v1.DescribeWorkflowExecutionRequest;
 import io.temporal.client.WorkflowClient;
 import io.temporal.client.WorkflowException;
+import io.temporal.client.WorkflowOptions;
 import io.temporal.testserver.TestServer;
 import java.time.Duration;
 import java.time.Instant;
@@ -112,11 +114,16 @@ class FulfillmentWorkflowTest extends OrchestrationTest {
                                 && !c.getAssignedPartitions().isEmpty()));
   }
 
+  /** Every stand-in returns Saga this test started: they end with the test. */
+  final List<String> returnsStarted = new java.util.ArrayList<>();
+
   /** Ends every run the test left waiting, so none can call the next test's stubs. */
   @AfterEach
   void endTheRun() {
-    for (var order : ordersPaid) {
-      var id = "fulfillment:" + order;
+    var ids = new java.util.ArrayList<String>();
+    ordersPaid.forEach(order -> ids.add("fulfillment:" + order));
+    ids.addAll(returnsStarted);
+    for (var id : ids) {
       try {
         temporal.newUntypedWorkflowStub(id).terminate("the test is over");
       } catch (WorkflowException | StatusRuntimeException e) {
@@ -543,6 +550,47 @@ class FulfillmentWorkflowTest extends OrchestrationTest {
   }
 
   @Test
+  void aReplacementEventSignalsItsRmasReturnsSagaNeverTheOrdersFulfillment() {
+    stubEveryStep();
+    paid();
+    awaitCalls(1);
+    var rmaId = UUID.randomUUID().toString();
+    var returns = returnsSagaStandIn(rmaId);
+    var replacementId = UUID.randomUUID().toString();
+
+    FulfillmentEvents.replacement(replacementId, rmaId, orderId, CUSTOMER_ID, 3, "PACKED");
+
+    await()
+        .atMost(Duration.ofSeconds(30))
+        .untilAsserted(() -> assertThat(signalsTo(returns)).hasSize(1));
+    assertThat(signalsTo(returns).getFirst()).contains(replacementId).contains("PACKED");
+    assertThat(signalsTo(workflowId())).isEmpty();
+    assertThat(calls()).noneMatch(c -> c.startsWith("POST " + CAPTURE));
+
+    // The Order's own Shipment, at the same version, still wakes its fulfillment.
+    shipment(3, "PACKED");
+    awaitCalls(6);
+    assertThat(calls()).filteredOn(c -> c.startsWith("POST " + CAPTURE)).hasSize(1);
+  }
+
+  @Test
+  void aReplacementEventForNoRunningReturnsSagaIsSkippedNotDeadLettered() {
+    stubEveryStep();
+    paid();
+    awaitCalls(1);
+    var replacementId = UUID.randomUUID().toString();
+
+    FulfillmentEvents.replacement(
+        replacementId, UUID.randomUUID().toString(), orderId, CUSTOMER_ID, 3, "PACKED");
+    // Shipment events after the skipped one still wake their Saga.
+    shipment(3, "PACKED");
+
+    awaitCalls(6);
+    assertThat(signalsTo(workflowId())).hasSize(1);
+    assertThat(Kafka.recordsKeyed("orchestration.shipments.dlt", replacementId)).isEmpty();
+  }
+
+  @Test
   void aShipmentEventForNoRunningSagaIsSkippedNotDeadLettered() {
     stubEveryStep();
     var unknownShipment = UUID.randomUUID().toString();
@@ -577,6 +625,39 @@ class FulfillmentWorkflowTest extends OrchestrationTest {
   }
 
   // --- the run ---
+
+  /**
+   * Stands in for the RMA's returns Saga, {@code returns:<rmaId>}, until it exists: a run no worker
+   * picks up, which keeps whatever it is signalled with.
+   */
+  String returnsSagaStandIn(String rmaId) {
+    var id = "returns:" + rmaId;
+    returnsStarted.add(id);
+    temporal
+        .newUntypedWorkflowStub(
+            "returns",
+            WorkflowOptions.newBuilder().setWorkflowId(id).setTaskQueue("returns-stand-in").build())
+        .start();
+    return id;
+  }
+
+  /** What the run {@code workflowId} has been signalled with, as JSON, oldest first. */
+  List<String> signalsTo(String workflowId) {
+    return temporal.fetchHistory(workflowId).getEvents().stream()
+        .filter(HistoryEvent::hasWorkflowExecutionSignaledEventAttributes)
+        .map(
+            e ->
+                e.getWorkflowExecutionSignaledEventAttributes().getSignalName()
+                    + " "
+                    + e
+                        .getWorkflowExecutionSignaledEventAttributes()
+                        .getInput()
+                        .getPayloadsList()
+                        .stream()
+                        .map(p -> p.getData().toStringUtf8())
+                        .toList())
+        .toList();
+  }
 
   String workflowId() {
     return "fulfillment:" + orderId;

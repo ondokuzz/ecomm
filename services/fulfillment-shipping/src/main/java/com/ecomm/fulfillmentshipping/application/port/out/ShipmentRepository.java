@@ -4,6 +4,7 @@ import com.ecomm.fulfillmentshipping.application.port.in.Page;
 import com.ecomm.fulfillmentshipping.domain.Shipment;
 import com.ecomm.fulfillmentshipping.domain.ShipmentExceptions.SerialNumberAlreadyShippedException;
 import com.ecomm.fulfillmentshipping.domain.ShipmentExceptions.ShipmentExistsException;
+import com.ecomm.fulfillmentshipping.domain.ShipmentKind;
 import com.ecomm.fulfillmentshipping.domain.ShipmentStatus;
 import com.ecomm.fulfillmentshipping.domain.TrackingEvent;
 import java.time.Instant;
@@ -16,7 +17,8 @@ import java.util.UUID;
 public interface ShipmentRepository {
 
   /**
-   * @throws ShipmentExistsException when the Order already has a Shipment
+   * @throws ShipmentExistsException when the Order already has its {@code ORDER} Shipment, or the
+   *     RMA its replacement
    */
   void add(Shipment shipment);
 
@@ -37,7 +39,11 @@ public interface ShipmentRepository {
 
   Optional<Shipment> find(UUID id);
 
+  /** The Order's {@code ORDER} Shipment. */
   Optional<Shipment> findByOrder(String orderId);
+
+  /** The RMA's replacement Shipment. */
+  Optional<Shipment> findByRma(String rmaId);
 
   /** The Shipment, locked until the transaction ends so that changes to it queue. */
   Optional<Shipment> lockToChange(UUID id);
@@ -52,10 +58,11 @@ public interface ShipmentRepository {
   List<String> shippedElsewhere(Shipment shipment);
 
   /**
-   * A page of Shipments, oldest first, in {@code status} and from {@code warehouseId} when they are
-   * given.
+   * A page of Shipments, oldest first, in {@code status}, from {@code warehouseId} and of {@code
+   * kind} when they are given.
    */
-  Page<Shipment> page(ShipmentStatus status, String warehouseId, int page, int size);
+  Page<Shipment> page(
+      ShipmentStatus status, String warehouseId, ShipmentKind kind, int page, int size);
 
   /** The IDs and Warehouses of the Shipments from any Warehouse but {@code warehouseIds}. */
   List<String> fromOtherWarehouses(Collection<String> warehouseIds);

@@ -18,6 +18,7 @@ import com.ecomm.fulfillmentshipping.domain.ShipmentExceptions.IllegalTransition
 import com.ecomm.fulfillmentshipping.domain.ShipmentExceptions.ProductsNotKnownYetException;
 import com.ecomm.fulfillmentshipping.domain.ShipmentExceptions.SerialNumberAlreadyShippedException;
 import com.ecomm.fulfillmentshipping.domain.ShipmentExceptions.ShipmentExistsException;
+import com.ecomm.fulfillmentshipping.domain.ShipmentKind;
 import com.ecomm.fulfillmentshipping.domain.ShipmentLine;
 import com.ecomm.fulfillmentshipping.domain.ShipmentStatus;
 import com.ecomm.fulfillmentshipping.domain.TrackingEvent;
@@ -69,15 +70,15 @@ public class ShipmentService
   }
 
   @Override
-  public Shipment create(NewShipment order) {
-    var variantIds = order.lines().stream().map(l -> l.variantId()).toList();
+  public Shipment create(NewShipment newShipment) {
+    var variantIds = newShipment.lines().stream().map(l -> l.variantId()).toList();
     var known = products.productsOf(variantIds);
     var unknown = variantIds.stream().filter(id -> !known.containsKey(id)).toList();
     if (!unknown.isEmpty()) {
       throw new ProductsNotKnownYetException(unknown);
     }
     var lines =
-        order.lines().stream()
+        newShipment.lines().stream()
             .map(
                 line -> {
                   var product = known.get(line.variantId());
@@ -89,20 +90,28 @@ public class ShipmentService
                       List.of());
                 })
             .toList();
-    Warehouse warehouse = warehouses.assignedTo(order.shippingAddress().country());
+    Warehouse warehouse = warehouses.assignedTo(newShipment.shippingAddress().country());
     return transactions.inTransaction(
         () -> {
-          if (shipments.findByOrder(order.orderId()).isPresent()) {
-            throw new ShipmentExistsException(order.orderId());
+          var replacement = newShipment.kind() == ShipmentKind.REPLACEMENT;
+          var existing =
+              replacement
+                  ? shipments.findByRma(newShipment.rmaId())
+                  : shipments.findByOrder(newShipment.orderId());
+          if (existing.isPresent()) {
+            throw new ShipmentExistsException(
+                newShipment.kind(), newShipment.orderId(), newShipment.rmaId());
           }
           var shipment =
               Shipment.create(
                   UUID.randomUUID(),
-                  order.orderId(),
-                  order.customerId(),
+                  newShipment.kind(),
+                  newShipment.rmaId(),
+                  newShipment.orderId(),
+                  newShipment.customerId(),
                   warehouse,
-                  order.shippingAddress(),
-                  order.shippingOption(),
+                  newShipment.shippingAddress(),
+                  newShipment.shippingOption(),
                   lines,
                   time.now());
           shipments.add(shipment);
@@ -201,8 +210,14 @@ public class ShipmentService
   }
 
   @Override
-  public Page<Shipment> shipments(ShipmentStatus status, String warehouseId, int page, int size) {
-    return shipments.page(status, warehouseId, page, size);
+  public Optional<Shipment> replacementOf(String rmaId) {
+    return shipments.findByRma(rmaId);
+  }
+
+  @Override
+  public Page<Shipment> shipments(
+      ShipmentStatus status, String warehouseId, ShipmentKind kind, int page, int size) {
+    return shipments.page(status, warehouseId, kind, page, size);
   }
 
   @Override

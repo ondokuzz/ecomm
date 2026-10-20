@@ -7,6 +7,7 @@ import com.ecomm.fulfillmentshipping.domain.SerialTracking;
 import com.ecomm.fulfillmentshipping.domain.Shipment;
 import com.ecomm.fulfillmentshipping.domain.ShipmentExceptions.SerialNumberAlreadyShippedException;
 import com.ecomm.fulfillmentshipping.domain.ShipmentExceptions.ShipmentExistsException;
+import com.ecomm.fulfillmentshipping.domain.ShipmentKind;
 import com.ecomm.fulfillmentshipping.domain.ShipmentLine;
 import com.ecomm.fulfillmentshipping.domain.ShipmentStatus;
 import com.ecomm.fulfillmentshipping.domain.ShippingAddress;
@@ -52,14 +53,17 @@ class PostgresShipmentRepository implements ShipmentRepository {
     try {
       jdbc.sql(
               """
-              INSERT INTO shipment (id, order_id, customer_id, warehouse_id, status, version,
-                created_at, recipient_name, line1, line2, postcode, city, region, country, phone,
-                option_id, option_carrier, cost_minor, currency, estimated_days)
-              VALUES (:id, :orderId, :customerId, :warehouseId, :status, :version, :createdAt,
+              INSERT INTO shipment (id, kind, rma_id, order_id, customer_id, warehouse_id, status,
+                version, created_at, recipient_name, line1, line2, postcode, city, region, country,
+                phone, option_id, option_carrier, cost_minor, currency, estimated_days)
+              VALUES (:id, :kind, :rmaId, :orderId, :customerId, :warehouseId, :status, :version,
+                :createdAt,
                 :recipientName, :line1, :line2, :postcode, :city, :region, :country, :phone,
                 :optionId, :optionCarrier, :costMinor, :currency, :estimatedDays)
               """)
           .param("id", shipment.id())
+          .param("kind", shipment.kind().name())
+          .param("rmaId", shipment.rmaId())
           .param("orderId", shipment.orderId())
           .param("customerId", shipment.customerId())
           .param("warehouseId", shipment.warehouseId())
@@ -81,7 +85,7 @@ class PostgresShipmentRepository implements ShipmentRepository {
           .param("estimatedDays", option.estimatedDays())
           .update();
     } catch (DuplicateKeyException e) {
-      throw new ShipmentExistsException(shipment.orderId());
+      throw new ShipmentExistsException(shipment.kind(), shipment.orderId(), shipment.rmaId());
     }
     var lines = shipment.lines();
     for (var position = 0; position < lines.size(); position++) {
@@ -210,7 +214,14 @@ class PostgresShipmentRepository implements ShipmentRepository {
 
   @Override
   public Optional<Shipment> findByOrder(String orderId) {
-    return one(jdbc.sql(SHIPMENT + "WHERE s.order_id = :orderId").param("orderId", orderId));
+    return one(
+        jdbc.sql(SHIPMENT + "WHERE s.order_id = :orderId AND s.kind = 'ORDER'")
+            .param("orderId", orderId));
+  }
+
+  @Override
+  public Optional<Shipment> findByRma(String rmaId) {
+    return one(jdbc.sql(SHIPMENT + "WHERE s.rma_id = :rmaId").param("rmaId", rmaId));
   }
 
   @Override
@@ -252,15 +263,19 @@ class PostgresShipmentRepository implements ShipmentRepository {
   }
 
   @Override
-  public Page<Shipment> page(ShipmentStatus status, String warehouseId, int page, int size) {
+  public Page<Shipment> page(
+      ShipmentStatus status, String warehouseId, ShipmentKind kind, int page, int size) {
     var where =
         "WHERE (CAST(:status AS VARCHAR) IS NULL OR s.status = :status)"
-            + " AND (CAST(:warehouseId AS VARCHAR) IS NULL OR s.warehouse_id = :warehouseId) ";
+            + " AND (CAST(:warehouseId AS VARCHAR) IS NULL OR s.warehouse_id = :warehouseId)"
+            + " AND (CAST(:kind AS VARCHAR) IS NULL OR s.kind = :kind) ";
     var statusName = status == null ? null : status.name();
+    var kindName = kind == null ? null : kind.name();
     var total =
         jdbc.sql("SELECT count(*) FROM shipment s " + where)
             .param("status", statusName)
             .param("warehouseId", warehouseId)
+            .param("kind", kindName)
             .query(Long.class)
             .single();
     var items =
@@ -268,6 +283,7 @@ class PostgresShipmentRepository implements ShipmentRepository {
             jdbc.sql(SHIPMENT + where + "ORDER BY s.created_at, s.id LIMIT :size OFFSET :offset")
                 .param("status", statusName)
                 .param("warehouseId", warehouseId)
+                .param("kind", kindName)
                 .param("size", size)
                 .param("offset", (long) page * size)
                 .query(this::header)
@@ -294,6 +310,8 @@ class PostgresShipmentRepository implements ShipmentRepository {
   /** A Shipment row, without its lines, history and Tracking events. */
   private record Header(
       UUID id,
+      ShipmentKind kind,
+      String rmaId,
       String orderId,
       String customerId,
       String warehouseId,
@@ -311,6 +329,8 @@ class PostgresShipmentRepository implements ShipmentRepository {
     var days = rs.getObject("estimated_days", Integer.class);
     return new Header(
         rs.getObject("id", UUID.class),
+        ShipmentKind.valueOf(rs.getString("kind")),
+        rs.getString("rma_id"),
         rs.getString("order_id"),
         rs.getString("customer_id"),
         rs.getString("warehouse_id"),
@@ -412,6 +432,8 @@ class PostgresShipmentRepository implements ShipmentRepository {
             h ->
                 new Shipment(
                     h.id(),
+                    h.kind(),
+                    h.rmaId(),
                     h.orderId(),
                     h.customerId(),
                     h.warehouseId(),

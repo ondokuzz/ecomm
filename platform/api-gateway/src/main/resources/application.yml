@@ -53,8 +53,9 @@ ecomm:
       fulfillment-shipping:
         uri: http://localhost:8099
         # Only Checkout asks for Shipping quotes, for a Checkout Session's address, and only the
-        # fulfillment Saga creates, dispatches and holds Shipments. Staff pick, pack and read them,
-        # and a Customer reads their own.
+        # fulfillment Saga creates, dispatches and holds Shipments, and the returns Saga creates and
+        # dispatches replacements. Staff pick, pack and read them, and a Customer reads their own,
+        # and any Warehouse's return address.
         internal: [/shipping/**, POST /shipments, POST /shipments/*/dispatch, POST /shipments/*/hold]
         # The Carrier reports Tracking events from outside; the service checks the signature.
         webhooks: [POST /webhooks/carrier]

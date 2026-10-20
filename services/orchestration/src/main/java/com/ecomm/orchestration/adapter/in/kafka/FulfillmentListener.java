@@ -7,6 +7,7 @@ import com.ecomm.orchestration.application.port.in.CheckoutRequest.ShippingOptio
 import com.ecomm.orchestration.application.port.in.FulfillmentRequest.Line;
 import com.ecomm.orchestration.application.port.in.FulfillmentUseCase;
 import com.ecomm.orchestration.application.port.in.FulfillmentUseCase.OrderChanged;
+import com.ecomm.orchestration.application.port.in.ReturnsUseCase;
 import com.ecomm.orchestration.application.port.in.ShipmentChange;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
@@ -15,7 +16,8 @@ import org.springframework.stereotype.Component;
 
 /**
  * Starts and wakes the fulfillment Saga from Order Management's Order events and Fulfillment &
- * Shipping's Shipment events, one consumer group per topic (ADR 0009).
+ * Shipping's Shipment events, one consumer group per topic (ADR 0009). A replacement Shipment's
+ * events wake its RMA's returns Saga instead, never a fulfillment Saga.
  */
 @Component
 class FulfillmentListener {
@@ -56,21 +58,33 @@ class FulfillmentListener {
     record Money(long amountMinor, String currency) {}
   }
 
-  /** The fields of a {@code fulfillment-shipping.shipment} event the Saga is woken with. */
+  /**
+   * The fields of a {@code fulfillment-shipping.shipment} event a Saga is woken with. A missing
+   * kind, from before replacements, is an Order's Shipment.
+   */
   record ShipmentEvent(
       @JsonProperty(required = true) String shipmentId,
       @JsonProperty(required = true) long version,
       @JsonProperty(required = true) Shipment shipment) {
 
     record Shipment(
+        String kind,
+        String rmaId,
         @JsonProperty(required = true) String orderId,
-        @JsonProperty(required = true) String status) {}
+        @JsonProperty(required = true) String status) {
+
+      boolean isReplacement() {
+        return "REPLACEMENT".equals(kind);
+      }
+    }
   }
 
   private final FulfillmentUseCase fulfillment;
+  private final ReturnsUseCase returns;
 
-  FulfillmentListener(FulfillmentUseCase fulfillment) {
+  FulfillmentListener(FulfillmentUseCase fulfillment, ReturnsUseCase returns) {
     this.fulfillment = fulfillment;
+    this.returns = returns;
   }
 
   /**
@@ -98,9 +112,12 @@ class FulfillmentListener {
   @KafkaListener(topics = "fulfillment-shipping.shipment", groupId = "orchestration.shipments")
   void on(ShipmentEvent event) {
     var shipment = event.shipment();
-    fulfillment.shipmentChanged(
-        shipment.orderId(),
-        new ShipmentChange(event.shipmentId(), event.version(), shipment.status()));
+    var change = new ShipmentChange(event.shipmentId(), event.version(), shipment.status());
+    if (shipment.isReplacement()) {
+      returns.replacementChanged(shipment.rmaId(), change);
+    } else {
+      fulfillment.shipmentChanged(shipment.orderId(), change);
+    }
   }
 
   private static ShippingAddress addressOf(OrderEvent.Address a) {

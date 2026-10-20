@@ -3,6 +3,7 @@ import {
   packRequestOf,
   queueOf,
   queueSearchOf,
+  replacementOf,
   serialCheckOf,
   serialFieldOf,
   shipmentHistoryRowsOf,
@@ -174,5 +175,50 @@ describe('shipmentHistoryRowsOf', () => {
 describe('unitsOf', () => {
   it('counts every unit on every line', () => {
     expect(unitsOf({ lines: [{ quantity: 2 }, { quantity: 1 }] })).toBe(3)
+  })
+})
+
+describe('replacementOf, for the queue and the Shipment page', () => {
+  it('labels a replacement with the RMA it is for, as the Customer quotes it', () => {
+    expect(replacementOf({ kind: 'REPLACEMENT', rmaId: '3f2a9c1b-7e4d-4c2a-9b1e-5d6f7a8b9c0d' })).toEqual({
+      label: 'Replacement · RMA-3F2A9C1B',
+      rmaReference: 'RMA-3F2A9C1B',
+      rmaId: '3f2a9c1b-7e4d-4c2a-9b1e-5d6f7a8b9c0d',
+    })
+  })
+
+  it("has nothing to say of an Order's Shipment", () => {
+    expect(replacementOf({ kind: 'ORDER', rmaId: null })).toBeNull()
+  })
+})
+
+describe('shipmentHistoryRowsOf, for a replacement', () => {
+  it("names Orchestration's changes the returns Saga's", () => {
+    const rows = shipmentHistoryRowsOf(
+      {
+        kind: 'REPLACEMENT',
+        statusHistory: [{ status: 'AWAITING_PICK', at: '2026-10-20T09:00:00Z', by: 'ORCHESTRATION' }],
+      },
+      'en-GB',
+    )
+    expect(rows.map((row) => row.by)).toEqual(['Returns Saga'])
+  })
+})
+
+describe('the queue, filtered by kind', () => {
+  it('asks for one kind when the queue is filtered to it', () => {
+    expect(shipmentsQueryOf({ status: 'PACKED', page: 0, kind: 'REPLACEMENT' }, undefined, 20)).toBe(
+      '?status=PACKED&page=0&size=20&kind=REPLACEMENT',
+    )
+  })
+
+  it('keeps the kind in the URL, and every kind is the default', () => {
+    expect(queueOf(new URLSearchParams('kind=REPLACEMENT'))).toEqual({
+      status: 'AWAITING_PICK',
+      page: 0,
+      kind: 'REPLACEMENT',
+    })
+    expect(queueOf(new URLSearchParams('kind=LOST')).kind).toBeUndefined()
+    expect(queueSearchOf({ status: 'PICKED', page: 0, kind: 'ORDER' })).toBe('?status=PICKED&kind=ORDER')
   })
 })

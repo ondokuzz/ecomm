@@ -22,15 +22,22 @@ ecomm:
     schema-registry-url: http://localhost:${APICURIO_PORT:8088}/apis/registry/v3
   fulfillment-shipping:
     # Exactly one is the default; at most one per country. A Shipment ships from the Warehouse in
-    # its destination's country, or else from the default.
+    # its destination's country, or else from the default. Each has a return address, where
+    # Customers send an RMA's units back to it.
     warehouses:
       - id: WH-BER
         name: Berlin
         address: { line1: Lagerstraße 1, postcode: "10115", city: Berlin, country: DE }
+        return-address:
+          { name: Ecomm Returns Berlin, street: Lagerstraße 3, postcode: "10115", city: Berlin,
+            country: DE }
         is-default: true
       - id: WH-AMS
         name: Amsterdam
         address: { line1: Magazijnweg 1, postcode: 1011 AB, city: Amsterdam, country: NL }
+        return-address:
+          { name: Ecomm Returns Amsterdam, street: Magazijnweg 3, postcode: 1011 AB,
+            city: Amsterdam, country: NL }
         is-default: false
     # The mock carrier behind the ShippingProvider port (ADR 0005). It ships to the EU's countries,
     # priced per Currency by zone: domestic when the destination is in the origin Warehouse's

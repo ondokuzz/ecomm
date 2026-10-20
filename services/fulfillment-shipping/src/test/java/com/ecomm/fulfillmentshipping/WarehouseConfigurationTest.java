@@ -7,7 +7,8 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 /**
  * The service doesn't start on Warehouses that can't assign every destination exactly one: none or
- * two defaults, an ID twice, or two Warehouses in one country.
+ * two defaults, an ID twice, or two Warehouses in one country. Nor on one without a whole return
+ * address.
  */
 class WarehouseConfigurationTest {
 
@@ -21,9 +22,19 @@ class WarehouseConfigurationTest {
               BERLIN + "id=WH-BER",
               BERLIN + "name=Berlin",
               BERLIN + "address.country=DE",
+              BERLIN + "return-address.name=Returns Berlin",
+              BERLIN + "return-address.street=Lagerstraße 3",
+              BERLIN + "return-address.postcode=10115",
+              BERLIN + "return-address.city=Berlin",
+              BERLIN + "return-address.country=DE",
               AMSTERDAM + "id=WH-AMS",
               AMSTERDAM + "name=Amsterdam",
-              AMSTERDAM + "address.country=NL");
+              AMSTERDAM + "address.country=NL",
+              AMSTERDAM + "return-address.name=Returns Amsterdam",
+              AMSTERDAM + "return-address.street=Magazijnweg 3",
+              AMSTERDAM + "return-address.postcode=1011 AB",
+              AMSTERDAM + "return-address.city=Amsterdam",
+              AMSTERDAM + "return-address.country=NL");
 
   @Test
   void oneDefaultStarts() {
@@ -88,5 +99,36 @@ class WarehouseConfigurationTest {
                     .getFailure()
                     .rootCause()
                     .hasMessageContaining("WH-AMS needs an ISO 3166-1 alpha-2 country"));
+  }
+
+  @Test
+  void aWarehouseWithoutAReturnAddressDoesNotStart() {
+    new ApplicationContextRunner()
+        .withUserConfiguration(WarehouseConfiguration.class)
+        .withPropertyValues(
+            BERLIN + "id=WH-BER",
+            BERLIN + "name=Berlin",
+            BERLIN + "address.country=DE",
+            BERLIN + "is-default=true")
+        .run(
+            started ->
+                assertThat(started)
+                    .getFailure()
+                    .rootCause()
+                    .hasMessageContaining("Warehouse WH-BER needs a return address"));
+  }
+
+  @Test
+  void aReturnAddressMissingAPartDoesNotStart() {
+    context
+        .withPropertyValues(BERLIN + "is-default=true", AMSTERDAM + "return-address.street=")
+        .run(
+            started ->
+                assertThat(started)
+                    .getFailure()
+                    .rootCause()
+                    .hasMessageContaining(
+                        "Warehouse WH-AMS needs a return address with a name, street, postcode,"
+                            + " city and ISO 3166-1 alpha-2 country"));
   }
 }

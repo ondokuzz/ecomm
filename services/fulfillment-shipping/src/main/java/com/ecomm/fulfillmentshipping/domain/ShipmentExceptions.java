@@ -47,11 +47,37 @@ public final class ShipmentExceptions {
     }
   }
 
-  /** An Order already has its Shipment: one Order has one. */
+  /**
+   * An Order already has its {@code ORDER} Shipment, or an RMA its replacement: each has one. The
+   * refused Shipment was of {@code kind}, for the Order {@code orderId} and, for a replacement, the
+   * RMA {@code rmaId} (null otherwise).
+   */
   public static class ShipmentExistsException extends RuntimeException {
 
-    public ShipmentExistsException(String orderId) {
-      super("Order " + orderId + " already has a Shipment");
+    private final ShipmentKind kind;
+    private final String orderId;
+    private final String rmaId;
+
+    public ShipmentExistsException(ShipmentKind kind, String orderId, String rmaId) {
+      super(
+          kind == ShipmentKind.REPLACEMENT
+              ? "RMA " + rmaId + " already has a replacement Shipment"
+              : "Order " + orderId + " already has a Shipment");
+      this.kind = kind;
+      this.orderId = orderId;
+      this.rmaId = rmaId;
+    }
+
+    public ShipmentKind kind() {
+      return kind;
+    }
+
+    public String orderId() {
+      return orderId;
+    }
+
+    public String rmaId() {
+      return rmaId;
     }
   }
 

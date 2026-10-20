@@ -3,11 +3,13 @@ package com.ecomm.fulfillmentshipping.domain;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 
 /**
  * Every configured Warehouse, in configuration order. Exactly one is the default, IDs are unique,
  * and no two share a country, so that every destination has exactly one Warehouse to ship from.
+ * Each has a whole return address.
  */
 public final class Warehouses {
 
@@ -18,7 +20,8 @@ public final class Warehouses {
 
   /**
    * @throws IllegalArgumentException naming what's wrong, when the Warehouses break a rule above or
-   *     one has a blank ID or name, or a country that isn't an ISO 3166-1 alpha-2 code
+   *     one has a blank ID or name, or a country that isn't an ISO 3166-1 alpha-2 code, or no
+   *     return address or one missing a part
    */
   public Warehouses(List<Warehouse> warehouses) {
     if (warehouses == null || warehouses.isEmpty()) {
@@ -34,6 +37,7 @@ public final class Warehouses {
         throw new IllegalArgumentException(
             "Warehouse " + warehouse.id() + " needs an ISO 3166-1 alpha-2 country");
       }
+      checkReturnAddress(warehouse);
       if (!ids.add(warehouse.id())) {
         throw new IllegalArgumentException("Warehouse " + warehouse.id() + " is configured twice");
       }
@@ -55,12 +59,35 @@ public final class Warehouses {
     return all;
   }
 
+  /** The configured Warehouse {@code id}, if there is one. */
+  public Optional<Warehouse> find(String id) {
+    return all.stream().filter(w -> w.id().equals(id)).findFirst();
+  }
+
   /** The Warehouse in {@code country}, else the default: where a Shipment there ships from. */
   public Warehouse assignedTo(String country) {
     return all.stream()
         .filter(w -> w.country().equals(country))
         .findFirst()
         .orElse(defaultWarehouse);
+  }
+
+  private static void checkReturnAddress(Warehouse warehouse) {
+    var address = warehouse.returnAddress();
+    if (address == null) {
+      throw new IllegalArgumentException("Warehouse " + warehouse.id() + " needs a return address");
+    }
+    if (blank(address.name())
+        || blank(address.street())
+        || blank(address.postcode())
+        || blank(address.city())
+        || !COUNTRIES.contains(address.country())) {
+      throw new IllegalArgumentException(
+          "Warehouse "
+              + warehouse.id()
+              + " needs a return address with a name, street, postcode, city and ISO 3166-1"
+              + " alpha-2 country");
+    }
   }
 
   private static boolean blank(String value) {

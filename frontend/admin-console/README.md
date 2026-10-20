@@ -24,8 +24,8 @@ Vite, React, TypeScript, React Router and TanStack Query, with `oidc-client-ts`.
 | `/promotions/campaigns/{id}` | A Campaign |
 | `/orders` | Every Customer's Orders, newest first, 20 to a page: Order reference, when placed, Customer ID, items, total and Order Status. Filter by Status, Customer ID, the days placed and Order reference |
 | `/orders/{id}` | An Order: its ID, Customer ID, lines, each Discount by its Campaign or Coupon, tax and total, its Payments with their transactions, its Shipment, its RMAs, and its Order Status history |
-| `/fulfillment` | The fulfillment queue: Shipments awaiting pick, picked, packed or on hold, one tab each with its count, oldest first, 20 to a page (`?status=&page=`), from the Warehouse chosen or all: Order reference, how long ago it was paid, Warehouse, destination country and units |
-| `/fulfillment/{id}` | A Shipment: its Order, Warehouse, Shipping option, Shipping address and lines. Pick it, pack it with a Serial number per unit, and see its tracking, its hold reason and its status history |
+| `/fulfillment` | The fulfillment queue: Shipments awaiting pick, picked, packed or on hold, one tab each with its count, oldest first, 20 to a page (`?status=&page=&kind=`), from the Warehouse chosen or all, of one kind or both: Order reference, "Replacement · RMA-…" for a replacement, linking to the RMA, how long ago it was paid, Warehouse, destination country and units |
+| `/fulfillment/{id}` | A Shipment: its RMA for a replacement, its Order, Warehouse, Shipping option, Shipping address and lines. Pick it, pack it with a Serial number per unit, and see its tracking, its hold reason and its status history |
 | `/rmas` | The RMA approval queue: requested RMAs, oldest first, 20 to a page, with tabs for the approved and the rejected (`?status=&page=`): RMA reference, kind, Order reference, Product and how long ago it was requested |
 | `/rmas/{id}` | An RMA: its Order, Customer, Product and Variant, quantity, Serial numbers, kind, the Customer's reason, the window it was checked against, and its decision history. Approve or reject a requested one |
 
@@ -187,21 +187,24 @@ its page. An Order not yet paid, or placed before Sprint 5, has none, and says s
 ## Fulfillment
 
 The fulfillment queue and the Shipment page call Fulfillment & Shipping's `GET /warehouses`,
-`GET /shipments?status=&warehouseId=&page=&size=` and `GET /shipments/{id}`, and move a Shipment with
+`GET /shipments?status=&warehouseId=&kind=&page=&size=` and `GET /shipments/{id}`, and move a Shipment with
 `POST /shipments/{id}/pick` and `/pack`, all as Staff (see the
 [Fulfillment & Shipping README](../../services/fulfillment-shipping/README.md)). The fulfillment
 Saga creates each Shipment once its Order is paid, and dispatches or holds it once packed; the
-console only reads what it did.
+returns Saga creates an RMA's replacement and dispatches it once packed. The console only reads
+what they did.
 
 - **The queue** has a tab for each status still in Staff's hands, Awaiting pick, Picked and Packed,
   and one for On hold, each with its count. Shipments are oldest first, so Orders are worked in the
   order they were paid; "how long ago" counts from the Shipment's creation, when the Order was
   paid. The tab and page live in the URL. The **Warehouse** filter is remembered by the browser, in
   `localStorage`, so Staff at one site see its Shipments every time; a browser that can't store it
-  forgets it when the page is left.
+  forgets it when the page is left. The **Kind** filter shows Orders' Shipments, replacements, or
+  both, and lives in the URL. A replacement is marked "Replacement · RMA-…", linking to the RMA.
 - **The Shipment page** shows the Order reference, linking to the Order, the Shipping address and
-  option, and each line's Product, Variant and quantity. An Awaiting pick one offers **Mark
-  picked**.
+  option, and each line's Product, Variant and quantity. A replacement is headed "Replacement for
+  RMA-…" and shows its RMA, linking to it, and that no Payment is captured for it; it says Created
+  where an Order's says Paid. An Awaiting pick one offers **Mark picked**.
 - **Pack**, once picked, has one input per unit of each serial-tracked line: an IMEI for a phone, a
   serial number otherwise. Each is checked as it is typed: an IMEI with anything but digits, more
   than 15, or a wrong Luhn check digit is refused beside its input at once; one still short of 15
@@ -215,7 +218,7 @@ console only reads what it did.
   was refused, the Shipment is On hold with the payment gateway's reason, and stays out of the
   Carrier's hands.
 - **The status history** is newest first: the status, when to the second, and who: a Staff
-  member's ID, the Fulfillment Saga or the Carrier. The Order page's Status history likewise names
+  member's ID, the Fulfillment Saga (the Returns Saga for a replacement) or the Carrier. The Order page's Status history likewise names
   the Fulfillment Saga for Fulfilled, Shipped and Delivered, and the Checkout Saga for the rest.
 
 `serialCheckOf`, `packRequestOf`, `queueOf`, `queueSearchOf`, `shipmentsQueryOf`, `unitsOf` and

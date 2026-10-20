@@ -113,7 +113,9 @@ pre-Sprint 5 Orders were paid before the group existed anyway.
 
 **Waking it.** The same listener consumes `fulfillment-shipping.shipment` in the group
 `orchestration.shipments`, and signals `fulfillment:<orderId>` (`shipmentChanged`) with the
-Shipment's ID, version and status. The workflow ignores a version it has seen, or an older one, so a
+Shipment's ID, version and status. A replacement Shipment's event (`kind` `REPLACEMENT`) signals its
+RMA's returns Saga, `returns:<rmaId>`, the same way instead, and never a fulfillment Saga; an event
+without `kind` is an Order's Shipment's. The workflow ignores a version it has seen, or an older one, so a
 duplicate or a stale event changes nothing. A signal for a Saga that doesn't exist, or has ended, is
 logged and skipped, not dead-lettered. Either group's dead-letter and redrive topics are
 `<group>.dlt` and `<group>.redrive`, as for every group (`infra/docker/consumer-groups`).
@@ -284,7 +286,9 @@ Orchestration calls:
   Shipment events ignored, a declined capture and an Order without an authorized Payment holding the
   Shipment with the Order untouched, a 503 on `FULFILLED` retried, delivery never confirmed ending
   `DELIVERY_UNCONFIRMED` at the delivery deadline (10 seconds here, so the test shows the setting is
-  the one honoured), and an event for no running Saga skipped, not dead-lettered. It has a test
+  the one honoured), an event for no running Saga skipped, not dead-lettered, and a replacement
+  Shipment's event signalling a stand-in `returns:<rmaId>` run, never the Order's fulfillment, or
+  skipped when no returns Saga runs. It has a test
   server of its own with time skipping off, so the Saga waits for the test's events in real time.
   Its own, too, because a Saga terminated while a workflow task is outstanding leaves a test
   server's time skipping locked for good (its completion is refused, and its lock never released):

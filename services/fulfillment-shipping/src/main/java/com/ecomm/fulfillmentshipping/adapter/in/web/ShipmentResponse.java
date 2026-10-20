@@ -6,9 +6,14 @@ import com.ecomm.fulfillmentshipping.domain.ShippingOption;
 import java.time.Instant;
 import java.util.List;
 
-/** A Shipment as its readers see it; carrier, tracking and delivery are null until they happen. */
+/**
+ * A Shipment as its readers see it; carrier, tracking and delivery are null until they happen, and
+ * the RMA is null for an {@code ORDER} Shipment.
+ */
 record ShipmentResponse(
     String id,
+    String kind,
+    String rmaId,
     String orderId,
     String customerId,
     String warehouseId,
@@ -39,6 +44,8 @@ record ShipmentResponse(
   static ShipmentResponse of(Shipment s) {
     return new ShipmentResponse(
         s.id().toString(),
+        s.kind().name(),
+        s.rmaId(),
         s.orderId(),
         s.customerId(),
         s.warehouseId(),

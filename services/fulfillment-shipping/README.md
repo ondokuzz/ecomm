@@ -4,8 +4,9 @@ Where an Order ships from, what shipping it costs, and its parcel from pick to d
 Fulfillment & Shipping holds the **Warehouses** as configuration, quotes **Shipping options** from a
 **Carrier** behind its `ShippingProvider` port
 ([ADR 0005](../../docs/adr/0005-localization-compliance-abstracted.md)) for Checkout, and keeps
-each paid Order's **Shipment**: the fulfillment Saga creates, dispatches and holds it, Staff pick
-and pack it, entering each unit's **Serial number**, and the Carrier reports its **Tracking events**
+each paid Order's **Shipment**, and each RMA's **Replacement Shipment**: the fulfillment Saga
+creates, dispatches and holds an Order's, the returns Saga creates and dispatches a replacement,
+Staff pick and pack both, entering each unit's **Serial number**, and the Carrier reports its **Tracking events**
 by **Carrier webhook** until it is delivered. Each change publishes a
 `fulfillment-shipping.shipment` event through the outbox. It has its own Postgres database,
 `fulfillment_shipping`, which `postgres-databases` creates on start when it is missing, and Flyway
@@ -17,18 +18,20 @@ testing conventions apply here.
 
 Warehouses are configuration, under `ecomm.fulfillment-shipping.warehouses` in
 [`application.yml`](./src/main/resources/application.yml), not data Staff edit. Each has an ID, a
-name, an address with its country (ISO 3166-1 alpha-2), and whether it is the default:
+name, an address with its country (ISO 3166-1 alpha-2), a **Return address** (name, street,
+postcode, city and country) where Customers send an RMA's units back, and whether it is the
+default:
 
-| ID | Name | Country | Default |
-|---|---|---|---|
-| `WH-BER` | Berlin | DE | yes |
-| `WH-AMS` | Amsterdam | NL | |
+| ID | Name | Country | Return address | Default |
+|---|---|---|---|---|
+| `WH-BER` | Berlin | DE | Ecomm Returns Berlin, Lagerstraße 3, 10115 Berlin | yes |
+| `WH-AMS` | Amsterdam | NL | Ecomm Returns Amsterdam, Magazijnweg 3, 1011 AB Amsterdam | |
 
 A destination is assigned the Warehouse in its country, or else the default: a Dutch address ships
 from Amsterdam, a German or a French one from Berlin. Quotes and Shipments use this rule, so what
 was quoted is what ships. The service doesn't start unless exactly one Warehouse is the default, no
-ID is used twice, no two Warehouses share a country, and each has an ID, a name and a valid
-country. Nor does it start when a Shipment names a Warehouse the configuration no longer has: it
+ID is used twice, no two Warehouses share a country, and each has an ID, a name, a valid country
+and a whole return address. Nor does it start when a Shipment names a Warehouse the configuration no longer has: it
 fails listing those Shipments (the first 20) and their Warehouses, so that removing or renaming a
 Warehouse can't strand them out of every queue. Stock stays one pool per Variant; Inventory knows
 nothing of Warehouses.
@@ -59,10 +62,18 @@ reorder or withhold them. A webhook still waiting when the service stops is lost
 
 ## Shipments
 
-A Shipment is one Order's parcel: its Warehouse, Shipping address and Shipping option, its lines
+A Shipment is one parcel: its kind, its Warehouse, Shipping address and Shipping option, its lines
 (Variant, Product name, quantity, Serial tracking, and the Serial numbers once packed), its status
 and status history, its Carrier and tracking number once booked, its Tracking events and
-`deliveredAt`. One Order has one.
+`deliveredAt`. Its kind is `ORDER`, an Order's units, or `REPLACEMENT`, units replacing an RMA's
+faulty ones, which names its `rmaId` and the Order. Every Shipment from before replacements is an
+`ORDER` one. An Order has one `ORDER` Shipment, and an RMA at most one replacement; a second of
+either is a 409 `shipmentExists` with the existing one in `shipment`.
+
+A replacement is created by the returns Saga with the Order Shipment's address and option, in the
+Warehouse that serves the address, and lives as any Shipment does: picked and packed by Staff, with
+new Serial numbers (a unit already shipped, the returned one included, is refused), dispatched by
+Orchestration, delivered by Carrier webhooks. Nothing captures a Payment for it.
 
 ```
 AWAITING_PICK → PICKED → PACKED → SHIPPED → DELIVERED
@@ -99,15 +110,17 @@ and publishes the Shipment, in one transaction under the Shipment's row lock.
 | Endpoint | Who | |
 |---|---|---|
 | `GET /warehouses` | Staff | Every Warehouse, in configuration order |
+| `GET /warehouses/{id}` | Customer, Staff, `ORCHESTRATION` | The Warehouse's name and return address; 404 for one not configured |
 | `POST /shipping/quotes` | `CHECKOUT` | The Warehouse and Shipping options for a destination |
-| `POST /shipments` | `ORCHESTRATION`, `Idempotency-Key` | 201: the Order's Shipment, awaiting pick; 409 `shipmentExists`; 503 `productsNotKnownYet` |
+| `POST /shipments` | `ORCHESTRATION`, `Idempotency-Key` | 201: the Order's Shipment, or with `"kind": "REPLACEMENT"` and `"rmaId"` the RMA's replacement, awaiting pick; 409 `shipmentExists` with the existing `shipment`; 503 `productsNotKnownYet` |
 | `POST /shipments/{id}/dispatch` | `ORCHESTRATION`, `Idempotency-Key` | `PACKED` → `SHIPPED`, booked with the Carrier |
 | `POST /shipments/{id}/hold` | `ORCHESTRATION`, `Idempotency-Key` | `PACKED` → `ON_HOLD`, with `{"reason"}` (1 to 255 characters) |
 | `POST /shipments/{id}/pick` | Staff | `AWAITING_PICK` → `PICKED` |
 | `POST /shipments/{id}/pack` | Staff | `PICKED` → `PACKED`, with `{"serialNumbers": {"<variantId>": [...]}}` |
 | `GET /shipments/{id}` | Staff, `ORCHESTRATION` | One Shipment |
-| `GET /shipments?orderId=` | Customer (their own), Staff, `ORCHESTRATION` | The Order's Shipment; 404 for none, or another Customer's |
-| `GET /shipments?status=&warehouseId=&page=&size=` | Staff, `ORCHESTRATION` | The fulfillment queue: a page (`items`, `page`, `size`, `total`), oldest first; `size` 1 to 100, 20 unless given |
+| `GET /shipments?orderId=` | Customer (their own), Staff, `ORCHESTRATION` | The Order's `ORDER` Shipment; 404 for none, or another Customer's |
+| `GET /shipments?rmaId=` | Customer (their own), Staff, `ORCHESTRATION` | The RMA's replacement; 404 for none, or another Customer's |
+| `GET /shipments?status=&warehouseId=&kind=&page=&size=` | Staff, `ORCHESTRATION` | The fulfillment queue: a page (`items`, `page`, `size`, `total`), oldest first; `size` 1 to 100, 20 unless given |
 | `POST /webhooks/carrier` | The Carrier, no token | A signed Carrier webhook |
 
 The gateway routes `/api/fulfillment-shipping/`, except `/shipping/**`, which only Checkout calls,
@@ -193,10 +206,12 @@ the compose stack.
 Each change publishes the Shipment to `fulfillment-shipping.shipment`, keyed by its ID
 ([schema](../../platform/event-schemas/schemas/fulfillment-shipping.shipment.json)): its version,
 one more per change; the `change`, `CREATED`, the status moved to, or `TRACKED` for a Tracking
-event that left the status as it was; and a snapshot with the Order and Customer, Warehouse,
-status, lines with Serial numbers, Carrier, tracking number, Tracking events, `deliveredAt`,
-`holdReason` and status history. The Shipping address stays out of it. Nothing consumes it yet;
-the fulfillment Saga and Returns & Warranty will.
+event that left the status as it was; and a snapshot with the kind, the RMA of a replacement,
+the Order and Customer, Warehouse, status, lines with Serial numbers, Carrier, tracking number,
+Tracking events, `deliveredAt`, `holdReason` and status history. The Shipping address stays out of
+it. `kind` and `rmaId` came later: an event without `kind` is an `ORDER` Shipment's. Orchestration
+wakes the fulfillment Saga with an `ORDER` Shipment's events and the returns Saga with a
+replacement's; Returns & Warranty projects `ORDER` Shipments only.
 
 ## Run it
 
@@ -221,7 +236,8 @@ webhook secret. Outside Docker, give them as
 
 - `WarehouseApiTest` and `ShippingQuoteApiTest` call the API over HTTP with
   [`FakeKeycloak`](../../platform/service-commons/src/testFixtures/java/com/ecomm/commons/security/FakeKeycloak.java)
-  tokens, with the service's own configuration: the Warehouses for Staff only, assignment by
+  tokens, with the service's own configuration: the Warehouses for Staff only, a Warehouse's
+  return address for a Customer, assignment by
   country and default, domestic and EU prices, `shippingUnavailable` for an unserved country or
   Currency, quotes for `CHECKOUT` only, and each malformed field. Postgres runs in Testcontainers.
 - The Shipment tests run the same way, against Kafka and the schema registry too
@@ -230,16 +246,19 @@ webhook secret. Outside Docker, give them as
   Order, idempotent replay, `productsNotKnownYet`, `ORCHESTRATION` only, malformed fields),
   `ShipmentTransitionApiTest` (every allowed and refused move, the history, the roles and keys),
   `PackShipmentApiTest` (IMEI and serial forms, counts, repeats, `serialAlreadyShipped`),
-  `ReadShipmentsApiTest` (the Customer's own, Staff's queue by status and Warehouse, paging),
+  `ReplacementShipmentApiTest` (once per RMA beside the Order's one Shipment, the kind and RMA
+  checked, picked, packed with new Serial numbers, dispatched and delivered),
+  `ReadShipmentsApiTest` (the Customer's own by Order and by RMA, Staff's queue by status,
+  Warehouse and kind, paging),
   `CarrierWebhookApiTest` (delivery, a repeat recorded once, reordering, bad signatures),
-  `ShipmentEventsApiTest` (an event per change, valid against the schema),
+  `ShipmentEventsApiTest` (an event per change with its kind and RMA, valid against the schema),
   `ProductProjectionApiTest` (the newest version wins) and `UnconfiguredWarehouseApiTest`
   (starting the service against a Shipment from a Warehouse no longer configured fails).
 - `SerialNumberTest` and `ShipmentStatusTest` are pure JUnit for the Serial number forms and the
   state machine.
 - `WarehouseConfigurationTest` starts the Warehouse configuration alone and checks the service
-  refuses to start on none or two defaults, an ID twice, two Warehouses in one country, or a
-  country that isn't an ISO code.
+  refuses to start on none or two defaults, an ID twice, two Warehouses in one country, a
+  country that isn't an ISO code, or a missing or partial return address.
 - `MockCarrierTest` is pure JUnit for the mock carrier's zone pricing, a deliberate exception to
   testing at the HTTP seam.
 - `ArchitectureTest` runs the shared `HexagonalRules`.
