@@ -168,6 +168,13 @@ No context is event-sourced: contexts keep append-only histories and ledgers whe
 | D | Returns & Warranty completion — received → inspected → refund/exchange; the returns Saga's durable timer auto-closing a request after the Warranty Window lapses; refund and restock through Payment's and Inventory's commands |
 | E | Return-request UI; admin RMA lifecycle UI; notifications wired to order/payment/fulfillment/return events |
 
+> **Note (Sprint 6, in progress):** Checks made by hand as tickets land; the definition-of-done pass (#98) completes this note.
+>
+> - **The returns Saga (#88), on the default stack on 2026-10-20**, through the gateway as the demo Customer and Staff:
+>   - **A return, with Orchestration stopped during inspection.** A JBL Flip 6 Order was paid, packed with its serial number and delivered. Its RMA was requested and approved (`sendBackBy` 14 days on), and its units received. Orchestration was stopped (`docker compose stop`) and the RMA inspected `ACCEPTED`. Started again, it consumed the `INSPECTED` event it had missed, then restocked the unit, refunded the Payment (`mock-refund-…`), resolved the RMA `REFUNDED` and marked the Order `RETURNED`, its only unit being refunded. Temporal's UI shows `returns:<rmaId>` on the `returns` task queue: `FindRma`, the Send-back timer, `rmaChanged` signals at versions 3 (`RECEIVED`) and 4 (`INSPECTED`) each cancelling the wait, then `FindRma`, `Restock`, `FindRefundablePayment`, `RefundPayment`, `ResolveRma` and `MarkOrderReturned`, and its own `REFUNDED` event as version 5.
+>   - **Expiry with a shortened Send-back period.** With Returns & Warranty's `return-period` at 3 minutes and `send-back-period` at 2 (a Compose override), an RMA approved 22:02:05 got `sendBackBy` 22:04:55, the Return Period's end. Its timer fired at 22:04:55.64, `ExpireRma` ran, the RMA went `EXPIRED`, and the run ended `EXPIRED`. Returns & Warranty was then started again with its defaults.
+>   - **Memory.** Orchestration, now with three Kafka consumers and three workers, sat at 312 MB of its 512 MB after these runs. #91 measures the stack as a whole.
+
 ## Sprint 7 (Weeks 13–14) — AI Assistant
 
 | Track | Delivers |
