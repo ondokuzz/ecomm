@@ -40,6 +40,7 @@ class RmaRequestTest {
           UUID.randomUUID(),
           "order-1",
           "customer-42",
+          "WH-BER",
           DELIVERED_AT,
           List.of(
               new DeliveredLine(
@@ -47,6 +48,19 @@ class RmaRequestTest {
               new DeliveredLine(
                   "LAPTOP", "ThinkPad X1", 2, SerialTracking.SERIAL, List.of("SN-A1", "SN-B2")),
               new DeliveredLine("CASE", "Phone case", 4, SerialTracking.NONE, List.of())));
+
+  /** The Order the Shipment delivered, without Discounts or Tax. */
+  private static final Order ORDER =
+      new Order(
+          "order-1",
+          1,
+          "EUR",
+          List.of(
+              new OrderLine("PHONE", 3, 79900),
+              new OrderLine("LAPTOP", 2, 129900),
+              new OrderLine("CASE", 4, 275)),
+          0,
+          0);
 
   private final List<Rma> others = new ArrayList<>();
 
@@ -60,7 +74,9 @@ class RmaRequestTest {
     assertThat(rma.serialNumbers()).containsExactly(IMEI_1, IMEI_2);
     assertThat(rma.requestedAt()).isEqualTo(NOW);
     assertThat(rma.window()).isEqualTo(Window.returnPeriod(DELIVERED_AT, RETURN_PERIOD));
-    assertThat(rma.decisions()).isEmpty();
+    assertThat(rma.history())
+        .extracting(RmaHistoryEntry::status)
+        .containsExactly(RmaStatus.REQUESTED);
     assertThat(rma.version()).isEqualTo(1);
   }
 
@@ -104,7 +120,9 @@ class RmaRequestTest {
   @Test
   void otherRequestedAndApprovedRmasHoldTheirUnits() {
     others.add(request(RmaKind.RETURN, "CASE", 1, List.of()));
-    others.add(request(RmaKind.RETURN, "CASE", 2, List.of()).approve("staff-7", null, NOW));
+    others.add(
+        request(RmaKind.RETURN, "CASE", 2, List.of())
+            .approve("staff-7", null, NOW, RETURN_PERIOD, "WH-BER"));
 
     assertThatThrownBy(() -> request(RmaKind.RETURN, "CASE", 2, List.of()))
         .isInstanceOfSatisfying(
@@ -124,6 +142,46 @@ class RmaRequestTest {
   }
 
   @Test
+  void anExpiredOrClosedRmaHoldsNothing() {
+    var approved =
+        request(RmaKind.RETURN, "PHONE", 1, List.of(IMEI_1))
+            .approve("staff-7", null, NOW, RETURN_PERIOD, "WH-BER");
+    others.add(approved.expire(NOW));
+    others.add(
+        request(RmaKind.RETURN, "PHONE", 1, List.of(IMEI_2))
+            .approve("staff-7", null, NOW, RETURN_PERIOD, "WH-BER")
+            .receive("staff-7", List.of(IMEI_2), 1, NOW)
+            .inspect("staff-7", InspectionOutcome.REFUSED, "Water damage", NOW)
+            .resolve(RmaStatus.CLOSED, null, null, "Water damage", NOW));
+
+    // A closed return's unit may be claimed again under warranty.
+    assertThat(
+            request(RmaKind.WARRANTY_CLAIM, "PHONE", 3, List.of(IMEI_1, IMEI_2, IMEI_3))
+                .serialNumbers())
+        .containsExactly(IMEI_1, IMEI_2, IMEI_3);
+  }
+
+  @Test
+  void whatIsStillFreeToClaimIsWhatNoHoldingRmaHas() {
+    var line = DELIVERY.lineOf("PHONE").orElseThrow();
+    others.add(request(RmaKind.RETURN, "PHONE", 1, List.of(IMEI_2)));
+    others.add(request(RmaKind.RETURN, "PHONE", 1, List.of(IMEI_3)).reject("staff-7", "No", NOW));
+
+    assertThat(Availability.of(line, others))
+        .isEqualTo(new Availability(2, List.of(IMEI_1, IMEI_3)));
+  }
+
+  @Test
+  void anRmasRefundAmountIsWhatItsUnitsComeToGivenTheOthers() {
+    var first = request(RmaKind.RETURN, "CASE", 3, List.of());
+    others.add(first);
+    var second = request(RmaKind.RETURN, "CASE", 1, List.of());
+
+    assertThat(first.refundAmount()).isEqualTo(new Money(825, "EUR"));
+    assertThat(second.refundAmount()).isEqualTo(new Money(275, "EUR"));
+  }
+
+  @Test
   void anRmaForAnotherVariantHoldsNoneOfThisOnesUnits() {
     others.add(request(RmaKind.RETURN, "PHONE", 3, List.of(IMEI_1, IMEI_2, IMEI_3)));
 
@@ -134,7 +192,8 @@ class RmaRequestTest {
   void aSerialNumberInAnotherOpenOrApprovedRmaIsRefused() {
     others.add(request(RmaKind.RETURN, "PHONE", 1, List.of(IMEI_1)));
     others.add(
-        request(RmaKind.WARRANTY_CLAIM, "PHONE", 1, List.of(IMEI_2)).approve("staff-7", null, NOW));
+        request(RmaKind.WARRANTY_CLAIM, "PHONE", 1, List.of(IMEI_2))
+            .approve("staff-7", null, NOW, RETURN_PERIOD, "WH-BER"));
 
     assertThatThrownBy(() -> request(RmaKind.WARRANTY_CLAIM, "PHONE", 1, List.of(IMEI_1)))
         .isInstanceOfSatisfying(
@@ -239,6 +298,7 @@ class RmaRequestTest {
         others,
         RETURN_PERIOD,
         TWO_YEARS,
+        ORDER,
         NOW);
   }
 
@@ -251,6 +311,7 @@ class RmaRequestTest {
         others,
         RETURN_PERIOD,
         warranty,
+        ORDER,
         now);
   }
 }

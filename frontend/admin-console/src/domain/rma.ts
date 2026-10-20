@@ -1,20 +1,35 @@
 import { formatTime } from './order'
 
-/** An RMA's status: requested by its Customer, then approved or rejected by Staff, once. */
-export type RmaStatus = 'REQUESTED' | 'APPROVED' | 'REJECTED'
+/**
+ * An RMA's status: requested by its Customer, approved or rejected by Staff, once; then received,
+ * or expired; inspected; and refunded, exchanged, closed or put on hold.
+ */
+export type RmaStatus =
+  | 'REQUESTED'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'RECEIVED'
+  | 'EXPIRED'
+  | 'INSPECTED'
+  | 'REFUNDED'
+  | 'EXCHANGED'
+  | 'CLOSED'
+  | 'ON_HOLD'
 
-/** Every RMA status, in the order an RMA moves through them. */
-export const rmaStatuses: readonly RmaStatus[] = ['REQUESTED', 'APPROVED', 'REJECTED']
+/** The RMA approval queue's tabs, each an RMA status. */
+export const queueStatuses: readonly RmaStatus[] = ['REQUESTED', 'APPROVED', 'REJECTED']
 
 /** What an RMA claims: a return within the Return Period, or a warranty claim within the Warranty Window. */
 export type RmaKind = 'RETURN' | 'WARRANTY_CLAIM'
 
-/** One RMA decision, kept for good: who decided, when, and the approval's note or the rejection's reason. */
-export interface RmaDecision {
-  status: Exclude<RmaStatus, 'REQUESTED'>
-  /** The deciding Staff member's ID. */
-  decidedBy: string
-  decidedAt: string
+/**
+ * One entry of an RMA's history, kept for good: the status it moved to, who moved it (a Staff
+ * member's ID, `CUSTOMER` or `ORCHESTRATION`), when, and its note, such as a rejection's reason.
+ */
+export interface RmaHistoryEntry {
+  status: RmaStatus
+  by: string
+  at: string
   note?: string
 }
 
@@ -47,13 +62,13 @@ export interface Rma {
   window: RmaWindow
   status: RmaStatus
   requestedAt: string
-  /** Its decision history, oldest first. */
-  decisions: RmaDecision[]
+  /** Its RMA history, oldest first: its request, then every step after. */
+  history: RmaHistoryEntry[]
 }
 
-/** An RMA status as Staff read it: "Requested", "Approved", "Rejected". */
+/** An RMA status as Staff read it: "Requested", "Approved", "On hold". */
 export function rmaStatusLabel(status: RmaStatus): string {
-  return status.charAt(0) + status.slice(1).toLowerCase()
+  return status.charAt(0) + status.slice(1).toLowerCase().replace('_', ' ')
 }
 
 /** An RMA's kind as Staff read it: "Return" or "Warranty claim". */
@@ -75,7 +90,7 @@ export function queueOf(params: URLSearchParams): Queue {
   const status = params.get('status') as RmaStatus
   const page = Number(params.get('page'))
   return {
-    status: rmaStatuses.includes(status) ? status : 'REQUESTED',
+    status: queueStatuses.includes(status) ? status : 'REQUESTED',
     page: Number.isInteger(page) && page >= 1 ? page - 1 : 0,
   }
 }
@@ -131,17 +146,18 @@ export interface DecisionRow {
   note?: string
 }
 
-/** An RMA's decision history for Staff, newest first. A requested RMA has none. */
-export function decisionRowsOf(rma: Pick<Rma, 'decisions'>, locale?: string): DecisionRow[] {
-  return rma.decisions
-    .map((decision): DecisionRow => {
+/** An RMA's RMA decisions, from its history, for Staff, newest first. A requested RMA has none. */
+export function decisionRowsOf(rma: Pick<Rma, 'history'>, locale?: string): DecisionRow[] {
+  return rma.history
+    .filter((entry) => entry.status === 'APPROVED' || entry.status === 'REJECTED')
+    .map((entry): DecisionRow => {
       const row = {
-        status: rmaStatusLabel(decision.status),
-        decidedBy: decision.decidedBy,
-        at: decision.decidedAt,
-        time: formatTime(decision.decidedAt, locale),
+        status: rmaStatusLabel(entry.status),
+        decidedBy: entry.by,
+        at: entry.at,
+        time: formatTime(entry.at, locale),
       }
-      return decision.note ? { ...row, note: decision.note } : row
+      return entry.note ? { ...row, note: entry.note } : row
     })
     .reverse()
 }

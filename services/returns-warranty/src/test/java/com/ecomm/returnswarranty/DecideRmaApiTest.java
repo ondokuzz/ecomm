@@ -6,7 +6,8 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Staff decide an RMA once: approve it, with an optional note, or reject it, with a reason. Each
- * decision is kept in its history.
+ * decision is kept in its RMA history, after its request. An approval sets its Send-back deadline
+ * and the Warehouse to send it back to.
  */
 class DecideRmaApiTest extends RmasApiTest {
 
@@ -26,9 +27,10 @@ class DecideRmaApiTest extends RmasApiTest {
         body(approve(STAFF, rma.id(), "{\"note\": \"Send it back\"}").expectStatus().isOk());
 
     assertThat(approved.status()).isEqualTo("APPROVED");
-    assertThat(approved.decisions())
+    assertThat(approved.history())
         .containsExactly(
-            new DecisionView("APPROVED", "staff-7", "2026-10-15T12:00:00Z", "Send it back"));
+            new HistoryView("REQUESTED", "CUSTOMER", "2026-10-15T12:00:00Z", null),
+            new HistoryView("APPROVED", "staff-7", "2026-10-15T12:00:00Z", "Send it back"));
     assertThat(readRma(CUSTOMER, rma.id())).isEqualTo(approved);
   }
 
@@ -38,8 +40,20 @@ class DecideRmaApiTest extends RmasApiTest {
 
     var approved = body(approve(STAFF, rma.id(), "{}").expectStatus().isOk());
 
-    assertThat(approved.decisions())
-        .containsExactly(new DecisionView("APPROVED", "staff-7", "2026-10-15T12:00:00Z", null));
+    assertThat(approved.history().getLast())
+        .isEqualTo(new HistoryView("APPROVED", "staff-7", "2026-10-15T12:00:00Z", null));
+  }
+
+  @Test
+  void anApprovalSetsTheSendBackDeadlineAndTheShipmentsWarehouse() {
+    var rma = requestedRma();
+    assertThat(rma.sendBackBy()).isNull();
+
+    var approved = body(approve(STAFF, rma.id(), "{}").expectStatus().isOk());
+
+    // The Return Period ends on 26 October, before 14 days after the approval.
+    assertThat(approved.sendBackBy()).isEqualTo("2026-10-29T12:00:00Z");
+    assertThat(approved.warehouseId()).isEqualTo("WH-BER");
   }
 
   @Test
@@ -50,9 +64,9 @@ class DecideRmaApiTest extends RmasApiTest {
         body(reject(STAFF, rma.id(), "{\"reason\": \"Water damage\"}").expectStatus().isOk());
 
     assertThat(rejected.status()).isEqualTo("REJECTED");
-    assertThat(rejected.decisions())
-        .containsExactly(
-            new DecisionView("REJECTED", "staff-7", "2026-10-15T12:00:00Z", "Water damage"));
+    assertThat(rejected.history().getLast())
+        .isEqualTo(new HistoryView("REJECTED", "staff-7", "2026-10-15T12:00:00Z", "Water damage"));
+    assertThat(rejected.sendBackBy()).isNull();
   }
 
   @Test
@@ -85,7 +99,9 @@ class DecideRmaApiTest extends RmasApiTest {
 
     var read = readRma(STAFF, rma.id());
     assertThat(read.status()).isEqualTo("APPROVED");
-    assertThat(read.decisions()).hasSize(1);
+    assertThat(read.history())
+        .extracting(HistoryView::status)
+        .containsExactly("REQUESTED", "APPROVED");
   }
 
   @Test

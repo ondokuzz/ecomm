@@ -23,3 +23,6 @@ ecomm:
   returns-warranty:
     # The Return Period: how long after delivery a Customer may request a return. One for the store.
     return-period: 14d
+    # The Send-back period: an approved RMA's units are due back by the later of its window's end
+    # and this long after its approval, its Send-back deadline.
+    send-back-period: 14d

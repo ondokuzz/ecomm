@@ -42,7 +42,9 @@ class RequestRmaApiTest extends RmasApiTest {
     assertThat(rma.window())
         .isEqualTo(
             new WindowView("RETURN_PERIOD", "2026-10-12T12:00:00Z", "2026-10-26T12:00:00Z", null));
-    assertThat(rma.decisions()).isEmpty();
+    assertThat(rma.history())
+        .containsExactly(new HistoryView("REQUESTED", "CUSTOMER", "2026-10-15T12:00:00Z", null));
+    assertThat(rma.refundAmount()).isEqualTo(new MoneyView(1000, "EUR"));
   }
 
   @Test
@@ -227,6 +229,58 @@ class RequestRmaApiTest extends RmasApiTest {
         .expectBody()
         .jsonPath("$.reason")
         .isEqualTo("productNotKnownYet");
+  }
+
+  @Test
+  void anRmaBeforeItsOrderIsKnownIsToBeRetried() {
+    var charger = newVariant("CHARGER");
+    var shipment =
+        Shipments.shipment(CUSTOMER_ID)
+            .line(charger, "Charger", 1, "NONE")
+            .withoutOrder()
+            .delivered(RECENTLY);
+    awaitShipmentsProjected();
+
+    request(CUSTOMER, rma(shipment.orderId(), charger, 1, "RETURN"))
+        .expectStatus()
+        .isEqualTo(503)
+        .expectHeader()
+        .exists("Retry-After")
+        .expectBody()
+        .jsonPath("$.reason")
+        .isEqualTo("orderNotKnownYet");
+
+    Orders.order(shipment.orderId(), CUSTOMER_ID).line(charger, 1, 1999).publish();
+
+    assertThat(requested(rma(shipment.orderId(), charger, 1, "RETURN")).refundAmount())
+        .isEqualTo(new MoneyView(1999, "EUR"));
+  }
+
+  @Test
+  void theRefundAmountIsTheUnitsPriceLessDiscountsPlusTaxAndNeverTheShipping() {
+    var headphones = newVariant("HEADPHONES");
+    var theCase = newVariant("CASE");
+    var shipment =
+        Shipments.shipment(CUSTOMER_ID)
+            .line(headphones, "WH-1000XM5", 2, "NONE")
+            .line(theCase, "Case", 1, "NONE")
+            .withoutOrder();
+    // 25.00 of lines, 2.50 off and 4.76 of Tax: the headphones come to 21.81, the case to 5.45.
+    Orders.order(shipment.orderId(), CUSTOMER_ID)
+        .line(headphones, 2, 1000)
+        .line(theCase, 1, 500)
+        .coupon(250)
+        .tax(476)
+        .publish();
+    shipment.delivered(RECENTLY);
+
+    var first = requested(rma(shipment.orderId(), headphones, 1, "RETURN"));
+    var second = requested(rma(shipment.orderId(), headphones, 1, "RETURN"));
+    var last = requested(rma(shipment.orderId(), theCase, 1, "RETURN"));
+
+    assertThat(first.refundAmount()).isEqualTo(new MoneyView(1090, "EUR"));
+    assertThat(second.refundAmount()).isEqualTo(new MoneyView(1091, "EUR"));
+    assertThat(last.refundAmount()).isEqualTo(new MoneyView(545, "EUR"));
   }
 
   @Test

@@ -1,5 +1,6 @@
 package com.ecomm.returnswarranty.domain;
 
+import java.util.List;
 import java.util.UUID;
 
 /** Why an RMA is refused, or a decision on one. */
@@ -52,7 +53,7 @@ public final class RmaExceptions {
     }
   }
 
-  /** A Serial number already in another requested or approved RMA, or named twice. */
+  /** A Serial number already in another RMA that holds its units, or named twice. */
   public static class SerialNumberAlreadyClaimedException extends RuntimeException {
 
     private final String serialNumber;
@@ -115,11 +116,91 @@ public final class RmaExceptions {
     }
   }
 
+  /** A step its status doesn't allow, such as receiving an RMA that isn't {@code APPROVED}. */
+  public static class TransitionRefusedException extends RuntimeException {
+
+    private final RmaStatus status;
+
+    public TransitionRefusedException(UUID id, RmaStatus status, RmaStatus to) {
+      this("RMA " + id + " is " + status + ", so it can't be " + to, status);
+    }
+
+    TransitionRefusedException(String message, RmaStatus status) {
+      super(message);
+      this.status = status;
+    }
+
+    /** The status it is in. */
+    public RmaStatus status() {
+      return status;
+    }
+  }
+
   /** A decision on an RMA that has already been decided. */
-  public static class RmaAlreadyDecidedException extends RuntimeException {
+  public static class RmaAlreadyDecidedException extends TransitionRefusedException {
 
     public RmaAlreadyDecidedException(UUID id, RmaStatus status) {
-      super("RMA " + id + " is already " + status);
+      super("RMA " + id + " is already " + status, status);
+    }
+  }
+
+  /**
+   * An Order Management Order that the projection doesn't hold yet, so an RMA's Refund amount can't
+   * be worked out. Its events catch up, so a later try succeeds.
+   */
+  public static class OrderNotKnownYetException extends RuntimeException {
+
+    public OrderNotKnownYetException(String orderId) {
+      super("Order " + orderId + " isn't known yet");
+    }
+  }
+
+  /** Units received with Serial numbers that aren't the RMA's, each named. */
+  public static class SerialMismatchException extends RuntimeException {
+
+    private final List<String> serialNumbers;
+
+    public SerialMismatchException(List<String> serialNumbers) {
+      super("Serial numbers " + serialNumbers + " aren't this RMA's");
+      this.serialNumbers = List.copyOf(serialNumbers);
+    }
+
+    public List<String> serialNumbers() {
+      return serialNumbers;
+    }
+  }
+
+  /** Units received that don't number the RMA's. */
+  public static class QuantityMismatchException extends RuntimeException {
+
+    private final int expected;
+
+    public QuantityMismatchException(int expected) {
+      super("The RMA is for " + expected + " units, each by Serial number where it has one");
+      this.expected = expected;
+    }
+
+    public int expected() {
+      return expected;
+    }
+  }
+
+  /** An Inspection outcome for the other kind of RMA. */
+  public static class OutcomeNotForKindException extends RuntimeException {
+
+    public OutcomeNotForKindException(InspectionOutcome outcome, RmaKind kind) {
+      super(outcome + " isn't an outcome for a " + kind);
+    }
+  }
+
+  /**
+   * A resolution the Inspection doesn't allow: a Refund or an exchange after a refusal, an exchange
+   * of an accepted return, or closing what was accepted.
+   */
+  public static class ResolutionContradictsInspectionException extends RuntimeException {
+
+    public ResolutionContradictsInspectionException(RmaStatus resolution, Inspection inspection) {
+      super("An RMA inspected as " + inspection.outcome() + " can't be " + resolution);
     }
   }
 }

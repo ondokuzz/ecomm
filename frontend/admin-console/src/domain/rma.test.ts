@@ -12,15 +12,18 @@ import {
 
 describe('decisionRowsOf', () => {
   it('lists none for a requested RMA', () => {
-    expect(decisionRowsOf({ decisions: [] })).toEqual([])
+    expect(decisionRowsOf({ history: [{ status: 'REQUESTED', by: 'CUSTOMER', at: '2026-10-15T02:00:00Z' }] })).toEqual(
+      [],
+    )
   })
 
-  it('shows a decision with who made it, when, and its note, newest first', () => {
+  it('shows each decision from the history with who made it, when, and its note, newest first', () => {
     const rows = decisionRowsOf(
       {
-        decisions: [
-          { status: 'APPROVED', decidedBy: 'staff-1', decidedAt: '2026-10-15T03:00:00Z' },
-          { status: 'REJECTED', decidedBy: 'staff-2', decidedAt: '2026-10-16T03:00:00Z', note: 'Water damage' },
+        history: [
+          { status: 'REQUESTED', by: 'CUSTOMER', at: '2026-10-15T02:00:00Z' },
+          { status: 'APPROVED', by: 'staff-1', at: '2026-10-15T03:00:00Z' },
+          { status: 'REJECTED', by: 'staff-2', at: '2026-10-16T03:00:00Z', note: 'Water damage' },
         ],
       },
       'en-GB',
@@ -35,6 +38,13 @@ describe('decisionRowsOf', () => {
       },
       { status: 'Approved', decidedBy: 'staff-1', at: '2026-10-15T03:00:00Z', time: '15 Oct 2026, 12:00:00' },
     ])
+  })
+})
+
+describe('rmaStatusLabel', () => {
+  it('reads each status as a word or two', () => {
+    expect(rmaStatusLabel('APPROVED')).toBe('Approved')
+    expect(rmaStatusLabel('ON_HOLD')).toBe('On hold')
   })
 })
 

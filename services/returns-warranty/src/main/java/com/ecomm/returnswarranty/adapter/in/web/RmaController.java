@@ -1,24 +1,39 @@
 package com.ecomm.returnswarranty.adapter.in.web;
 
 import com.ecomm.commons.idempotency.IdempotentCommand;
+import com.ecomm.returnswarranty.adapter.in.web.LifecycleBodies.HoldBody;
+import com.ecomm.returnswarranty.adapter.in.web.LifecycleBodies.InspectBody;
+import com.ecomm.returnswarranty.adapter.in.web.LifecycleBodies.ReceiveBody;
+import com.ecomm.returnswarranty.adapter.in.web.LifecycleBodies.ResolveBody;
 import com.ecomm.returnswarranty.application.port.in.Page;
 import com.ecomm.returnswarranty.application.port.in.RmaFilter;
 import com.ecomm.returnswarranty.application.port.in.RmaUseCase;
 import com.ecomm.returnswarranty.domain.Rma;
 import com.ecomm.returnswarranty.domain.RmaExceptions.NoWarrantyException;
 import com.ecomm.returnswarranty.domain.RmaExceptions.NotDeliveredException;
+import com.ecomm.returnswarranty.domain.RmaExceptions.OrderNotKnownYetException;
+import com.ecomm.returnswarranty.domain.RmaExceptions.OutcomeNotForKindException;
 import com.ecomm.returnswarranty.domain.RmaExceptions.OutsideWindowException;
 import com.ecomm.returnswarranty.domain.RmaExceptions.ProductNotKnownYetException;
 import com.ecomm.returnswarranty.domain.RmaExceptions.QuantityExceededException;
+import com.ecomm.returnswarranty.domain.RmaExceptions.QuantityMismatchException;
+import com.ecomm.returnswarranty.domain.RmaExceptions.ResolutionContradictsInspectionException;
 import com.ecomm.returnswarranty.domain.RmaExceptions.RmaAlreadyDecidedException;
+import com.ecomm.returnswarranty.domain.RmaExceptions.SerialMismatchException;
 import com.ecomm.returnswarranty.domain.RmaExceptions.SerialNumberAlreadyClaimedException;
 import com.ecomm.returnswarranty.domain.RmaExceptions.SerialNumberNotShippedException;
 import com.ecomm.returnswarranty.domain.RmaExceptions.SerialNumbersMiscountedException;
+import com.ecomm.returnswarranty.domain.RmaExceptions.TransitionRefusedException;
 import com.ecomm.returnswarranty.domain.RmaStatus;
 import com.ecomm.returnswarranty.domain.Window;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import java.net.URI;
+import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import org.slf4j.Logger;
@@ -42,7 +57,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * RMAs. A Customer requests one for a delivered Variant of their Order, with an {@code
- * Idempotency-Key}, and reads their own. Staff decide them and read any.
+ * Idempotency-Key}, reads their own, and asks what their Order's lines are still eligible for.
+ * Staff decide them, receive their units and inspect them, and read any. Orchestration's returns
+ * Saga, with its own {@code ORCHESTRATION} token, resolves, holds and expires them. Every step
+ * after a decision takes a required {@code Idempotency-Key}, so a repeat replays its answer.
  */
 @RestController
 @RequestMapping("/rmas")
@@ -53,7 +71,7 @@ class RmaController {
   /** The most RMAs a page can hold. */
   static final int MAX_PAGE_SIZE = 100;
 
-  /** How long a Customer waits before asking again while Catalog's Products catch up. */
+  /** How long a Customer waits before asking again while the projections catch up. */
   private static final String RETRY_AFTER_SECONDS = "5";
 
   private final RmaUseCase rmas;
@@ -101,7 +119,7 @@ class RmaController {
       throw new InvalidRequestException(
           "note", "must be 1 to " + RequestRmaBody.MAX_TEXT + " characters when given");
     }
-    return decided(id, uuid -> rmas.approve(uuid, staff.getSubject(), note));
+    return stepped(id, uuid -> rmas.approve(uuid, staff.getSubject(), note));
   }
 
   /**
@@ -115,13 +133,143 @@ class RmaController {
       @RequestBody(required = false) RejectBody body,
       @AuthenticationPrincipal Jwt staff) {
     var reason = RequestRmaBody.text("reason", body == null ? null : body.reason());
-    return decided(id, uuid -> rmas.reject(uuid, staff.getSubject(), reason));
+    return stepped(id, uuid -> rmas.reject(uuid, staff.getSubject(), reason));
   }
 
-  private RmaResponse decided(String id, Function<UUID, Optional<Rma>> decision) {
-    var rma = parse(id).flatMap(decision).orElseThrow(() -> new RmaNotFoundException(id));
+  /** The RMA the step changed; 404 when there is no such RMA. */
+  private RmaResponse stepped(String id, Function<UUID, Optional<Rma>> step) {
+    var rma = parse(id).flatMap(step).orElseThrow(() -> new RmaNotFoundException(id));
     log.info("{} is {}", rma.reference(), rma.status());
     return RmaResponse.of(rma);
+  }
+
+  /**
+   * Staff receive an {@code APPROVED} RMA's units: each by Serial number, or by quantity for a
+   * Variant without Serial tracking. 422 {@code serialMismatch} naming each Serial number that
+   * isn't the RMA's, or {@code quantityMismatch} when they don't number its units; 409 {@code
+   * transitionRefused} from any other status.
+   */
+  @PostMapping("/{id}/receive")
+  @PreAuthorize("hasRole('STAFF')")
+  @IdempotentCommand
+  RmaResponse receive(
+      @PathVariable String id,
+      @RequestBody(required = false) ReceiveBody body,
+      @AuthenticationPrincipal Jwt staff) {
+    var units = body == null ? new ReceiveBody(null, null) : body;
+    var serials = units.serials();
+    return stepped(id, uuid -> rmas.receive(uuid, staff.getSubject(), serials, units.units()));
+  }
+
+  /**
+   * Staff record a {@code RECEIVED} RMA's Inspection: {@code ACCEPTED} or {@code REFUSED} for a
+   * return, {@code FAULT_CONFIRMED} or {@code NO_FAULT_FOUND} for a warranty claim, with a note
+   * that a refusing outcome must give. 422 {@code outcomeNotForKind} for the other kind's; 409
+   * {@code transitionRefused} from any other status.
+   */
+  @PostMapping("/{id}/inspect")
+  @PreAuthorize("hasRole('STAFF')")
+  @IdempotentCommand
+  RmaResponse inspect(
+      @PathVariable String id,
+      @RequestBody(required = false) InspectBody body,
+      @AuthenticationPrincipal Jwt staff) {
+    var inspection = body == null ? new InspectBody(null, null) : body;
+    var outcome = inspection.toOutcome();
+    return stepped(id, uuid -> rmas.inspect(uuid, staff.getSubject(), outcome, inspection.note()));
+  }
+
+  /** A resolved RMA, and whether every unit its Order delivered has now been refunded. */
+  @JsonInclude(JsonInclude.Include.NON_NULL)
+  record ResolvedResponse(@JsonUnwrapped RmaResponse rma, boolean orderFullyRefunded) {}
+
+  /**
+   * The returns Saga resolves an {@code INSPECTED} RMA. 422 {@code resolutionContradictsInspection}
+   * for a resolution its Inspection doesn't allow; 409 {@code transitionRefused} from any other
+   * status.
+   */
+  @PostMapping("/{id}/resolve")
+  @PreAuthorize("hasRole('ORCHESTRATION')")
+  @IdempotentCommand
+  ResolvedResponse resolve(
+      @PathVariable String id, @RequestBody(required = false) ResolveBody body) {
+    var resolve = body == null ? new ResolveBody(null, null, null, null) : body;
+    var resolution = resolve.toResolution();
+    var reference = resolution == RmaStatus.REFUNDED ? resolve.paymentTransactionReference() : null;
+    var replacement = resolution == RmaStatus.EXCHANGED ? resolve.replacement() : null;
+    var resolved =
+        parse(id)
+            .flatMap(uuid -> rmas.resolve(uuid, resolution, reference, replacement, resolve.note()))
+            .orElseThrow(() -> new RmaNotFoundException(id));
+    log.info(
+        "{} is {}; its Order is {}fully refunded",
+        resolved.rma().reference(),
+        resolved.rma().status(),
+        resolved.orderFullyRefunded() ? "" : "not ");
+    return new ResolvedResponse(RmaResponse.of(resolved.rma()), resolved.orderFullyRefunded());
+  }
+
+  /**
+   * The returns Saga holds an {@code INSPECTED} RMA, with a reason of 1 to 1,000 characters; 409
+   * {@code transitionRefused} from any other status.
+   */
+  @PostMapping("/{id}/hold")
+  @PreAuthorize("hasRole('ORCHESTRATION')")
+  @IdempotentCommand
+  RmaResponse hold(@PathVariable String id, @RequestBody(required = false) HoldBody body) {
+    var reason = RequestRmaBody.text("reason", body == null ? null : body.reason());
+    return stepped(id, uuid -> rmas.hold(uuid, reason));
+  }
+
+  /**
+   * The returns Saga expires an {@code APPROVED} RMA once its Send-back deadline passed; 409 {@code
+   * transitionRefused} from any other status, so a receipt that raced the timer wins.
+   */
+  @PostMapping("/{id}/expire")
+  @PreAuthorize("hasRole('ORCHESTRATION')")
+  @IdempotentCommand
+  RmaResponse expire(@PathVariable String id) {
+    return stepped(id, rmas::expire);
+  }
+
+  /** One delivered line of an Order, and what it is still eligible for. */
+  @JsonInclude(JsonInclude.Include.NON_NULL)
+  record EligibilityResponse(
+      String variantId,
+      String productName,
+      String returnPeriodEndsAt,
+      String warrantyWindowEndsAt,
+      List<String> serialNumbers,
+      int quantity) {}
+
+  record EligibilitiesResponse(String orderId, List<EligibilityResponse> lines) {}
+
+  /**
+   * What each line the Customer's delivered Order delivered is still eligible for: when its Return
+   * Period ends, when its Warranty Window ends (left out when its Product has none, or isn't known
+   * yet), and the Serial numbers and quantity still free to claim. 404 when the Order has no
+   * delivered Shipment of the Customer's.
+   */
+  @GetMapping("/eligibility")
+  @PreAuthorize("hasRole('CUSTOMER')")
+  EligibilitiesResponse eligibility(@RequestParam String orderId, Authentication customer) {
+    return new EligibilitiesResponse(
+        orderId,
+        rmas.eligibility(customer.getName(), orderId).stream()
+            .map(
+                e ->
+                    new EligibilityResponse(
+                        e.variantId(),
+                        e.productName(),
+                        e.returnPeriodEndsAt().toString(),
+                        text(e.warrantyWindowEndsAt()),
+                        e.available().serialNumbers(),
+                        e.available().quantity()))
+            .toList());
+  }
+
+  private static String text(Instant instant) {
+    return instant == null ? null : instant.toString();
   }
 
   /** The RMA. A Customer reads only their own: another's is a 404. */
@@ -136,14 +284,15 @@ class RmaController {
   }
 
   /**
-   * A page of RMAs, oldest first: a Customer's own, or for Staff, everyone's (the RMA approval
-   * queue). {@code status} and {@code orderId} narrow it when given; {@code page} counts from 0;
-   * {@code size} is 1 to {@value #MAX_PAGE_SIZE}.
+   * A page of RMAs: a Customer's own, or for Staff, everyone's (the RMA queue). {@code status}, one
+   * or more, repeated or comma-separated, and {@code orderId} narrow it when given; {@code page}
+   * counts from 0; {@code size} is 1 to {@value #MAX_PAGE_SIZE}. {@code APPROVED} alone is by
+   * Send-back deadline, soonest first; any other list is oldest first.
    */
   @GetMapping
   @PreAuthorize("hasAnyRole('CUSTOMER', 'STAFF')")
   Page<RmaResponse> rmas(
-      @RequestParam(required = false) String status,
+      @RequestParam(required = false) List<String> status,
       @RequestParam(required = false) String orderId,
       @RequestParam(defaultValue = "0") int page,
       @RequestParam(defaultValue = "20") int size,
@@ -158,15 +307,17 @@ class RmaController {
     return rmas.rmas(filter, page, size).map(RmaResponse::of);
   }
 
-  private static RmaStatus status(String value) {
-    if (value == null) {
-      return null;
+  private static Set<RmaStatus> status(List<String> values) {
+    var statuses = new HashSet<RmaStatus>();
+    for (var value : values == null ? List.<String>of() : values) {
+      try {
+        statuses.add(RmaStatus.valueOf(value));
+      } catch (IllegalArgumentException e) {
+        throw new InvalidRequestException(
+            "status", "must be one or more of " + List.of(RmaStatus.values()));
+      }
     }
-    try {
-      return RmaStatus.valueOf(value);
-    } catch (IllegalArgumentException e) {
-      throw new InvalidRequestException("status", "must be one of " + List.of(RmaStatus.values()));
-    }
+    return statuses;
   }
 
   private static boolean isStaff(Authentication caller) {
@@ -203,6 +354,38 @@ class RmaController {
     var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
     problem.setProperty("reason", "rmaAlreadyDecided");
     return problem;
+  }
+
+  @ExceptionHandler(TransitionRefusedException.class)
+  ProblemDetail transitionRefused(TransitionRefusedException e) {
+    var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
+    problem.setProperty("reason", "transitionRefused");
+    problem.setProperty("status", e.status().name());
+    return problem;
+  }
+
+  @ExceptionHandler(SerialMismatchException.class)
+  ProblemDetail serialMismatch(SerialMismatchException e) {
+    var problem = refusal(e, "serialMismatch");
+    problem.setProperty("serialNumbers", e.serialNumbers());
+    return problem;
+  }
+
+  @ExceptionHandler(QuantityMismatchException.class)
+  ProblemDetail quantityMismatch(QuantityMismatchException e) {
+    var problem = refusal(e, "quantityMismatch");
+    problem.setProperty("expected", e.expected());
+    return problem;
+  }
+
+  @ExceptionHandler(OutcomeNotForKindException.class)
+  ProblemDetail outcomeNotForKind(OutcomeNotForKindException e) {
+    return refusal(e, "outcomeNotForKind");
+  }
+
+  @ExceptionHandler(ResolutionContradictsInspectionException.class)
+  ProblemDetail contradictsInspection(ResolutionContradictsInspectionException e) {
+    return refusal(e, "resolutionContradictsInspection");
   }
 
   @ExceptionHandler(QuantityExceededException.class)
@@ -252,15 +435,25 @@ class RmaController {
 
   @ExceptionHandler(ProductNotKnownYetException.class)
   ResponseEntity<ProblemDetail> productNotKnownYet(ProductNotKnownYetException e) {
+    return notKnownYet(e, "productNotKnownYet");
+  }
+
+  @ExceptionHandler(OrderNotKnownYetException.class)
+  ResponseEntity<ProblemDetail> orderNotKnownYet(OrderNotKnownYetException e) {
+    return notKnownYet(e, "orderNotKnownYet");
+  }
+
+  /** A 503 to try again shortly, while a projection catches up. */
+  private static ResponseEntity<ProblemDetail> notKnownYet(RuntimeException e, String reason) {
     log.info(e.getMessage());
     var problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, e.getMessage());
-    problem.setProperty("reason", "productNotKnownYet");
+    problem.setProperty("reason", reason);
     return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
         .header(HttpHeaders.RETRY_AFTER, RETRY_AFTER_SECONDS)
         .body(problem);
   }
 
-  /** A 422: the request is well-formed, but the RMA can't be requested, for {@code reason}. */
+  /** A 422: the request is well-formed, but the RMA refuses it, for {@code reason}. */
   private static ProblemDetail refusal(RuntimeException e, String reason) {
     var problem =
         ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, e.getMessage());

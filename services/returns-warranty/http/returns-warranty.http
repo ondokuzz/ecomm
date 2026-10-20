@@ -1,7 +1,10 @@
-# Exercises Returns & Warranty against the compose stack (`make up`): the demo Customer requests a
-# return of a delivered phone, after the requests it refuses, and Staff approve it.
+# Exercises Returns & Warranty against the compose stack (`make up`): the demo Customer asks what
+# their Order is eligible for and requests a return of a delivered phone, after the requests it
+# refuses; Staff approve it, receive the phone and inspect it; and, standing in for the returns
+# Saga with Orchestration's token, it is refunded. One RMA, from request to resolution, by hand.
 # Run the requests top to bottom in the IntelliJ HTTP client; the token requests store tokens for
-# the ones after them.
+# the ones after them. Orchestration's client secret is the stack's own: run it in the `dev`
+# environment, whose http-client.private.env.json holds it (the root README's "Secrets").
 # It needs a delivered Order of the demo Customer's with a phone: check one out in the Storefront,
 # pack its Shipment in the Admin Console, and wait about 30 seconds for the mock carrier to deliver
 # it. Then set @orderId to the Order's ID, @variantId to the phone's Variant ID, and @imei to the
@@ -30,6 +33,18 @@ grant_type=password&client_id=dev-cli&username=staff@ecomm.local&password=staff
 
 > {% client.global.set("staffToken", response.body.access_token); %}
 
+### Orchestration token: the returns Saga's own identity, for the steps only it takes
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&client_id=orchestration&client_secret={{orchestrationClientSecret}}
+
+> {% client.global.set("orchestrationToken", response.body.access_token); %}
+
+### What each delivered line is still eligible for: the Return Period's and Warranty Window's ends, and the IMEIs and quantity free to claim
+GET {{gateway}}/api/returns-warranty/rmas/eligibility?orderId={{orderId}}
+Authorization: Bearer {{customerToken}}
+
 ### An IMEI not shipped on that Order: 422 serialNotShipped
 POST {{returns}}/rmas
 Authorization: Bearer {{customerToken}}
@@ -48,7 +63,7 @@ Content-Type: application/json
 {"orderId": "{{orderId}}", "variantId": "{{variantId}}", "quantity": 2,
  "serialNumbers": ["{{imei}}", "490154203237518"], "kind": "RETURN", "reason": "Both broken"}
 
-### A return of the phone, naming its IMEI, through the gateway: 201, REQUESTED, with the Return Period
+### A return of the phone, naming its IMEI, through the gateway: 201, REQUESTED, with the Return Period and its Refund amount
 POST {{gateway}}/api/returns-warranty/rmas
 Authorization: Bearer {{customerToken}}
 Idempotency-Key: {{$random.uuid}}
@@ -100,7 +115,7 @@ Content-Type: application/json
 
 {}
 
-### Staff approve the return, with a note: APPROVED, the decision in its history
+### Staff approve the return, with a note: APPROVED, with its Send-back deadline and Warehouse
 POST {{gateway}}/api/returns-warranty/rmas/{{returnId}}/approve
 Authorization: Bearer {{staffToken}}
 Content-Type: application/json
@@ -114,7 +129,7 @@ Content-Type: application/json
 
 {"reason": "Changed our minds"}
 
-### The Customer reads it, with its decision history
+### The Customer reads it, with its RMA history
 GET {{gateway}}/api/returns-warranty/rmas/{{returnId}}
 Authorization: Bearer {{customerToken}}
 
@@ -124,3 +139,69 @@ Authorization: Bearer {{customerToken}}
 Content-Type: application/json
 
 {}
+
+### Expiring it before its units arrive is the returns Saga's alone: 404 through the gateway
+POST {{gateway}}/api/returns-warranty/rmas/{{returnId}}/expire
+Authorization: Bearer {{staffToken}}
+Idempotency-Key: {{$random.uuid}}
+
+### Staff awaiting units, by Send-back deadline, soonest first
+GET {{gateway}}/api/returns-warranty/rmas?status=APPROVED
+Authorization: Bearer {{staffToken}}
+
+### Receiving another unit than the RMA's: 422 serialMismatch, naming it
+POST {{gateway}}/api/returns-warranty/rmas/{{returnId}}/receive
+Authorization: Bearer {{staffToken}}
+Idempotency-Key: {{$random.uuid}}
+Content-Type: application/json
+
+{"serialNumbers": ["490154203237518"]}
+
+### Staff receive the phone by its IMEI: RECEIVED
+POST {{gateway}}/api/returns-warranty/rmas/{{returnId}}/receive
+Authorization: Bearer {{staffToken}}
+Idempotency-Key: {{$random.uuid}}
+Content-Type: application/json
+
+{"serialNumbers": ["{{imei}}"]}
+
+### Expiring it now that its units arrived: 409 transitionRefused, so the receipt wins
+POST {{returns}}/rmas/{{returnId}}/expire
+Authorization: Bearer {{orchestrationToken}}
+Idempotency-Key: {{$random.uuid}}
+
+### A warranty claim's outcome for a return: 422 outcomeNotForKind
+POST {{gateway}}/api/returns-warranty/rmas/{{returnId}}/inspect
+Authorization: Bearer {{staffToken}}
+Idempotency-Key: {{$random.uuid}}
+Content-Type: application/json
+
+{"outcome": "FAULT_CONFIRMED"}
+
+### Staff inspect it: INSPECTED, ACCEPTED (REFUSED would need a note)
+POST {{gateway}}/api/returns-warranty/rmas/{{returnId}}/inspect
+Authorization: Bearer {{staffToken}}
+Idempotency-Key: {{$random.uuid}}
+Content-Type: application/json
+
+{"outcome": "ACCEPTED", "note": "Unopened, as new"}
+
+### Closing an accepted return: 422 resolutionContradictsInspection
+POST {{returns}}/rmas/{{returnId}}/resolve
+Authorization: Bearer {{orchestrationToken}}
+Idempotency-Key: {{$random.uuid}}
+Content-Type: application/json
+
+{"resolution": "CLOSED"}
+
+### The returns Saga resolves it once refunded: REFUNDED, and orderFullyRefunded when the phone was the Order's only unit
+POST {{returns}}/rmas/{{returnId}}/resolve
+Authorization: Bearer {{orchestrationToken}}
+Idempotency-Key: {{$random.uuid}}
+Content-Type: application/json
+
+{"resolution": "REFUNDED", "paymentTransactionReference": "<the Refund's gateway reference>"}
+
+### The Customer reads it, resolved, with every step in its RMA history
+GET {{gateway}}/api/returns-warranty/rmas/{{returnId}}
+Authorization: Bearer {{customerToken}}

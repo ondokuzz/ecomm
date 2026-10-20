@@ -53,13 +53,15 @@ class RmaEventsApiTest extends RmasApiTest {
     assertThat(snapshot.get("window").get("kind").asString()).isEqualTo("WARRANTY_WINDOW");
     assertThat(snapshot.get("window").get("warranty").get("manufacturer").asString())
         .isEqualTo("Samsung");
-    assertThat(snapshot.get("decisions")).isEmpty();
+    assertThat(snapshot.get("refundAmount").get("amountMinor").asLong()).isEqualTo(1000);
+    assertThat(snapshot.get("decisions")).hasSize(1);
+    assertThat(snapshot.get("decisions").get(0).get("decidedBy").asString()).isEqualTo("CUSTOMER");
 
     var rejected = events.get(1);
     assertThat(rejected.get("version").asLong()).isEqualTo(2);
     assertThat(rejected.get("change").asString()).isEqualTo("REJECTED");
     assertThat(rejected.get("rma").get("status").asString()).isEqualTo("REJECTED");
-    var decision = rejected.get("rma").get("decisions").get(0);
+    var decision = rejected.get("rma").get("decisions").get(1);
     assertThat(decision.get("status").asString()).isEqualTo("REJECTED");
     assertThat(decision.get("decidedBy").asString()).isEqualTo("staff-7");
     assertThat(decision.get("note").asString()).isEqualTo("Water damage");
@@ -78,6 +80,39 @@ class RmaEventsApiTest extends RmasApiTest {
     assertThat(eventsOf(rma.id(), 2))
         .extracting(event -> event.get("change").asString())
         .containsExactly("REQUESTED", "APPROVED");
+  }
+
+  @Test
+  void eachStepToItsResolutionIsPublishedWithWhatItAdded() {
+    var charger = newVariant("CHARGER");
+    var shipment =
+        Shipments.shipment(CUSTOMER_ID).line(charger, "Charger", 1, "NONE").delivered(RECENTLY);
+    var rma =
+        inspected(
+            received(approved(requested(rma(shipment.orderId(), charger, 1, "RETURN")))),
+            "ACCEPTED");
+    step(
+            ORCHESTRATION,
+            rma.id(),
+            "resolve",
+            "{\"resolution\": \"REFUNDED\", \"paymentTransactionReference\": \"re_7\"}")
+        .expectStatus()
+        .isOk();
+
+    var events = eventsOf(rma.id(), 5);
+
+    assertThat(events)
+        .extracting(event -> event.get("change").asString())
+        .containsExactly("REQUESTED", "APPROVED", "RECEIVED", "INSPECTED", "REFUNDED");
+    var approved = events.get(1).get("rma");
+    assertThat(approved.get("sendBackBy").asString()).isEqualTo("2026-10-29T12:00:00Z");
+    assertThat(approved.get("warehouseId").asString()).isEqualTo("WH-BER");
+    var refunded = events.get(4).get("rma");
+    assertThat(refunded.get("inspection").get("outcome").asString()).isEqualTo("ACCEPTED");
+    assertThat(refunded.get("resolution").get("paymentTransactionReference").asString())
+        .isEqualTo("re_7");
+    assertThat(refunded.get("decisions").get(4).get("decidedBy").asString())
+        .isEqualTo("ORCHESTRATION");
   }
 
   /** The RMA's events, oldest first, once at least {@code atLeast} are there or 20 seconds pass. */

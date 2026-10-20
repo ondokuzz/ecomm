@@ -10,7 +10,7 @@ import {
   queueSearchOf,
   rmaKindLabel,
   rmaStatusLabel,
-  rmaStatuses,
+  queueStatuses,
   rmasPageSize,
   rmasQueryOf,
 } from '../domain/rma'
@@ -43,7 +43,7 @@ export function RmaQueuePage() {
         <h1>RMAs</h1>
       </div>
       <nav className="subnav" aria-label="RMA statuses">
-        {rmaStatuses.map((status) => (
+        {queueStatuses.map((status) => (
           <Link
             key={status}
             to={`/rmas${queueSearchOf({ status, page: 0 })}`}

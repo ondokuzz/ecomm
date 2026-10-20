@@ -1,9 +1,9 @@
 {
   "eventId": "2c7e9a14-5b8d-4f3e-9a61-0d4b7c2e8f15",
-  "occurredAt": "2026-10-15T12:05:00Z",
+  "occurredAt": "2026-10-22T16:00:00Z",
   "rmaId": "3f2a9c1b-7d4e-4a8b-b1c2-9e8d7f6a5b4c",
-  "version": 2,
-  "change": "APPROVED",
+  "version": 5,
+  "change": "REFUNDED",
   "rma": {
     "reference": "RMA-3F2A9C1B",
     "orderId": "7f1c2d3e-4a5b-4c6d-8e9f-0a1b2c3d4e5f",
@@ -12,22 +12,46 @@
     "productName": "Samsung Galaxy S25",
     "quantity": 1,
     "serialNumbers": ["490154203237518"],
-    "kind": "WARRANTY_CLAIM",
-    "reason": "The screen flickers.",
+    "kind": "RETURN",
+    "reason": "Not what I expected.",
     "window": {
-      "kind": "WARRANTY_WINDOW",
-      "startsAt": "2026-10-01T09:30:00Z",
-      "endsAt": "2028-10-01T09:30:00Z",
-      "warranty": { "months": 24, "manufacturer": "Samsung" }
+      "kind": "RETURN_PERIOD",
+      "startsAt": "2026-10-10T09:30:00Z",
+      "endsAt": "2026-10-24T09:30:00Z"
     },
-    "status": "APPROVED",
+    "status": "REFUNDED",
     "requestedAt": "2026-10-15T12:00:00Z",
+    "refundAmount": { "amountMinor": 86900, "currency": "EUR" },
+    "sendBackBy": "2026-10-29T12:05:00Z",
+    "warehouseId": "WH-BER",
+    "inspection": { "outcome": "ACCEPTED" },
+    "resolution": { "paymentTransactionReference": "re_3NkF8a2eZvKYlo2C" },
     "decisions": [
+      {
+        "status": "REQUESTED",
+        "decidedBy": "CUSTOMER",
+        "decidedAt": "2026-10-15T12:00:00Z"
+      },
       {
         "status": "APPROVED",
         "decidedBy": "a1b2c3d4-0000-4000-8000-000000000007",
         "decidedAt": "2026-10-15T12:05:00Z",
         "note": "Send it to the Berlin Warehouse."
+      },
+      {
+        "status": "RECEIVED",
+        "decidedBy": "a1b2c3d4-0000-4000-8000-000000000007",
+        "decidedAt": "2026-10-21T10:00:00Z"
+      },
+      {
+        "status": "INSPECTED",
+        "decidedBy": "a1b2c3d4-0000-4000-8000-000000000007",
+        "decidedAt": "2026-10-22T15:00:00Z"
+      },
+      {
+        "status": "REFUNDED",
+        "decidedBy": "ORCHESTRATION",
+        "decidedAt": "2026-10-22T16:00:00Z"
       }
     ]
   }

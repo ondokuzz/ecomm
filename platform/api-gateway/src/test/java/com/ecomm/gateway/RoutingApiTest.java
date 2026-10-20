@@ -41,7 +41,8 @@ class RoutingApiTest extends GatewayApiTest {
     "/api/fulfillment-shipping/shipments?status=PACKED&warehouseId=WH-BER, /shipments?status=PACKED&warehouseId=WH-BER",
     "/api/fulfillment-shipping/shipments/s-1, /shipments/s-1",
     "/api/returns-warranty/rmas?status=REQUESTED&page=1, /rmas?status=REQUESTED&page=1",
-    "/api/returns-warranty/rmas/r-1, /rmas/r-1"
+    "/api/returns-warranty/rmas/r-1, /rmas/r-1",
+    "/api/returns-warranty/rmas/eligibility?orderId=o-1, /rmas/eligibility?orderId=o-1"
   })
   void eachServiceIsReachedWithThePrefixStripped(String path, String downstreamPath) {
     http.get()
@@ -100,6 +101,10 @@ class RoutingApiTest extends GatewayApiTest {
     "POST, /api/fulfillment-shipping/shipments/",
     "POST, /api/fulfillment-shipping/shipments/s-1/dispatch",
     "POST, /api/fulfillment-shipping/shipments/s-1/hold",
+    "POST, /api/returns-warranty/rmas/r-1/resolve",
+    "POST, /api/returns-warranty/rmas/r-1/resolve/",
+    "POST, /api/returns-warranty/rmas/r-1/hold",
+    "POST, /api/returns-warranty/rmas/r-1/expire",
     "GET, /api/catalog/actuator/prometheus",
     "GET, /api/catalog/actuator/health",
     "GET, /api/order-management/actuator",
@@ -135,7 +140,10 @@ class RoutingApiTest extends GatewayApiTest {
     "POST, /api/fulfillment-shipping/shipping/quotes",
     "POST, /api/fulfillment-shipping/shipments",
     "POST, /api/fulfillment-shipping/shipments/s-1/dispatch",
-    "POST, /api/fulfillment-shipping/shipments/s-1/hold"
+    "POST, /api/fulfillment-shipping/shipments/s-1/hold",
+    "POST, /api/returns-warranty/rmas/r-1/resolve",
+    "POST, /api/returns-warranty/rmas/r-1/hold",
+    "POST, /api/returns-warranty/rmas/r-1/expire"
   })
   void internalEndpointsAreNotFoundWithoutAToken(String method, String path) {
     http.method(HttpMethod.valueOf(method)).uri(path).exchange().expectStatus().isNotFound();

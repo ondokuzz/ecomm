@@ -14,9 +14,9 @@ import org.springframework.test.web.servlet.client.EntityExchangeResult;
 import org.springframework.test.web.servlet.client.RestTestClient;
 
 /**
- * Base for the RMA tests: delivered Shipments and Products as their contexts publish them, the
- * Customer's requests and Staff's decisions as a client makes them, and the parts of an RMA a
- * client reads.
+ * Base for the RMA tests: delivered Shipments, their Orders and Products as their contexts publish
+ * them; the Customer's requests, Staff's steps and the returns Saga's as a client makes them; and
+ * the parts of an RMA a client reads.
  */
 abstract class RmasApiTest extends ReturnsWarrantyApiTest {
 
@@ -152,6 +152,52 @@ abstract class RmasApiTest extends ReturnsWarrantyApiTest {
         .exchange();
   }
 
+  /** A step after the RMA decision, with a new {@code Idempotency-Key}. */
+  RestTestClient.ResponseSpec step(String token, String id, String step, String body) {
+    return stepWithKey(token, UUID.randomUUID().toString(), id, step, body);
+  }
+
+  RestTestClient.ResponseSpec stepWithKey(
+      String token, String key, String id, String step, String body) {
+    return http.post()
+        .uri("/rmas/{id}/{step}", id, step)
+        .headers(h -> h.setBearerAuth(token))
+        .header("Idempotency-Key", key)
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(body)
+        .exchange();
+  }
+
+  /** The RMA, approved by Staff. */
+  RmaView approved(RmaView rma) {
+    return body(approve(STAFF, rma.id(), "{}").expectStatus().isOk());
+  }
+
+  /** The approved RMA, received by Staff with its own units. */
+  RmaView received(RmaView rma) {
+    var units =
+        rma.serialNumbers().isEmpty()
+            ? "{\"quantity\": %d}".formatted(rma.quantity())
+            : "{\"serialNumbers\": [%s]}"
+                .formatted(
+                    rma.serialNumbers().stream()
+                        .map(s -> "\"" + s + "\"")
+                        .collect(Collectors.joining(", ")));
+    return body(step(STAFF, rma.id(), "receive", units).expectStatus().isOk());
+  }
+
+  /** The received RMA, inspected by Staff with the outcome and a note. */
+  RmaView inspected(RmaView rma, String outcome) {
+    return body(
+        step(
+                STAFF,
+                rma.id(),
+                "inspect",
+                "{\"outcome\": \"%s\", \"note\": \"Checked\"}".formatted(outcome))
+            .expectStatus()
+            .isOk());
+  }
+
   RestTestClient.ResponseSpec read(String token, String id) {
     return http.get().uri("/rmas/{id}", id).headers(h -> h.setBearerAuth(token)).exchange();
   }
@@ -185,13 +231,20 @@ abstract class RmasApiTest extends ReturnsWarrantyApiTest {
       String kind,
       String reason,
       WindowView window,
+      MoneyView refundAmount,
       String status,
       String requestedAt,
-      List<DecisionView> decisions) {}
+      String sendBackBy,
+      String warehouseId,
+      Map<String, Object> inspection,
+      Map<String, Object> resolution,
+      List<HistoryView> history) {}
 
   record WindowView(String kind, String startsAt, String endsAt, Map<String, Object> warranty) {}
 
-  record DecisionView(String status, String decidedBy, String decidedAt, String note) {}
+  record MoneyView(long amountMinor, String currency) {}
+
+  record HistoryView(String status, String by, String at, String note) {}
 
   record PageView(List<RmaView> items, int page, int size, long total) {}
 }

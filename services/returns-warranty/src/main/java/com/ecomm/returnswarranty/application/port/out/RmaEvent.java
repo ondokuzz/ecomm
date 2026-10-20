@@ -2,6 +2,7 @@ package com.ecomm.returnswarranty.application.port.out;
 
 import com.ecomm.commons.events.IntegrationEvent;
 import com.ecomm.returnswarranty.domain.Rma;
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -13,7 +14,10 @@ public record RmaEvent(String rmaId, long version, String change, Snapshot rma)
 
   public static final String TOPIC = "returns-warranty.rma";
 
-  /** The null fields are left out. */
+  /**
+   * The null fields are left out. {@code decisions} is the RMA history: the schema keeps the name
+   * it had when it held only RMA decisions, since a field can't be renamed compatibly.
+   */
   public record Snapshot(
       String reference,
       String orderId,
@@ -27,22 +31,48 @@ public record RmaEvent(String rmaId, long version, String change, Snapshot rma)
       Window window,
       String status,
       String requestedAt,
+      Money refundAmount,
+      String sendBackBy,
+      String warehouseId,
+      Inspection inspection,
+      Resolution resolution,
       List<Decision> decisions) {}
 
   public record Window(String kind, String startsAt, String endsAt, Warranty warranty) {}
 
   public record Warranty(int months, String manufacturer) {}
 
+  public record Money(long amountMinor, String currency) {}
+
+  public record Inspection(String outcome, String note) {}
+
+  public record Resolution(String paymentTransactionReference, String replacementShipmentId) {}
+
   public record Decision(String status, String decidedBy, String decidedAt, String note) {}
 
-  /** The RMA as it is now: {@code REQUESTED} when new, else the decision that moved it. */
+  /** Why an RMA that took no step is published: what it lacked from before Sprint 6 filled in. */
+  public static final String BACKFILLED = "BACKFILLED";
+
+  /** The RMA as it is now: {@code REQUESTED} when new, else the step that moved it. */
   public static RmaEvent of(Rma rma) {
+    return of(rma, rma.status().name());
+  }
+
+  /** The RMA as it is now, its Warehouse or Refund amount just filled in. */
+  public static RmaEvent backfilled(Rma rma) {
+    return of(rma, BACKFILLED);
+  }
+
+  private static RmaEvent of(Rma rma, String change) {
     var window = rma.window();
     var warranty = window.warranty();
+    var refund = rma.refundAmount();
+    var inspection = rma.inspection();
+    var resolution = rma.resolution();
     return new RmaEvent(
         rma.id().toString(),
         rma.version(),
-        rma.status().name(),
+        change,
         new Snapshot(
             rma.reference(),
             rma.orderId(),
@@ -60,12 +90,26 @@ public record RmaEvent(String rmaId, long version, String change, Snapshot rma)
                 warranty == null ? null : new Warranty(warranty.months(), warranty.manufacturer())),
             rma.status().name(),
             rma.requestedAt().toString(),
-            rma.decisions().stream()
-                .map(
-                    d ->
-                        new Decision(
-                            d.status().name(), d.decidedBy(), d.decidedAt().toString(), d.note()))
+            refund == null ? null : new Money(refund.amountMinor(), refund.currency()),
+            text(rma.sendBackBy()),
+            rma.warehouseId(),
+            inspection == null
+                ? null
+                : new Inspection(inspection.outcome().name(), inspection.note()),
+            resolution == null
+                ? null
+                : new Resolution(
+                    resolution.paymentTransactionReference(),
+                    resolution.replacementShipmentId() == null
+                        ? null
+                        : resolution.replacementShipmentId().toString()),
+            rma.history().stream()
+                .map(e -> new Decision(e.status().name(), e.by(), e.at().toString(), e.note()))
                 .toList()));
+  }
+
+  private static String text(Instant instant) {
+    return instant == null ? null : instant.toString();
   }
 
   @Override

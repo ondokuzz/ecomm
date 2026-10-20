@@ -89,6 +89,33 @@ class ReadRmasApiTest extends RmasApiTest {
   }
 
   @Test
+  void staffListSeveralStatusesAndTheApprovedBySendBackDeadline() {
+    var charger = newVariant("CHARGER");
+    var shipment =
+        Shipments.shipment(CUSTOMER_ID).line(charger, "Charger", 3, "NONE").delivered(RECENTLY);
+    awaitShipmentsProjected();
+    var first = requestedAt(Duration.ofHours(1), shipment.orderId(), charger);
+    var second = requestedAt(Duration.ofHours(2), shipment.orderId(), charger);
+    var third = requestedAt(Duration.ofHours(3), shipment.orderId(), charger);
+    // The later approval comes first, so the earlier one has the sooner Send-back deadline.
+    clock.set(TestTimeSource.NOW.plus(Duration.ofDays(2)));
+    approve(STAFF, first.id(), "{}").expectStatus().isOk();
+    clock.set(TestTimeSource.NOW.plus(Duration.ofDays(1)));
+    approve(STAFF, second.id(), "{}").expectStatus().isOk();
+    var byOrder = "&orderId=" + shipment.orderId();
+
+    assertThat(list(STAFF, "?status=APPROVED" + byOrder).items())
+        .extracting(RmaView::id)
+        .containsExactly(second.id(), first.id());
+    assertThat(list(STAFF, "?status=APPROVED,REQUESTED" + byOrder).items())
+        .extracting(RmaView::id)
+        .containsExactly(first.id(), second.id(), third.id());
+    assertThat(list(STAFF, "?status=REQUESTED&status=REJECTED" + byOrder).items())
+        .extracting(RmaView::id)
+        .containsExactly(third.id());
+  }
+
+  @Test
   void aMalformedListingNamesTheParameter() {
     for (var query : new String[] {"?status=OPEN", "?size=0", "?size=101", "?page=-1"}) {
       http.get()

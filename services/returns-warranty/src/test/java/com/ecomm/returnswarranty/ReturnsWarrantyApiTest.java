@@ -15,9 +15,9 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * Base for HTTP-seam tests: the app runs with its own configuration, the store's Return Period
  * included, against one Postgres container shared by every test class and the shared Kafka and
  * schema registry from {@link EventBackbone}, with {@link FakeKeycloak} tokens. Fulfillment &
- * Shipping's Shipment topic and Catalog's Product topic are created as the stack creates them, with
- * the projections' dead-letter and redrive topics, and so is the RMA topic, its schema registered.
- * The clock is fixed at {@link TestTimeSource#NOW}.
+ * Shipping's Shipment topic, Catalog's Product topic and Order Management's Order topic are created
+ * as the stack creates them, with the projections' dead-letter and redrive topics, and so is the
+ * RMA topic, its schema registered. The clock is fixed at {@link TestTimeSource#NOW}.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureRestTestClient
@@ -38,6 +38,8 @@ abstract class ReturnsWarrantyApiTest {
     EventBackbone.createDeadLetterTopicsOf(Shipments.GROUP);
     EventBackbone.createTopic(Products.TOPIC);
     EventBackbone.createDeadLetterTopicsOf(Products.GROUP);
+    EventBackbone.createTopic(Orders.TOPIC);
+    EventBackbone.createDeadLetterTopicsOf(Orders.GROUP);
   }
 
   @DynamicPropertySource

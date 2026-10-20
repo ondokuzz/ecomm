@@ -96,15 +96,15 @@ fulfillment-rebuild:
 	  -c 'TRUNCATE product_variant, product'
 	$(COMPOSE) up -d --wait fulfillment-shipping
 
-## Rebuild Returns & Warranty's projections of delivered Shipments and of Products from their
+## Rebuild Returns & Warranty's projections of delivered Shipments, Products and Orders from their
 ## topics (services/returns-warranty/README.md): stop the service, reset its groups to the earliest
 ## offset, empty the projections, and start it again. RMAs stay, with the windows they were checked
-## against. As for Search, the redrive topics aren't replayed.
+## against and their Refund amounts. As for Search, the redrive topics aren't replayed.
 returns-rebuild:
 	$(COMPOSE) stop returns-warranty
 	infra/docker/replay-groups.sh $(RETURNS_GROUPS)
 	$(COMPOSE) exec -T postgres psql -U ecomm -d returns_warranty -v ON_ERROR_STOP=1 \
-	  -c 'TRUNCATE shipment_line, shipment, product_variant, product'
+	  -c 'TRUNCATE shipment_line, shipment, product_variant, product, customer_order_line, customer_order'
 	$(COMPOSE) up -d --wait returns-warranty
 
 ## Redrive a consumer group's dead events once their cause is fixed, e.g.

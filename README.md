@@ -330,7 +330,7 @@ d=.secrets/ecomm; printf '{"dev": {"checkoutClientSecret": "%s", "orchestrationC
 | `make reviews-rebuild` | Rebuild Reviews' projection of Orders and Products from the topics, keeping the reviews ([Reviews & Ratings](./services/reviews-ratings/README.md#rebuilding)) |
 | `make recommendations-rebuild` | Rebuild Recommendations' projection of Orders and Products from the topics ([Recommendations](./services/recommendations/README.md#rebuilding)) |
 | `make fulfillment-rebuild` | Rebuild Fulfillment & Shipping's Product projection from `catalog.product`, keeping the Shipments ([Fulfillment & Shipping](./services/fulfillment-shipping/README.md#shipments)) |
-| `make returns-rebuild` | Rebuild Returns & Warranty's projections of Shipments and Products from the topics, keeping the RMAs ([Returns & Warranty](./services/returns-warranty/README.md#rebuilding)) |
+| `make returns-rebuild` | Rebuild Returns & Warranty's projections of Shipments, Products and Orders from the topics, keeping the RMAs ([Returns & Warranty](./services/returns-warranty/README.md#rebuilding)) |
 
 Every checkout takes Stock, so after many smoke-test runs `make seed-reset` refills it. To wipe
 everything, Keycloak's users included, run `docker compose down -v`.

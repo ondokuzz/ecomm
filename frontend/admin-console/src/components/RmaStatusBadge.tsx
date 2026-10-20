@@ -5,9 +5,16 @@ const tones: Record<RmaStatus, Tone> = {
   REQUESTED: 'warning',
   APPROVED: 'success',
   REJECTED: 'danger',
+  RECEIVED: 'info',
+  EXPIRED: 'neutral',
+  INSPECTED: 'info',
+  REFUNDED: 'success',
+  EXCHANGED: 'success',
+  CLOSED: 'neutral',
+  ON_HOLD: 'danger',
 }
 
-/** An RMA status as a pill: awaiting a decision, approved, or rejected. */
+/** An RMA status as a pill: awaiting Staff, under way, resolved, or stopped. */
 export function RmaStatusBadge({ status }: { status: RmaStatus }) {
   return (
     <Badge tone={tones[status]} dot>

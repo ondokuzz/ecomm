@@ -7,7 +7,8 @@ import java.util.UUID;
 
 /**
  * What Returns & Warranty keeps of a Fulfillment & Shipping Shipment, at the newest version it has
- * applied: its Order and Customer, its lines and, once delivered, when.
+ * applied: its Order and Customer, the Warehouse it ships from, its lines and, once delivered,
+ * when.
  *
  * @param status Fulfillment & Shipping's Shipment status, kept as text so a new one doesn't break
  *     the projection
@@ -18,6 +19,7 @@ public record Shipment(
     long version,
     String orderId,
     String customerId,
+    String warehouseId,
     String status,
     Instant deliveredAt,
     List<DeliveredLine> lines) {
@@ -31,7 +33,7 @@ public record Shipment(
   /** What it delivered, once it is delivered. */
   public Optional<Delivery> delivery() {
     return DELIVERED.equals(status) && deliveredAt != null
-        ? Optional.of(new Delivery(id, orderId, customerId, deliveredAt, lines))
+        ? Optional.of(new Delivery(id, orderId, customerId, warehouseId, deliveredAt, lines))
         : Optional.empty();
   }
 }

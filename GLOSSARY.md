@@ -9,7 +9,7 @@ A person who browses, buys, and manages Orders on the platform. Keycloak holds a
 _Avoid_: User, Account, Buyer
 
 **Staff**:
-A back-office person with the `STAFF` role. In the Admin Console, which turns away anyone without the role, Staff manage the Catalog, Coupons and Campaigns, look up every Customer's Orders with their Payments without changing them, read each Variant's Stock movements, and work two queues. In the fulfillment queue, Shipments by status and Warehouse, oldest first, Staff pick each Shipment and pack it with a Serial number per unit of each serial-tracked line; the fulfillment Saga does the rest, so Staff never capture a Payment, book a Carrier or hold a Shipment themselves. In the RMA approval queue, requested RMAs, oldest first, each is approved or rejected once by an RMA decision. A Staff member's ID is recorded on each Shipment status change and RMA decision they make. Customers can neither list, pick nor pack Shipments.
+A back-office person with the `STAFF` role. In the Admin Console, which turns away anyone without the role, Staff manage the Catalog, Coupons and Campaigns, look up every Customer's Orders with their Payments without changing them, read each Variant's Stock movements, and work two queues. In the fulfillment queue, Shipments by status and Warehouse, oldest first, Staff pick each Shipment and pack it with a Serial number per unit of each serial-tracked line; the fulfillment Saga does the rest, so Staff never capture a Payment, book a Carrier or hold a Shipment themselves. In the RMA queue, each requested RMA is approved or rejected once by an RMA decision, and an approved one's units are received and inspected. A Staff member's ID is recorded on each Shipment status change they make and each step of an RMA they take. Customers can neither list, pick nor pack Shipments.
 _Avoid_: Admin, Operator
 
 **Storefront**:
@@ -232,12 +232,28 @@ The Carrier's notice of a Tracking event, posted to Fulfillment & Shipping's `PO
 _Avoid_: Callback, notification (on their own), Gateway webhook (the payment gateway's)
 
 **RMA (Return Case)**:
-A Customer's request about units of one Variant from their delivered Order, of one of two kinds: a return (`RETURN`), within the Return Period, or a warranty claim (`WARRANTY_CLAIM`), within the Warranty Window. It names how many units, the Serial number of each where the Product has Serial tracking, and the Customer's reason. It is refused if those units weren't delivered, or another of the Customer's RMAs that isn't rejected holds them. It keeps the window it was checked against. Its status is `REQUESTED`, then `APPROVED` or `REJECTED` by an RMA decision; receiving, inspecting and resolving an approved RMA come in Sprint 6. Its own lifecycle is apart from its Order's. It is shown by its RMA reference, such as `RMA-3F2A9C1B`: `RMA-` and the first eight characters of its ID, upper-cased, like an Order reference. Returns & Warranty owns RMAs.
+A Customer's request about units of one Variant from their delivered Order, of one of two kinds: a return (`RETURN`), within the Return Period, or a warranty claim (`WARRANTY_CLAIM`), within the Warranty Window. It names how many units, the Serial number of each where the Product has Serial tracking, and the Customer's reason. It is refused if those units weren't delivered, or another of the Customer's RMAs holds them: every RMA holds its units until it is rejected, expires or is closed, so a closed return's unit may still be claimed under warranty. It keeps the window it was checked against and its Refund amount. Its status is `REQUESTED`, then `APPROVED` or `REJECTED` by an RMA decision. An approved one has a Send-back deadline and a Warehouse to send its units back to: Staff receive them, checked unit by unit against it (`RECEIVED`), unless the deadline passes first (`EXPIRED`); then record an Inspection (`INSPECTED`). The returns Saga resolves it, `REFUNDED`, `EXCHANGED` for a replacement Shipment or `CLOSED`, as its Inspection allows, or puts it `ON_HOLD` when a Refund is declined; nothing resolves a hold yet. Every step is in its RMA history, and one its status doesn't allow is refused. Its own lifecycle is apart from its Order's, though refunding every unit an Order delivered lets the Saga mark it `RETURNED`. It is shown by its RMA reference, such as `RMA-3F2A9C1B`: `RMA-` and the first eight characters of its ID, upper-cased, like an Order reference. Returns & Warranty owns RMAs.
 _Avoid_: Return, Refund — those are possible outcomes of an RMA, not the RMA itself
 
 **RMA decision**:
-Staff approving or rejecting a `REQUESTED` RMA: who decided, when, and a note, which an approval may leave out and a rejection must give as its reason. An RMA is decided once; its decision history only ever grows.
-_Avoid_: Review, Resolution (what follows an approval in Sprint 6)
+Staff approving or rejecting a `REQUESTED` RMA: who decided, when, and a note, which an approval may leave out and a rejection must give as its reason. It is one kind of entry in the RMA history. An RMA is decided once.
+_Avoid_: Review, Resolution (what follows an Inspection)
+
+**RMA history**:
+Every step an RMA has taken, oldest first, kept for good: the status it moved to, who took it (a Staff member's ID, `CUSTOMER` for the request, or `ORCHESTRATION` for the returns Saga's steps), when, and its note, such as a rejection's reason, an Inspection's note or a hold's reason. It is appended to in the transaction of each step and never changed. It replaced the decision history, whose RMA decisions it keeps unchanged: an RMA requested before it has no entry for its request.
+_Avoid_: Decision history, Audit log, Timeline (how the Storefront shows it)
+
+**Send-back deadline**:
+When an approved RMA's units must have been received by, set on approval: the later of the end of the window it was checked against and 14 days after the approval (the Send-back period, one for the store). Staff receive the units at the Warehouse their Shipment came from. If it passes first, the returns Saga expires the RMA; a receipt that came first wins. Staff's queue of RMAs awaiting units is ordered by it.
+_Avoid_: Return deadline, Return Period (which limits requesting a return, not sending it)
+
+**Refund amount**:
+What refunding an RMA's units gives back, worked out when it is requested and kept on it: their Prices, less their share of the Order's Discounts, plus their share of its Tax, each shared over the Order's lines by subtotal with the largest-remainder rule. The Shipping cost is never refunded, so the Refund amounts of RMAs covering every unit come to the Order's total less Shipping. It is the whole RMA's, not one unit's. The returns Saga refunds it after an accepted return, or a confirmed fault with no replacement in Stock.
+_Avoid_: Refund (the Payment's giving back of money), Price (one unit's, before Discounts and Tax)
+
+**Inspection**:
+Staff's finding on an RMA's received units, with a note: `ACCEPTED` or `REFUSED` for a return, `FAULT_CONFIRMED` or `NO_FAULT_FOUND` for a warranty claim. A refusing outcome must say why in its note. It decides how the RMA can be resolved: refunded after an accepted return, exchanged or refunded after a confirmed fault, closed after a refusal.
+_Avoid_: Review, Check, RMA decision (whether to take the units back at all)
 
 **Return Period**:
 How long after its Shipment is delivered a Customer may request a return of a Variant: 14 days, one for the store, whatever the Product. A return requested after it ends is refused with the moment it ended.

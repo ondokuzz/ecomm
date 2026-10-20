@@ -61,7 +61,10 @@ ecomm:
         webhooks: [POST /webhooks/carrier]
       returns-warranty:
         uri: http://localhost:8100
-        # Customers request and read their own RMAs; Staff decide and read any. Nothing is internal.
+        # Customers request and read their own RMAs, and ask what their Orders are eligible for;
+        # Staff decide, receive, inspect and read any. Only the returns Saga resolves, holds and
+        # expires them.
+        internal: [POST /rmas/*/resolve, POST /rmas/*/hold, POST /rmas/*/expire]
 
 # Plain-text logs name the Correlation ID too, so the access log reads the same outside Docker.
 logging:

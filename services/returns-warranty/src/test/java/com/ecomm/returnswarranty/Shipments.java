@@ -27,6 +27,9 @@ final class Shipments {
   static final String TOPIC = "fulfillment-shipping.shipment";
   static final String GROUP = "returns-warranty.shipments";
 
+  /** Each unit's Price on the Order a delivered Shipment publishes: 10.00 euros. */
+  static final long UNIT_PRICE = 1000;
+
   private static final JsonMapper JSON = new JsonMapper();
   private static final JsonSchema SCHEMA = loadSchema();
 
@@ -48,6 +51,8 @@ final class Shipments {
     private final String customerId;
     private final String rmaId;
     private final List<Map<String, Object>> lines = new ArrayList<>();
+    private Orders.Order order;
+    private boolean publishesOrder = true;
 
     private Shipment(String customerId, String orderId, String rmaId) {
       this.customerId = customerId;
@@ -69,6 +74,19 @@ final class Shipments {
               "quantity", quantity,
               "serialTracking", serialTracking,
               "serialNumbers", List.of(serialNumbers)));
+      if (order == null) {
+        order = Orders.order(orderId, customerId);
+      }
+      order.line(variantId, quantity, UNIT_PRICE);
+      return this;
+    }
+
+    /**
+     * Leaves its Order for the test to publish: otherwise, once delivered, its Order Management
+     * Order is published first, each unit at {@link #UNIT_PRICE}, without Discounts or Tax.
+     */
+    Shipment withoutOrder() {
+      publishesOrder = false;
       return this;
     }
 
@@ -80,8 +98,11 @@ final class Shipments {
       return orderId;
     }
 
-    /** Publishes it delivered at {@code deliveredAt}, as its version 6. */
+    /** Publishes it delivered at {@code deliveredAt}, as its version 6, after its Order. */
     Shipment delivered(Instant deliveredAt) {
+      if (publishesOrder && rmaId == null && order != null) {
+        order.publish();
+      }
       return publish(6, "DELIVERED", "DELIVERED", deliveredAt);
     }
 

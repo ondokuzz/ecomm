@@ -24,7 +24,7 @@ class PostgresShipmentStore implements ShipmentStore {
 
   @Override
   public Optional<Long> versionOf(UUID id) {
-    return jdbc.sql("SELECT version FROM shipment WHERE id = :id")
+    return jdbc.sql("SELECT version FROM shipment WHERE id = :id AND warehouse_id IS NOT NULL")
         .param("id", id)
         .query(Long.class)
         .optional();
@@ -34,17 +34,19 @@ class PostgresShipmentStore implements ShipmentStore {
   public void save(Shipment shipment) {
     jdbc.sql(
             """
-            INSERT INTO shipment (id, version, order_id, customer_id, status, delivered_at)
-            VALUES (:id, :version, :orderId, :customerId, :status, :deliveredAt)
+            INSERT INTO shipment
+              (id, version, order_id, customer_id, warehouse_id, status, delivered_at)
+            VALUES (:id, :version, :orderId, :customerId, :warehouseId, :status, :deliveredAt)
             ON CONFLICT (id) DO UPDATE SET
               version = EXCLUDED.version, order_id = EXCLUDED.order_id,
-              customer_id = EXCLUDED.customer_id, status = EXCLUDED.status,
-              delivered_at = EXCLUDED.delivered_at
+              customer_id = EXCLUDED.customer_id, warehouse_id = EXCLUDED.warehouse_id,
+              status = EXCLUDED.status, delivered_at = EXCLUDED.delivered_at
             """)
         .param("id", shipment.id())
         .param("version", shipment.version())
         .param("orderId", shipment.orderId())
         .param("customerId", shipment.customerId())
+        .param("warehouseId", shipment.warehouseId())
         .param("status", shipment.status())
         .param(
             "deliveredAt",
@@ -72,12 +74,28 @@ class PostgresShipmentStore implements ShipmentStore {
 
   @Override
   public Optional<Delivery> lockDeliveryOf(String orderId) {
+    return deliveryOf(orderId, " FOR UPDATE");
+  }
+
+  @Override
+  public Optional<Delivery> deliveryOf(String orderId) {
+    return deliveryOf(orderId, "");
+  }
+
+  @Override
+  public boolean anyWithoutWarehouse() {
+    return jdbc.sql("SELECT EXISTS (SELECT 1 FROM shipment WHERE warehouse_id IS NULL)")
+        .query(Boolean.class)
+        .single();
+  }
+
+  private Optional<Delivery> deliveryOf(String orderId, String lock) {
     return jdbc.sql(
             """
-            SELECT id, customer_id, delivered_at FROM shipment
+            SELECT id, customer_id, warehouse_id, delivered_at FROM shipment
             WHERE order_id = :orderId AND status = 'DELIVERED' AND delivered_at IS NOT NULL
-            FOR UPDATE
-            """)
+            """
+                + lock)
         .param("orderId", orderId)
         .query(
             (rs, row) ->
@@ -85,6 +103,7 @@ class PostgresShipmentStore implements ShipmentStore {
                     rs.getObject("id", UUID.class),
                     orderId,
                     rs.getString("customer_id"),
+                    rs.getString("warehouse_id"),
                     rs.getTimestamp("delivered_at").toInstant(),
                     List.of()))
         .optional()
@@ -112,6 +131,7 @@ class PostgresShipmentStore implements ShipmentStore {
         delivery.shipmentId(),
         delivery.orderId(),
         delivery.customerId(),
+        delivery.warehouseId(),
         delivery.deliveredAt(),
         lines);
   }

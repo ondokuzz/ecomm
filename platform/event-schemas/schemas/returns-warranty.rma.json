@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "returns-warranty.rma",
-  "description": "A snapshot of an RMA, a Customer's request to return units of a Variant from a delivered Order or to claim their warranty, published when it is requested and with each RMA decision. Keyed by rmaId.",
+  "description": "A snapshot of an RMA, a Customer's request to return units of a Variant from a delivered Order or to claim their warranty, published when it is requested and with each step of its lifecycle after. Keyed by rmaId.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -38,9 +38,17 @@
       "enum": [
         "REQUESTED",
         "APPROVED",
-        "REJECTED"
+        "REJECTED",
+        "RECEIVED",
+        "EXPIRED",
+        "INSPECTED",
+        "REFUNDED",
+        "EXCHANGED",
+        "CLOSED",
+        "ON_HOLD",
+        "BACKFILLED"
       ],
-      "description": "Why the event was published: REQUESTED for a new RMA, or the RMA decision that moved it."
+      "description": "Why the event was published: REQUESTED for a new RMA, the status a step moved it to, or BACKFILLED when an RMA from before Sprint 6 had its Warehouse or Refund amount filled in, which is no step."
     },
     "rma": {
       "type": "object",
@@ -161,16 +169,96 @@
           "enum": [
             "REQUESTED",
             "APPROVED",
-            "REJECTED"
+            "REJECTED",
+            "RECEIVED",
+            "EXPIRED",
+            "INSPECTED",
+            "REFUNDED",
+            "EXCHANGED",
+            "CLOSED",
+            "ON_HOLD"
           ]
         },
         "requestedAt": {
           "type": "string",
           "format": "date-time"
         },
+        "refundAmount": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "What refunding its units gives back: their Prices less their share of the Order's Discounts, plus their share of its Tax; never the Shipping cost. Left out of an RMA requested before Returns & Warranty projected its Order, until it has.",
+          "required": [
+            "amountMinor",
+            "currency"
+          ],
+          "properties": {
+            "amountMinor": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "The amount in its Currency's Minor unit."
+            },
+            "currency": {
+              "type": "string",
+              "pattern": "^[A-Z]{3}$",
+              "description": "The Currency's ISO 4217 code."
+            }
+          }
+        },
+        "sendBackBy": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The Send-back deadline: by when its units must be received, the later of its window's end and the Send-back period after its approval. Left out until it is approved."
+        },
+        "warehouseId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The Warehouse its units go back to, such as WH-BER: the one its Shipment came from. Left out until it is approved, and while that isn't known."
+        },
+        "inspection": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Staff's Inspection of its received units; left out until it is inspected.",
+          "required": [
+            "outcome"
+          ],
+          "properties": {
+            "outcome": {
+              "type": "string",
+              "enum": [
+                "ACCEPTED",
+                "REFUSED",
+                "FAULT_CONFIRMED",
+                "NO_FAULT_FOUND"
+              ],
+              "description": "ACCEPTED or REFUSED for a RETURN; FAULT_CONFIRMED or NO_FAULT_FOUND for a WARRANTY_CLAIM."
+            },
+            "note": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Always given for REFUSED and NO_FAULT_FOUND."
+            }
+          }
+        },
+        "resolution": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "What resolved it; left out until it is REFUNDED, EXCHANGED or CLOSED. A CLOSED RMA's is empty.",
+          "properties": {
+            "paymentTransactionReference": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The Refund's Payment transaction reference, when REFUNDED."
+            },
+            "replacementShipmentId": {
+              "type": "string",
+              "format": "uuid",
+              "description": "The replacement Shipment, when EXCHANGED."
+            }
+          }
+        },
         "decisions": {
           "type": "array",
-          "description": "The RMA's decision history, oldest first.",
+          "description": "The RMA history, oldest first: every step, who took it and when. It keeps the name it had when it held only RMA decisions. An RMA requested before Sprint 6 starts with its RMA decision, an RMA requested since with its request.",
           "items": {
             "type": "object",
             "additionalProperties": false,
@@ -183,23 +271,32 @@
               "status": {
                 "type": "string",
                 "enum": [
+                  "REQUESTED",
                   "APPROVED",
-                  "REJECTED"
+                  "REJECTED",
+                  "RECEIVED",
+                  "EXPIRED",
+                  "INSPECTED",
+                  "REFUNDED",
+                  "EXCHANGED",
+                  "CLOSED",
+                  "ON_HOLD"
                 ]
               },
               "decidedBy": {
                 "type": "string",
                 "minLength": 1,
-                "description": "The Staff member's ID."
+                "description": "Who took the step: CUSTOMER for the request, a Staff member's ID for a decision, receipt or Inspection, or ORCHESTRATION for the returns Saga's."
               },
               "decidedAt": {
                 "type": "string",
-                "format": "date-time"
+                "format": "date-time",
+                "description": "When the step was taken."
               },
               "note": {
                 "type": "string",
                 "minLength": 1,
-                "description": "An approval's note, left out when it has none, or a rejection's reason."
+                "description": "The step's note, left out when it has none: an approval's, a rejection's reason, an Inspection's note, a resolution's or a hold's reason."
               }
             }
           }
