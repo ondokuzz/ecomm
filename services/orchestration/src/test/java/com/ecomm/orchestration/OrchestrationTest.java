@@ -58,6 +58,12 @@ abstract class OrchestrationTest {
   static final java.time.Duration PACKING_CHECK = java.time.Duration.ofSeconds(8);
 
   /**
+   * How long the returns Saga awaits an Inspection before it reads the RMA again here: the stack's
+   * hour, which the time-skipping test server passes in moments.
+   */
+  static final java.time.Duration INSPECTION_CHECK = java.time.Duration.ofHours(1);
+
+  /**
    * How long a call to another service may take here: shorter than the stack's 25 seconds, so a
    * test can outlast it without waiting as long, and still more than a cold service's first answer.
    */
@@ -78,6 +84,8 @@ abstract class OrchestrationTest {
     for (var group : FulfillmentEvents.GROUPS) {
       Kafka.createDeadLetterTopicsOf(group);
     }
+    Kafka.createTopic(RmaEvents.TOPIC);
+    Kafka.createDeadLetterTopicsOf(RmaEvents.GROUP);
   }
 
   @DynamicPropertySource
@@ -95,7 +103,8 @@ abstract class OrchestrationTest {
             "inventory",
             "cart",
             "checkout-pricing",
-            "fulfillment-shipping")) {
+            "fulfillment-shipping",
+            "returns-warranty")) {
       registry.add("ecomm.orchestration." + service + "-url", DOWNSTREAM::baseUrl);
     }
     registry.add(
@@ -104,6 +113,7 @@ abstract class OrchestrationTest {
     registry.add("ecomm.orchestration.settlement-deadline", () -> SETTLEMENT_DEADLINE);
     registry.add("ecomm.orchestration.delivery-deadline", DELIVERY_DEADLINE::toString);
     registry.add("ecomm.orchestration.packing-check", PACKING_CHECK::toString);
+    registry.add("ecomm.orchestration.inspection-check", INSPECTION_CHECK::toString);
     registry.add("ecomm.orchestration.read-timeout", READ_TIMEOUT::toString);
   }
 

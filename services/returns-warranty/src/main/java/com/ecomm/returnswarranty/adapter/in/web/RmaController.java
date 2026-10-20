@@ -59,8 +59,9 @@ import org.springframework.web.bind.annotation.RestController;
  * RMAs. A Customer requests one for a delivered Variant of their Order, with an {@code
  * Idempotency-Key}, reads their own, and asks what their Order's lines are still eligible for.
  * Staff decide them, receive their units and inspect them, and read any. Orchestration's returns
- * Saga, with its own {@code ORCHESTRATION} token, resolves, holds and expires them. Every step
- * after a decision takes a required {@code Idempotency-Key}, so a repeat replays its answer.
+ * Saga, with its own {@code ORCHESTRATION} token, reads any one, and resolves, holds and expires
+ * them. Every step after a decision takes a required {@code Idempotency-Key}, so a repeat replays
+ * its answer.
  */
 @RestController
 @RequestMapping("/rmas")
@@ -272,13 +273,16 @@ class RmaController {
     return instant == null ? null : instant.toString();
   }
 
-  /** The RMA. A Customer reads only their own: another's is a 404. */
+  /**
+   * The RMA. A Customer reads only their own: another's is a 404. Staff read any, and so does the
+   * returns Saga, as it reads its RMA again while it awaits a step.
+   */
   @GetMapping("/{id}")
-  @PreAuthorize("hasAnyRole('CUSTOMER', 'STAFF')")
+  @PreAuthorize("hasAnyRole('CUSTOMER', 'STAFF', 'ORCHESTRATION')")
   RmaResponse rma(@PathVariable String id, Authentication caller) {
     return parse(id)
         .flatMap(rmas::rma)
-        .filter(rma -> isStaff(caller) || rma.belongsTo(caller.getName()))
+        .filter(rma -> readsAny(caller) || rma.belongsTo(caller.getName()))
         .map(RmaResponse::of)
         .orElseThrow(() -> new RmaNotFoundException(id));
   }
@@ -318,6 +322,14 @@ class RmaController {
       }
     }
     return statuses;
+  }
+
+  private static boolean readsAny(Authentication caller) {
+    return caller.getAuthorities().stream()
+        .anyMatch(
+            a ->
+                a.getAuthority().equals("ROLE_STAFF")
+                    || a.getAuthority().equals("ROLE_ORCHESTRATION"));
   }
 
   private static boolean isStaff(Authentication caller) {

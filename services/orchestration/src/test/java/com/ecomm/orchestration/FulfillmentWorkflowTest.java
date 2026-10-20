@@ -627,8 +627,9 @@ class FulfillmentWorkflowTest extends OrchestrationTest {
   // --- the run ---
 
   /**
-   * Stands in for the RMA's returns Saga, {@code returns:<rmaId>}, until it exists: a run no worker
-   * picks up, which keeps whatever it is signalled with.
+   * Stands in for the RMA's returns Saga, {@code returns:<rmaId>}: a run no worker picks up, which
+   * keeps whatever it is signalled with, so this class sees where the event went. {@code
+   * ReturnsWorkflowTest} shows what the real Saga does with it.
    */
   String returnsSagaStandIn(String rmaId) {
     var id = "returns:" + rmaId;

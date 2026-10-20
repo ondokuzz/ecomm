@@ -28,7 +28,16 @@ spring:
           - shipmentActivities
           - captureActivities
           - orderFulfillmentActivities
-  # Order and Shipment events start and wake the fulfillment Saga.
+      - task-queue: returns
+        workflow-classes:
+          - com.ecomm.orchestration.application.ReturnsSaga
+        activity-beans:
+          - rmaActivities
+          - returnsInventoryActivities
+          - refundActivities
+          - replacementActivities
+          - orderReturnActivities
+  # Order, Shipment and RMA events start and wake the fulfillment and returns Sagas.
   kafka:
     bootstrap-servers: localhost:${KAFKA_PORT:9092}
   security:
@@ -59,6 +68,9 @@ ecomm:
     # Shipment again, in case the event never comes (dead-lettered, say). Each check adds a few
     # events to the run's history.
     packing-check: 1h
+    # How long the returns Saga awaits an RMA's INSPECTED event before it reads the RMA again, in
+    # case the event never comes. It awaits a replacement's packing for packing-check, as above.
+    inspection-check: 1h
     # How long a step's call to another context may take to connect and to answer. The read timeout
     # stays under the Sagas' 30 seconds for an attempt (CheckoutSaga.ATTEMPT), so a slow call fails
     # in the worker and its retry replays with the same key.
@@ -70,3 +82,4 @@ ecomm:
     cart-url: http://localhost:8083
     checkout-pricing-url: http://localhost:8086
     fulfillment-shipping-url: http://localhost:8099
+    returns-warranty-url: http://localhost:8100

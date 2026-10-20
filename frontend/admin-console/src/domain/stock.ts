@@ -67,7 +67,8 @@ const rmaOwnerPrefix = 'rma:'
 
 /**
  * A movement's reference as Staff read it: a restock's as given, and an RMA named by ID as its
- * RMA reference, `RMA-` and the start of its ID, upper-cased.
+ * RMA reference, `RMA-` and the start of its ID, upper-cased. That repeats Returns & Warranty's
+ * rule (`Rma.reference()`) on purpose, so the row can link to the RMA (#100).
  */
 function referenceOf(reference: string | null): Pick<MovementRow, 'reference' | 'rmaId'> {
   if (reference === null) return { reference: '—', rmaId: null }

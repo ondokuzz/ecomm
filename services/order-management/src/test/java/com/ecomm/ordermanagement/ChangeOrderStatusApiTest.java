@@ -7,7 +7,10 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.MediaType;
 
-/** Checkout moves an Order along its Order Status lifecycle; illegal moves are a conflict. */
+/**
+ * Orchestration moves an Order along its Order Status lifecycle, with a key; illegal moves are a
+ * conflict.
+ */
 class ChangeOrderStatusApiTest extends OrderApiTest {
 
   @Test
@@ -30,6 +33,34 @@ class ChangeOrderStatusApiTest extends OrderApiTest {
       changeStatus(id, status).expectStatus().isOk();
     }
     assertThat(read(id).status()).isEqualTo("DELIVERED");
+  }
+
+  /** The returns Saga marks an Order returned once every unit it delivered is refunded. */
+  @Test
+  void aDeliveredOrderCanBeReturnedAndNothingElseCan() {
+    var path = new String[] {"PLACED", "PAID", "FULFILLED", "SHIPPED", "DELIVERED"};
+    for (var reached = 0; reached < path.length - 1; reached++) {
+      var id = placed().id();
+      for (var step = 1; step <= reached; step++) {
+        changeStatus(id, path[step]).expectStatus().isOk();
+      }
+      changeStatus(id, "RETURNED").expectStatus().isEqualTo(409);
+      assertThat(read(id).status()).isEqualTo(path[reached]);
+    }
+    var cancelled = placed().id();
+    changeStatus(cancelled, "CANCELLED").expectStatus().isOk();
+    changeStatus(cancelled, "RETURNED").expectStatus().isEqualTo(409);
+
+    var id = placed().id();
+    for (var step = 1; step < path.length; step++) {
+      changeStatus(id, path[step]).expectStatus().isOk();
+    }
+    changeStatus(id, "RETURNED")
+        .expectStatus()
+        .isOk()
+        .expectBody(OrderView.class)
+        .value(returned -> assertThat(returned.status()).isEqualTo("RETURNED"));
+    changeStatus(id, "RETURNED").expectStatus().isEqualTo(409);
   }
 
   @Test

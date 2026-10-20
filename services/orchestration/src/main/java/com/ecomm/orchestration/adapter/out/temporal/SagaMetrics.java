@@ -3,13 +3,20 @@ package com.ecomm.orchestration.adapter.out.temporal;
 import com.ecomm.orchestration.application.port.in.CheckoutOutcome;
 import com.ecomm.orchestration.application.port.in.FulfillmentOutcome;
 import com.ecomm.orchestration.application.port.in.FulfillmentWorkflow;
+import com.ecomm.orchestration.application.port.in.ReturnsOutcome;
+import com.ecomm.orchestration.application.port.in.ReturnsWorkflow;
 import com.ecomm.orchestration.application.port.out.CaptureActivities;
 import com.ecomm.orchestration.application.port.out.CartActivities;
 import com.ecomm.orchestration.application.port.out.CheckoutSessionActivities;
 import com.ecomm.orchestration.application.port.out.InventoryActivities;
 import com.ecomm.orchestration.application.port.out.OrderActivities;
 import com.ecomm.orchestration.application.port.out.OrderFulfillmentActivities;
+import com.ecomm.orchestration.application.port.out.OrderReturnActivities;
 import com.ecomm.orchestration.application.port.out.PaymentActivities;
+import com.ecomm.orchestration.application.port.out.RefundActivities;
+import com.ecomm.orchestration.application.port.out.ReplacementActivities;
+import com.ecomm.orchestration.application.port.out.ReturnsInventoryActivities;
+import com.ecomm.orchestration.application.port.out.RmaActivities;
 import com.ecomm.orchestration.application.port.out.ShipmentActivities;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tag;
@@ -75,7 +82,19 @@ class SagaMetrics {
               List.of(
                   ShipmentActivities.class,
                   CaptureActivities.class,
-                  OrderFulfillmentActivities.class)));
+                  OrderFulfillmentActivities.class)),
+          new Saga(
+              ReturnsWorkflow.TASK_QUEUE,
+              "returns",
+              List.of(
+                  new Counter("workflows", "outcome", names(ReturnsOutcome.Status.values())),
+                  new Counter("holds", "kind", ReturnsWorkflow.HOLDS)),
+              List.of(
+                  RmaActivities.class,
+                  ReturnsInventoryActivities.class,
+                  RefundActivities.class,
+                  ReplacementActivities.class,
+                  OrderReturnActivities.class)));
 
   private final MeterRegistry registry;
   private final String namespace;

@@ -12,8 +12,9 @@ event. Built from [`platform/service-template`](../../platform/service-template/
 layout, security and testing conventions apply here.
 
 The returns Saga that drives an RMA from approval to resolution, restocking, refunding and
-replacing on the way, is Orchestration's (ticket #88); until it runs, its steps can be taken by hand
-with Orchestration's token, as [the `.http` file](./http/returns-warranty.http) does.
+replacing on the way, is [Orchestration's](../orchestration/README.md#the-returns-saga), started by
+an RMA's `APPROVED` event. Its steps can also be taken by hand with Orchestration's token, as [the
+`.http` file](./http/returns-warranty.http) does.
 
 ## API
 
@@ -21,7 +22,7 @@ with Orchestration's token, as [the `.http` file](./http/returns-warranty.http) 
 |---|---|---|
 | `POST /rmas` | a Customer, with an `Idempotency-Key` | Request an RMA: 201, `REQUESTED` |
 | `GET /rmas/eligibility?orderId=` | a Customer | What each line of their delivered Order is still eligible for |
-| `GET /rmas/{id}` | the RMA's Customer, or Staff | Read it; anyone else's is a 404 |
+| `GET /rmas/{id}` | the RMA's Customer, Staff, or Orchestration | Read it; anyone else's is a 404. The returns Saga reads its RMA again while it awaits a step |
 | `GET /rmas?status=&orderId=&page=&size=` | a Customer, or Staff | A page of RMAs: a Customer's own, or for Staff everyone's (the RMA queue) |
 | `POST /rmas/{id}/approve` | Staff | Approve it, with an optional `note` |
 | `POST /rmas/{id}/reject` | Staff | Reject it, with a required `reason` |
@@ -135,8 +136,8 @@ the first answer and changes nothing.
   `RETURNED`.
 - **Holding**, `{"reason"}`, is for a declined Refund; **expiring** takes no body.
 
-The returns Saga isn't built to the RMA's state: it takes these steps when their events tell it to,
-and a step it repeats under its key is answered again.
+The returns Saga takes these steps when their events tell it to, reading the RMA when an event
+may have been lost, and a step it repeats under its key is answered again.
 
 ### Eligibility
 

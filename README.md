@@ -46,7 +46,9 @@ The first build takes several minutes. Then open the Storefront on http://localh
 7. once an Order is delivered, request an RMA for it through the API: a return within the 14-day
    Return Period, or a warranty claim within the Warranty Window, naming the IMEI or serial number
    of a serial-tracked unit ([Returns & Warranty](./services/returns-warranty/README.md) and its
-   [`.http` file](./services/returns-warranty/http/returns-warranty.http)). The Storefront's form
+   [`.http` file](./services/returns-warranty/http/returns-warranty.http)). Once Staff approve it,
+   the returns Saga in [Orchestration](./services/orchestration/README.md#the-returns-saga) awaits
+   its units, then refunds, replaces or closes it as its Inspection says. The Storefront's form
    comes in Sprint 6.
 
 The payment gateway is mocked, and each test card stands for a Payment method:
@@ -172,8 +174,10 @@ dashboards, under **ecomm**, are files in [`infra/docker/grafana`](./infra/docke
   `FAILED`), step failures by step, compensations by kind, and Temporal's own activity failures and
   workflow durations; and a Fulfillment row, with fulfillments by outcome (`DELIVERED`,
   `CAPTURE_REFUSED`, `DELIVERY_UNCONFIRMED`, `FAILED`), step failures by step, Shipments on hold by
-  kind, the lag of Orchestration's `orchestration.orders` and `orchestration.shipments` groups, and
-  workflow durations.
+  kind, the lag of Orchestration's `orchestration.orders`, `orchestration.shipments` and
+  `orchestration.rmas` groups, and workflow durations; and a Returns row, with returns by outcome
+  (`REFUNDED`, `EXCHANGED`, `CLOSED`, `EXPIRED`, `REFUND_REFUSED`), step failures by step, RMAs on
+  hold by kind, and Temporal's own activity failures.
 
 A panel plotting `rate()` or `increase()` counts a series only from its second sample, so a
 counter has to be on `/actuator/prometheus` at 0 before its first count, or that count is missed.

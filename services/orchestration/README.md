@@ -8,7 +8,7 @@ security and testing conventions apply here.
 It has no public API, and the gateway doesn't route it. Over HTTP it serves only its health and its
 metrics (`/actuator/health`, `/actuator/prometheus`); it publishes no host port. Checkout starts
 its workflow through Temporal's client, never over HTTP to Orchestration, and Orchestration starts
-and wakes the fulfillment Saga itself from the events it consumes. It publishes none.
+and wakes the fulfillment and returns Sagas itself from the events it consumes. It publishes none.
 
 ## Workflows
 
@@ -16,6 +16,7 @@ and wakes the fulfillment Saga itself from the events it consumes. It publishes 
 |---|---|---|
 | `checkout` | `checkout` | The checkout Saga ([below](#the-checkout-saga)), which Checkout starts when a Customer pays a Checkout Session |
 | `fulfillment` | `fulfillment` | The fulfillment Saga ([below](#the-fulfillment-saga)), which Orchestration starts when an Order is paid |
+| `returns` | `returns` | The returns Saga ([below](#the-returns-saga)), which Orchestration starts when an RMA is approved |
 
 The workers, their workflow classes and their activity beans are declared in `application.yml`
 under `spring.temporal.workers`, through Temporal's Spring Boot starter. Workflow interfaces are
@@ -114,7 +115,7 @@ pre-Sprint 5 Orders were paid before the group existed anyway.
 **Waking it.** The same listener consumes `fulfillment-shipping.shipment` in the group
 `orchestration.shipments`, and signals `fulfillment:<orderId>` (`shipmentChanged`) with the
 Shipment's ID, version and status. A replacement Shipment's event (`kind` `REPLACEMENT`) signals its
-RMA's returns Saga, `returns:<rmaId>`, the same way instead, and never a fulfillment Saga; an event
+RMA's [returns Saga](#the-returns-saga), `returns:<rmaId>`, the same way instead, and never a fulfillment Saga; an event
 without `kind` is an Order's Shipment's. The workflow ignores a version it has seen, or an older one, so a
 duplicate or a stale event changes nothing. A signal for a Saga that doesn't exist, or has ended, is
 logged and skipped, not dead-lettered. Either group's dead-letter and redrive topics are
@@ -175,6 +176,86 @@ is done:
 A status read this way carries no version, so it counts only when it is further along than the
 events seen so far.
 
+## The returns Saga
+
+`ReturnsSaga` takes one approved RMA to its resolution, with the workflow ID `returns:<rmaId>`.
+
+**Starting it.** `RmaListener` consumes `returns-warranty.rma` in the group `orchestration.rmas`.
+Unlike `orchestration.orders`, it read from the earliest offset when it first started, so the RMAs
+approved in Sprint 5 started their Saga on upgrade; from then on it resumes where it left off. An
+`APPROVED` event starts the Saga, with the RMA's ID, reference, Order, Customer, Variant, quantity,
+kind, Refund amount and `sendBackBy` (either may be absent on a Sprint 5 RMA), and the event's
+Correlation ID. The reuse policy refuses a second start, as for fulfillment, so a redelivered or
+replayed event starts nothing.
+
+**Waking it.** Each later RMA event signals `returns:<rmaId>` (`rmaChanged`) with its version and
+status, and each replacement Shipment event (`shipmentChanged`, through `orchestration.shipments`)
+with the Shipment's ID, version and status. The workflow ignores a version it has seen, or an older
+one. A signal for a Saga that doesn't exist, or has ended, such as for a `REQUESTED` RMA or the
+`REFUNDED` event its own resolution publishes, is logged and skipped, not dead-lettered.
+
+It answers `{"status", "refundReference", "replacementShipmentId", "holdReason"}`, `status` being
+`REFUNDED`, `EXCHANGED`, `CLOSED`, `EXPIRED` or `REFUND_REFUSED`. The steps, in order:
+
+1. **Read the RMA** (`GET /rmas/{id}` on Returns & Warranty, step `findRma`), retried until it
+   answers. A run that finds it `EXPIRED`, `REFUNDED`, `EXCHANGED`, `CLOSED` or `ON_HOLD` ends as the
+   first run did, calling nothing more (see "Taking up an RMA" below). Found `RECEIVED`, it skips
+   step 2; found `INSPECTED`, steps 2 and 3.
+2. **Await `RECEIVED` until the Send-back deadline**, the RMA's `sendBackBy` as read, a durable
+   timer. When it fires, **expire the RMA** (`POST /rmas/{id}/expire`): the outcome is `EXPIRED`. A
+   `409` (`transitionRefused`) says the units were received meanwhile, and the run goes on. A
+   deadline already past, as for a Sprint 5 RMA approved long ago, expires it at once.
+3. **Await `INSPECTED`**, with no deadline. Each `ecomm.orchestration.inspection-check` (1 hour)
+   without an `INSPECTED` event, the RMA is read again, so a run whose event never comes goes on
+   once the read says it is inspected. The RMA is then read once more for its Inspection.
+4. **An accepted return** (`ACCEPTED`): **restock** its units (`POST /stock/{variantId}/restocks`
+   on Inventory, naming the RMA reference), **refund** it (below), and **resolve it `REFUNDED`**
+   (`POST /rmas/{id}/resolve`) with the Refund's gateway reference.
+5. **A confirmed fault** (`FAULT_CONFIRMED`): **reserve** the quantity for `rma:<rmaId>` (`POST
+   /reservations`, held 15 minutes) and **commit** it (`POST /reservations/{id}/commit`); one that
+   lapsed before its commit is reserved again. A `409` (`insufficientStock`) refunds it instead, as
+   in step 4 but without restocking, resolved with the note "No replacement in Stock". Otherwise
+   **create the replacement** (`POST /shipments` with `kind` `REPLACEMENT` and the `rmaId`, to the
+   Order Shipment's address and Shipping option, read by Order), **await `PACKED`** with the
+   replacement read again by RMA each `packing-check`, **dispatch** it, and **resolve it
+   `EXCHANGED`** with the replacement's ID. A `409` (`shipmentExists`) on creating it is read by RMA
+   (`GET /shipments?rmaId=`), never by Order, which would answer the Order's own Shipment; one found
+   `SHIPPED` isn't dispatched again. Its delivery is followed on the Shipment, not by the Saga.
+6. **A refusing Inspection** (`REFUSED`, `NO_FAULT_FOUND`): **resolve it `CLOSED`** with the
+   Inspection's note. Nothing is restocked or refunded.
+7. **When resolving answers `orderFullyRefunded`**, mark the Order `RETURNED` (`PATCH
+   /orders/{id}/status`). A refusal, for an Order that isn't `DELIVERED`, is logged, not retried.
+
+**Refunding.** The Order's Payments are read (step `findRefundablePayment`, Payment's read by
+Order), and the captured or partly refunded one is refunded (`POST /payments/{id}/refunds`) the
+RMA's Refund amount as it is: what refunding all its units gives back, never multiplied by its
+quantity. A Payment that already has an approved Refund for the RMA reference isn't refunded again.
+A `402 refundDeclined` **holds the RMA** (`POST /rmas/{id}/hold`) with the reason `Refund declined:
+<declineReason>`; a Refund still failing after about a minute, or an Order with no captured
+Payment, holds it with `Refund failed: …`, unless Payment, read again, shows an attempt whose answer
+was lost refunded it after all. Either way the outcome is `REFUND_REFUSED`, and a restock already
+made stays. Resolving a hold is out of scope. An RMA without a Refund amount yet, approved in Sprint
+5 before its Order was projected, is read again each `inspection-check` until it has one.
+
+Once a unit is restocked or a Reservation committed, nothing is compensated: every later step is
+retried until it succeeds. Each attempt has the checkout Saga's 30 seconds, and each command carries
+the `Idempotency-Key` `returns:<rmaId>:<runId>:<step>` (`expireRma`, `restock`, `refundPayment`,
+`resolveRma`, `holdRma`, `createReplacement`, `dispatchReplacement`, `markOrderReturned`). Reserving
+and committing need none: Inventory answers the RMA's Reservation again for the same owner. Every
+call carries the Correlation ID of the `APPROVED` event.
+
+**Taking up an RMA.** A second run starts when the RMA's `APPROVED` event is replayed after Temporal
+stopped keeping the first (7 days), or on upgrade, from a Sprint 5 event of an RMA that has moved on.
+Its keys carry its own run ID, so it reads the RMA first and goes on from its status. A first run
+closes only once the RMA is expired, resolved or held, so a second finds it so and ends at once,
+counting nothing. Only a run terminated by hand after restocking and before resolving could leave a
+second run to restock again; the Refund it would not make twice.
+
+**Versioning.** A returns Saga can wait months, for its units and then for its Inspection, so the
+rule in [Changing the workflow](#changing-the-workflow) applies to it from its release: every change
+to its steps or payloads branches on `Workflow.getVersion`, or reads old payloads as they were.
+Waiting for the running Sagas to drain isn't an option.
+
 ### Changing the workflow
 
 Workflow code must replay the same way every time: no I/O, clock, randomness or threads of its own,
@@ -215,7 +296,11 @@ with the task queue, workflow and activity type):
 - `checkout_compensations_total{kind}`: `cancelOrder` and `voidPayment`;
 - `fulfillment_workflows_total{outcome}`: fulfillment runs by outcome;
 - `fulfillment_step_failures_total{step}`: failed attempts of each fulfillment step;
-- `fulfillment_holds_total{kind}`: Shipments held, `captureDeclined` or `captureFailed`.
+- `fulfillment_holds_total{kind}`: Shipments held, `captureDeclined` or `captureFailed`;
+- `returns_workflows_total{outcome}`: returns runs by outcome, a run that finds its RMA final
+  already not counted again;
+- `returns_step_failures_total{step}`: failed attempts of each returns step;
+- `returns_holds_total{kind}`: RMAs held, `refundDeclined` or `refundFailed`.
 
 A step's failure is counted under its Saga's workflow type, so an activity shared by both Sagas
 would count in each. Temporal's Spring Boot starter reports them to Micrometer every 10 seconds, its
@@ -223,8 +308,8 @@ fixed interval, but only once it has counted something. So that Prometheus has e
 first count, which `increase()` would otherwise miss, `SagaMetrics` registers every outcome, step,
 compensation and kind of hold at 0 when Orchestration starts, with the tags Temporal's scopes give
 them. It reads the steps from each Saga's activity interfaces, but a compensation or kind of hold
-added to a Saga is added there by hand. Grafana's **Sagas** dashboard shows them, in a Checkout and
-a Fulfillment row, the latter with the lag of the two consumer groups
+added to a Saga is added there by hand. Grafana's **Sagas** dashboard shows them, in a Checkout, a
+Fulfillment and a Returns row, the Fulfillment row with the lag of Orchestration's consumer groups
 ([infra/docker/grafana](../../infra/docker/grafana)).
 
 ## Temporal
@@ -288,12 +373,26 @@ Orchestration calls:
   `DELIVERY_UNCONFIRMED` at the delivery deadline (10 seconds here, so the test shows the setting is
   the one honoured), an event for no running Saga skipped, not dead-lettered, and a replacement
   Shipment's event signalling a stand-in `returns:<rmaId>` run, never the Order's fulfillment, or
-  skipped when no returns Saga runs. It has a test
+  skipped when no returns Saga runs (`ReturnsWorkflowTest` shows the real Saga acting on it). It has a test
   server of its own with time skipping off, so the Saga waits for the test's events in real time.
   Its own, too, because a Saga terminated while a workflow task is outstanding leaves a test
   server's time skipping locked for good (its completion is refused, and its lock never released):
   on the shared server, later classes' retries would wait in real time;
 - `FulfillmentMetricsTest`: every fulfillment counter at 0 before any run;
+- `ReturnsWorkflowTest`: the returns Saga from Kafka in to WireMock out, on a test server of its
+  own with time skipping on (on the shared one, runs earlier classes left there, taken up by this
+  context's other workers, kept time from jumping): an approved RMA expired once time passes its Send-back deadline, a receipt
+  signalled just before the timer winning, an expiry refused as received going on and the hourly
+  read finding an Inspection whose event was lost, an accepted return restocked, refunded its Refund
+  amount as it is and resolved with its keys and the Correlation ID and its Order then returned (or
+  left, when other units aren't refunded), a confirmed fault reserved, committed, replaced,
+  dispatched once its replacement's PACKED event comes and exchanged, a replacement that exists read
+  by RMA, no Stock refunding without restocking, a declined Refund and one that keeps failing holding
+  the RMA, a 503 on restock retried with its key, the same approval twice and a replay after it
+  closed starting nothing more, a run finding its RMA resolved already, and duplicate and stale RMA
+  events ignored. A test that sends events holds time still meanwhile (`lockTimeSkipping`), and every
+  run left open is cancelled, not terminated, so time skipping is left as it was;
+- `ReturnsMetricsTest`: every returns counter at 0 before any run;
 - `ServiceTokenTest`: the token's caching, renewal and retry on a 401;
 - `HealthApiTest`: health is public, and there is no API;
 - `ArchitectureTest`: the shared `HexagonalRules`, and workflow code reaching other contexts only

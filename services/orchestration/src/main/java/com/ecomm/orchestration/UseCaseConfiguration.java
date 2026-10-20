@@ -25,9 +25,12 @@ class UseCaseConfiguration {
     return new FulfillmentService(workflows, deliveryDeadline, packingCheck);
   }
 
-  /** Wakes the returns Saga with its replacement Shipment's events. */
+  /** Starts and wakes the returns Saga from RMA events and its replacement Shipment's. */
   @Bean
-  ReturnsService returnsService(ReturnsWorkflows workflows) {
-    return new ReturnsService(workflows);
+  ReturnsService returnsService(
+      ReturnsWorkflows workflows,
+      @Value("${ecomm.orchestration.inspection-check}") Duration inspectionCheck,
+      @Value("${ecomm.orchestration.packing-check}") Duration packingCheck) {
+    return new ReturnsService(workflows, inspectionCheck, packingCheck);
   }
 }

@@ -9,7 +9,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * A Customer reads their own RMAs and nobody else's; Staff read any, and list them by status,
- * oldest first, a page at a time.
+ * oldest first, a page at a time. Orchestration reads any one, as the returns Saga re-reads its
+ * RMA, but lists none.
  */
 class ReadRmasApiTest extends RmasApiTest {
 
@@ -33,7 +34,7 @@ class ReadRmasApiTest extends RmasApiTest {
   }
 
   @Test
-  void aCustomerReadsTheirOwnRmaAndStaffReadAny() {
+  void aCustomerReadsTheirOwnRmaAndStaffAndOrchestrationReadAny() {
     var charger = newVariant("CHARGER");
     var shipment =
         Shipments.shipment(CUSTOMER_ID).line(charger, "Charger", 1, "NONE").delivered(RECENTLY);
@@ -42,7 +43,13 @@ class ReadRmasApiTest extends RmasApiTest {
     assertThat(readRma(CUSTOMER, rma.id())).isEqualTo(rma);
     assertThat(readRma(STAFF, rma.id())).isEqualTo(rma);
     read(OTHER_CUSTOMER, rma.id()).expectStatus().isNotFound();
-    read(ORCHESTRATION, rma.id()).expectStatus().isForbidden();
+    assertThat(readRma(ORCHESTRATION, rma.id())).isEqualTo(rma);
+    http.get()
+        .uri("/rmas")
+        .headers(h -> h.setBearerAuth(ORCHESTRATION))
+        .exchange()
+        .expectStatus()
+        .isForbidden();
     read(CUSTOMER, "not-an-id").expectStatus().isNotFound();
   }
 

@@ -15,3 +15,4 @@ returns-warranty.products
 returns-warranty.orders
 orchestration.orders
 orchestration.shipments
+orchestration.rmas

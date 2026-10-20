@@ -525,7 +525,8 @@ services:
     depends_on:
       temporal-namespace: { condition: service_completed_successfully }
       keycloak-realm: { condition: service_completed_successfully }
-      # It consumes Order and Shipment events, which start and wake the fulfillment Saga.
+      # It consumes Order, Shipment and RMA events, which start and wake the fulfillment and returns
+      # Sagas.
       kafka-topics: { condition: service_completed_successfully }
 
   # The one way in for browsers: authenticates at the edge and routes /api/<service>/** to the
