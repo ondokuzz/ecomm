@@ -9,7 +9,7 @@ import { Icon } from '../components/ui/Icon'
 import { pageCount } from '../domain/order'
 import { balanceOf, movementRowsOf, movementsPageSize } from '../domain/stock'
 
-const columns = 6
+const columns = 7
 
 /**
  * `/products/:sku/stock/:variantId`: a Variant's Stock movements, newest first, a page at a time
@@ -45,8 +45,9 @@ export function StockMovementsPage() {
         )}
       </div>
       <p className="muted page-intro">
-        Every change to the Variant's On-hand units, or to what Reservations hold of them, newest first. Movements are
-        never changed; set On-hand in the Product editor.
+        Every change to the Variant's On-hand units, or to what Reservations hold of them, newest first. A return's
+        restock and a replacement's Reservation name their RMA. Movements are never changed; set On-hand in the Product
+        editor.
       </p>
 
       {movements.error ? (
@@ -96,6 +97,7 @@ export function StockMovementsPage() {
                   </th>
                   <th scope="col">Reservation</th>
                   <th scope="col">Reason</th>
+                  <th scope="col">Reference</th>
                   <th scope="col">When</th>
                 </tr>
               </thead>
@@ -117,6 +119,7 @@ export function StockMovementsPage() {
                         <code>{row.reservation}</code>
                       </td>
                       <td>{row.reason}</td>
+                      <td>{row.rmaId ? <Link to={`/rmas/${row.rmaId}`}>{row.reference}</Link> : row.reference}</td>
                       <td>
                         <time dateTime={row.at}>{row.time}</time>
                       </td>

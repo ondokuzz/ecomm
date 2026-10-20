@@ -108,7 +108,9 @@ A stocked Variant's row in the editor has a **Movements** link to
 [Inventory README](../../services/inventory/README.md#stock-movements)). The page lives in the URL
 as `?page=`. Each movement shows its kind (Adjusted, Reserved, Released, Committed, Received or
 Restocked), its On-hand change and reserved change, signed as `+3` or `−2`, the Reservation that
-made it, Staff's reason and its time to the second. Above them are the Variant's On-hand, the
+made it, Staff's reason, its reference and its time to the second. The reference is the RMA a
+return's restock or a replacement's Reservation was for, as its RMA reference (`RMA-3F2A9C1B`);
+Inventory names a replacement's RMA by ID, so that one links to its RMA page. Above them are the Variant's On-hand, the
 On-hand its movements add up to, and whether the two balance. `movementRowsOf` and `balanceOf` in
 [`src/domain/stock.ts`](./src/domain/stock.ts) do this. The page is read only: Staff still change
 only On-hand, in the editor, and each change shows here as an Adjusted movement with no reason.

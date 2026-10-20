@@ -23,7 +23,8 @@ beside the Stock counter, so On-hand can be checked against it, and is published
 | `PUT /stock/{variantId}` | Staff | Sets on-hand Stock: 201 for a new Variant, 200 otherwise |
 | `GET /stock/{variantId}/movements` | Staff | A page of the Variant's Stock movements, newest first, and whether On-hand equals their sum |
 | `DELETE /stock/{variantId}` | Staff | Stops stocking a Variant: 204; 404 for an unknown Variant, 409 while Reservations hold some |
-| `POST /reservations` | Checkout | Holds a batch for a Customer until `expiresAt`; 201 with the Reservation |
+| `POST /stock/{variantId}/restocks` | Orchestration | Puts returned units back on hand, naming the RMA: 200 with the Stock. Takes an `Idempotency-Key` |
+| `POST /reservations` | Checkout, Orchestration | Holds a batch for a Customer, or for an RMA's replacement, until `expiresAt`; 201 with the Reservation |
 | `POST /reservations/{id}/commit` | Orchestration | Takes the held Stock off on-hand for good |
 | `POST /reservations/{id}/release` | Checkout | Gives the held Stock back |
 
@@ -37,6 +38,16 @@ the Variant if Inventory doesn't stock it yet. Setting it below `reserved` is a 
 says how many units Reservations hold; a negative or non-integer count, or a reason that is too
 long, is a 400.
 
+The returns Saga restocks the units of an accepted return with Orchestration's own token
+(`ORCHESTRATION`), which only it may do: `{"quantity": 1, "reference": "RMA-3F2A9C1B"}`. It
+records a `RESTOCKED` movement naming the reference, raises On-hand, publishes the Variant's Stock
+with change `RESTOCKED`, and the Stock cache follows, as for every change. It answers 200 with the
+Stock, as `GET /stock/{variantId}` does. It needs an `Idempotency-Key` (400
+`idempotencyKeyRequired` without one); the same key again replays the first answer, with
+`Idempotent-Replayed: true`, and restocks nothing more. A quantity below 1, or a reference that is
+missing or longer than 64 characters, is a 400; a Variant Inventory doesn't stock is a 404 with
+`unknownVariants`. Staff, Checkout and Customers get 403.
+
 Staff stop stocking a Variant when its Product leaves the Catalog; the
 [Admin Console](../../frontend/admin-console/README.md) does it when it deletes a Product. Its
 stock is then a 404, and reserving it is a 404 with `unknownVariants`, until Staff set its on-hand
@@ -47,14 +58,17 @@ The Reservation endpoints are internal, and the API gateway doesn't route them. 
 releasing need Checkout's own token, with the `CHECKOUT` role
 ([ADR 0002](../identity-access/docs/adr/0002-service-identity-by-client-credentials.md)); the
 checkout Saga commits a Reservation with Orchestration's own token (`ORCHESTRATION`), which only it
-may do since Checkout moved onto the Saga (#60). Committing takes no
+may do since Checkout moved onto the Saga (#60). The returns Saga reserves and commits a
+replacement unit with Orchestration's token too, for an RMA ([below](#reservations-for-an-rma)).
+Committing takes no
 `Idempotency-Key`: committing a `COMMITTED` Reservation again changes nothing and answers the same
 200. On all of these a Customer's or the other role's token gets
 403, and no token gets 401.
 
 ### Reservations
 
-A Reservation holds a batch of Variants for one Customer, all or nothing:
+A Reservation holds a batch of Variants for one owner, all or nothing. The owner is a Customer, or
+an RMA ([below](#reservations-for-an-rma)), named in `customerId`:
 
 ```json
 {"customerId": "…", "expiresAt": "2026-09-30T10:15:00Z",
@@ -83,6 +97,23 @@ belongs to another Customer, is a 404.
 - **Release** gives its units back, and releasing again changes nothing. A committed Reservation
   can't be released: a 409 with `reservationCommitted`.
 
+### Reservations for an RMA
+
+The returns Saga holds the replacement unit of a warranty claim with a Reservation owned by the
+RMA: its `customerId` is `rma:<rmaId>`, and it commits it with the same owner. Checkout reserves
+only for Customers and Orchestration only for RMAs; reserving for the other kind of owner is a 403.
+Checkout can't release an RMA's Reservation either (403), and Orchestration releases none.
+
+- An RMA has at most one Reservation not yet released. Asking again for an RMA whose Reservation
+  is committed, or still holds its Stock, answers it with 200, holding nothing more, so a retried
+  step reserves once. A unique index on the owner backs this up.
+- One that expired before it was committed, with Orchestration down meanwhile, can never be
+  committed. Asking again releases it, recording its `RELEASED` movements as the sweeper would,
+  and makes a new one: 201.
+- Too little Stock is the 409 with `insufficientStock`, which the returns Saga reads as "replace
+  with a Refund".
+- Its `RESERVED`, `COMMITTED` and `RELEASED` movements name the owner as their `reference`.
+
 **Expiry.** An `ACTIVE` Reservation stops holding Stock the moment its `expiresAt` passes, so its
 units are available again straight away. Every 30 seconds a sweeper marks expired `ACTIVE`
 Reservations `RELEASED`, recording their `RELEASED` movements and publishing their Variants' Stock.
@@ -102,20 +133,25 @@ it changed On-hand (`onHandChange`) and what Reservations hold (`reservedChange`
 | `RESERVED` | A Reservation is made, one per Variant | 0 | + its quantity |
 | `RELEASED` | A Reservation is released, by Checkout or by the sweeper once it has expired | 0 | − its quantity |
 | `COMMITTED` | A Reservation is committed | − its quantity | − its quantity |
-| `RECEIVED`, `RESTOCKED` | Units arrive from a supplier, or a return goes back on hand. Unused until replenishment and returns exist | + | 0 |
+| `RESTOCKED` | The returns Saga puts a return's units back on hand, naming its RMA reference | + its quantity | 0 |
+| `RECEIVED` | Units arrive from a supplier. Unused until replenishment exists | + | 0 |
 
 Setting On-hand to what it already is, committing or releasing a Reservation again, and anything
 refused record nothing. A movement made by a Reservation names it as `reservationId`; otherwise,
-like a missing `reason`, it is `null`.
+like a missing `reason`, it is `null`. `reference` is what it was for: a restock's RMA reference,
+or `rma:<rmaId>` for the movements of an RMA's Reservation; it is `null` for every other movement,
+and for every movement recorded before Sprint 6.
 
 `GET /stock/{variantId}/movements?page=0&size=20` (Staff only; `size` up to 100) answers:
 
 ```json
 {"variantId": "PHN-PIXEL-9", "onHand": 23, "onHandFromMovements": 23, "balanced": true,
  "items": [{"kind": "COMMITTED", "onHandChange": -2, "reservedChange": -2,
-            "reservationId": "…", "reason": null, "at": "2026-10-05T10:00:00Z"},
+            "reservationId": "…", "reason": null, "reference": "rma:…",
+            "at": "2026-10-05T10:00:00Z"},
            {"kind": "ADJUSTED", "onHandChange": 25, "reservedChange": 0,
-            "reservationId": null, "reason": "opening balance", "at": "2026-10-04T09:00:00Z"}],
+            "reservationId": null, "reason": "opening balance", "reference": null,
+            "at": "2026-10-04T09:00:00Z"}],
  "page": 0, "size": 20, "total": 2}
 ```
 
@@ -219,6 +255,9 @@ sequence on every write. Stock movements are `stock_movement` rows, only ever in
 newest first by their generated ID; like `reservation_item`, they name their Variant without a
 foreign key. Spring Modulith's `event_publication` table is the outbox, and
 `stock_awaiting_backfill_event` lists the Variants the startup job has still to publish.
+`idempotency_key` holds the keys of restocks, for service-commons' `@IdempotentCommand`, and a
+partial unique index on `reservation (customer_id)` keeps an RMA to one Reservation not yet
+released.
 
 ## Seed data
 

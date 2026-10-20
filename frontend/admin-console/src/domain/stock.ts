@@ -3,15 +3,15 @@ import type { Page } from './paging'
 
 /**
  * What a Stock movement records: Staff setting On-hand, a Reservation made, released or committed,
- * or units arriving from a supplier or a return. The last two are unused until replenishment and
- * returns exist.
+ * or units arriving from a supplier or a return. `RECEIVED` is unused until replenishment exists.
  */
 export type StockMovementKind = 'ADJUSTED' | 'RESERVED' | 'RELEASED' | 'COMMITTED' | 'RECEIVED' | 'RESTOCKED'
 
 /**
  * One change to a Variant's On-hand units, or to what Reservations hold of them, recorded for
- * good. `reservationId` names the Reservation that made it, and `reason` is Staff's; each is null
- * otherwise.
+ * good. `reservationId` names the Reservation that made it, `reason` is Staff's, and `reference`
+ * is what it was for: a restock's RMA reference, or `rma:<rmaId>` for the movements of the
+ * Reservation an RMA's replacement is held with. Each is null otherwise.
  */
 export interface StockMovement {
   kind: StockMovementKind
@@ -19,6 +19,7 @@ export interface StockMovement {
   reservedChange: number
   reservationId: string | null
   reason: string | null
+  reference: string | null
   at: string
 }
 
@@ -46,6 +47,10 @@ export interface MovementRow {
   reservation: string
   /** Staff's reason, or a dash when none was given. */
   reason: string
+  /** The RMA reference it was for, such as `RMA-3F2A9C1B`, or a dash. */
+  reference: string
+  /** The RMA to link the reference to, when Inventory names it by ID. */
+  rmaId: string | null
   /** The instant, for `<time dateTime>`. */
   at: string
   /** When, in the Staff member's own time zone, to the second. */
@@ -57,6 +62,20 @@ function signed(change: number): string {
   return change > 0 ? `+${change}` : change < 0 ? `−${-change}` : '0'
 }
 
+/** How Inventory names an RMA that owns a Reservation: `rma:<rmaId>`. */
+const rmaOwnerPrefix = 'rma:'
+
+/**
+ * A movement's reference as Staff read it: a restock's as given, and an RMA named by ID as its
+ * RMA reference, `RMA-` and the start of its ID, upper-cased.
+ */
+function referenceOf(reference: string | null): Pick<MovementRow, 'reference' | 'rmaId'> {
+  if (reference === null) return { reference: '—', rmaId: null }
+  if (!reference.startsWith(rmaOwnerPrefix)) return { reference, rmaId: null }
+  const rmaId = reference.slice(rmaOwnerPrefix.length)
+  return { reference: `RMA-${rmaId.slice(0, 8).toUpperCase()}`, rmaId }
+}
+
 /** A Variant's Stock movements for Staff, in the order Inventory gives them. */
 export function movementRowsOf(movements: StockMovement[], locale?: string): MovementRow[] {
   return movements.map((movement) => ({
@@ -65,6 +84,7 @@ export function movementRowsOf(movements: StockMovement[], locale?: string): Mov
     reservedChange: signed(movement.reservedChange),
     reservation: movement.reservationId ?? '—',
     reason: movement.reason ?? '—',
+    ...referenceOf(movement.reference),
     at: movement.at,
     time: formatTime(movement.at, locale),
   }))

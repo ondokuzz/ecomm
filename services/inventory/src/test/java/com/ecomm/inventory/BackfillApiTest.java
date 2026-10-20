@@ -31,8 +31,8 @@ class BackfillApiTest extends InventoryApiTest {
 
     assertThat(ledger.changes())
         .containsExactly(
-            new MovementView("RESERVED", 0, 2, ACTIVE_RESERVATION, "opening balance", null),
-            new MovementView("ADJUSTED", 9, 0, null, "opening balance", null));
+            new MovementView("RESERVED", 0, 2, ACTIVE_RESERVATION, "opening balance", null, null),
+            new MovementView("ADJUSTED", 9, 0, null, "opening balance", null, null));
     assertThat(ledger.balanced()).isTrue();
   }
 
@@ -51,9 +51,9 @@ class BackfillApiTest extends InventoryApiTest {
 
     assertThat(ledger.changes())
         .containsExactly(
-            new MovementView("RELEASED", 0, -3, EXPIRED_RESERVATION, null, null),
-            new MovementView("RESERVED", 0, 3, EXPIRED_RESERVATION, "opening balance", null),
-            new MovementView("ADJUSTED", 5, 0, null, "opening balance", null));
+            new MovementView("RELEASED", 0, -3, EXPIRED_RESERVATION, null, null, null),
+            new MovementView("RESERVED", 0, 3, EXPIRED_RESERVATION, "opening balance", null, null),
+            new MovementView("ADJUSTED", 5, 0, null, "opening balance", null, null));
     assertThat(ledger.balanced()).isTrue();
   }
 

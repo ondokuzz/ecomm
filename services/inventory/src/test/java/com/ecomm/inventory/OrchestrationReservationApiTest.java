@@ -7,8 +7,9 @@ import org.junit.jupiter.api.Test;
 
 /**
  * The checkout Saga commits a Customer's Reservation with Orchestration's own token, naming the
- * Customer in the body. Committing is naturally idempotent, so it takes no key. Holding and
- * releasing Stock stay Checkout's, and committing is Orchestration's alone.
+ * Customer in the body. Committing is naturally idempotent, so it takes no key. Holding Stock for a
+ * Customer and releasing it stay Checkout's, and committing is Orchestration's alone. Orchestration
+ * holds Stock only for an RMA ({@link RmaReservationApiTest}).
  */
 class OrchestrationReservationApiTest extends InventoryApiTest {
 
@@ -36,7 +37,7 @@ class OrchestrationReservationApiTest extends InventoryApiTest {
   }
 
   @Test
-  void orchestrationCanNeitherReserveNorRelease() {
+  void orchestrationCanNeitherReserveForACustomerNorRelease() {
     var variant = newVariant(10);
     var reservation = reserved(item(variant, 1));
 

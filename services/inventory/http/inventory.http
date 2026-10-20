@@ -235,7 +235,7 @@ Content-Type: application/json
 
 {"customerId": "http-file-customer"}
 
-### Orchestration can't reserve or release, only commit: 403
+### Orchestration can't reserve for a Customer, or release, only commit: 403
 POST {{inventory}}/reservations/{{sagaReservationId}}/release
 Authorization: Bearer {{orchestrationToken}}
 Content-Type: application/json
@@ -248,3 +248,60 @@ Authorization: Bearer {{checkoutToken}}
 Content-Type: application/json
 
 {"customerId": "http-file-customer"}
+
+### Orchestration restocks a return's units, naming the RMA: 200 with the Stock, On-hand up by 1
+# A RESTOCKED movement with the reference, and an inventory.stock event with change RESTOCKED.
+POST {{inventory}}/stock/PHN-PIXEL-9/restocks
+Authorization: Bearer {{orchestrationToken}}
+Idempotency-Key: http-file-restock-1
+Content-Type: application/json
+
+{"quantity": 1, "reference": "RMA-3F2A9C1B"}
+
+### The same key again replays the first answer (Idempotent-Replayed: true) and restocks nothing more
+POST {{inventory}}/stock/PHN-PIXEL-9/restocks
+Authorization: Bearer {{orchestrationToken}}
+Idempotency-Key: http-file-restock-1
+Content-Type: application/json
+
+{"quantity": 1, "reference": "RMA-3F2A9C1B"}
+
+### Without a key: 400 idempotencyKeyRequired. Staff's or Checkout's token: 403
+POST {{inventory}}/stock/PHN-PIXEL-9/restocks
+Authorization: Bearer {{orchestrationToken}}
+Content-Type: application/json
+
+{"quantity": 1, "reference": "RMA-3F2A9C1B"}
+
+### Orchestration reserves a replacement unit for an RMA: 201, owned by rma:<rmaId>
+POST {{inventory}}/reservations
+Authorization: Bearer {{orchestrationToken}}
+Content-Type: application/json
+
+{"customerId": "rma:00000000-0000-4000-8000-0000000000a1", "expiresAt": "2030-01-01T00:00:00Z",
+ "items": [{"variantId": "PHN-PIXEL-9", "quantity": 1}]}
+
+> {% client.global.set("rmaReservationId", response.body.id); %}
+
+### Asking again for the same RMA answers the first: 200, the same Reservation, nothing more held
+POST {{inventory}}/reservations
+Authorization: Bearer {{orchestrationToken}}
+Content-Type: application/json
+
+{"customerId": "rma:00000000-0000-4000-8000-0000000000a1", "expiresAt": "2030-01-01T00:00:00Z",
+ "items": [{"variantId": "PHN-PIXEL-9", "quantity": 1}]}
+
+### Orchestration commits it: 200, COMMITTED; its COMMITTED movement names rma:<rmaId> as its reference
+POST {{inventory}}/reservations/{{rmaReservationId}}/commit
+Authorization: Bearer {{orchestrationToken}}
+Content-Type: application/json
+
+{"customerId": "rma:00000000-0000-4000-8000-0000000000a1"}
+
+### Checkout can't reserve for an RMA: 403
+POST {{inventory}}/reservations
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"customerId": "rma:00000000-0000-4000-8000-0000000000a2", "expiresAt": "2030-01-01T00:00:00Z",
+ "items": [{"variantId": "PHN-PIXEL-9", "quantity": 1}]}

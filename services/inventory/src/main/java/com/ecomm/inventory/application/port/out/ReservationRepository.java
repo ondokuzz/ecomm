@@ -15,6 +15,12 @@ public interface ReservationRepository {
   Optional<Reservation> find(UUID id);
 
   /**
+   * The one Reservation owned by the RMA, {@code rma:<rmaId>}, that isn't {@code RELEASED}, if it
+   * has one.
+   */
+  Optional<Reservation> findForRma(String owner);
+
+  /**
    * Like {@link #find}, but locked until the surrounding transaction ends. Callers lock the stock
    * rows it holds first, so every transaction takes its locks in the same order.
    */

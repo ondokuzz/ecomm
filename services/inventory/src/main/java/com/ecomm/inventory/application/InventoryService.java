@@ -8,6 +8,7 @@ import com.ecomm.inventory.application.port.in.ReadStockUseCase;
 import com.ecomm.inventory.application.port.in.ReleaseExpiredReservationsUseCase;
 import com.ecomm.inventory.application.port.in.RemoveStockUseCase;
 import com.ecomm.inventory.application.port.in.ReserveStockUseCase;
+import com.ecomm.inventory.application.port.in.RestockUseCase;
 import com.ecomm.inventory.application.port.in.SetOnHandUseCase;
 import com.ecomm.inventory.application.port.in.SettleReservationUseCase;
 import com.ecomm.inventory.application.port.out.CachedStock;
@@ -24,10 +25,12 @@ import com.ecomm.inventory.domain.Reservation;
 import com.ecomm.inventory.domain.Stock;
 import com.ecomm.inventory.domain.StockBatch;
 import com.ecomm.inventory.domain.StockMovement;
+import com.ecomm.inventory.domain.UnknownVariantException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -54,6 +57,7 @@ public class InventoryService
         ReadStockMovementsUseCase,
         SetOnHandUseCase,
         RemoveStockUseCase,
+        RestockUseCase,
         ReserveStockUseCase,
         SettleReservationUseCase,
         ReleaseExpiredReservationsUseCase,
@@ -202,22 +206,56 @@ public class InventoryService
   }
 
   @Override
-  public Reservation reserve(String customerId, StockBatch items, Instant expiresAt) {
-    var reservation =
-        Reservation.create(UUID.randomUUID(), customerId, items, expiresAt, time.now());
+  public Stock restock(String variantId, int quantity, String reference) {
+    var now = time.now();
+    var movement = StockMovement.restocked(variantId, quantity, reference, now);
+    return transactions.inTransaction(
+        () -> {
+          var current = lockStock(List.of(variantId)).get(variantId);
+          if (current == null) {
+            throw new UnknownVariantException(List.of(variantId));
+          }
+          var changed = current.withOnHand(Math.addExact(current.onHand(), quantity));
+          recordChange(
+              Change.RESTOCKED, List.of(movement), Map.of(variantId, changed.onHand()), now);
+          return changed;
+        });
+  }
+
+  /**
+   * An RMA's Reservation is looked for first, before the Stock cache can refuse a retry whose first
+   * attempt took the last unit, and again once the stock rows are locked: two first attempts for
+   * the same RMA lock the same rows, so the second finds what the first made. One that expired
+   * uncommitted is released then, as the sweeper would, so the RMA can hold Stock again.
+   */
+  @Override
+  public Reserved reserve(String owner, StockBatch items, Instant expiresAt) {
+    var forRma = Reservation.isRmaOwner(owner);
+    var previous = forRma ? reservations.findForRma(owner) : Optional.<Reservation>empty();
+    if (previous.isPresent() && previous.get().answersAgainAt(time.now())) {
+      return new Reserved(previous.get(), false);
+    }
+    var reservation = Reservation.create(UUID.randomUUID(), owner, items, expiresAt, time.now());
     refuseWhatTheCacheShowsShort(items);
     return transactions.inTransaction(
         () -> {
-          var locked = lockStock(items.variantIds());
+          var toLock = new HashSet<>(items.variantIds());
+          previous.ifPresent(r -> toLock.addAll(r.items().variantIds()));
+          var locked = lockStock(toLock);
+          var current = forRma ? reservations.findForRma(owner) : Optional.<Reservation>empty();
+          if (current.isPresent()) {
+            if (current.get().answersAgainAt(time.now())) {
+              return new Reserved(current.get(), false);
+            }
+            releaseExpiredOfRma(current.get(), locked);
+          }
           items.requireAvailableIn(locked);
           reservations.insert(reservation);
           var now = time.now();
-          recordChange(
-              Change.RESERVED,
-              StockMovement.reserved(reservation, now),
-              onHandOf(locked.values()),
-              now);
-          return reservation;
+          var onHand = onHandOf(locked.values());
+          onHand.keySet().retainAll(items.variantIds());
+          recordChange(Change.RESERVED, StockMovement.reserved(reservation, now), onHand, now);
+          return new Reserved(reservation, true);
         });
   }
 
@@ -293,6 +331,24 @@ public class InventoryService
               now);
           return releasedReservations.stream().map(Reservation::id).toList();
         });
+  }
+
+  /**
+   * Releases an RMA's Reservation that expired uncommitted, recording its {@code RELEASED}
+   * movements as the sweeper would. Call it inside a transaction holding the stock rows in {@code
+   * locked}; it locks any of the Reservation's it is missing.
+   */
+  private void releaseExpiredOfRma(Reservation expired, Map<String, Stock> locked) {
+    var variantIds = expired.items().variantIds();
+    var stocks = new HashMap<>(locked);
+    stocks.putAll(lockStock(variantIds.stream().filter(id -> !locked.containsKey(id)).toList()));
+    var now = time.now();
+    if (reservations.releaseExpired(List.of(expired.id()), now).isEmpty()) {
+      return;
+    }
+    var onHand = onHandOf(stocks.values());
+    onHand.keySet().retainAll(variantIds);
+    recordChange(Change.RELEASED, StockMovement.released(expired.release(), now), onHand, now);
   }
 
   @Override

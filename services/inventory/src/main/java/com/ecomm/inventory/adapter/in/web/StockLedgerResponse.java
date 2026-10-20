@@ -19,13 +19,18 @@ record StockLedgerResponse(
     int size,
     long total) {
 
-  /** {@code reservationId} and {@code reason} are null when there is none. */
+  /**
+   * {@code reservationId}, {@code reason} and {@code reference} are null when there is none. The
+   * reference is a restock's RMA reference, or {@code rma:<rmaId>} for the movements of an RMA's
+   * Reservation.
+   */
   record MovementResponse(
       String kind,
       int onHandChange,
       int reservedChange,
       String reservationId,
       String reason,
+      String reference,
       Instant at) {
 
     static MovementResponse of(StockMovement movement) {
@@ -35,6 +40,7 @@ record StockLedgerResponse(
           movement.reservedChange(),
           movement.reservationId() == null ? null : movement.reservationId().toString(),
           movement.reason(),
+          movement.reference(),
           movement.at());
     }
   }

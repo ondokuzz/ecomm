@@ -1,16 +1,21 @@
 package com.ecomm.inventory.domain;
 
 import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
- * An all-or-nothing hold on a batch of Variants for one Customer. While {@code ACTIVE} and before
- * {@code expiresAt} it holds its Stock; committing it takes that Stock off on-hand for good, and
- * releasing it gives the Stock back. An {@code ACTIVE} Reservation past its expiry holds nothing,
- * whether or not the sweeper has released it yet.
+ * An all-or-nothing hold on a batch of Variants for its owner: a Customer, by their ID, or an RMA
+ * whose replacement it holds, as {@code rma:<rmaId>}. An RMA has at most one. While {@code ACTIVE}
+ * and before {@code expiresAt} it holds its Stock; committing it takes that Stock off on-hand for
+ * good, and releasing it gives the Stock back. An {@code ACTIVE} Reservation past its expiry holds
+ * nothing, whether or not the sweeper has released it yet.
  */
 public record Reservation(
     UUID id, String customerId, StockBatch items, ReservationStatus status, Instant expiresAt) {
+
+  /** How the owner of an RMA's Reservation starts. */
+  public static final String RMA_OWNER_PREFIX = "rma:";
 
   /**
    * A new {@code ACTIVE} Reservation. Throws {@link InvalidStockRequestException} unless it names
@@ -39,8 +44,28 @@ public record Reservation(
     return this.customerId.equals(customerId);
   }
 
+  /** Whether {@code owner} names an RMA, as {@code rma:<rmaId>}, rather than a Customer. */
+  public static boolean isRmaOwner(String owner) {
+    return owner != null
+        && owner.startsWith(RMA_OWNER_PREFIX)
+        && !owner.substring(RMA_OWNER_PREFIX.length()).isBlank();
+  }
+
+  /** Its owner, {@code rma:<rmaId>}, when it holds an RMA's replacement; empty for a Customer's. */
+  public Optional<String> rmaOwner() {
+    return isRmaOwner(customerId) ? Optional.of(customerId) : Optional.empty();
+  }
+
   public boolean holdsStockAt(Instant now) {
     return status == ReservationStatus.ACTIVE && now.isBefore(expiresAt);
+  }
+
+  /**
+   * Whether asking its RMA's Reservation again answers this one: it is committed, or still holds
+   * its Stock. One that expired uncommitted can never be committed, so the RMA holds Stock anew.
+   */
+  public boolean answersAgainAt(Instant now) {
+    return status == ReservationStatus.COMMITTED || holdsStockAt(now);
   }
 
   /**

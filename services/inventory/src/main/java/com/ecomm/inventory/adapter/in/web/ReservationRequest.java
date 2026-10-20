@@ -6,8 +6,9 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 /**
- * A Reservation for a Customer until {@code expiresAt}: {@code {"customerId", "expiresAt", "items":
- * [{"variantId", "quantity"}]}}.
+ * A Reservation for its owner until {@code expiresAt}: {@code {"customerId", "expiresAt", "items":
+ * [{"variantId", "quantity"}]}}. {@code customerId} names the owner: a Customer, or an RMA as
+ * {@code rma:<rmaId>}.
  */
 record ReservationRequest(String customerId, Instant expiresAt, List<ItemBody> items) {
 

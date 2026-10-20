@@ -66,6 +66,14 @@ class PostgresReservationRepository implements ReservationRepository {
   }
 
   @Override
+  public Optional<Reservation> findForRma(String owner) {
+    return single(
+        query(
+            SELECT + "WHERE r.customer_id = :owner AND r.status <> 'RELEASED'",
+            Map.of("owner", owner)));
+  }
+
+  @Override
   public Optional<Reservation> lock(UUID id) {
     // Lock the Reservation's own row, then read it whole; its items never change.
     return jdbc.sql("SELECT id FROM reservation WHERE id = :id FOR UPDATE")

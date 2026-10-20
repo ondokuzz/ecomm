@@ -20,10 +20,14 @@ public record StockMovement(
     int reservedChange,
     UUID reservationId,
     String reason,
+    String reference,
     Instant at) {
 
   /** The longest reason Inventory stores. */
   public static final int MAX_REASON_LENGTH = 200;
+
+  /** The longest reference a restock names. */
+  public static final int MAX_REFERENCE_LENGTH = 64;
 
   /** What made the movement. */
   public enum Kind {
@@ -37,7 +41,7 @@ public record StockMovement(
     COMMITTED,
     /** Units arrived from a supplier. Unused until replenishment exists. */
     RECEIVED,
-    /** Returned units went back on hand. Unused until returns exist. */
+    /** Returned units went back on hand, naming the RMA they came back on. */
     RESTOCKED
   }
 
@@ -51,7 +55,28 @@ public record StockMovement(
     if (from == to) {
       return Optional.empty();
     }
-    return Optional.of(new StockMovement(variantId, Kind.ADJUSTED, to - from, 0, null, reason, at));
+    return Optional.of(
+        new StockMovement(variantId, Kind.ADJUSTED, to - from, 0, null, reason, null, at));
+  }
+
+  /**
+   * {@code quantity} returned units back on hand, for the reference. Throws {@link
+   * InvalidStockRequestException} unless the quantity is positive and the reference is 1 to {@value
+   * #MAX_REFERENCE_LENGTH} characters.
+   */
+  public static StockMovement restocked(
+      String variantId, int quantity, String reference, Instant at) {
+    if (quantity < 1) {
+      throw new InvalidStockRequestException("a restock's quantity is at least 1");
+    }
+    if (reference == null
+        || reference.isBlank()
+        || reference.strip().length() > MAX_REFERENCE_LENGTH) {
+      throw new InvalidStockRequestException(
+          "a restock's reference is 1 to " + MAX_REFERENCE_LENGTH + " characters");
+    }
+    return new StockMovement(
+        variantId, Kind.RESTOCKED, quantity, 0, null, null, reference.strip(), at);
   }
 
   /** One {@code RESERVED} movement per Variant the Reservation holds. */
@@ -97,6 +122,7 @@ public record StockMovement(
                     reservedSign * line.quantity(),
                     reservation.id(),
                     null,
+                    reservation.rmaOwner().orElse(null),
                     at))
         .toList();
   }

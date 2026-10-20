@@ -308,10 +308,12 @@ abstract class InventoryApiTest {
       int reservedChange,
       String reservationId,
       String reason,
+      String reference,
       String at) {
 
     MovementView withoutTime() {
-      return new MovementView(kind, onHandChange, reservedChange, reservationId, reason, null);
+      return new MovementView(
+          kind, onHandChange, reservedChange, reservationId, reason, reference, null);
     }
   }
 }

@@ -213,6 +213,6 @@ class StockMovementsApiTest extends InventoryApiTest {
   /** A movement as the ledger shows it, ignoring when it happened. */
   private static MovementView movement(
       String kind, int onHandChange, int reservedChange, String reservationId, String reason) {
-    return new MovementView(kind, onHandChange, reservedChange, reservationId, reason, null);
+    return new MovementView(kind, onHandChange, reservedChange, reservationId, reason, null, null);
   }
 }

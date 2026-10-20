@@ -26,6 +26,7 @@ class PostgresStockMovementRepository implements StockMovementRepository {
               rs.getInt("reserved_change"),
               rs.getObject("reservation_id", UUID.class),
               rs.getString("reason"),
+              rs.getString("reference"),
               rs.getTimestamp("at").toInstant());
 
   private final JdbcClient jdbc;
@@ -40,9 +41,11 @@ class PostgresStockMovementRepository implements StockMovementRepository {
       jdbc.sql(
               """
               INSERT INTO stock_movement
-                (variant_id, kind, on_hand_change, reserved_change, reservation_id, reason, at)
+                (variant_id, kind, on_hand_change, reserved_change, reservation_id, reason,
+                 reference, at)
               VALUES
-                (:variantId, :kind, :onHandChange, :reservedChange, :reservationId, :reason, :at)
+                (:variantId, :kind, :onHandChange, :reservedChange, :reservationId, :reason,
+                 :reference, :at)
               """)
           .param("variantId", movement.variantId())
           .param("kind", movement.kind().name())
@@ -50,6 +53,7 @@ class PostgresStockMovementRepository implements StockMovementRepository {
           .param("reservedChange", movement.reservedChange())
           .param("reservationId", movement.reservationId())
           .param("reason", movement.reason())
+          .param("reference", movement.reference())
           .param("at", Timestamp.from(movement.at()))
           .update();
     }
@@ -59,7 +63,8 @@ class PostgresStockMovementRepository implements StockMovementRepository {
   public List<StockMovement> newestFirst(String variantId, long offset, int limit) {
     return jdbc.sql(
             """
-            SELECT variant_id, kind, on_hand_change, reserved_change, reservation_id, reason, at
+            SELECT variant_id, kind, on_hand_change, reserved_change, reservation_id, reason,
+                   reference, at
             FROM stock_movement WHERE variant_id = :id
             ORDER BY id DESC OFFSET :offset LIMIT :limit
             """)

@@ -18,7 +18,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -29,7 +31,9 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Internal: Checkout, with its own {@code CHECKOUT} token, holds Stock for a Customer and releases
  * the Reservation; the checkout Saga commits it with Orchestration's {@code ORCHESTRATION} token.
- * Each names the Customer in the body (ADR 0002). A Reservation owned by anyone else is a 404.
+ * Each names the Customer in the body (ADR 0002). The returns Saga, with Orchestration's token,
+ * holds and commits a replacement unit the same way, for an owner {@code rma:<rmaId>} in place of
+ * the Customer. A Reservation owned by anyone else is a 404.
  *
  * <p>Each endpoint checks its own role. A role on the class would guard the exception handlers too,
  * and turn a 404 or 409 for the other caller into a 500.
@@ -48,18 +52,41 @@ class ReservationController {
     this.settle = settle;
   }
 
-  /** 201 with the new {@code ACTIVE} Reservation, and its URL in {@code Location}. */
+  /**
+   * 201 with the new {@code ACTIVE} Reservation, and its URL in {@code Location}; 200 with an RMA's
+   * Reservation when it already has one, whatever its status, holding nothing more. Checkout
+   * reserves for a Customer and Orchestration for an RMA, {@code rma:<rmaId>}; any other owner is a
+   * 403.
+   */
   @PostMapping
-  @PreAuthorize("hasRole('CHECKOUT')")
-  ResponseEntity<ReservationResponse> reserve(@RequestBody ReservationRequest request) {
-    var reservation =
-        reserve.reserve(request.customerId(), request.toItems(), request.toExpiresAt());
+  @PreAuthorize("hasAnyRole('CHECKOUT', 'ORCHESTRATION')")
+  ResponseEntity<ReservationResponse> reserve(
+      @RequestBody ReservationRequest request, Authentication caller) {
+    var owner = request.customerId();
+    var mayReserve =
+        Reservation.isRmaOwner(owner)
+            ? hasRole(caller, "ORCHESTRATION")
+            : hasRole(caller, "CHECKOUT");
+    if (!mayReserve) {
+      throw new AccessDeniedException("Checkout reserves for Customers, Orchestration for RMAs");
+    }
+    var reserved = reserve.reserve(owner, request.toItems(), request.toExpiresAt());
+    var reservation = reserved.reservation();
+    var location = URI.create("/reservations/" + reservation.id());
+    if (!reserved.created()) {
+      log.info("Answered {} again with Reservation {}", owner, reservation.id());
+      return ResponseEntity.ok().location(location).body(ReservationResponse.of(reservation));
+    }
     log.info(
         "Reserved Stock of {} Variants as {}",
         reservation.items().variantIds().size(),
         reservation.id());
-    return ResponseEntity.created(URI.create("/reservations/" + reservation.id()))
-        .body(ReservationResponse.of(reservation));
+    return ResponseEntity.created(location).body(ReservationResponse.of(reservation));
+  }
+
+  private static boolean hasRole(Authentication caller, String role) {
+    return caller.getAuthorities().stream()
+        .anyMatch(authority -> ("ROLE_" + role).equals(authority.getAuthority()));
   }
 
   /**
@@ -75,10 +102,16 @@ class ReservationController {
     return reservation;
   }
 
-  /** 200 with the Reservation {@code RELEASED}, its Stock available again. */
+  /**
+   * 200 with the Reservation {@code RELEASED}, its Stock available again. Checkout releases only
+   * Customers' Reservations; naming an RMA is a 403.
+   */
   @PostMapping("/{id}/release")
   @PreAuthorize("hasRole('CHECKOUT')")
   ReservationResponse release(@PathVariable String id, @RequestBody CustomerRequest request) {
+    if (Reservation.isRmaOwner(request.customerId())) {
+      throw new AccessDeniedException("Checkout releases only Customers' Reservations");
+    }
     var reservation =
         owned(id, reservationId -> settle.release(request.customerId(), reservationId));
     log.info("Released Reservation {}", id);

@@ -1,8 +1,10 @@
 package com.ecomm.inventory.adapter.in.web;
 
+import com.ecomm.commons.idempotency.IdempotentCommand;
 import com.ecomm.inventory.application.port.in.ReadStockMovementsUseCase;
 import com.ecomm.inventory.application.port.in.ReadStockUseCase;
 import com.ecomm.inventory.application.port.in.RemoveStockUseCase;
+import com.ecomm.inventory.application.port.in.RestockUseCase;
 import com.ecomm.inventory.application.port.in.SetOnHandUseCase;
 import com.ecomm.inventory.domain.InvalidStockRequestException;
 import com.ecomm.inventory.domain.OnHandBelowReservedException;
@@ -19,6 +21,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -28,7 +31,8 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Anyone may read stock, one Variant's or a batch's (see {@code public-read-paths}); only Staff may
  * set how many units are on hand, stop stocking a Variant, or read its Stock movements. Checkout
- * takes Stock through Reservations ({@link ReservationController}).
+ * takes Stock through Reservations ({@link ReservationController}), and the returns Saga, with
+ * Orchestration's {@code ORCHESTRATION} token, puts returned units back on hand.
  */
 @RestController
 @RequestMapping("/stock")
@@ -45,16 +49,19 @@ class StockController {
   private final ReadStockMovementsUseCase readMovements;
   private final SetOnHandUseCase setOnHand;
   private final RemoveStockUseCase remove;
+  private final RestockUseCase restock;
 
   StockController(
       ReadStockUseCase read,
       ReadStockMovementsUseCase readMovements,
       SetOnHandUseCase setOnHand,
-      RemoveStockUseCase remove) {
+      RemoveStockUseCase remove,
+      RestockUseCase restock) {
     this.read = read;
     this.readMovements = readMovements;
     this.setOnHand = setOnHand;
     this.remove = remove;
+    this.restock = restock;
   }
 
   /**
@@ -128,6 +135,23 @@ class StockController {
     }
     log.info("Removed the Stock of {}", variantId);
     return ResponseEntity.noContent().build();
+  }
+
+  /**
+   * 200 with the Variant's Stock once the returned units are back on hand, recorded as a {@code
+   * RESTOCKED} movement naming the reference; 404 when Inventory doesn't stock the Variant. The
+   * {@code Idempotency-Key} is required; a repeat replays the first response and restocks nothing
+   * more.
+   */
+  @PostMapping("/{variantId}/restocks")
+  @PreAuthorize("hasRole('ORCHESTRATION')")
+  @IdempotentCommand
+  StockResponse restock(@PathVariable String variantId, @RequestBody RestockRequest request) {
+    var quantity = request.toQuantity();
+    var reference = request.toReference();
+    var stock = restock.restock(variantId, quantity, reference);
+    log.info("Restocked {} units of {} for {}", quantity, variantId, reference);
+    return StockResponse.of(stock);
   }
 
   @ExceptionHandler(StockReservedException.class)
