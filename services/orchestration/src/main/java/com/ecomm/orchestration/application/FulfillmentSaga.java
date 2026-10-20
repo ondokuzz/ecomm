@@ -62,9 +62,9 @@ public class FulfillmentSaga implements FulfillmentWorkflow {
           .build();
 
   /**
-   * Creating the Shipment, reading the Payment again once its capture failed, and marking delivered
-   * the Order of a Shipment an earlier run dispatched: retried until it succeeds, such as while
-   * Fulfillment & Shipping waits for Catalog's Products, but not when it is refused.
+   * Creating the Shipment, reading the Payment, before its capture and again once it failed, and
+   * marking delivered the Order of a Shipment an earlier run dispatched: retried until it succeeds,
+   * such as while Fulfillment & Shipping waits for Catalog's Products, but not when it is refused.
    */
   private static final ActivityOptions UNTIL_CREATED =
       ActivityOptions.newBuilder()
@@ -224,9 +224,11 @@ public class FulfillmentSaga implements FulfillmentWorkflow {
   private Hold capture(String customerId, String orderId) {
     PaymentToCapture payment;
     try {
-      payment = captures.findPayment(customerId, orderId);
+      // Read until Payment answers: only its answer that there is no Payment to capture holds the
+      // Shipment, never Payment being down. The minute is the capture's alone.
+      payment = capturesUntilAnswered.findPayment(customerId, orderId);
     } catch (ActivityFailure e) {
-      log.error("Order {}'s Payment to capture couldn't be found", orderId, e);
+      log.error("Order {} has no authorized Payment to capture", orderId, e);
       return new Hold(CAPTURE_FAILED, "Capture failed: the Payment couldn't be captured");
     }
     Capture capture;

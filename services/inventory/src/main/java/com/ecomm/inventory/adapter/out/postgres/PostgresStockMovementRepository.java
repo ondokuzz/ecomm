@@ -84,6 +84,19 @@ class PostgresStockMovementRepository implements StockMovementRepository {
   }
 
   @Override
+  public boolean restocked(String variantId, String reference) {
+    return jdbc.sql(
+            """
+            SELECT EXISTS (SELECT 1 FROM stock_movement
+                           WHERE variant_id = :id AND kind = 'RESTOCKED' AND reference = :reference)
+            """)
+        .param("id", variantId)
+        .param("reference", reference)
+        .query(Boolean.class)
+        .single();
+  }
+
+  @Override
   public long onHandSum(String variantId) {
     return jdbc.sql(
             "SELECT coalesce(sum(on_hand_change), 0) FROM stock_movement WHERE variant_id = :id")

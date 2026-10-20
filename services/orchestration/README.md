@@ -138,7 +138,8 @@ It answers `{"status", "shipmentId", "holdReason"}`, `status` being `DELIVERED`,
 3. **Capture the Payment**: the Order's Payments are read (step `findPayment`, `GET
    /payments/by-order?orderId=&customerId=`, Payment's read for Orchestration), and the authorized
    one, or one captured already, is captured (step `capturePayment`, `POST /payments/{id}/capture`), each
-   step retried on its own. A `402 captureDeclined` **holds the Shipment** (`POST
+   step retried on its own: the read until Payment answers, so Payment being down never holds the
+   Shipment by itself. A `402 captureDeclined` **holds the Shipment** (`POST
    /shipments/{id}/hold`) with the reason `Capture declined: <declineReason>`; a capture that still
    fails after about a minute (the gateway's 502, say), or an Order with no authorized Payment,
    holds it with `Capture failed: …`. Since the hold is final, a failed capture is first checked:
@@ -227,7 +228,7 @@ It answers `{"status", "refundReference", "replacementShipmentId", "holdReason"}
    /orders/{id}/status`). A refusal, for an Order that isn't `DELIVERED`, is logged, not retried.
 
 **Refunding.** The Order's Payments are read (step `findRefundablePayment`, Payment's read by
-Order), and the captured or partly refunded one is refunded (`POST /payments/{id}/refunds`) the
+Order, retried until Payment answers), and the captured or partly refunded one is refunded (`POST /payments/{id}/refunds`) the
 RMA's Refund amount as it is: what refunding all its units gives back, never multiplied by its
 quantity. A Payment that already has an approved Refund for the RMA reference isn't refunded again.
 A `402 refundDeclined` **holds the RMA** (`POST /rmas/{id}/hold`) with the reason `Refund declined:
@@ -248,8 +249,9 @@ call carries the Correlation ID of the `APPROVED` event.
 stopped keeping the first (7 days), or on upgrade, from a Sprint 5 event of an RMA that has moved on.
 Its keys carry its own run ID, so it reads the RMA first and goes on from its status. A first run
 closes only once the RMA is expired, resolved or held, so a second finds it so and ends at once,
-counting nothing. Only a run terminated by hand after restocking and before resolving could leave a
-second run to restock again; the Refund it would not make twice.
+counting nothing. A run terminated by hand after restocking and before resolving leaves the next to
+restock and refund again, which do nothing twice: Inventory restocks a Variant once per RMA
+reference, and a Refund already made for the reference is found on the Payment.
 
 **Versioning.** A returns Saga can wait months, for its units and then for its Inspection, so the
 rule in [Changing the workflow](#changing-the-workflow) applies to it from its release: every change
@@ -388,7 +390,8 @@ Orchestration calls:
   left, when other units aren't refunded), a confirmed fault reserved, committed, replaced,
   dispatched once its replacement's PACKED event comes and exchanged, a replacement that exists read
   by RMA, no Stock refunding without restocking, a declined Refund and one that keeps failing holding
-  the RMA, a 503 on restock retried with its key, the same approval twice and a replay after it
+  the RMA, Payment unreadable for minutes read until it answers and then refunded, an RMA read
+  without its status counted as `findRma`'s failure and read again, a 503 on restock retried with its key, the same approval twice and a replay after it
   closed starting nothing more, a run finding its RMA resolved already, and duplicate and stale RMA
   events ignored. A test that sends events holds time still meanwhile (`lockTimeSkipping`), and every
   run left open is cancelled, not terminated, so time skipping is left as it was;

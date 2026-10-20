@@ -82,8 +82,8 @@ public class ReturnsSaga implements ReturnsWorkflow {
           .build();
 
   /**
-   * Reading the RMA, a replacement or the Payment again, and marking the Order returned: retried
-   * until answered, but not when refused.
+   * Reading the RMA, a replacement or the Payment, and marking the Order returned: retried until
+   * answered, but not when refused.
    */
   private static final ActivityOptions UNTIL_ANSWERED =
       ActivityOptions.newBuilder()
@@ -323,11 +323,13 @@ public class ReturnsSaga implements ReturnsWorkflow {
     String transaction;
     PaymentToRefund payment;
     try {
+      // Read until Payment answers: only its answer that there is no Payment to refund holds the
+      // RMA, never Payment being down. The minute is the Refund's alone.
       payment =
-          refunds.findRefundablePayment(
+          refundsUntilAnswered.findRefundablePayment(
               request.customerId(), request.orderId(), request.reference());
     } catch (ActivityFailure e) {
-      log.error("Order {}'s Payment to refund couldn't be found", request.orderId(), e);
+      log.error("Order {} has no Payment to refund", request.orderId(), e);
       return held(
           rmaId, new Hold(REFUND_FAILED, "Refund failed: the Payment couldn't be refunded"));
     }

@@ -28,7 +28,9 @@ final class Steps {
   /**
    * Runs the call of step {@code step}. A 4xx left after the client's one retry on a 401 fails it
    * as {@link Refusals#REFUSED}; anything else fails as it is, for Temporal to retry. Either way
-   * the failure is counted under the step's name.
+   * the failure is counted under the step's name. So that an answer the step can't use, such as one
+   * without the ID or status it needs, is counted and reported the same way, {@code call} checks
+   * the answer too, not only makes the request.
    *
    * <p>The failure Temporal keeps says what went wrong in its message alone, with no stack and no
    * cause: the HTTP client's stacks run past the server's size limit for an activity's failure, and

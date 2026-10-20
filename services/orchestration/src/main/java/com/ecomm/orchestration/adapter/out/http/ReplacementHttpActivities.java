@@ -42,45 +42,45 @@ class ReplacementHttpActivities implements ReplacementActivities {
   @Override
   public Replacement createReplacement(
       String rmaId, String orderId, String customerId, String variantId, int quantity) {
-    var shipment =
-        Steps.call(
-            "createReplacement",
-            () -> {
-              var order =
-                  http.get()
-                      .uri("/shipments?orderId={orderId}", orderId)
-                      .retrieve()
-                      .body(OrderShipmentBody.class);
-              if (order == null || order.shippingAddress() == null) {
-                throw new IllegalStateException(
-                    "Fulfillment & Shipping answered Order " + orderId + " without its address");
-              }
-              var body =
-                  new CreateBody(
-                      "REPLACEMENT",
-                      rmaId,
-                      orderId,
-                      customerId,
-                      List.of(new Line(variantId, quantity)),
-                      AddressBody.of(order.shippingAddress()),
-                      order.shippingOption());
-              try {
-                return http.post()
+    return Steps.call(
+        "createReplacement",
+        () -> {
+          var order =
+              http.get()
+                  .uri("/shipments?orderId={orderId}", orderId)
+                  .retrieve()
+                  .body(OrderShipmentBody.class);
+          if (order == null || order.shippingAddress() == null) {
+            throw new IllegalStateException(
+                "Fulfillment & Shipping answered Order " + orderId + " without its address");
+          }
+          var body =
+              new CreateBody(
+                  "REPLACEMENT",
+                  rmaId,
+                  orderId,
+                  customerId,
+                  List.of(new Line(variantId, quantity)),
+                  AddressBody.of(order.shippingAddress()),
+                  order.shippingOption());
+          try {
+            return replacementFrom(
+                rmaId,
+                http.post()
                     .uri("/shipments")
                     .header("Idempotency-Key", Steps.idempotencyKey("createReplacement"))
                     .body(body)
                     .retrieve()
-                    .body(ShipmentBody.class);
-              } catch (HttpClientErrorException.Conflict e) {
-                return replacementOf(rmaId);
-              }
-            });
-    return replacementFrom(rmaId, shipment);
+                    .body(ShipmentBody.class));
+          } catch (HttpClientErrorException.Conflict e) {
+            return replacementFrom(rmaId, replacementOf(rmaId));
+          }
+        });
   }
 
   @Override
   public Replacement findReplacement(String rmaId) {
-    return replacementFrom(rmaId, Steps.call("findReplacement", () -> replacementOf(rmaId)));
+    return Steps.call("findReplacement", () -> replacementFrom(rmaId, replacementOf(rmaId)));
   }
 
   private ShipmentBody replacementOf(String rmaId) {

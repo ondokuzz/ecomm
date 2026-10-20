@@ -15,6 +15,9 @@ public interface StockMovementRepository {
 
   long count(String variantId);
 
+  /** Whether the Variant has a {@code RESTOCKED} movement naming {@code reference}. */
+  boolean restocked(String variantId, String reference);
+
   /** The sum of the Variant's On-hand changes: what its On-hand should be. */
   long onHandSum(String variantId);
 }

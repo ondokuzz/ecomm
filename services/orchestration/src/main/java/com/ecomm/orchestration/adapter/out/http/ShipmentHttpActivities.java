@@ -43,27 +43,27 @@ class ShipmentHttpActivities implements ShipmentActivities {
       ShippingOption shippingOption) {
     var body =
         new CreateBody(orderId, customerId, lines, AddressBody.of(shippingAddress), shippingOption);
-    var shipment =
-        Steps.call(
-            "createShipment",
-            () -> {
-              try {
-                return http.post()
+    return Steps.call(
+        "createShipment",
+        () -> {
+          try {
+            return shipmentFrom(
+                orderId,
+                http.post()
                     .uri("/shipments")
                     .header("Idempotency-Key", Steps.idempotencyKey("createShipment"))
                     .body(body)
                     .retrieve()
-                    .body(ShipmentBody.class);
-              } catch (HttpClientErrorException.Conflict e) {
-                return shipmentOf(orderId);
-              }
-            });
-    return shipmentFrom(orderId, shipment);
+                    .body(ShipmentBody.class));
+          } catch (HttpClientErrorException.Conflict e) {
+            return shipmentFrom(orderId, shipmentOf(orderId));
+          }
+        });
   }
 
   @Override
   public Shipment findShipment(String orderId) {
-    return shipmentFrom(orderId, Steps.call("findShipment", () -> shipmentOf(orderId)));
+    return Steps.call("findShipment", () -> shipmentFrom(orderId, shipmentOf(orderId)));
   }
 
   private ShipmentBody shipmentOf(String orderId) {

@@ -31,21 +31,22 @@ class PaymentHttpActivities implements PaymentActivities {
   @Override
   public Authorization authorizePayment(
       String customerId, String orderId, Amount amount, String paymentMethod) {
-    var payment =
-        Steps.call(
-            "authorizePayment",
-            () ->
-                http.post()
-                    .uri("/payments")
-                    .header("Idempotency-Key", Steps.idempotencyKey("authorizePayment"))
-                    .body(new AuthorizeBody(customerId, orderId, paymentMethod, amount))
-                    .retrieve()
-                    .body(PaymentBody.class));
-    if (payment == null || payment.id() == null || payment.status() == null) {
-      throw new IllegalStateException(
-          "Payment answered for Order " + orderId + " without a status");
-    }
-    return authorizationOf(payment);
+    return Steps.call(
+        "authorizePayment",
+        () -> {
+          var payment =
+              http.post()
+                  .uri("/payments")
+                  .header("Idempotency-Key", Steps.idempotencyKey("authorizePayment"))
+                  .body(new AuthorizeBody(customerId, orderId, paymentMethod, amount))
+                  .retrieve()
+                  .body(PaymentBody.class);
+          if (payment == null || payment.id() == null || payment.status() == null) {
+            throw new IllegalStateException(
+                "Payment answered for Order " + orderId + " without a status");
+          }
+          return authorizationOf(payment);
+        });
   }
 
   private static Authorization authorizationOf(PaymentBody payment) {
@@ -63,17 +64,21 @@ class PaymentHttpActivities implements PaymentActivities {
     var payment =
         Steps.call(
             "awaitSettlement",
-            () ->
-                http.get()
-                    .uri(
-                        "/payments/{id}/for-customer?customerId={customerId}",
-                        paymentId,
-                        customerId)
-                    .retrieve()
-                    .body(PaymentBody.class));
-    if (payment == null || payment.status() == null) {
-      throw new IllegalStateException("Payment " + paymentId + " answered without a status");
-    }
+            () -> {
+              var read =
+                  http.get()
+                      .uri(
+                          "/payments/{id}/for-customer?customerId={customerId}",
+                          paymentId,
+                          customerId)
+                      .retrieve()
+                      .body(PaymentBody.class);
+              if (read == null || read.status() == null) {
+                throw new IllegalStateException(
+                    "Payment " + paymentId + " answered without a status");
+              }
+              return read;
+            });
     return switch (payment.status()) {
       case "AUTHORIZED", "DECLINED" -> authorizationOf(payment);
       case "PENDING" ->

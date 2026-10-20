@@ -39,9 +39,12 @@ class RmaHttpActivities implements RmaActivities {
 
   @Override
   public Rma findRma(String rmaId) {
-    var rma =
-        Steps.call(
-            "findRma", () -> http.get().uri("/rmas/{id}", rmaId).retrieve().body(RmaBody.class));
+    return Steps.call(
+        "findRma",
+        () -> rmaFrom(rmaId, http.get().uri("/rmas/{id}", rmaId).retrieve().body(RmaBody.class)));
+  }
+
+  private static Rma rmaFrom(String rmaId, RmaBody rma) {
     if (rma == null || rma.status() == null) {
       throw new IllegalStateException(
           "Returns & Warranty answered RMA " + rmaId + " without a status");

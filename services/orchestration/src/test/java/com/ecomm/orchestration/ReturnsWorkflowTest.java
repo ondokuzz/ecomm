@@ -16,7 +16,9 @@ import static org.awaitility.Awaitility.await;
 
 import com.ecomm.orchestration.application.port.in.ReturnsOutcome;
 import com.ecomm.orchestration.application.port.in.ReturnsOutcome.Status;
+import com.github.tomakehurst.wiremock.client.MappingBuilder;
 import com.github.tomakehurst.wiremock.client.WireMock;
+import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import io.grpc.StatusRuntimeException;
 import io.temporal.api.common.v1.WorkflowExecution;
 import io.temporal.api.enums.v1.WorkflowExecutionStatus;
@@ -37,6 +39,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -45,6 +48,7 @@ import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.web.servlet.client.RestTestClient;
 
 /**
  * The returns Saga, from Kafka in to HTTP out: Orchestration's real consumer reads RMA events from
@@ -81,6 +85,7 @@ class ReturnsWorkflowTest extends OrchestrationTest {
 
   @Autowired WorkflowClient temporal;
   @Autowired KafkaListenerEndpointRegistry listeners;
+  @Autowired RestTestClient http;
 
   String rmaId;
   String orderId;
@@ -436,6 +441,26 @@ class ReturnsWorkflowTest extends OrchestrationTest {
                 equalToJson("{\"reason\": \"Refund declined: refund_window_closed\"}")));
   }
 
+  /**
+   * Payment can't be read for longer than the Refund's minute: the read is retried until it
+   * answers, so the RMA is refunded, not held.
+   */
+  @Test
+  void aPaymentThatCantBeReadForMinutesIsReadUntilItAnswersThenRefunded() {
+    stubEveryStep();
+    stubResolve(false);
+    stubFailingTimes(10, this::readPaymentsRequest);
+    var sendBackBy = serverNow().plus(Duration.ofDays(14));
+    stubRma("INSPECTED", sendBackBy, "ACCEPTED", null);
+
+    approved(sendBackBy);
+
+    assertThat(outcome())
+        .isEqualTo(new ReturnsOutcome(Status.REFUNDED, "mock-refund-1", null, null));
+    assertThat(calls()).filteredOn(c -> c.equals("GET " + readPayments())).hasSize(11);
+    assertThat(calls()).doesNotContain("POST " + rma() + "/hold");
+  }
+
   /** A Refund still failing after its minute of retries, time skipped, holds the RMA. */
   @Test
   void aRefundThatKeepsFailingHoldsTheRma() {
@@ -532,6 +557,28 @@ class ReturnsWorkflowTest extends OrchestrationTest {
     assertThat(calls()).filteredOn(c -> c.equals("POST " + REFUNDS)).hasSize(1);
   }
 
+  /**
+   * Returns & Warranty answers without the RMA's status: the read fails as its step, counted under
+   * it, and is retried.
+   */
+  @Test
+  void aReadAnsweredWithoutAStatusIsCountedAsTheStepsFailureAndRetried() {
+    var failedBefore = findRmaFailures();
+    var sendBackBy = serverNow().plus(Duration.ofDays(14));
+    stubInSequence(
+        () -> get(urlEqualTo(rma())),
+        okJson("{\"id\": \"%s\"}".formatted(rmaId)),
+        okJson(rmaJson("EXPIRED", sendBackBy, null, null)));
+
+    approved(sendBackBy);
+
+    assertThat(outcome().status()).isEqualTo(Status.EXPIRED);
+    assertThat(calls()).containsExactly("GET " + rma(), "GET " + rma());
+    await()
+        .atMost(Duration.ofSeconds(30))
+        .untilAsserted(() -> assertThat(findRmaFailures()).isEqualTo(failedBefore + 1));
+  }
+
   // --- events ---
 
   /** The RMA's APPROVED event, as Returns & Warranty publishes it once Staff approved it. */
@@ -597,9 +644,7 @@ class ReturnsWorkflowTest extends OrchestrationTest {
         post("/stock/" + VARIANT_ID + "/restocks")
             .willReturn(okJson("{\"variantId\": \"%s\"}".formatted(VARIANT_ID))));
     DOWNSTREAM.stubFor(
-        get(urlPathEqualTo("/payments/by-order"))
-            .withQueryParam("orderId", equalTo(orderId))
-            .withQueryParam("customerId", equalTo(CUSTOMER_ID))
+        readPaymentsRequest()
             .willReturn(
                 okJson(
                     """
@@ -666,6 +711,30 @@ class ReturnsWorkflowTest extends OrchestrationTest {
     DOWNSTREAM.stubFor(
         post(rma() + "/hold")
             .willReturn(okJson("{\"id\": \"%s\", \"status\": \"ON_HOLD\"}".formatted(rmaId))));
+  }
+
+  MappingBuilder readPaymentsRequest() {
+    return get(urlPathEqualTo("/payments/by-order"))
+        .withQueryParam("orderId", equalTo(orderId))
+        .withQueryParam("customerId", equalTo(CUSTOMER_ID));
+  }
+
+  /**
+   * The request answers 503 {@code times} times, then as its other stubs say: with the backoff
+   * doubling from a second, ten failures span more than a minute of the test server's time.
+   */
+  static void stubFailingTimes(int times, Supplier<MappingBuilder> request) {
+    var scenario = UUID.randomUUID().toString();
+    for (var i = 0; i < times; i++) {
+      DOWNSTREAM.stubFor(
+          request
+              .get()
+              .atPriority(1)
+              .inScenario(scenario)
+              .whenScenarioStateIs(i == 0 ? Scenario.STARTED : "failed " + i)
+              .willSetStateTo("failed " + (i + 1))
+              .willReturn(aResponse().withStatus(503)));
+    }
   }
 
   /** Resolving answers whether the Order's every delivered unit is now refunded. */
@@ -848,6 +917,23 @@ class ReturnsWorkflowTest extends OrchestrationTest {
   }
 
   // --- what the stubs were called with ---
+
+  /** How often {@code findRma} has failed, as {@code /actuator/prometheus} says. */
+  double findRmaFailures() {
+    var metrics =
+        http.get()
+            .uri("/actuator/prometheus")
+            .exchange()
+            .expectStatus()
+            .isOk()
+            .expectBody(String.class)
+            .returnResult()
+            .getResponseBody();
+    return CheckoutMetricsTest.samples(metrics, "returns_step_failures_total", "step", "findRma")
+        .stream()
+        .mapToDouble(Double::doubleValue)
+        .sum();
+  }
 
   /** This test's calls, oldest first. */
   List<String> calls() {

@@ -266,6 +266,14 @@ Content-Type: application/json
 
 {"quantity": 1, "reference": "RMA-3F2A9C1B"}
 
+### The same reference under another key restocks nothing more: 200 with the Stock as it is
+POST {{inventory}}/stock/PHN-PIXEL-9/restocks
+Authorization: Bearer {{orchestrationToken}}
+Idempotency-Key: http-file-restock-2
+Content-Type: application/json
+
+{"quantity": 1, "reference": "RMA-3F2A9C1B"}
+
 ### Without a key: 400 idempotencyKeyRequired. Staff's or Checkout's token: 403
 POST {{inventory}}/stock/PHN-PIXEL-9/restocks
 Authorization: Bearer {{orchestrationToken}}

@@ -44,7 +44,11 @@ records a `RESTOCKED` movement naming the reference, raises On-hand, publishes t
 with change `RESTOCKED`, and the Stock cache follows, as for every change. It answers 200 with the
 Stock, as `GET /stock/{variantId}` does. It needs an `Idempotency-Key` (400
 `idempotencyKeyRequired` without one); the same key again replays the first answer, with
-`Idempotent-Replayed: true`, and restocks nothing more. A quantity below 1, or a reference that is
+`Idempotent-Replayed: true`, and restocks nothing more. A Variant is also restocked once per
+reference, whatever the key: a restock naming a reference the Variant has a `RESTOCKED` movement for
+answers 200 with the Stock as it is, recording and publishing nothing. So a second run of a returns
+Saga, whose keys are its own, restocks an RMA's units once. It is checked under the Variant's stock
+row lock, so two such restocks at once can't both pass. A quantity below 1, or a reference that is
 missing or longer than 64 characters, is a 400; a Variant Inventory doesn't stock is a 404 with
 `unknownVariants`. Staff, Checkout and Customers get 403.
 

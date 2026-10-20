@@ -9,7 +9,8 @@ import org.springframework.test.web.servlet.client.RestTestClient;
 
 /**
  * The returns Saga puts returned units back on hand: a {@code RESTOCKED} Stock movement naming the
- * RMA reference, once per {@code Idempotency-Key}. Restocking is Orchestration's alone.
+ * RMA reference, once per {@code Idempotency-Key}, and once per Variant and reference whatever the
+ * key. Restocking is Orchestration's alone.
  */
 class RestockApiTest extends InventoryApiTest {
 
@@ -51,6 +52,35 @@ class RestockApiTest extends InventoryApiTest {
     assertThat(ledgerOf(variant).changes())
         .filteredOn(m -> m.kind().equals("RESTOCKED"))
         .hasSize(1);
+  }
+
+  /**
+   * A second run of a returns Saga, whose keys are its own, restocks the same RMA's units again:
+   * they are on hand already, so nothing more is.
+   */
+  @Test
+  void theSameReferenceUnderAnotherKeyRestocksNothingMore() {
+    var variant = newVariant(5);
+    restock(orchestrationToken(), variant, newKey(), restockBody(2, RMA_REFERENCE))
+        .expectStatus()
+        .isOk();
+
+    restock(orchestrationToken(), variant, newKey(), restockBody(2, RMA_REFERENCE))
+        .expectStatus()
+        .isOk()
+        .expectBody(StockView.class)
+        .isEqualTo(new StockView(variant, 7, 7, 0));
+
+    assertThat(stockOf(variant)).isEqualTo(new StockView(variant, 7, 7, 0));
+    assertThat(ledgerOf(variant).changes())
+        .filteredOn(m -> m.kind().equals("RESTOCKED"))
+        .hasSize(1);
+    // Another RMA's units are restocked as ever.
+    restock(orchestrationToken(), variant, newKey(), restockBody(1, "RMA-0000AAAA"))
+        .expectStatus()
+        .isOk()
+        .expectBody(StockView.class)
+        .isEqualTo(new StockView(variant, 8, 8, 0));
   }
 
   @Test

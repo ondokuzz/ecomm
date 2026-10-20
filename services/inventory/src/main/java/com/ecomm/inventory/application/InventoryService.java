@@ -215,6 +215,10 @@ public class InventoryService
           if (current == null) {
             throw new UnknownVariantException(List.of(variantId));
           }
+          // Under the stock row's lock, so two restocks naming the same reference can't both pass.
+          if (movements.restocked(variantId, reference)) {
+            return current;
+          }
           var changed = current.withOnHand(Math.addExact(current.onHand(), quantity));
           recordChange(
               Change.RESTOCKED, List.of(movement), Map.of(variantId, changed.onHand()), now);

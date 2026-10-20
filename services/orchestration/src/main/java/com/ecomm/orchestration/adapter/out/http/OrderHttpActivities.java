@@ -62,16 +62,19 @@ class OrderHttpActivities implements OrderActivities {
             tax,
             AddressBody.of(shippingAddress),
             shippingOption);
-    var order =
-        Steps.call(
-            "placeOrder",
-            () ->
+    return Steps.call(
+        "placeOrder",
+        () ->
+            placedOrderOf(
                 http.post()
                     .uri("/orders")
                     .header("Idempotency-Key", Steps.idempotencyKey("placeOrder"))
                     .body(body)
                     .retrieve()
-                    .body(OrderBody.class));
+                    .body(OrderBody.class)));
+  }
+
+  private static PlacedOrder placedOrderOf(OrderBody order) {
     if (order == null || order.id() == null || order.total() == null) {
       throw new IllegalStateException("Order Management placed an Order without an ID or total");
     }
