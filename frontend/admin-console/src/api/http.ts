@@ -41,6 +41,8 @@ interface RequestOptions {
   body?: unknown
   /** The signed-in Staff member's access token. */
   token?: string
+  /** For a command the service replays when it is repeated under the same key. */
+  idempotencyKey?: string
 }
 
 /** Calls a service's endpoint and returns its JSON body, or undefined for an empty one. */
@@ -48,6 +50,7 @@ export async function api<T>(service: Service, path: string, options: RequestOpt
   const headers: Record<string, string> = { Accept: 'application/json' }
   if (options.token) headers.Authorization = `Bearer ${options.token}`
   if (options.body !== undefined) headers['Content-Type'] = 'application/json'
+  if (options.idempotencyKey) headers['Idempotency-Key'] = options.idempotencyKey
 
   const response = await fetch(`/api/${service}${path}`, {
     method: options.method ?? 'GET',

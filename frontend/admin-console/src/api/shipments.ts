@@ -92,6 +92,37 @@ export function useOrderShipment(orderId: string) {
 }
 
 /**
+ * The replacement Shipment the returns Saga created for an RMA, or null while it has none, asked
+ * again until it has. Staff only.
+ */
+export function useReplacement(rmaId: string) {
+  const token = useAuth().user?.access_token
+  return useQuery({
+    ...replacementQuery(rmaId, token),
+    refetchInterval: (query) => (query.state.data === null ? followingInterval : false),
+  })
+}
+
+/** The replacements of several RMAs, in their order. */
+export function useReplacements(rmaIds: readonly string[]) {
+  const token = useAuth().user?.access_token
+  return useQueries({ queries: rmaIds.map((rmaId) => replacementQuery(rmaId, token)) })
+}
+
+function replacementQuery(rmaId: string, token: string | undefined) {
+  return {
+    queryKey: [...shipmentsKey, 'rma', rmaId],
+    queryFn: () =>
+      api<Shipment>('fulfillment-shipping', `/shipments?${new URLSearchParams({ rmaId })}`, { token }).catch(
+        (error: unknown) => {
+          if (isNotFound(error)) return null
+          throw error
+        },
+      ),
+  }
+}
+
+/**
  * Picks or packs a Shipment as the signed-in Staff member. Another status than the one it moves
  * from is a 409 `illegalTransition`: someone else moved it first. A Pack's refused Serial numbers
  * are a 422 naming each field, or a 409 `serialAlreadyShipped`.

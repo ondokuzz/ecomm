@@ -299,7 +299,8 @@ code {
 select.input {
   padding-right: var(--space-5);
 }
-input[type='checkbox'] {
+input[type='checkbox'],
+input[type='radio'] {
   width: 1rem;
   height: 1rem;
   margin: 0;

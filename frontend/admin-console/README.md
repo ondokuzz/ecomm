@@ -2,7 +2,8 @@
 
 The back-office React app where Staff manage the Catalog: Products with their Variants, Prices and
 Stock, and Categories with their attribute definitions; and Promotions: Coupons and Campaigns. Staff
-also read every Customer's Orders here, without being able to change them. Built on the Storefront's stack:
+also read every Customer's Orders here, without being able to change them, and work two queues:
+Shipments to pick and pack, and RMAs to decide, receive and inspect. Built on the Storefront's stack:
 Vite, React, TypeScript, React Router and TanStack Query, with `oidc-client-ts`.
 
 ## Pages
@@ -23,11 +24,11 @@ Vite, React, TypeScript, React Router and TanStack Query, with `oidc-client-ts`.
 | `/promotions/campaigns/new` | A new Campaign |
 | `/promotions/campaigns/{id}` | A Campaign |
 | `/orders` | Every Customer's Orders, newest first, 20 to a page: Order reference, when placed, Customer ID, items, total and Order Status. Filter by Status, Customer ID, the days placed and Order reference |
-| `/orders/{id}` | An Order: its ID, Customer ID, lines, each Discount by its Campaign or Coupon, tax and total, its Payments with their transactions, its Shipment, its RMAs, and its Order Status history |
+| `/orders/{id}` | An Order: its ID, Customer ID, lines, each Discount by its Campaign or Coupon, tax and total, its Payments with their transactions, its Shipment, its RMAs with their statuses, their replacement Shipments, its Refunds, and its Order Status history |
 | `/fulfillment` | The fulfillment queue: Shipments awaiting pick, picked, packed or on hold, one tab each with its count, oldest first, 20 to a page (`?status=&page=&kind=`), from the Warehouse chosen or all, of one kind or both: Order reference, "Replacement · RMA-…" for a replacement, linking to the RMA, how long ago it was paid, Warehouse, destination country and units |
 | `/fulfillment/{id}` | A Shipment: its RMA for a replacement, its Order, Warehouse, Shipping option, Shipping address and lines. Pick it, pack it with a Serial number per unit, and see its tracking, its hold reason and its status history |
-| `/rmas` | The RMA approval queue: requested RMAs, oldest first, 20 to a page, with tabs for the approved and the rejected (`?status=&page=`): RMA reference, kind, Order reference, Product and how long ago it was requested |
-| `/rmas/{id}` | An RMA: its Order, Customer, Product and Variant, quantity, Serial numbers, kind, the Customer's reason, the window it was checked against, and its decision history. Approve or reject a requested one |
+| `/rmas` | The RMA queue: Requested, Awaiting units, Received, On hold and Closed, one tab each with its count, 20 to a page (`?tab=&page=`): RMA reference, kind, Order reference, Product, the status where a tab holds several, and how long ago it was requested, or, awaiting units, its Send-back deadline |
+| `/rmas/{id}` | An RMA: its Order, Customer, Product and Variant, quantity, Serial numbers, kind, the Customer's reason, its Refund amount, Send-back deadline, Warehouse and Inspection, the window it was checked against, and its RMA history. Approve or reject a requested one, receive an approved one's units, inspect a received one, and see its resolution |
 
 `/` opens the Products. Every page needs a Staff sign-in.
 
@@ -186,7 +187,12 @@ The Order page also lists the Order's RMAs, oldest first, from Returns & Warrant
 `GET /rmas?orderId=`: each RMA reference links to its page, with its kind, Product, quantity, when it
 was requested and its status. Above them, its Shipment from Fulfillment & Shipping's
 `GET /shipments?orderId=`: its status, Warehouse, tracking number once dispatched, and a link to
-its page. An Order not yet paid, or placed before Sprint 5, has none, and says so.
+its page. An Order not yet paid, or placed before Sprint 5, has none, and says so. Below them, once
+an RMA's fault is confirmed, its replacement Shipment from `GET /shipments?rmaId=`, with its status,
+Warehouse, tracking number and a link; one the returns Saga refunded instead, for want of Stock, has
+none. Then the Refunds of its Payments, oldest first, whatever their outcome: the RMA each was for,
+linking to it, its outcome, amount, the gateway's reference and time. `refundRowsOf` in
+[`src/domain/payment.ts`](./src/domain/payment.ts) gathers them.
 
 ## Fulfillment
 
@@ -230,27 +236,53 @@ what they did.
 
 ## RMAs
 
-The RMA approval queue and the RMA page call Returns & Warranty's `GET /rmas?status=&page=&size=`
-and `GET /rmas/{id}`, and decide with `POST /rmas/{id}/approve` and `/reject`, all as Staff (see the
+The RMA queue and the RMA page call Returns & Warranty's `GET /rmas?status=&page=&size=` and
+`GET /rmas/{id}`, decide with `POST /rmas/{id}/approve` and `/reject`, and take the next steps with
+`/receive` and `/inspect`, each under an `Idempotency-Key` of its own, all as Staff (see the
 [Returns & Warranty README](../../services/returns-warranty/README.md#api)). Customers request RMAs
-through the API this sprint; the Storefront's form is Sprint 6's.
+through the API until the Storefront's form lands. The returns Saga takes it from the Inspection, and
+the console only reads what it did.
 
-- **The queue** opens on the requested RMAs, oldest first, so none waits forgotten; its Approved
-  and Rejected tabs list the decided ones in the same order. The tab and the page live in the URL,
-  and the RMA page's back link returns to them. "How long ago" counts from when the page was
-  fetched, in whole minutes, hours or days.
-- **The RMA page** shows what it claims, the Customer's reason, and the window it was checked
-  against, as it was then: the Return Period, or the Warranty Window with its Warranty terms, such
-  as "12 months, from JBL", each from delivery to its end, in the browser's time zone.
+- **The queue** has a tab per stage of the RMA lifecycle, each with its count: Requested (`REQUESTED`),
+  Awaiting units (`APPROVED`), Received (`RECEIVED` and `INSPECTED`, while the Saga resolves it), On
+  hold (`ON_HOLD`) and Closed (`REJECTED`, `EXPIRED`, `REFUNDED`, `EXCHANGED` and `CLOSED`). Awaiting
+  units is by Send-back deadline, soonest first, and flags each deadline within 2 days, or passed,
+  which the Saga is about to expire; every other tab is oldest request first, so none waits
+  forgotten. A tab of several statuses shows each RMA's. The tab and the page live in the URL, and
+  the RMA page's back link returns to them. "How long ago" counts from when the page was fetched, in
+  whole minutes, hours or days.
+- **The RMA page** shows what it claims, the Customer's reason, its Refund amount, and, once
+  approved, its Send-back deadline and the Warehouse its units go back to; and the window it was
+  checked against, as it was then: the Return Period, or the Warranty Window with its Warranty
+  terms, such as "12 months, from JBL", each from delivery to its end, in the browser's time zone.
 - **Deciding**: a requested RMA can be approved, with an optional note, or rejected, with a reason
   the Customer is told. A rejection without a reason, or either text over 1,000 characters, is
   refused beside its field before anything is sent. Once decided, the page offers neither again; an
   RMA another Staff member decided first answers 409 `rmaAlreadyDecided`, which the page says,
   showing the RMA as they left it.
-- **The decision history** is newest first: the decision, when to the second, the deciding Staff
-  member's ID, and the note or reason.
+- **Receiving** an approved RMA takes one input per unit of a serial-tracked Variant, each checked
+  as it is typed against the RMA's Serial numbers, whatever its case: one that can't become one of
+  them, or one typed twice, is refused at once, and an empty or unfinished one when Receive is
+  pressed. Any other Variant's units are received by confirming their quantity. Returns & Warranty's
+  422 `serialMismatch` shows beside each input holding a Serial number it refused, `quantityMismatch`
+  beside the quantity (or the units, for a serial-tracked Variant), and a 400 beside the field it
+  names. A Receive or Inspection sent again unchanged, after an answer that never came, keeps its
+  `Idempotency-Key`, so Returns & Warranty replays its first answer.
+- **Inspecting** a received RMA offers the outcomes for its kind: Accepted or Refused for a return,
+  Fault confirmed or No fault found for a warranty claim. A refusing one needs a note, refused
+  beside it before anything is sent. An RMA another Staff member moved on first answers 409
+  `transitionRefused`, which the page says.
+- **The resolution**, once inspected: while the returns Saga is at work the page asks again every
+  3 seconds. Then it shows the Refund's amount and its reference at the payment gateway; the
+  replacement Shipment's status, Warehouse, tracking number and a link, from the moment the Saga
+  creates it; the Inspection's note for one closed; or, for one on hold, the reason its Refund was
+  declined.
+- **The RMA history** is newest first: each step, when to the second, who took it (the Customer,
+  a Staff member's ID, or the Returns Saga), and its note: an approval's, a rejection's reason, an
+  Inspection's, a hold's reason.
 
-`queueOf`, `queueSearchOf`, `rmasQueryOf`, `windowOf`, `decisionRowsOf` and `decisionOf` in
+`queueTabs`, `queueOf`, `queueSearchOf`, `rmasQueryOf`, `sendBackOf`, `windowOf`, `historyRowsOf`,
+`decisionOf`, `receivedChecksOf`, `receiveOf`, `receiveRefusalsOf`, `outcomesOf`, `inspectionOf` and `resolutionOf` in
 [`src/domain/rma.ts`](./src/domain/rma.ts), and `formatAgo` in
 [`src/domain/ago.ts`](./src/domain/ago.ts), do this.
 
@@ -341,12 +373,14 @@ how to apply the client to an existing realm.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: failed requests as messages and references, field errors from problem details, the STAFF role in an access token, a Category, a Product with its Warranty terms and Serial tracking, a Coupon and a Campaign to and from their editor's form, decimals to and from Money, the Order list's filters to Order Management's query, an Order's Status history, Payment statuses and transactions, Stock movements and their balance, RMA statuses and kinds, the RMA approval queue's URL and query, an RMA's window, its decision history and a decision before it is sent, Shipment and Tracking event statuses, the fulfillment queue's URL and query, an IMEI or serial number as it is typed, a Pack request, a Shipment's status history, and how long ago
+npm test          # Vitest: failed requests as messages and references, field errors from problem details, the STAFF role in an access token, a Category, a Product with its Warranty terms and Serial tracking, a Coupon and a Campaign to and from their editor's form, decimals to and from Money, the Order list's filters to Order Management's query, an Order's Status history, Payment statuses and transactions, Stock movements and their balance, RMA statuses and kinds, the RMA queue's tabs, URL and query, a Send-back deadline and its flag, an RMA's window, its RMA history, a decision, a receipt and an Inspection before they are sent, each Serial number received as it is typed, Returns & Warranty's refusals of a receipt, an RMA's resolution, an Order's Refunds, Shipment and Tracking event statuses, the fulfillment queue's URL and query, an IMEI or serial number as it is typed, a Pack request, a Shipment's status history, and how long ago
 npm run build
 npm run test:e2e  # Playwright against the running compose stack (`make up`)
 ```
 
-The Playwright tests sign in on Keycloak as `staff@ecomm.local`.
+The Playwright tests sign in on Keycloak as `staff@ecomm.local`. What the fulfillment and RMA tests
+share, from tokens to a Customer of their own and buying a phone through the gateway, is in
+[`e2e/stack.ts`](./e2e/stack.ts).
 [`e2e/promotions.spec.ts`](./e2e/promotions.spec.ts) creates, edits, switches off and deletes a
 Coupon and a Campaign, checking each through Promotions' API, and sees Promotions refuse a window
 that ends before it starts and the seeded Audio week's priority beside the field. It also creates a
@@ -392,7 +426,18 @@ deliver it, about 30 seconds. As the demo Customer it then requests a return of 
 warranty claim on the other through the gateway. In the console it finds the return on the queue's
 last page, checks its page, approves it with a note and sees the decision in its history; then it
 opens the warranty claim, sees its Warranty Window of 12 months from JBL, is refused a rejection
-without a reason, and rejects it with one. The Order page lists both RMAs with their statuses.
+without a reason, and rejects it with one, then opens the Closed tab. The Order page lists both RMAs
+with their statuses.
+
+A second test there needs the fulfillment and returns Sagas. As a Customer of its own it buys a
+seeded phone through the gateway, packs its Shipment through the API with an IMEI of the run's own,
+and waits while the fulfillment Saga captures the Payment and dispatches it and the mock carrier
+delivers it. It requests a return of the phone as that Customer and approves it as Staff, through
+the API. In the console the RMA page shows its Send-back deadline, Warehouse and Refund amount;
+another IMEI is refused as it is typed, and Receive sends nothing; the right one receives it. Staff
+inspect it as Accepted, and within the Saga's run the page shows it Refunded, with the Refund's
+amount and the gateway reference Returns & Warranty recorded. The Order page lists the RMA as
+Refunded and the Refund, Approved, with the same reference.
 
 [`e2e/fulfillment.spec.ts`](./e2e/fulfillment.spec.ts) needs the fulfillment Saga. As a Customer
 of its own it buys a seeded phone through the gateway, shipped to Berlin, Standard, and pays with
@@ -407,6 +452,6 @@ gateway's reason, without tracking, and is listed under On hold.
 
 Each test removes its Product and Stock, Coupon, Campaign or Customer through the services' and
 Keycloak's APIs if it failed before doing so itself, so the stack is left as it was, but for the
-Orders the Order and Campaign tests place, the RMA test's Order, Shipment and RMAs, and the fulfillment test's two Orders and Shipments. It runs against the console on 8090; set `ADMIN_CONSOLE_URL` to use Vite's
+Orders the Order and Campaign tests place, the RMA tests' Orders, Shipments and RMAs, and the fulfillment test's two Orders and Shipments. It runs against the console on 8090; set `ADMIN_CONSOLE_URL` to use Vite's
 5174, and `STOREFRONT_URL` or `KEYCLOAK_URL` for other hosts. Install Chromium once with
 `npx playwright install chromium`.

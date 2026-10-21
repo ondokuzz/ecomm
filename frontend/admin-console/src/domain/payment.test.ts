@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { type Payment, paymentStatusLabel, paymentStatuses, refundedOf, transactionRowsOf } from './payment'
+import {
+  type Payment,
+  paymentStatusLabel,
+  paymentStatuses,
+  refundRowsOf,
+  refundedOf,
+  transactionRowsOf,
+} from './payment'
 
 const eur = (amountMinor: number) => ({ amountMinor, currency: 'EUR' })
 
@@ -148,5 +155,78 @@ describe('refundedOf', () => {
       refundedOf({ amount: eur(79900), transactions: [refund(30000, 'APPROVED'), refund(100, 'DECLINED')] }),
     ).toEqual(eur(30000))
     expect(refundedOf(payment)).toEqual(eur(0))
+  })
+})
+
+describe('refundRowsOf', () => {
+  const transaction = {
+    declineReason: null,
+    gatewayEventId: null,
+    backfilled: false,
+  }
+
+  it('lists every Payment’s Refunds, oldest first, with what each was for', () => {
+    const captured = (id: string, at: string) => ({
+      ...transaction,
+      kind: 'CAPTURE' as const,
+      amount: eur(79900),
+      outcome: 'APPROVED' as const,
+      gatewayReference: `mock_capture_${id}`,
+      at,
+      reference: null,
+    })
+    const rows = refundRowsOf(
+      [
+        {
+          transactions: [
+            captured('2', '2026-10-05T12:00:00Z'),
+            {
+              ...transaction,
+              kind: 'REFUND',
+              amount: eur(12900),
+              outcome: 'DECLINED',
+              gatewayReference: null,
+              declineReason: 'card_closed',
+              at: '2026-10-07T12:00:00Z',
+              reference: 'RMA-0B8E6F2A',
+            },
+          ],
+        },
+        {
+          transactions: [
+            captured('1', '2026-10-03T12:00:00Z'),
+            {
+              ...transaction,
+              kind: 'REFUND',
+              amount: eur(39950),
+              outcome: 'APPROVED',
+              gatewayReference: 'mock_refund_1',
+              at: '2026-10-06T12:00:00Z',
+              reference: 'RMA-3F2A9C1B',
+            },
+          ],
+        },
+      ],
+      'en-GB',
+    )
+    expect(rows).toEqual([
+      {
+        amount: eur(39950),
+        outcome: 'Approved',
+        reference: 'mock_refund_1',
+        rmaReference: 'RMA-3F2A9C1B',
+        at: '2026-10-06T12:00:00Z',
+        time: '6 Oct 2026, 21:00:00',
+      },
+      {
+        amount: eur(12900),
+        outcome: 'Declined',
+        reference: '—',
+        declineReason: 'card_closed',
+        rmaReference: 'RMA-0B8E6F2A',
+        at: '2026-10-07T12:00:00Z',
+        time: '7 Oct 2026, 21:00:00',
+      },
+    ])
   })
 })

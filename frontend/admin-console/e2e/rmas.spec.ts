@@ -1,12 +1,30 @@
-import { type APIRequestContext, type Page, expect, test } from '@playwright/test'
+import { type APIRequestContext, expect, test } from '@playwright/test'
 import type { Page as ListPage } from '../src/domain/paging'
 import type { Rma } from '../src/domain/rma'
 import { stackSecret } from './secrets'
+import {
+  type Customer,
+  aPhoneInStock,
+  bearer,
+  buy,
+  createCustomer,
+  deleteCustomer,
+  newImei,
+  password,
+  shipmentOf,
+  signInOnKeycloak,
+  staff,
+  staffToken,
+  subjectOf,
+  tokenOf,
+} from './stack'
 
 /**
- * Staff decide RMAs in the RMA approval queue: the demo Customer returns one of two speakers
+ * Staff work RMAs in the RMA queue. In the first test the demo Customer returns one of two speakers
  * delivered on an Order, and claims the warranty on the other, through the API; Staff approve the
- * return with a note and reject the claim with a reason, and the Order page lists both.
+ * return with a note and reject the claim with a reason, and the Order page lists both. In the
+ * second a Customer of the test's own buys a phone and returns it; Staff receive it, a wrong IMEI
+ * refused, inspect it, and see the returns Saga's Refund.
  *
  * The Order and its Shipment are made as the checkout and fulfillment Sagas would, straight at
  * Order Management and Fulfillment & Shipping, since the gateway routes neither placing an Order
@@ -16,19 +34,17 @@ import { stackSecret } from './secrets'
  * its own.
  */
 
-const keycloakUrl = process.env.KEYCLOAK_URL ?? 'http://localhost:8180'
 /** Order Management's compose host port, which bypasses the gateway, for the checkout Saga's commands. */
 const orderManagementUrl = process.env.ORDER_MANAGEMENT_URL ?? 'http://localhost:8085'
 /** Fulfillment & Shipping's compose host port, likewise, for the fulfillment Saga's commands. */
 const fulfillmentUrl = process.env.FULFILLMENT_SHIPPING_URL ?? 'http://localhost:8099'
-const staff = { email: 'staff@ecomm.local', password: 'staff' }
 const demo = { email: 'demo@ecomm.local', password: 'demo' }
 const orchestrationClientSecret = stackSecret('orchestration-client-secret')
 
 /** A serial-tracked Product with 12 months of Warranty terms from JBL. */
 const speaker = { variantId: 'AUD-JBL-FLIP-6', productName: 'JBL Flip 6', price: 12900 }
 
-test('Staff approve a return and reject a warranty claim from the RMA approval queue', async ({ page, request }) => {
+test('Staff approve a return and reject a warranty claim from the RMA queue', async ({ page, request }) => {
   // Waiting for the mock carrier's delivery and Returns & Warranty's projection of it.
   test.setTimeout(180_000)
   const run = `${Date.now().toString(36)}${test.info().workerIndex}`.toUpperCase()
@@ -64,9 +80,11 @@ test('Staff approve a return and reject a warranty claim from the RMA approval q
   await page.goto(lastPage > 1 ? `/rmas?page=${lastPage}` : '/rmas')
   await signInOnKeycloak(page)
   await expect(page.getByRole('heading', { name: 'RMAs' })).toBeVisible()
-  await expect(
-    page.getByRole('navigation', { name: 'RMA statuses' }).getByRole('link', { name: 'Requested' }),
-  ).toHaveAttribute('aria-current', 'page')
+  const tabs = page.getByRole('navigation', { name: 'RMA stages' })
+  await expect(tabs.getByRole('link', { name: /^Requested/ })).toHaveAttribute('aria-current', 'page')
+  for (const tab of ['Requested', 'Awaiting units', 'Received', 'On hold', 'Closed']) {
+    await expect(tabs.getByRole('link', { name: new RegExp(`^${tab} \\d+$`) })).toBeVisible()
+  }
   const row = page.getByRole('row').filter({ hasText: returned.reference })
   await expect(row).toContainText('Return')
   await expect(row).toContainText(`#${orderReference}`)
@@ -86,13 +104,16 @@ test('Staff approve a return and reject a warranty claim from the RMA approval q
   const window = page.getByRole('region', { name: 'Checked against' })
   await expect(window).toContainText('Return Period')
   await expect(window.locator('time').last()).toHaveAttribute('datetime', returned.window.endsAt)
-  await expect(page.getByRole('region', { name: 'Decision history' })).toContainText('Not decided yet.')
+  const requested = page.getByRole('table', { name: 'RMA history' }).getByRole('row')
+  await expect(requested).toHaveCount(2)
+  await expect(requested.nth(1)).toContainText('Requested')
+  await expect(requested.nth(1)).toContainText('Customer')
 
   await page.getByLabel('Note').fill('Send it to the Berlin Warehouse')
   await page.getByRole('button', { name: 'Approve' }).click()
   await expect(page.getByRole('main').getByText('Approved', { exact: true }).first()).toBeVisible()
-  const approval = page.getByRole('table', { name: 'Decision history' }).getByRole('row')
-  await expect(approval).toHaveCount(2)
+  const approval = page.getByRole('table', { name: 'RMA history' }).getByRole('row')
+  await expect(approval).toHaveCount(3)
   await expect(approval.nth(1)).toContainText('Approved')
   await expect(approval.nth(1)).toContainText('Send it to the Berlin Warehouse')
   await expect(approval.nth(1)).toContainText(subjectOf(staffToken))
@@ -111,16 +132,19 @@ test('Staff approve a return and reject a warranty claim from the RMA approval q
   await expect(page.getByLabel('Reason')).toHaveAttribute('aria-invalid', 'true')
   await page.getByLabel('Reason').fill('Water damage is not covered')
   await page.getByRole('button', { name: 'Reject' }).click()
-  const rejection = page.getByRole('table', { name: 'Decision history' }).getByRole('row')
-  await expect(rejection).toHaveCount(2)
+  const rejection = page.getByRole('table', { name: 'RMA history' }).getByRole('row')
+  await expect(rejection).toHaveCount(3)
   await expect(rejection.nth(1)).toContainText('Rejected')
   await expect(rejection.nth(1)).toContainText('Water damage is not covered')
   await expect(page.getByRole('button', { name: 'Reject' })).toHaveCount(0)
 
-  // The tabs for the decided ones.
+  // The rejected one is closed.
   await page.getByRole('main').getByRole('link', { name: 'RMAs' }).click()
-  await page.getByRole('navigation', { name: 'RMA statuses' }).getByRole('link', { name: 'Rejected' }).click()
-  await expect(page).toHaveURL(/\/rmas\?status=REJECTED$/)
+  await page
+    .getByRole('navigation', { name: 'RMA stages' })
+    .getByRole('link', { name: /^Closed/ })
+    .click()
+  await expect(page).toHaveURL(/\/rmas\?tab=closed$/)
   await expect(page.getByText('oldest request first')).toBeVisible()
 
   // The Order lists both, with their statuses.
@@ -131,6 +155,115 @@ test('Staff approve a return and reject a warranty claim from the RMA approval q
   await rmas.getByRole('link', { name: claimed.reference }).click()
   await expect(page).toHaveURL(new RegExp(`/rmas/${claimed.id}$`))
 })
+
+let customer: Customer | undefined
+
+test.afterAll(async ({ request }) => {
+  if (customer) await deleteCustomer(request, customer)
+})
+
+test('Staff receive a returned phone, refused a wrong IMEI, inspect it, and see the returns Saga refund it', async ({
+  page,
+  request,
+}) => {
+  // Checkout, the fulfillment Saga and the mock carrier's delivery, then the returns Saga's Refund.
+  test.setTimeout(300_000)
+  customer = await createCustomer(request, 'rmas')
+  const phone = await aPhoneInStock(request)
+  const orderId = await buy(request, customer, phone.variantId, 'tok_approve')
+  const imei = newImei()
+  await shipAndDeliver(request, orderId, phone.variantId, imei)
+
+  const returned = await requestRma(request, await tokenOf(request, password(customer)), {
+    orderId,
+    variantId: phone.variantId,
+    quantity: 1,
+    serialNumbers: [imei],
+    kind: 'RETURN',
+    reason: 'Changed my mind',
+  })
+  const staffHeaders = bearer(await staffToken(request))
+  const approved = await request.post(`/api/returns-warranty/rmas/${returned.id}/approve`, {
+    headers: staffHeaders,
+    data: {},
+  })
+  expect(approved.ok()).toBeTruthy()
+  const rma = (await approved.json()) as Rma
+
+  // Awaiting its units: the Send-back deadline, the Warehouse they go back to and the Refund amount.
+  await page.goto(`/rmas/${rma.id}`)
+  await signInOnKeycloak(page)
+  await expect(page.getByRole('heading', { name: `Return ${rma.reference}` })).toBeVisible()
+  const facts = page.getByRole('region', { name: 'About this RMA' })
+  // To the second: the approval's answer has more of its fraction than Postgres keeps.
+  await expect(facts.locator(`time[datetime^="${rma.sendBackBy!.slice(0, 19)}"]`)).toBeVisible()
+  await expect(facts).toContainText('WH-BER')
+  await expect(facts).toContainText(euros(rma.refundAmount!.amountMinor))
+
+  // A unit that isn't the RMA's is refused as it is typed, and Receive sends nothing.
+  const receive = page.getByRole('form', { name: 'Receive' })
+  const serialInput = receive.getByLabel('Serial number', { exact: true })
+  await serialInput.fill(newImei())
+  await expect(receive.getByText('Not one of this RMA’s Serial numbers.')).toBeVisible()
+  await expect(serialInput).toHaveAttribute('aria-invalid', 'true')
+  await receive.getByRole('button', { name: 'Receive' }).click()
+  await expect(page.getByRole('table', { name: 'RMA history' }).getByRole('row')).toHaveCount(3)
+
+  // The right one receives it.
+  await serialInput.fill(imei)
+  await expect(serialInput).not.toHaveAttribute('aria-invalid', 'true')
+  await receive.getByRole('button', { name: 'Receive' }).click()
+  const history = page.getByRole('table', { name: 'RMA history' }).getByRole('row')
+  await expect(history).toHaveCount(4)
+  await expect(history.nth(1)).toContainText('Received')
+  await expect(history.nth(1)).toContainText(subjectOf(await staffToken(request)))
+  await expect(page.getByRole('form', { name: 'Receive' })).toHaveCount(0)
+
+  // Inspected as accepted, the returns Saga refunds it.
+  const inspect = page.getByRole('form', { name: 'Inspect' })
+  await inspect.getByLabel('Accepted').check()
+  await inspect.getByRole('button', { name: 'Record the Inspection' }).click()
+  await expect(page.locator('.page-heading')).toContainText('Refunded', { timeout: 90_000 })
+  const refunded = (await (
+    await request.get(`/api/returns-warranty/rmas/${rma.id}`, { headers: bearer(await staffToken(request)) })
+  ).json()) as Rma
+  const reference = refunded.resolution!.paymentTransactionReference!
+  const resolution = page.getByRole('region', { name: 'Resolution' })
+  await expect(resolution).toContainText(euros(rma.refundAmount!.amountMinor))
+  await expect(resolution).toContainText(reference)
+  await expect(history.nth(1)).toContainText('Returns Saga')
+
+  // The Order lists the RMA as refunded, and the Refund it was given.
+  await facts.getByRole('link', { name: `#${orderId.slice(0, 8).toUpperCase()}` }).click()
+  await expect(
+    page.getByRole('table', { name: 'RMAs' }).getByRole('row').filter({ hasText: rma.reference }),
+  ).toContainText('Refunded')
+  const refund = page.getByRole('table', { name: 'Refunds' }).getByRole('row').filter({ hasText: rma.reference })
+  await expect(refund).toContainText('Approved')
+  await expect(refund).toContainText(reference)
+  await expect(refund).toContainText(euros(rma.refundAmount!.amountMinor))
+})
+
+/** An amount in euros as the console shows it in the browser's locale, en-US: `€799.00`. */
+function euros(amountMinor: number): string {
+  return (amountMinor / 100).toLocaleString('en-US', { style: 'currency', currency: 'EUR' })
+}
+
+/**
+ * Picks and packs the Order's Shipment as Staff, with `imei`, and waits while the fulfillment Saga
+ * captures the Payment and dispatches it, and the mock carrier delivers it.
+ */
+async function shipAndDeliver(request: APIRequestContext, orderId: string, variantId: string, imei: string) {
+  const shipment = await shipmentOf(request, orderId)
+  const headers = bearer(await staffToken(request))
+  const path = `/api/fulfillment-shipping/shipments/${shipment.id}`
+  expect((await request.post(`${path}/pick`, { headers })).ok()).toBeTruthy()
+  const packed = await request.post(`${path}/pack`, { headers, data: { serialNumbers: { [variantId]: [imei] } } })
+  expect(packed.ok()).toBeTruthy()
+  await expect
+    .poll(async () => (await shipmentOf(request, orderId)).status, { timeout: 150_000, intervals: [2_000] })
+    .toBe('DELIVERED')
+}
 
 /**
  * Places an Order of two speakers for the demo Customer, then creates its Shipment, picks it, packs
@@ -227,12 +360,6 @@ async function requestRma(request: APIRequestContext, token: string, rma: object
   return requested!
 }
 
-async function signInOnKeycloak(page: Page) {
-  await page.locator('#username').fill(staff.email)
-  await page.locator('#password').fill(staff.password)
-  await page.locator('#kc-login').click()
-}
-
 /** The Shipping every Order is placed with since Sprint 5: Berlin, Standard at 4.99. */
 const shipping = {
   shippingAddress: {
@@ -243,23 +370,4 @@ const shipping = {
     country: 'DE',
   },
   shippingOption: { id: 'STANDARD', carrier: 'Mock Carrier', cost: { amountMinor: 499, currency: 'EUR' } },
-}
-
-function password(user: { email: string; password: string }) {
-  return { grant_type: 'password', client_id: 'dev-cli', username: user.email, password: user.password }
-}
-
-async function tokenOf(request: APIRequestContext, form: Record<string, string>): Promise<string> {
-  const response = await request.post(`${keycloakUrl}/realms/ecomm/protocol/openid-connect/token`, { form })
-  expect(response.ok()).toBeTruthy()
-  return ((await response.json()) as { access_token: string }).access_token
-}
-
-function bearer(token: string) {
-  return { Authorization: `Bearer ${token}` }
-}
-
-/** A token's `sub`: the Customer's or Staff member's ID. */
-function subjectOf(token: string): string {
-  return (JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString()) as { sub: string }).sub
 }

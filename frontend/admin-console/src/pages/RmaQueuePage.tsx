@@ -1,21 +1,34 @@
 import { Link, useLocation, useSearchParams } from 'react-router'
-import { useRmas } from '../api/rmas'
+import { useQueueCounts, useRmas } from '../api/rmas'
+import { RmaStatusBadge } from '../components/RmaStatusBadge'
+import { SendBackDeadline } from '../components/SendBackDeadline'
 import { ErrorMessage, SkeletonRows } from '../components/Status'
+import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { formatAgo } from '../domain/ago'
 import { orderReference, pageCount } from '../domain/order'
 import {
   type Queue,
+  type QueueTabId,
   queueOf,
   queueSearchOf,
+  queueTabOf,
+  queueTabs,
   rmaKindLabel,
-  rmaStatusLabel,
-  queueStatuses,
   rmasPageSize,
   rmasQueryOf,
 } from '../domain/rma'
 
-const columns = 5
+/** What each tab says it lists. */
+const intros: Record<QueueTabId, string> = {
+  requested: 'Returns and warranty claims awaiting a decision, oldest first. Open one to approve or reject it.',
+  'awaiting-units':
+    'Approved RMAs whose units are on their way back, soonest Send-back deadline first. The returns Saga expires one whose units never arrive.',
+  received:
+    'RMAs whose units arrived, oldest request first. Open one to inspect it; the returns Saga resolves it then.',
+  'on-hold': 'RMAs the returns Saga held, oldest request first: their Refund was declined.',
+  closed: 'Rejected, expired, refunded, exchanged and closed RMAs, oldest request first.',
+}
 
 /** Where an RMA page's back link returns to: the queue's tab and page as they were. */
 export interface FromQueueState {
@@ -23,13 +36,20 @@ export interface FromQueueState {
 }
 
 /**
- * The RMA approval queue: requested RMAs, oldest first, so none waits forgotten, with tabs for the
- * approved and the rejected ones. The tab and page live in the URL (`?status=&page=`).
+ * The RMA queue, a tab per stage of the RMA lifecycle, each with its count: requested RMAs oldest
+ * first, so none waits forgotten; approved ones by Send-back deadline, flagged within 2 days;
+ * received, on hold, and closed. The tab and page live in the URL (`?tab=&page=`).
  */
 export function RmaQueuePage() {
   const [params, setParams] = useSearchParams()
   const location = useLocation()
   const queue = queueOf(params)
+  const tab = queueTabOf(queue.tab)
+  const counts = useQueueCounts()
+  const awaitingUnits = queue.tab === 'awaiting-units'
+  // A tab of several statuses shows each RMA's.
+  const showStatus = tab.statuses.length > 1
+  const columns = showStatus ? 6 : 5
   const rmas = useRmas(rmasQueryOf(queue, rmasPageSize))
   const page = rmas.data
   const pages = page ? pageCount(page) : 1
@@ -42,23 +62,22 @@ export function RmaQueuePage() {
       <div className="page-heading">
         <h1>RMAs</h1>
       </div>
-      <nav className="subnav" aria-label="RMA statuses">
-        {queueStatuses.map((status) => (
+      <nav className="subnav" aria-label="RMA stages">
+        {queueTabs.map(({ id, label }) => (
           <Link
-            key={status}
-            to={`/rmas${queueSearchOf({ status, page: 0 })}`}
-            className={status === queue.status ? 'subnav-link active' : 'subnav-link'}
-            aria-current={status === queue.status ? 'page' : undefined}
+            key={id}
+            to={`/rmas${queueSearchOf({ tab: id, page: 0 })}`}
+            className={id === queue.tab ? 'subnav-link active' : 'subnav-link'}
+            aria-current={id === queue.tab ? 'page' : undefined}
           >
-            {rmaStatusLabel(status)}
+            {label}
+            {counts[id] !== undefined && (
+              <Badge tone={id === 'on-hold' && counts[id] > 0 ? 'danger' : 'neutral'}>{counts[id]}</Badge>
+            )}
           </Link>
         ))}
       </nav>
-      <p className="muted page-intro">
-        {queue.status === 'REQUESTED'
-          ? 'Returns and warranty claims awaiting a decision, oldest first. Open one to approve or reject it.'
-          : `${rmaStatusLabel(queue.status)} RMAs, oldest request first. A decision is final.`}
-      </p>
+      <p className="muted page-intro">{intros[queue.tab]}</p>
 
       {rmas.error ? (
         <ErrorMessage
@@ -77,7 +96,8 @@ export function RmaQueuePage() {
                   <th scope="col">Kind</th>
                   <th scope="col">Order</th>
                   <th scope="col">Product</th>
-                  <th scope="col">Requested</th>
+                  {showStatus && <th scope="col">Status</th>}
+                  <th scope="col">{awaitingUnits ? 'Send back by' : 'Requested'}</th>
                 </tr>
               </thead>
               {page ? (
@@ -86,7 +106,7 @@ export function RmaQueuePage() {
                     <tr>
                       <td colSpan={columns} className="table-empty">
                         {page.total === 0
-                          ? `No RMAs are ${rmaStatusLabel(queue.status).toLowerCase()}.`
+                          ? `No RMAs are ${tab.label.toLowerCase()}.`
                           : 'There are no RMAs on this page.'}
                       </td>
                     </tr>
@@ -110,8 +130,17 @@ export function RmaQueuePage() {
                           </small>
                         )}
                       </td>
+                      {showStatus && (
+                        <td>
+                          <RmaStatusBadge status={rma.status} />
+                        </td>
+                      )}
                       <td>
-                        <time dateTime={rma.requestedAt}>{formatAgo(rma.requestedAt, now)}</time>
+                        {awaitingUnits && rma.sendBackBy ? (
+                          <SendBackDeadline sendBackBy={rma.sendBackBy} now={now} awaited />
+                        ) : (
+                          <time dateTime={rma.requestedAt}>{formatAgo(rma.requestedAt, now)}</time>
+                        )}
                       </td>
                     </tr>
                   ))}

@@ -245,7 +245,7 @@ manage Coupons and Campaigns, and a Campaign they create applies to a Customer's
 whose Order Staff then find; Staff give a Product Warranty terms and Serial tracking and the
 Storefront shows the warranty; Staff pick and pack a Shipment from the fulfillment queue, refused an
 invalid IMEI, and see it dispatched, and a Shipment whose capture is refused goes on hold with the
-reason; Staff approve a return and reject a warranty claim from the RMA approval queue. Run it with `npm run test:e2e` in `frontend/admin-console`, after the
+reason; Staff approve a return and reject a warranty claim from the RMA queue; and Staff receive a returned phone, refused a wrong IMEI, inspect it, and see the returns Saga refund it. Run it with `npm run test:e2e` in `frontend/admin-console`, after the
 Storefront's rather than beside it, since both check out. Both suites make their own Customers
 through Keycloak's admin API and delete them again; the Orders they place, and the Stock those
 take, stay. The tests pick from the seeded Products only, so an `E2E-` Product a failed test left

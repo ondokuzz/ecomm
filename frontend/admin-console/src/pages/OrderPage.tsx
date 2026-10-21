@@ -4,7 +4,7 @@ import { isNotFound } from '../api/failure'
 import { useOrder } from '../api/orders'
 import { usePayments } from '../api/payments'
 import { useOrderRmas } from '../api/rmas'
-import { useOrderShipment } from '../api/shipments'
+import { useOrderShipment, useReplacements } from '../api/shipments'
 import { NotFound } from '../components/NotFound'
 import { OrderStatusBadge } from '../components/OrderStatusBadge'
 import { RmaStatusBadge } from '../components/RmaStatusBadge'
@@ -14,11 +14,21 @@ import { Badge, type Tone } from '../components/ui/Badge'
 import { Icon } from '../components/ui/Icon'
 import { type Currencies, type Money, formatMoney } from '../domain/money'
 import { type Order, discountLabel, formatTime, historyRowsOf, orderReference } from '../domain/order'
-import { type Payment, type PaymentStatus, paymentStatusLabel, refundedOf, transactionRowsOf } from '../domain/payment'
-import { rmaKindLabel } from '../domain/rma'
+import {
+  type Payment,
+  type PaymentStatus,
+  paymentStatusLabel,
+  refundRowsOf,
+  refundedOf,
+  transactionRowsOf,
+} from '../domain/payment'
+import { type Rma, rmaKindLabel } from '../domain/rma'
 import type { FromListState } from './OrderListPage'
 
-/** `/orders/:id`: one Order, whoever it belongs to, how it got to its Status, and its Payments. Read only. */
+/**
+ * `/orders/:id`: one Order, whoever it belongs to, how it got to its Status, its Payments, its
+ * Shipment, its RMAs with their replacement Shipments and Refunds. Read only.
+ */
 export function OrderPage() {
   const { id } = useParams()
   const order = useOrder(id!)
@@ -194,6 +204,13 @@ function OrderDetail({ order, currencies }: { order: Order; currencies: Currenci
         <Rmas rmas={rmas} />
       </section>
 
+      {rmas.data && <Replacements rmas={rmas.data.items} />}
+
+      <section className="panel" aria-labelledby="order-refunds">
+        <h2 id="order-refunds">Refunds</h2>
+        <Refunds payments={payments} rmas={rmas.data?.items ?? []} money={money} />
+      </section>
+
       <section className="panel" aria-labelledby="order-history">
         <h2 id="order-history">Status history</h2>
         <div className="table-scroll">
@@ -348,7 +365,154 @@ function Rmas({ rmas }: { rmas: RmasQuery }) {
   )
 }
 
+/**
+ * The replacement Shipments the returns Saga created for the Order's RMAs, one per confirmed fault
+ * it could replace, each with its status and a link to it. Shown only when a fault was confirmed.
+ */
+function Replacements({ rmas }: { rmas: readonly Rma[] }) {
+  const faulty = rmas.filter((rma) => rma.inspection?.outcome === 'FAULT_CONFIRMED')
+  const replacements = useReplacements(faulty.map((rma) => rma.id))
+  if (faulty.length === 0) return null
+  const failed = replacements.find((replacement) => replacement.error)
+  return (
+    <section className="panel" aria-labelledby="order-replacements">
+      <h2 id="order-replacements">Replacement Shipments</h2>
+      {failed ? (
+        <ErrorMessage
+          error={failed.error}
+          title="Couldn't load the replacements"
+          retrying={failed.isFetching}
+          onRetry={() => failed.refetch()}
+        />
+      ) : (
+        <div className="table-scroll">
+          <table className="table" aria-labelledby="order-replacements">
+            <thead>
+              <tr>
+                <th scope="col">RMA</th>
+                <th scope="col">Status</th>
+                <th scope="col">Warehouse</th>
+                <th scope="col">Tracking number</th>
+                <th scope="col">Shipment</th>
+              </tr>
+            </thead>
+            <tbody>
+              {faulty.map((rma, i) => {
+                const replacement = replacements[i].data
+                return (
+                  <tr key={rma.id}>
+                    <th scope="row">
+                      <Link to={`/rmas/${rma.id}`}>
+                        <code>{rma.reference}</code>
+                      </Link>
+                    </th>
+                    {replacement ? (
+                      <>
+                        <td>
+                          <ShipmentStatusBadge status={replacement.status} />
+                        </td>
+                        <td>
+                          <code>{replacement.warehouseId}</code>
+                        </td>
+                        <td>
+                          {replacement.trackingNumber ? (
+                            <code>{replacement.trackingNumber}</code>
+                          ) : (
+                            <span className="muted">—</span>
+                          )}
+                        </td>
+                        <td>
+                          <Link to={`/fulfillment/${replacement.id}`}>Open the replacement</Link>
+                        </td>
+                      </>
+                    ) : (
+                      <td colSpan={4} className="muted">
+                        {replacement === null ? 'None: it was refunded, or the returns Saga is at work.' : 'Loading…'}
+                      </td>
+                    )}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  )
+}
+
 type PaymentsQuery = ReturnType<typeof usePayments>
+
+/** The Refunds of the Order's Payments, oldest first, each linking to the RMA it was for. */
+function Refunds({
+  payments,
+  rmas,
+  money,
+}: {
+  payments: PaymentsQuery
+  rmas: readonly Rma[]
+  money: (amount: Money) => string
+}) {
+  // The Payments panel says why they couldn't be loaded.
+  if (payments.error) return <p className="muted">Unknown: the Payments couldn't be loaded.</p>
+  if (!payments.data) {
+    return (
+      <div aria-busy="true">
+        <span className="skeleton heading-skeleton" />
+        <span className="visually-hidden">Loading…</span>
+      </div>
+    )
+  }
+  const rows = refundRowsOf(payments.data)
+  if (rows.length === 0) return <p className="muted">Nothing was refunded.</p>
+  const rmaIdOf = new Map(rmas.map((rma) => [rma.reference, rma.id]))
+  return (
+    <div className="table-scroll">
+      <table className="table" aria-labelledby="order-refunds">
+        <thead>
+          <tr>
+            <th scope="col">For</th>
+            <th scope="col">Outcome</th>
+            <th scope="col" className="num">
+              Amount
+            </th>
+            <th scope="col">Gateway reference</th>
+            <th scope="col">When</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => {
+            const rmaId = row.rmaReference && rmaIdOf.get(row.rmaReference)
+            return (
+              <tr key={i}>
+                <th scope="row">
+                  {rmaId ? (
+                    <Link to={`/rmas/${rmaId}`}>
+                      <code>{row.rmaReference}</code>
+                    </Link>
+                  ) : (
+                    <code>{row.rmaReference ?? '—'}</code>
+                  )}
+                </th>
+                <td>
+                  {row.outcome}
+                  {row.declineReason && <small className="hint">{row.declineReason}</small>}
+                </td>
+                <td className="num">{money(row.amount)}</td>
+                <td>
+                  <code>{row.reference}</code>
+                </td>
+                <td>
+                  <time dateTime={row.at}>{row.time}</time>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
 
 const paymentTones: Record<PaymentStatus, Tone> = {
   PENDING: 'warning',

@@ -107,3 +107,33 @@ export function transactionRowsOf(payment: Pick<Payment, 'transactions'>, locale
     ...(transaction.backfilled ? { note: 'Backfilled from before the ledger: the time is approximate' } : {}),
   }))
 }
+
+/** One Refund as the Order page lists it. */
+export interface RefundRow {
+  amount: Money
+  outcome: string
+  /** The gateway's reference, or a dash when it gave none. */
+  reference: string
+  declineReason?: string
+  /** The RMA it was for, by its RMA reference. */
+  rmaReference?: string
+  /** The instant, for `<time dateTime>`, and as Staff read it, to the second. */
+  at: string
+  time: string
+}
+
+/** Every Refund of an Order's Payments, oldest first, whatever its outcome. */
+export function refundRowsOf(payments: readonly Pick<Payment, 'transactions'>[], locale?: string): RefundRow[] {
+  return payments
+    .flatMap((payment) => payment.transactions.filter((transaction) => transaction.kind === 'REFUND'))
+    .sort((a, b) => a.at.localeCompare(b.at))
+    .map((transaction) => ({
+      amount: transaction.amount,
+      outcome: labelOf(transaction.outcome),
+      reference: transaction.gatewayReference ?? '—',
+      ...(transaction.declineReason ? { declineReason: transaction.declineReason } : {}),
+      ...(transaction.reference ? { rmaReference: transaction.reference } : {}),
+      at: transaction.at,
+      time: formatTime(transaction.at, locale),
+    }))
+}
