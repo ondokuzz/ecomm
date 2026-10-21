@@ -5,6 +5,7 @@ import { AdminConsoleAuthProvider, RequireStaff } from './auth/auth'
 import { Layout } from './components/Layout'
 import { NotFound } from './components/NotFound'
 import { FulfillmentQueuePage } from './pages/FulfillmentQueuePage'
+import { MessageTemplatesPage } from './pages/MessageTemplatesPage'
 import { CampaignEditorPage } from './pages/CampaignEditorPage'
 import { CampaignListPage } from './pages/CampaignListPage'
 import { CategoryEditorPage } from './pages/CategoryEditorPage'
@@ -58,6 +59,7 @@ export function App() {
                 <Route path="fulfillment/:id" element={<ShipmentPage />} />
                 <Route path="rmas" element={<RmaQueuePage />} />
                 <Route path="rmas/:id" element={<RmaPage />} />
+                <Route path="message-templates" element={<MessageTemplatesPage />} />
                 <Route path="*" element={<NotFound />} />
               </Route>
             </Routes>

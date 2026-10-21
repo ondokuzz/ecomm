@@ -1,0 +1,20 @@
+Hello {{customer.givenName}},
+
+Thank you for your Order {{order.reference}}, placed on {{order.placedOn}}. Your payment is through,
+and we'll email you again when it ships.
+
+{{#lines}}
+{{quantity}} × {{name}}: {{lineTotal}}
+{{/lines}}
+
+Subtotal: {{subtotal}}
+{{#discounts}}
+Discount: −{{.}}
+{{/discounts}}
+{{#shipping}}
+Shipping: {{.}}
+{{/shipping}}
+Tax: {{tax}}
+Total: {{total}}
+
+Ecomm

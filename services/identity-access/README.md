@@ -11,8 +11,8 @@ has and the running realm lacks, through Keycloak's admin API
 ([`infra/docker/keycloak-realm-sync.py`](../../infra/docker/keycloak-realm-sync.py)):
 
 - each realm role that is missing, with its composites;
-- each client that is missing, and, for one with a service account, that service account's realm
-  roles from the file's `service-account-<client>` user.
+- each client that is missing, and, for one with a service account, exactly that service account's
+  realm roles and other clients' roles from the file's `service-account-<client>` user.
 
 It changes nothing that already exists, a role, a client or a role mapping, so it is safe to run
 every time, and the next role or client added to the file reaches every existing stack the same
@@ -20,7 +20,8 @@ way. A change to something that already exists, such as a client's redirect URIs
 applying by hand (below), or deleting the realm in the admin console (http://localhost:8180,
 `admin` / `admin`) or dropping the `postgres-data` volume, then restarting Keycloak.
 
-This is how a Sprint 3 realm gains the `orchestration` client and the `ORCHESTRATION` role. To see
+This is how a Sprint 3 realm gains the `orchestration` client and the `ORCHESTRATION` role, and a
+Sprint 5 realm the `notifications` client with `view-users`. To see
 what it did: `docker compose logs keycloak-realm`.
 
 ## What the realm holds
@@ -36,6 +37,7 @@ what it did: `docker compose logs keycloak-realm`.
 | `dev-cli` | public client with the password grant, **for local development and tests only** |
 | `checkout` | confidential client with client credentials only; its service account holds `CHECKOUT`. Its secret is the stack's own, below |
 | `orchestration` | confidential client with client credentials only, for the Sagas' calls; its service account holds `ORCHESTRATION`. Its secret is the stack's own, below |
+| `notifications` | confidential client with client credentials only, for [Notifications](../notifications/README.md#recipients)' reads of Customers through the admin API; its service account holds realm-management's `view-users` and no realm role. Its secret is the stack's own, below |
 | Seeded users | `demo@ecomm.local` / `demo` (CUSTOMER), `staff@ecomm.local` / `staff` (STAFF) |
 
 ## Client secrets

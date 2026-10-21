@@ -75,6 +75,7 @@ infrastructure pgadmin-password postgres-data admin
 # sets each client's secret from its file on every start.
 write checkout-client-secret "$(random)"
 write orchestration-client-secret "$(random)"
+write notifications-client-secret "$(random)"
 write payment-webhook-secret "$(random)"
 write carrier-webhook-secret "$(random)"
 

@@ -951,3 +951,20 @@ textarea.input {
 .pack-line > .field-error {
   grid-column: 1 / -1;
 }
+
+/* Message templates: an email's HTML in a sandboxed frame, its text as sent. */
+.template-preview .template-html {
+  display: block;
+  width: 100%;
+  min-height: 420px;
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.template-preview .template-text {
+  overflow-x: auto;
+  white-space: pre-wrap;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}

@@ -16,3 +16,5 @@ returns-warranty.orders
 orchestration.orders
 orchestration.shipments
 orchestration.rmas
+notifications.orders
+notifications.products

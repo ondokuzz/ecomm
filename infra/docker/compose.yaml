@@ -183,7 +183,11 @@ services:
       KEYCLOAK_URL: http://keycloak:8080
       KEYCLOAK_ADMIN_USERNAME: admin
       REALM_FILE: /realm/realm-ecomm.json
-    secrets: [keycloak-admin-password, checkout-client-secret, orchestration-client-secret]
+    secrets:
+      - keycloak-admin-password
+      - checkout-client-secret
+      - orchestration-client-secret
+      - notifications-client-secret
     volumes:
       - ./keycloak-realm-sync.py:/init/keycloak-realm-sync.py:ro
       - ../../services/identity-access/realm:/realm:ro
@@ -386,6 +390,49 @@ services:
       postgres-databases: { condition: service_completed_successfully }
       keycloak: { condition: service_healthy }
 
+  # Notifications: Customers' messages about their Orders, triggered by Order Management's events,
+  # rendered from Message templates and kept in a ledger in Postgres's notifications database. Email
+  # goes to Mailpit over SMTP (ADR 0005), and recipients come from Keycloak's admin API.
+  notifications:
+    <<: *spring-service
+    build:
+      context: ../..
+      dockerfile: services/notifications/Dockerfile
+    image: ${IMAGE_PREFIX:-ecomm}/notifications:${IMAGE_TAG:-latest}
+    ports: ["${NOTIFICATIONS_PORT:-8101}:8080"]
+    secrets:
+      - { source: postgres-password, target: spring.datasource.password }
+      # Notifications' own client in the ecomm realm (Identity & Access ADR 0002), holding only
+      # realm-management's view-users; realm sync sets its secret from the same file.
+      - source: notifications-client-secret
+        target: spring.security.oauth2.client.registration.notifications.client-secret
+    # It only consumes, so it waits for the topics but not for their schemas.
+    depends_on:
+      kafka-topics: { condition: service_completed_successfully }
+      postgres-databases: { condition: service_completed_successfully }
+      keycloak: { condition: service_healthy }
+      keycloak-realm: { condition: service_completed_successfully }
+      mailpit: { condition: service_healthy }
+
+  # Catches every email the stack sends, for reading in its UI on http://localhost:8025 and through
+  # its API (the Playwright suites do). Services reach its SMTP port on mailpit:1025, the host on
+  # localhost:1025. Messages live in memory, up to its 500 most recent.
+  mailpit:
+    image: axllent/mailpit:v1.31.3
+    environment:
+      MP_MAX_MESSAGES: 500
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+    mem_limit: 64m
+    ports:
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
   checkout-pricing:
     <<: *spring-service
     build:
@@ -510,9 +557,10 @@ services:
       dockerfile: services/orchestration/Dockerfile
     image: ${IMAGE_PREFIX:-ecomm}/orchestration:${IMAGE_TAG:-latest}
     # Idle, it holds about 285 MB beside the heap it has committed (metaspace and code 150 MB, the
-    # rest threads and native buffers, Temporal's gRPC client and two Kafka consumers among them),
+    # rest threads and native buffers, Temporal's gRPC client and its Kafka consumers among them),
     # so at 384 MB it sat at 340 MB and was killed for memory (2026-10-16). The heap keeps the
-    # 230 MB it may grow to; the rest of the cap is room for what isn't heap.
+    # 230 MB it may grow to; the rest of the cap is room for what isn't heap. With the returns Saga
+    # it runs three Kafka consumers and three workers, and sat at 301 MB idle on 2026-10-21.
     mem_limit: 512m
     environment:
       <<: *spring-jvm
@@ -552,6 +600,7 @@ services:
       recommendations: { condition: service_healthy }
       fulfillment-shipping: { condition: service_healthy }
       returns-warranty: { condition: service_healthy }
+      notifications: { condition: service_healthy }
 
   storefront:
     build:
@@ -785,6 +834,8 @@ secrets:
     file: ../../.secrets/${COMPOSE_PROJECT_NAME}/checkout-client-secret
   orchestration-client-secret:
     file: ../../.secrets/${COMPOSE_PROJECT_NAME}/orchestration-client-secret
+  notifications-client-secret:
+    file: ../../.secrets/${COMPOSE_PROJECT_NAME}/notifications-client-secret
   payment-webhook-secret:
     file: ../../.secrets/${COMPOSE_PROJECT_NAME}/payment-webhook-secret
   carrier-webhook-secret:

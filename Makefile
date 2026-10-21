@@ -9,9 +9,10 @@ REVIEWS_GROUPS := $(filter reviews-ratings.%,$(GROUPS))
 RECOMMENDATIONS_GROUPS := $(filter recommendations.%,$(GROUPS))
 FULFILLMENT_GROUPS := $(filter fulfillment-shipping.%,$(GROUPS))
 RETURNS_GROUPS := $(filter returns-warranty.%,$(GROUPS))
+NOTIFICATIONS_PRODUCT_GROUPS := notifications.products
 DEAD_LETTER_TOPICS := $(foreach group,$(GROUPS),$(group).dlt $(group).redrive)
 
-.PHONY: secrets up down status seed-reset search-rebuild reviews-rebuild recommendations-rebuild fulfillment-rebuild returns-rebuild dlt-redrive upgrade-from upgrade-to upgrade-clean
+.PHONY: secrets up down status seed-reset search-rebuild reviews-rebuild recommendations-rebuild fulfillment-rebuild returns-rebuild notifications-rebuild dlt-redrive upgrade-from upgrade-to upgrade-clean
 
 ## Write each of the stack's secrets that is missing to .secrets/<project>/, never overwriting one
 ## (infra/docker/secrets.sh). `make up` runs it first.
@@ -32,18 +33,19 @@ status:
 	@infra/docker/stack-status.sh
 
 ## Put the seed Categories, Products, Stock and Coupons back and drop every Cart, Checkout Session,
-## Reservation, Order, Payment, review, Shipment and RMA. Keycloak is left alone, so registered
-## Customers stay. The reset stores count their events' versions from the start again, so every
-## topic, dead-letter and redrive topics included, is emptied and Search's, Reviews',
-## Recommendations' and Returns & Warranty's databases dropped, or their consumers would take the
-## new events for stale ones. Kafka deletes topics in the background, and one can't be created again until it has gone.
+## Reservation, Order, Payment, review, Shipment, RMA and Notification. Keycloak is left alone, so
+## registered Customers stay. The reset stores count their events' versions from the start again, so
+## every topic, dead-letter and redrive topics included, is emptied and Search's, Reviews',
+## Recommendations', Returns & Warranty's and Notifications' databases dropped, or their consumers
+## would take the new events for stale ones. Kafka deletes topics in the background, and one can't be
+## created again until it has gone.
 seed-reset:
 	$(COMPOSE) up -d --wait couchbase postgres redis kafka mongo
-	$(COMPOSE) stop storefront checkout-pricing catalog inventory cart payment order-management promotions search-discovery reviews-ratings recommendations fulfillment-shipping returns-warranty
+	$(COMPOSE) stop storefront checkout-pricing catalog inventory cart payment order-management promotions search-discovery reviews-ratings recommendations fulfillment-shipping returns-warranty notifications
 	$(COMPOSE) exec -T couchbase sh -c \
 	  'couchbase-cli bucket-delete -c localhost:8091 -u admin -p "$$(cat /run/secrets/couchbase-password)" --bucket catalog'
 	$(COMPOSE) run --rm --no-deps couchbase-init
-	for db in inventory payment orders promotions recommendations fulfillment_shipping returns_warranty; do \
+	for db in inventory payment orders promotions recommendations fulfillment_shipping returns_warranty notifications; do \
 	  $(COMPOSE) exec -T postgres psql -U ecomm -d postgres -v ON_ERROR_STOP=1 \
 	    -c "DROP DATABASE IF EXISTS $$db WITH (FORCE)" -c "CREATE DATABASE $$db" || exit 1; \
 	done
@@ -106,6 +108,17 @@ returns-rebuild:
 	$(COMPOSE) exec -T postgres psql -U ecomm -d returns_warranty -v ON_ERROR_STOP=1 \
 	  -c 'TRUNCATE shipment_line, shipment, product_variant, product, customer_order_line, customer_order'
 	$(COMPOSE) up -d --wait returns-warranty
+
+## Rebuild Notifications' projection of Product names from catalog.product: stop the service, reset
+## its products group to the earliest offset, empty the projection, and start it again
+## (services/notifications/README.md). The Notification ledger stays, and so does the
+## notifications.orders group's offset, so nothing is sent again. As for Search, the redrive topic isn't replayed.
+notifications-rebuild:
+	$(COMPOSE) stop notifications
+	infra/docker/replay-groups.sh $(NOTIFICATIONS_PRODUCT_GROUPS)
+	$(COMPOSE) exec -T postgres psql -U ecomm -d notifications -v ON_ERROR_STOP=1 \
+	  -c 'TRUNCATE product_variant, product'
+	$(COMPOSE) up -d --wait notifications
 
 ## Redrive a consumer group's dead events once their cause is fixed, e.g.
 ## `make dlt-redrive GROUP=search-discovery.products`: copy what was dead-lettered since the last

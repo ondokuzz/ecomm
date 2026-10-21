@@ -1,0 +1,31 @@
+# Active inside Docker Compose (SPRING_PROFILES_ACTIVE=docker).
+
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres:5432/notifications
+  kafka:
+    bootstrap-servers: kafka:19092
+  mail:
+    host: mailpit
+    port: 1025
+  security:
+    oauth2:
+      client:
+        provider:
+          keycloak:
+            token-uri: http://keycloak:8080/realms/ecomm/protocol/openid-connect/token
+
+ecomm:
+  # Keys come over the internal network; the issuer stays the browser-facing one tokens carry.
+  security:
+    jwt:
+      jwk-set-uri: http://keycloak:8080/realms/ecomm/protocol/openid-connect/certs
+  notifications:
+    keycloak:
+      admin-url: http://keycloak:8080/admin/realms/ecomm
+
+# One JSON (ECS) object per line, with the service name and the MDC, including correlationId.
+logging:
+  structured:
+    format:
+      console: ecs

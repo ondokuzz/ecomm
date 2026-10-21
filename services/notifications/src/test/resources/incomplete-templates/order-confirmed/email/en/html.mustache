@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Your Order {{order.reference}} is confirmed</title></head>
+<body style="font-family: Helvetica, Arial, sans-serif; color: #1f2937; line-height: 1.5;">
+  <p>Hello {{customer.givenName}},</p>
+  <p>Thank you for your Order <strong>{{order.reference}}</strong>, placed on {{order.placedOn}}.
+    Your payment is through, and we'll email you again when it ships.</p>
+  <table style="border-collapse: collapse; width: 100%; max-width: 560px;">
+    <thead>
+      <tr>
+        <th align="left" style="border-bottom: 1px solid #d1d5db; padding: 6px 0;">Item</th>
+        <th align="right" style="border-bottom: 1px solid #d1d5db; padding: 6px 0;">Qty</th>
+        <th align="right" style="border-bottom: 1px solid #d1d5db; padding: 6px 0;">Price</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{#lines}}
+      <tr>
+        <td style="padding: 6px 0;">{{name}}</td>
+        <td align="right" style="padding: 6px 0;">{{quantity}}</td>
+        <td align="right" style="padding: 6px 0;">{{lineTotal}}</td>
+      </tr>
+      {{/lines}}
+    </tbody>
+    <tfoot>
+      <tr><td colspan="2" align="right">Subtotal</td><td align="right">{{subtotal}}</td></tr>
+      {{#discounts}}
+      <tr><td colspan="2" align="right">Discount</td><td align="right">−{{.}}</td></tr>
+      {{/discounts}}
+      {{#shipping}}
+      <tr><td colspan="2" align="right">Shipping</td><td align="right">{{.}}</td></tr>
+      {{/shipping}}
+      <tr><td colspan="2" align="right">Tax</td><td align="right">{{tax}}</td></tr>
+      <tr><td colspan="2" align="right"><strong>Total</strong></td><td align="right"><strong>{{total}}</strong></td></tr>
+    </tfoot>
+  </table>
+  <p>Ecomm</p>
+</body>
+</html>

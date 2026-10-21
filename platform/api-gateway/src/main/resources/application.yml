@@ -65,6 +65,10 @@ ecomm:
         # Staff decide, receive, inspect and read any. Only the returns Saga resolves, holds and
         # expires them.
         internal: [POST /rmas/*/resolve, POST /rmas/*/hold, POST /rmas/*/expire]
+      notifications:
+        uri: http://localhost:8101
+        # Staff read the Notification ledger and preview the Message templates; a Customer reads
+        # their own Notifications. Nothing is internal.
 
 # Plain-text logs name the Correlation ID too, so the access log reads the same outside Docker.
 logging:

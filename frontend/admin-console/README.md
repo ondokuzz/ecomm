@@ -29,6 +29,7 @@ Vite, React, TypeScript, React Router and TanStack Query, with `oidc-client-ts`.
 | `/fulfillment/{id}` | A Shipment: its RMA for a replacement, its Order, Warehouse, Shipping option, Shipping address and lines. Pick it, pack it with a Serial number per unit, and see its tracking, its hold reason and its status history |
 | `/rmas` | The RMA queue: Requested, Awaiting units, Received, On hold and Closed, one tab each with its count, 20 to a page (`?tab=&page=`): RMA reference, kind, Order reference, Product, the status where a tab holds several, and how long ago it was requested, or, awaiting units, its Send-back deadline |
 | `/rmas/{id}` | An RMA: its Order, Customer, Product and Variant, quantity, Serial numbers, kind, the Customer's reason, its Refund amount, Send-back deadline, Warehouse and Inspection, the window it was checked against, and its RMA history. Approve or reject a requested one, receive an approved one's units, inspect a received one, and see its resolution |
+| `/message-templates` | Message templates: each Message type on each Notification channel as Notifications renders it with its sample content, an email's subject, its HTML in a sandboxed frame, and its plain text. Read only |
 
 `/` opens the Products. Every page needs a Staff sign-in.
 
@@ -286,6 +287,15 @@ the console only reads what it did.
 [`src/domain/rma.ts`](./src/domain/rma.ts), and `formatAgo` in
 [`src/domain/ago.ts`](./src/domain/ago.ts), do this.
 
+## Message templates
+
+The **Messages** page calls Notifications' `GET /templates`, which renders every Message template
+with its Message type's sample content for a made-up Customer, as the service's start-up check does.
+Each Message type and channel is a panel: its name and code, the channel, the locale, and for email
+the subject, the HTML body in an `iframe` with an empty `sandbox` (no scripts, no forms, no
+navigation) and the text body under "Plain text". Staff can't edit the templates, which live in the
+[Notifications](../../services/notifications/README.md#message-templates) service.
+
 ## Validation errors
 
 Catalog and Promotions check every write. A 400 names each offending field in its problem detail's `errors`,
@@ -373,7 +383,7 @@ how to apply the client to an existing realm.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: failed requests as messages and references, field errors from problem details, the STAFF role in an access token, a Category, a Product with its Warranty terms and Serial tracking, a Coupon and a Campaign to and from their editor's form, decimals to and from Money, the Order list's filters to Order Management's query, an Order's Status history, Payment statuses and transactions, Stock movements and their balance, RMA statuses and kinds, the RMA queue's tabs, URL and query, a Send-back deadline and its flag, an RMA's window, its RMA history, a decision, a receipt and an Inspection before they are sent, each Serial number received as it is typed, Returns & Warranty's refusals of a receipt, an RMA's resolution, an Order's Refunds, Shipment and Tracking event statuses, the fulfillment queue's URL and query, an IMEI or serial number as it is typed, a Pack request, a Shipment's status history, and how long ago
+npm test          # Vitest: failed requests as messages and references, field errors from problem details, the STAFF role in an access token, a Category, a Product with its Warranty terms and Serial tracking, a Coupon and a Campaign to and from their editor's form, decimals to and from Money, the Order list's filters to Order Management's query, an Order's Status history, Payment statuses and transactions, Stock movements and their balance, RMA statuses and kinds, Message type and Notification channel names, the RMA queue's tabs, URL and query, a Send-back deadline and its flag, an RMA's window, its RMA history, a decision, a receipt and an Inspection before they are sent, each Serial number received as it is typed, Returns & Warranty's refusals of a receipt, an RMA's resolution, an Order's Refunds, Shipment and Tracking event statuses, the fulfillment queue's URL and query, an IMEI or serial number as it is typed, a Pack request, a Shipment's status history, and how long ago
 npm run build
 npm run test:e2e  # Playwright against the running compose stack (`make up`)
 ```
@@ -416,6 +426,10 @@ Order stays, Cancelled. A second test places an Order the same way, authorizes i
 `tok_approve` straight at Payment on its host port (`PAYMENT_URL`, default `http://localhost:8084`)
 and marks it paid, then opens it in the console and sees the Payment Authorized with its
 authorization transaction: Approved, with the gateway's reference and time.
+
+[`e2e/templates.spec.ts`](./e2e/templates.spec.ts) opens Messages and sees the Order confirmation's
+email previewed: its subject for the sample Order `#3F2A9C1B`, "Hello Ada," and a sample line in the
+HTML frame, and the total in its plain text.
 
 [`e2e/rmas.spec.ts`](./e2e/rmas.spec.ts) places an Order of two JBL Flip 6 speakers for the demo
 Customer, `demo@ecomm.local`, the same way, and leaves it placed, so no Saga takes it up. It creates

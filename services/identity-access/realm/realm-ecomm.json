@@ -100,6 +100,19 @@
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": true
+    },
+    {
+      "clientId": "notifications",
+      "name": "Notifications service",
+      "description": "Client credentials for Notifications' reads of Customers through the admin API, as realm-management's view-users only. Its secret is set from the stack's secrets on every start, by realm sync.",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "protocol": "openid-connect",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true
     }
   ],
   "users": [
@@ -134,6 +147,13 @@
       "enabled": true,
       "serviceAccountClientId": "orchestration",
       "realmRoles": ["ORCHESTRATION"]
+    },
+    {
+      "username": "service-account-notifications",
+      "enabled": true,
+      "serviceAccountClientId": "notifications",
+      "realmRoles": [],
+      "clientRoles": { "realm-management": ["view-users"] }
     }
   ]
 }

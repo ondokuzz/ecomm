@@ -1,0 +1,60 @@
+# Exercises Notifications against the compose stack (`make up`): Staff preview the Message templates
+# and read the Notifications about an Order, and the demo Customer reads their own. Run the token
+# requests first; they store tokens for the ones after them.
+# A Notification needs a paid Order: check one out in the Storefront as demo@ecomm.local, then set
+# @orderId to its ID. Its confirmation is in Mailpit, on http://localhost:8025, a second later.
+
+@notifications = http://localhost:8101
+@gateway = http://localhost:8000
+@keycloak = http://localhost:8180/realms/ecomm/protocol/openid-connect/token
+@orderId = <a paid Order's ID>
+
+### The demo Customer's token
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=dev-cli&username=demo@ecomm.local&password=demo
+
+> {% client.global.set("customerToken", response.body.access_token); %}
+
+### Staff token
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=dev-cli&username=staff@ecomm.local&password=staff
+
+> {% client.global.set("staffToken", response.body.access_token); %}
+
+### Every Message type on every channel, rendered with its sample content, through the gateway
+GET {{gateway}}/api/notifications/templates
+Authorization: Bearer {{staffToken}}
+
+### One of them; the body's locale is optional, and falls back to en
+POST {{notifications}}/templates/ORDER_CONFIRMED/EMAIL/preview
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{"locale": "en"}
+
+### A Message type there is none of: 404
+POST {{notifications}}/templates/ORDER_EXPLODED/EMAIL/preview
+Authorization: Bearer {{staffToken}}
+
+### The Notifications about the Order, newest first, the address masked: its ORDER_CONFIRMED email, SENT
+GET {{gateway}}/api/notifications/notifications?orderId={{orderId}}
+Authorization: Bearer {{staffToken}}
+
+### Staff list by exactly one of orderId, rmaId and customerId: naming none is a 400
+GET {{notifications}}/notifications
+Authorization: Bearer {{staffToken}}
+
+### The demo Customer's own Notifications, a page at a time
+GET {{gateway}}/api/notifications/notifications/me?page=0&size=20
+Authorization: Bearer {{customerToken}}
+
+### A Customer can't list by Order: 403
+GET {{notifications}}/notifications?orderId={{orderId}}
+Authorization: Bearer {{customerToken}}
+
+### What Mailpit caught: the newest emails first (no token)
+GET http://localhost:8025/api/v1/messages?limit=5

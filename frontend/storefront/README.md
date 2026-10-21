@@ -470,7 +470,9 @@ field and corrected, the address shown back, Express's cost in the summary and t
 then the confirmation, the Order's Shipping card and its total including Express, the confetti gone under reduced motion, the Order's lines by
 Product name, its timeline with Placed then Paid at the times Order Management recorded, its Payment
 Authorized for the Order's total, its card on
-My Orders with no pager, and on-hand Stock down by one), pays with the
+My Orders with no pager, on-hand Stock down by one, and the Order's confirmation email in Mailpit,
+once, to the Customer, naming both Products and the total, read from Mailpit's API on `MAILPIT_URL`,
+default `http://localhost:8025`), pays with the
 Decline card and sees the decline inline with the session kept, then pays the same session with
 Approve and sees `PAID`, applies `WELCOME10`, gets Audio week and `WELCOME10` together on an audio
 Product, empties a Cart through the confirmation, pages My Orders through twenty Orders it stands in

@@ -132,6 +132,8 @@ Orchestration, which serves nothing but its health:
 | 8098 | Recommendations |
 | 8099 | Fulfillment & Shipping |
 | 8100 | Returns & Warranty |
+| 8101 | Notifications |
+| 8025 | Mailpit: every email the stack sends, and its API (`/api/v1/messages`); its SMTP port is 1025 |
 | 8088 | Apicurio schema registry: the event schemas, under `/apis/registry/v3` |
 | 9092 | Kafka |
 | 7233 | Temporal, for workers and clients run from the host ([Orchestration](./services/orchestration/README.md#temporal)) |
@@ -272,7 +274,7 @@ properties, through its config tree ([ADR 0011](./docs/adr/0011-secrets-as-gener
 | `couchbase-password` | Couchbase's `admin`: Catalog, and `make seed-reset` |
 | `keycloak-admin-password` | Keycloak's bootstrap `admin` in the `master` realm, and realm sync |
 | `grafana-admin-password`, `pgadmin-password` | Grafana's and pgAdmin's `admin` |
-| `checkout-client-secret`, `orchestration-client-secret` | The confidential Keycloak clients and the services that use them; realm sync sets each client's secret from its file on every start ([Identity & Access](./services/identity-access/README.md#client-secrets)) |
+| `checkout-client-secret`, `orchestration-client-secret`, `notifications-client-secret` | The confidential Keycloak clients and the services that use them; realm sync sets each client's secret from its file on every start ([Identity & Access](./services/identity-access/README.md#client-secrets)) |
 | `payment-webhook-secret` | Payment, and its mock gateway, which signs its webhooks with it |
 | `carrier-webhook-secret` | Fulfillment & Shipping, and its mock carrier, which signs its Carrier webhooks with it |
 
@@ -327,7 +329,7 @@ d=.secrets/ecomm; printf '{"dev": {"checkoutClientSecret": "%s", "orchestrationC
 | `make secrets` | Write each secret the stack lacks to `.secrets/<project>/`, never overwriting one ([Secrets](#secrets)) |
 | `make down` | Stop the stack, keeping its data |
 | `make status` | Say whether every service is running and healthy, naming any that isn't with its exit code and whether it was killed for its memory cap. Both Playwright suites run it first |
-| `make seed-reset` | Put the seed Categories, Products, Stock, Coupons and Campaigns back and drop every Cart, Checkout Session, Reservation, Order, Payment, Shipment, RMA and review; registered Customers stay. It also empties the event topics, dead-letter and redrive topics included, and Search's, Reviews', Recommendations', Fulfillment & Shipping's and Returns & Warranty's projections, since the reset stores count their events' versions from 1 again |
+| `make seed-reset` | Put the seed Categories, Products, Stock, Coupons and Campaigns back and drop every Cart, Checkout Session, Reservation, Order, Payment, Shipment, RMA, review and Notification; registered Customers stay. It also empties the event topics, dead-letter and redrive topics included, and Search's, Reviews', Recommendations', Fulfillment & Shipping's, Returns & Warranty's and Notifications' projections, since the reset stores count their events' versions from 1 again |
 | `make upgrade-from FROM=<commit>`, `make upgrade-to`, `make upgrade-clean` | Start the stack as it was at a commit under a project of its own, bring it up to this tree keeping its data, and remove it ([the upgrade check](./docs/agents/upgrade-check.md)) |
 | `make search-rebuild` | Rebuild Search's projection from the topics ([Search & Discovery](./services/search-discovery/README.md#rebuilding)) |
 | `make dlt-redrive GROUP=<group>` | Redrive a consumer group's dead events once their cause is fixed: copy what reached `<group>.dlt` since the last redrive to `<group>.redrive`, which the group's listeners also consume ([service template](./platform/service-template/README.md#consuming)) |
@@ -335,6 +337,7 @@ d=.secrets/ecomm; printf '{"dev": {"checkoutClientSecret": "%s", "orchestrationC
 | `make recommendations-rebuild` | Rebuild Recommendations' projection of Orders and Products from the topics ([Recommendations](./services/recommendations/README.md#rebuilding)) |
 | `make fulfillment-rebuild` | Rebuild Fulfillment & Shipping's Product projection from `catalog.product`, keeping the Shipments ([Fulfillment & Shipping](./services/fulfillment-shipping/README.md#shipments)) |
 | `make returns-rebuild` | Rebuild Returns & Warranty's projections of Shipments, Products and Orders from the topics, keeping the RMAs ([Returns & Warranty](./services/returns-warranty/README.md#rebuilding)) |
+| `make notifications-rebuild` | Rebuild Notifications' projection of Product names from `catalog.product`, keeping the Notification ledger and sending nothing again ([Notifications](./services/notifications/README.md#the-events-it-consumes)) |
 
 Every checkout takes Stock, so after many smoke-test runs `make seed-reset` refills it. To wipe
 everything, Keycloak's users included, run `docker compose down -v`.
@@ -382,10 +385,10 @@ about 50 MB off each; the images themselves keep the JVM's defaults (`x-spring-j
 [`infra/docker/compose.yaml`](./infra/docker/compose.yaml)). Keycloak is capped at 768 MB with 40%
 for the heap, and each nginx at 64 MB. Kafka is capped at 640 MB with a 256 MB heap, and Mongo at
 512 MB with a 256 MB cache, Apicurio and pgAdmin at 384 MB each, the Temporal server at 384 MB, its
-UI at 64 MB, Prometheus and Grafana at 256 MB each, the Kafka exporter at 32 MB, and the init steps
-at 256 MB or less. Couchbase, Postgres and Redis are uncapped. After both suites the default stack
-uses about 5.6 GB (`docker stats`), and fits in about 8 GB of Docker memory, with some of it in
-swap ([Sprint 5's reading](./docs/roadmap.md#sprint-5-weeks-910--fulfillment--returns-foundations)).
+UI at 64 MB, Prometheus and Grafana at 256 MB each, Mailpit at 64 MB, the Kafka exporter at 32 MB,
+and the init steps at 256 MB or less. Couchbase, Postgres and Redis are uncapped. After both suites
+the default stack uses about 5.65 GB (`docker stats`), and fits in about 8 GB of Docker memory, with
+its swap nearly full ([Sprint 6's reading](./docs/roadmap.md#sprint-6-weeks-1112--returns-completion)).
 That leaves little over: with 8 GB given to Docker on a 16 GB host that also runs a browser and an
 IDE, the host swaps the VM out, and requests stall for tens of seconds.
 

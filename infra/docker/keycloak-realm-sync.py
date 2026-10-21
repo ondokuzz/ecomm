@@ -1,6 +1,7 @@
 """Adds what the realm file has and the running ecomm realm lacks: realm roles, and clients with their
-service accounts' realm roles. Keycloak's import skips a realm that already exists, so without this a
-stack from an earlier sprint never gets a client or role added since. Anything else that already
+service accounts' realm roles and other clients' roles, such as realm-management's view-users.
+Keycloak's import skips a realm that already exists, so without this a stack from an earlier sprint
+never gets a client or role added since. Anything else that already
 exists is left as it is, so it is safe on every `docker compose up`.
 
 The one thing it changes is each confidential client's secret, set on every run from the secret
@@ -92,8 +93,8 @@ def main():
             request("POST", f"{path}/composites", token, [role(c) for c in composites])
         print(f"Added realm role {new_role['name']}")
 
-    service_account_roles = {
-        u["serviceAccountClientId"]: u.get("realmRoles", [])
+    service_accounts = {
+        u["serviceAccountClientId"]: u
         for u in realm.get("users", [])
         if "serviceAccountClientId" in u
     }
@@ -103,16 +104,20 @@ def main():
             continue
         request("POST", f"{base}/clients", token, new_client)
         created = client(client_id)
-        roles = service_account_roles.get(client_id, [])
-        if new_client.get("serviceAccountsEnabled") and roles:
+        account = service_accounts.get(client_id)
+        if new_client.get("serviceAccountsEnabled") and account is not None:
+            realm_roles = account.get("realmRoles", [])
+            client_roles = account.get("clientRoles", {})
             try:
-                give_only(base, token, created, roles, role)
+                give_only(base, token, created, realm_roles, client_roles, role, client)
             except SystemExit:
                 # Existing clients are skipped, so one left without its roles would stay so. Take
                 # it away again, and the next run adds it whole.
                 request("DELETE", f"{base}/clients/{created['id']}", token)
                 raise
-            print(f"Added client {client_id}; its service account holds {', '.join(roles)} only")
+            held = realm_roles + [f"{c}'s {r}" for c, names in client_roles.items() for r in names]
+            held = ", ".join(held) or "nothing"
+            print(f"Added client {client_id}; its service account holds {held} only")
         else:
             print(f"Added client {client_id}")
 
@@ -126,15 +131,29 @@ def main():
         print(f"Set client {client_id}'s secret from its file")
 
 
-def give_only(base, token, client, roles, role):
-    """Gives the client's service account exactly these realm roles. One made through the admin
-    API also gets the realm's default roles, CUSTOMER among them, which an imported one doesn't."""
+def give_only(base, token, client, realm_roles, client_roles, role, find_client):
+    """Gives the client's service account exactly these realm roles, and these roles of other
+    clients, such as realm-management's view-users. One made through the admin API also gets the
+    realm's default roles, CUSTOMER among them, which an imported one doesn't."""
     user = request("GET", f"{base}/clients/{client['id']}/service-account-user", token)
-    mappings = f"{base}/users/{user['id']}/role-mappings/realm"
-    request("POST", mappings, token, [role(r) for r in roles])
-    extra = [r for r in request("GET", mappings, token) if r["name"] not in roles]
+    mappings = f"{base}/users/{user['id']}/role-mappings"
+    if realm_roles:
+        request("POST", f"{mappings}/realm", token, [role(r) for r in realm_roles])
+    extra = [r for r in request("GET", f"{mappings}/realm", token) if r["name"] not in realm_roles]
     if extra:
-        request("DELETE", mappings, token, extra)
+        request("DELETE", f"{mappings}/realm", token, extra)
+    for owner_id, names in client_roles.items():
+        owner = find_client(owner_id)
+        if owner is None:
+            sys.exit(f"Client {owner_id} doesn't exist, and the realm file names its roles")
+        roles = []
+        for name in names:
+            path = f"{base}/clients/{owner['id']}/roles/{urllib.parse.quote(name)}"
+            found = request("GET", path, token)
+            if found is None:
+                sys.exit(f"Client {owner_id} has no role {name}, and the realm file names it")
+            roles.append(found)
+        request("POST", f"{mappings}/clients/{owner['id']}", token, roles)
 
 
 main()

@@ -31,6 +31,8 @@ ecomm:
         uri: http://fulfillment-shipping:8080
       returns-warranty:
         uri: http://returns-warranty:8080
+      notifications:
+        uri: http://notifications:8080
 
 # One JSON (ECS) object per line, with the service name and the MDC, including correlationId.
 logging:

@@ -267,6 +267,22 @@ _Avoid_: Return window, Cooling-off period, Warranty Window (the manufacturer's,
 The time in which a Customer may make a warranty claim on a Variant: from its Shipment's delivery for its Product's Warranty terms' months, counted on the calendar, so a delivery on 31 January with one month's warranty ends on the last day of February. A Product without Warranty terms has none. An RMA keeps the Warranty Window it was checked against, with the terms it came from, so a later change to the Product's Warranty terms doesn't change it.
 _Avoid_: Return Period (the store's, for returns), Warranty terms (what it is worked out from)
 
+**Notification**:
+One message to one Customer on one Notification channel, triggered by one Integration event, such as the email confirming their paid Order. Notifications records it `PENDING`, once per event, Message type and channel however often the event is delivered, then sends it: `SENT` with the provider's reference, or `FAILED` once a permanent failure, such as `noRecipient` for a Customer with no email address, or the last of six attempts over about an hour says so. It keeps the Order or RMA it is about, its recipient's address, the message as rendered and every attempt; Staff read them by Order, RMA or Customer, and a Customer reads their own, the address masked. Nothing that happened before Notifications existed is announced.
+_Avoid_: Message (what a Notification sends), Alert, Email (one channel)
+
+**Message type**:
+What a Notification says, and what triggers it, such as `ORDER_CONFIRMED` on an Order's change to `PAID`. Each has a Message template for every Notification channel and sample content that Staff preview it with.
+_Avoid_: Event type (an Integration event's `change`), Template (one Message type's wording on one channel)
+
+**Message template**:
+The wording of one Message type on one Notification channel in one locale, kept in Notifications as Mustache files, one per part: for email, a subject, an HTML body and a text body. It is rendered against a model built from the triggering event, with Money and dates written for the locale and the Customer's names from Identity & Access. A Customer's locale falls back to its language, then to `en`, the only one so far. The service refuses to start if a Message type lacks one for a channel or one doesn't render its sample content. Staff preview them in the Admin Console, and can't edit them.
+_Avoid_: Email template (one channel's), Content
+
+**Notification channel**:
+How a Notification reaches its Customer: `EMAIL` so far, with SMS and push to come. Each has a `NotificationProvider` that sends it and answers a reference or a failure, transient or permanent (ADR 0005). Email goes over SMTP, to Mailpit in the local stack.
+_Avoid_: Medium, Transport, Provider (what sends on a channel)
+
 **Support Assistant**:
 The AI-driven conversational agent that answers a Customer's questions about their own Order, Payment, or RMA, grounded in that Customer's real data.
 _Avoid_: Chatbot, Bot

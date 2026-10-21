@@ -256,7 +256,39 @@ test('a Customer checks out a picked Variant and another Product, and on-hand St
   for (const { variantId, stock } of bought) {
     expect(await stockOf(request, variantId)).toEqual({ quantity: stock.quantity - 1, onHand: stock.onHand - 1 })
   }
+
+  // Notifications emailed the Customer the Order's confirmation, once, and Mailpit caught it.
+  const confirmation = await theOneEmail(request, `Your Order #${orderId.slice(0, 8).toUpperCase()} is confirmed`)
+  expect(confirmation.To.map((to) => to.Address)).toEqual([customer.email])
+  for (const { product } of bought) expect(confirmation.Text).toContain(product.name)
+  expect(confirmation.Text).toContain(`Total: ${formatMoney(order.total, currencies, 'en-US')}`)
 })
+
+/** Mailpit's API, where the stack's email lands. */
+const mailpitUrl = process.env.MAILPIT_URL ?? 'http://localhost:8025'
+
+interface Email {
+  Subject: string
+  To: { Address: string }[]
+  Text: string
+}
+
+/**
+ * The email with exactly `subject`, once Mailpit has it, checking no second one came: the
+ * dispatcher sends within a second or two of the event, so a duplicate would be there by then.
+ */
+async function theOneEmail(request: APIRequestContext, subject: string): Promise<Email> {
+  const search = `${mailpitUrl}/api/v1/search?query=${encodeURIComponent(`subject:"${subject}"`)}`
+  const found = async () =>
+    ((await (await request.get(search)).json()) as { messages: { ID: string; Subject: string }[] }).messages.filter(
+      (message) => message.Subject === subject,
+    )
+  await expect.poll(async () => (await found()).length, { timeout: 30_000 }).toBeGreaterThan(0)
+  await new Promise((resolve) => setTimeout(resolve, 3_000))
+  const messages = await found()
+  expect(messages).toHaveLength(1)
+  return (await (await request.get(`${mailpitUrl}/api/v1/message/${messages[0].ID}`)).json()) as Email
+}
 
 test('a declined card shows why, and the held session can then be paid with one that approves', async ({
   page,

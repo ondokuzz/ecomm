@@ -1,0 +1,55 @@
+spring:
+  application:
+    name: notifications
+  config:
+    # Secrets are files, one per property and named after it: the ones Compose mounts in
+    # /run/secrets (docs/adr/0011-secrets-as-generated-files.md). There are none outside a container.
+    import: optional:configtree:${ecomm.secrets-dir:/run/secrets/}
+  datasource:
+    # POSTGRES_PORT matches the compose override, for when something else holds 5432.
+    url: jdbc:postgresql://localhost:${POSTGRES_PORT:5432}/notifications
+    # The password is a secret: spring.datasource.password.
+    username: ecomm
+  kafka:
+    bootstrap-servers: localhost:${KAFKA_PORT:9092}
+  # Email goes over SMTP: to Mailpit in the compose stack, whose SMTP port the host reaches as 1025.
+  mail:
+    host: localhost
+    port: ${MAILPIT_SMTP_PORT:1025}
+    properties:
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 10000
+      mail.smtp.writetimeout: 10000
+  security:
+    oauth2:
+      client:
+        # Notifications' own identity for Keycloak's admin API (Identity & Access ADR 0002). Its
+        # client-secret has no default; compose gives it as a secret.
+        registration:
+          notifications:
+            provider: keycloak
+            client-id: notifications
+            authorization-grant-type: client_credentials
+        provider:
+          keycloak:
+            token-uri: http://localhost:8180/realms/ecomm/protocol/openid-connect/token
+
+ecomm:
+  notifications:
+    email:
+      from: "Ecomm <orders@ecomm.local>"
+    # The Message templates: <message-type>/<channel>/<locale>/<part>.mustache under here.
+    templates:
+      location: classpath:/templates/
+    keycloak:
+      # The CustomerDirectory's: Keycloak's admin API for the ecomm realm, how long its answers are
+      # kept, and how long a call may take to connect and to answer.
+      admin-url: http://localhost:8180/admin/realms/ecomm
+      cache-for: 10m
+      timeout: 5s
+    dispatch:
+      # How often the dispatcher looks for due Notifications, and how it retries a transient
+      # failure: 6 attempts in all, waiting 2, 4, 8, 16 and 32 minutes between them, about an hour.
+      poll-every: 1s
+      attempts: 6
+      first-retry-after: 2m

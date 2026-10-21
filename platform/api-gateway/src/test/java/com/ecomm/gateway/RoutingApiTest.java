@@ -42,7 +42,10 @@ class RoutingApiTest extends GatewayApiTest {
     "/api/fulfillment-shipping/shipments/s-1, /shipments/s-1",
     "/api/returns-warranty/rmas?status=REQUESTED&page=1, /rmas?status=REQUESTED&page=1",
     "/api/returns-warranty/rmas/r-1, /rmas/r-1",
-    "/api/returns-warranty/rmas/eligibility?orderId=o-1, /rmas/eligibility?orderId=o-1"
+    "/api/returns-warranty/rmas/eligibility?orderId=o-1, /rmas/eligibility?orderId=o-1",
+    "/api/notifications/notifications?orderId=o-1, /notifications?orderId=o-1",
+    "/api/notifications/notifications/me, /notifications/me",
+    "/api/notifications/templates, /templates"
   })
   void eachServiceIsReachedWithThePrefixStripped(String path, String downstreamPath) {
     http.get()

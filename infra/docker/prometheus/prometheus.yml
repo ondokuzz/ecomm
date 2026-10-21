@@ -24,6 +24,7 @@ scrape_configs:
           - fulfillment-shipping:8080
           - returns-warranty:8080
           - orchestration:8080
+          - notifications:8080
 
   # Consumer lag from the broker's committed offsets (compose.yaml's kafka-exporter). Only its lag
   # and each partition's oldest and newest offsets are kept, the lag's consumergroup label renamed

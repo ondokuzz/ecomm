@@ -29,6 +29,7 @@ stay with the services, which still check every token themselves.
 | `recommendations` | `/products/*/also-bought` | |
 | `fulfillment-shipping` | | `/shipping/**`: Shipping quotes, which only Checkout calls; `POST /shipments`, `POST /shipments/*/dispatch`, `POST /shipments/*/hold`: what only the fulfillment Saga does |
 | `returns-warranty` | | `POST /rmas/*/resolve`, `POST /rmas/*/hold`, `POST /rmas/*/expire`: resolving, holding and expiring RMAs, which only the returns Saga calls |
+| `notifications` | | |
 
 Two webhooks are routed without a token, since their senders call from outside and the service
 checks the webhook's signature itself: Payment's `POST /webhooks/gateway`, from the payment gateway,
