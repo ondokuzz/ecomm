@@ -1,8 +1,9 @@
 # Architecture
 
-Five views of the running stack as of Sprint 5: how browsers reach the services, how the contexts
-call each other, what flows over Kafka, how the checkout Saga pays for a Checkout Session, and how
-the fulfillment Saga takes a paid Order to its Customer. [`GLOSSARY-MAP.md`](../GLOSSARY-MAP.md) is the
+Six views of the running stack as of Sprint 6, still in progress: how browsers reach the services,
+how the contexts call each other, what flows over Kafka, how the checkout Saga pays for a Checkout
+Session, how the fulfillment Saga takes a paid Order to its Customer, and how the returns Saga takes
+an approved RMA to its resolution. [`GLOSSARY-MAP.md`](../GLOSSARY-MAP.md) is the
 source of truth for the relationships. Update these diagrams when a relationship there changes.
 
 ## Requests
@@ -61,8 +62,8 @@ Contexts call each other's internal endpoints, which the gateway never routes, e
 client-credentials identity
 ([Identity ADR 0002](../services/identity-access/docs/adr/0002-service-identity-by-client-credentials.md)).
 Checkout calls five contexts to start and change a Checkout Session, and starts the checkout Saga
-to pay one. Orchestration starts the fulfillment Saga itself, from a paid Order's event. The Sagas'
-workers then send each step's command.
+to pay one. Orchestration starts the fulfillment Saga itself, from a paid Order's event, and the
+returns Saga from an approved RMA's. The Sagas' workers then send each step's command.
 
 ```mermaid
 flowchart TB
@@ -90,6 +91,8 @@ flowchart TB
     bank(["Payment gateway<br/>(mock)"])
   end
 
+  returns["Returns & Warranty"]
+
   checkout -- reads Cart --> cart
   checkout -- prices lines --> catalog
   checkout -- evaluates Discounts --> promotions
@@ -99,13 +102,14 @@ flowchart TB
 
   checkout == "starts checkout Saga,<br/>reads outcome" ==> temporal
   temporal <--> orchestration
-  orchestration -- "place, cancel, mark paid,<br/>fulfilled, shipped, delivered" --> orders
-  orchestration -- "authorize, await settlement,<br/>void, find by Order, capture" --> payment
-  payment -- "authorizes,<br/>captures" --> bank
-  orchestration -- commit Reservation --> inventory
+  orchestration -- "place, cancel, mark paid,<br/>fulfilled, shipped, delivered, returned" --> orders
+  orchestration -- "authorize, await settlement,<br/>void, find by Order, capture, refund" --> payment
+  payment -- "authorizes, captures,<br/>refunds" --> bank
+  orchestration -- "commit Reservation, restock,<br/>reserve and commit for an RMA" --> inventory
   orchestration -- clear Cart --> cart
   orchestration -- end session --> checkout
-  orchestration -- "create, read,<br/>dispatch, hold Shipment" --> quotes
+  orchestration -- "create, read, dispatch, hold Shipment,<br/>create, read, dispatch replacement" --> quotes
+  orchestration -- "read, expire,<br/>resolve, hold RMA" --> returns
   quotes -- books Shipment --> carrier(["Carrier<br/>(mock)"])
 ```
 
@@ -143,7 +147,7 @@ flowchart LR
   recs["Recommendations"]
   fulfillmentIn["Fulfillment & Shipping"]
   returnsIn["Returns & Warranty"]
-  orchestration["Orchestration<br/><i>fulfillment Saga</i>"]
+  orchestration["Orchestration<br/><i>fulfillment and returns Sagas</i>"]
   later["Notifications, Support Assistant<br/><i>not built yet</i>"]
 
   catalog --> tProduct & tCategory
@@ -158,6 +162,7 @@ flowchart LR
   tStock --> search
   tOrder --> reviews & recs & orchestration
   tShipment --> orchestration & returnsIn
+  tRma --> orchestration
   tPayment -.-> later
   tOrder -.-> later
   tRma -.-> later
@@ -165,8 +170,9 @@ flowchart LR
 
 Fulfillment & Shipping and Returns & Warranty appear twice, as a publisher on the left and a
 consumer on the right, to keep the arrows one way. Orchestration consumes `order-management.order`
-to start a paid Order's fulfillment Saga, and `fulfillment-shipping.shipment` to wake it; it
-publishes nothing.
+to start a paid Order's fulfillment Saga, `returns-warranty.rma` to start an approved RMA's returns
+Saga and wake it, and `fulfillment-shipping.shipment` to wake either: an Order's Shipment wakes its
+fulfillment, a replacement wakes its RMA's returns Saga. It publishes nothing.
 
 ## Paying a Checkout Session
 
@@ -260,13 +266,64 @@ sequenceDiagram
   end
 ```
 
+## Resolving an RMA
+
 Returns & Warranty takes a Customer's RMA, a return within the Return Period or a warranty claim
 within the Warranty Window, only against units its projection of `fulfillment-shipping.shipment`
-shows were delivered. Staff approve or reject it in the Admin Console. No Saga drives an RMA yet.
+shows were delivered. Staff approve or reject it. An approved RMA starts its returns Saga,
+`returns:<rmaId>`, once however often its event is delivered
+([ADR 0009](./adr/0009-sagas-on-temporal.md)). The Saga reads the RMA first and takes it up from
+its status, then waits on the RMA's events: for its units until the Send-back deadline, a durable
+timer, and for Staff's Inspection with no deadline, reading the RMA again each hour in case an
+event never comes. Once units are restocked or a replacement's Stock committed nothing is
+compensated: each later step is retried until it succeeds. A declined Refund holds the RMA for good.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant RW as Returns & Warranty
+  participant S as Returns Saga<br/>(Temporal)
+  actor St as Staff
+  participant I as Inventory
+  participant P as Payment
+  participant FS as Fulfillment & Shipping
+  participant OM as Order Management
+
+  RW-->>S: returns-warranty.rma: Approved
+  S->>RW: read RMA (take it up from its status)
+  alt no units by the Send-back deadline
+    S->>RW: expire RMA (a 409, received meanwhile, goes on)
+  else received
+    St->>RW: receive, then inspect
+    RW-->>S: returns-warranty.rma: Received, Inspected
+    S->>RW: read the Inspection
+    alt return accepted
+      S->>I: restock units (RMA reference)
+      S->>P: find the Order's Payment, refund the Refund amount
+    else fault confirmed
+      S->>I: reserve a replacement, owned by the RMA
+      alt Stock for a replacement
+        S->>I: commit Reservation
+        S->>FS: create replacement Shipment
+        St->>FS: pick, then pack
+        FS-->>S: fulfillment-shipping.shipment: replacement Packed
+        S->>FS: dispatch replacement
+      else insufficient Stock
+        S->>P: find the Order's Payment, refund the Refund amount
+      end
+    end
+    alt Refund declined, or still failing
+      S->>RW: hold RMA, with the reason
+    else refunded, exchanged, or Inspection refused
+      S->>RW: resolve Refunded, Exchanged or Closed
+      opt every delivered unit of the Order refunded
+        S->>OM: mark Order returned
+      end
+    end
+  end
+```
 
 ## Not built yet
 
-Notifications, the AI Support Assistant and the returns Saga are planned in
-[`docs/roadmap.md`](./roadmap.md). The returns Saga will run in Orchestration beside the checkout
-and fulfillment Sagas, refunding through Payment and restocking through Inventory. Prometheus and
-Grafana scrape every service and are left out of the diagrams.
+Notifications and the AI Support Assistant are planned in [`docs/roadmap.md`](./roadmap.md).
+Prometheus and Grafana scrape every service and are left out of the diagrams.
