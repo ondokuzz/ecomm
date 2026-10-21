@@ -1,5 +1,6 @@
+import { useId } from 'react'
 import { useShipment } from '../api/shipments'
-import { type ShipmentStatus, shipmentStatusLabel, trackingEventsOf } from '../domain/shipment'
+import { type Shipment, type ShipmentStatus, shipmentStatusLabel, trackingEventsOf } from '../domain/shipment'
 import { Badge, type Tone } from './ui/Badge'
 import { Card } from './ui/Card'
 
@@ -13,21 +14,30 @@ const shipmentStatusTones: Record<ShipmentStatus, Tone> = {
 }
 
 /**
- * The Order's Shipment: whether it is being prepared, shipped or delivered, the Carrier and tracking
- * number once it ships, and its Tracking events, oldest first. Like "Customers also bought", nothing
- * shows while it loads, for an Order without a Shipment, or when Fulfillment & Shipping can't be
- * asked. It is asked again every 10 s while it or the Order is `Shipped`.
+ * The Order's Shipment, as `ShipmentPanel` shows it. Like "Customers also bought", nothing shows
+ * while it loads, for an Order without a Shipment, or when Fulfillment & Shipping can't be asked.
+ * It is asked again every 10 s while it or the Order is `Shipped`.
  */
 export function OrderShipment({ orderId }: { orderId: string }) {
   const shipment = useShipment(orderId).data
   if (!shipment) return null
+  return <ShipmentPanel shipment={shipment} title="Shipment" />
+}
+
+/**
+ * A Shipment under `title`: whether it is being prepared, shipped or delivered, the Carrier and
+ * tracking number once it ships, and its Tracking events, oldest first. The Order page shows its
+ * Order's, and an RMA's page its Replacement Shipment.
+ */
+export function ShipmentPanel({ shipment, title }: { shipment: Shipment; title: string }) {
+  const headingId = useId()
   const tracking = trackingEventsOf(shipment)
 
   return (
-    <Card className="order-shipment" role="region" aria-labelledby="order-shipment-heading">
+    <Card className="order-shipment" role="region" aria-labelledby={headingId}>
       <div className="order-shipment-top">
-        <h2 id="order-shipment-heading" className="card-title">
-          Shipment
+        <h2 id={headingId} className="card-title">
+          {title}
         </h2>
         {/* The smoke test finds the Shipment's status by its `shipment-*` class. */}
         <Badge

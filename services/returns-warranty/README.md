@@ -98,8 +98,9 @@ An RMA reads as:
 Deciding a decided RMA is a 409 `rmaAlreadyDecided`. A decision takes no `Idempotency-Key`: a repeat
 is refused, not replayed. A listing's `page` counts from 0, and `size` is 1 to 100 (20 by default).
 `status` takes one or more, repeated or comma-separated (`?status=APPROVED,RECEIVED`); an unknown one
-is a 400. `APPROVED` alone is listed by Send-back deadline, soonest first, as Staff chase the units;
-any other listing is oldest first.
+is a 400. A Customer's own are listed newest first, as their Returns page shows them. For Staff,
+`APPROVED` alone is listed by Send-back deadline, soonest first, as they chase the units; any other
+listing is oldest first.
 
 ### The lifecycle
 

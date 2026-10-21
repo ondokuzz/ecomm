@@ -179,11 +179,14 @@ class PostgresRmaRepository implements RmaRepository {
       where.append(" AND order_id = :orderId");
       params.put("orderId", filter.orderId());
     }
-    // Approved RMAs are chased by their Send-back deadline; every other list is oldest first.
+    // A Customer reads their own newest first. Staff chase approved RMAs by their Send-back
+    // deadline, and every other list oldest first.
     var order =
-        filter.statuses().equals(Set.of(RmaStatus.APPROVED))
-            ? " ORDER BY send_back_by, requested_at, id"
-            : " ORDER BY requested_at, id";
+        filter.customerId() != null
+            ? " ORDER BY requested_at DESC, id DESC"
+            : filter.statuses().equals(Set.of(RmaStatus.APPROVED))
+                ? " ORDER BY send_back_by, requested_at, id"
+                : " ORDER BY requested_at, id";
     var total =
         jdbc.sql("SELECT count(*) FROM rma" + where).params(params).query(Long.class).single();
     var items =

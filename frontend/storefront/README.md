@@ -14,6 +14,8 @@ React, TypeScript, React Router and TanStack Query.
 | `/checkout` | Starts or resumes a Checkout Session: its lines, price breakdown, a Coupon field and a countdown to when it expires, a Shipping address form and Shipping options, a test-card picker and a "Pay" button | yes |
 | `/orders/{id}` | An Order: its Order Status timeline, drawn from its Order Status history with times, its Payment, its Shipping, its lines and summary; after checkout, the confirmation first | yes |
 | `/orders?page=` | My Orders as cards, newest first, 12 to a page; `page` counts from 1 | yes |
+| `/returns?page=` | My Returns: the Customer's RMAs as cards, newest first, 20 to a page; in the account menu. See [Returns](#returns) | yes |
+| `/returns/{id}` | An RMA, followed: its timeline, where to send it back, its Refund amount, its replacement | yes |
 
 ## Design
 
@@ -182,6 +184,32 @@ the Order Shipped for longer than the delivery deadline (30 days, Orchestration'
 stay Shipped. Either can be read as delivered first, since the Saga marks the Order Delivered
 moments after the Carrier's webhook, so neither stops on its own. Its Payment shows Charged once
 the Saga has captured it.
+
+## Returns
+
+A delivered (or Returned) Order's page has a "Returns and warranty" card, from Returns &
+Warranty's `GET /rmas/eligibility?orderId=`: each delivered line with until when it may be
+returned and until when its warranty runs, or why not (`kindOptionsOf` in
+[`src/domain/rma.ts`](./src/domain/rma.ts)), and "Return or claim warranty". That opens the request
+form under the line: the kind, each disabled with its reason once its window ended, the Product has
+no warranty, or every unit is already claimed; the units, as checkboxes of the Serial numbers still
+free to claim, or a quantity up to what is left; and the reason, up to 1,000 characters. The form
+checks these itself (`rmaRequestOf`), then posts `POST /rmas` with one `Idempotency-Key` for as long
+as the request it sends is the same, so a request whose answer never came is replayed, not made
+twice. Each refusal shows beside its field (`rmaRefusalsOf`): an ended window or a missing warranty
+beside the kind, units already claimed or not shipped beside the units, and a 503 while Returns &
+Warranty catches up with the Order above the form. Like the Shipment, the card is simply absent
+while it loads and when the read fails.
+
+Sent, the form opens the RMA's page: its RMA reference and status, its timeline from the RMA history
+with each step's note and the Inspection's outcome, then the steps still to come
+(`rmaTimelineOf`); for a return, its Refund amount, noting that Shipping isn't refunded, and once
+refunded the amount; once approved, the Warehouse's Return address from Fulfillment & Shipping's
+`GET /warehouses/{id}`, "Write RMA-… on the parcel" and the Send-back deadline, after which it
+expires; and for an upheld warranty claim, the Replacement Shipment (`GET /shipments?rmaId=`) in the same
+Shipment panel as the Order page's, followed every 10 seconds while it is prepared or on its way. It asks again every 10 seconds while the RMA is Received or Inspected
+(`rmaRefreshInterval`). The Order's Payment names the RMA each Refund was for ("Refunded for
+RMA-…"), and the Order shows Returned once every unit it delivered is refunded.
 
 My Orders lists them as cards: reference, date, the first three Products' thumbnails (and how many
 more), item count, total and Order Status badge, and "Saved with Audio week, WELCOME10" naming each
@@ -425,7 +453,7 @@ Sign in as `demo@ecomm.local` / `demo`, or register a new Customer.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: failed responses as messages and support references, Money formatting by Catalog's Minor units, Cart pricing, checkout problems, the session countdown and the price breakdown with each Discount and the Shipping cost, address violations mapped to their fields, Shipping options and addresses in words, whether a session can be paid, Coupon rejections, test cards and payment failures, an Order's Payment statuses and transactions and why a cancelled Order was cancelled, quantities, Stock levels and Cart lines' availability, toasts, the search's URL and its Facets as chips and filters, rating stars and summaries and the review form's validation, Product specs by their Category's definitions, Warranty terms in words, Customer initials, Orders and their timeline from the Order Status history, Shipment statuses in words, Tracking events oldest first and when the Order page refreshes them, the Orders list's paging, Order Status colours, seed Product images, the Keycloak theme's and the Admin Console's copies of the tokens
+npm test          # Vitest: failed responses as messages and support references, Money formatting by Catalog's Minor units, Cart pricing, checkout problems, the session countdown and the price breakdown with each Discount and the Shipping cost, address violations mapped to their fields, Shipping options and addresses in words, whether a session can be paid, Coupon rejections, test cards and payment failures, an Order's Payment statuses and transactions and why a cancelled Order was cancelled, quantities, Stock levels and Cart lines' availability, toasts, the search's URL and its Facets as chips and filters, rating stars and summaries and the review form's validation, Product specs by their Category's definitions, Warranty terms in words, Customer initials, Orders and their timeline from the Order Status history, Shipment statuses in words, Tracking events oldest first and when the Order page refreshes them, the Orders list's paging, Order Status colours, RMA kinds offered or disabled with why, the request form's checks, Returns & Warranty's refusals by field, the RMA timeline and when its page refreshes, Refunds named by their RMA, seed Product images, the Keycloak theme's and the Admin Console's copies of the tokens
 npm run test:e2e  # Playwright smoke, search, product-page and error-states tests against the running compose stack (`make up`)
 ```
 
@@ -461,7 +489,13 @@ picks and packs it as Staff through the gateway (as the Admin Console does, with
 number or IMEI for any serial-tracked line), waits for the Saga to ship it, and sees the Carrier
 and tracking number, the Payment Charged, the Tracking events arrive by themselves and the Shipment
 and Order end Delivered; the other places an Order as Orchestration and never pays it, so the
-fulfillment Saga never creates its Shipment, and sees no Shipment panel. The error-states test
+fulfillment Saga never creates its Shipment, and sees no Shipment panel. Sprint 6's buys a phone,
+has it packed with a new IMEI and delivered, returns it from the Order's page choosing that IMEI,
+and sees the RMA Requested with its Refund amount (the Order's total less Shipping) and first on My
+Returns; once Staff approve it through the gateway it sees the Return address and "Write RMA-… on
+the parcel", and once they receive and accept it, the RMA turns Refunded by itself, the Order's
+Payment shows "Refunded for RMA-…" and is Partly refunded (Shipping isn't refunded), and the Order
+Returned. The error-states test
 ([`e2e/error-states.spec.ts`](./e2e/error-states.spec.ts)) opens unknown route, Product and Order
 addresses and sees the Not Found page, answers the Product list with a 500 and sees the panel's
 reference and "Try again" recover, fails the Product page's Stock lookup and sees it say so with its

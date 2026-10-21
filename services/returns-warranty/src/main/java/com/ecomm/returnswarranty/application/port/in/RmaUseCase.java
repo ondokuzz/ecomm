@@ -61,7 +61,10 @@ public interface RmaUseCase {
 
   Optional<Rma> rma(UUID id);
 
-  /** A page of the RMAs that match: approved ones by Send-back deadline, others oldest first. */
+  /**
+   * A page of the RMAs that match: a Customer's own newest first; otherwise approved ones by
+   * Send-back deadline, others oldest first.
+   */
   Page<Rma> rmas(RmaFilter filter, int page, int size);
 
   /**

@@ -10,7 +10,7 @@ import type { Shipment } from '../src/domain/shipment'
 import { stackSecret } from './secrets'
 
 /**
- * The smoke test: the definitions of done of Sprints 1 to 4, end to end, each test as a Customer of
+ * The smoke test: the definitions of done of Sprints 1 to 6, end to end, each test as a Customer of
  * its own, made in Keycloak for the test and deleted afterwards with their reviews. The Orders stay,
  * as Orders are never deleted.
  *
@@ -33,6 +33,10 @@ import { stackSecret } from './secrets'
  *   the fulfillment Saga captures the Payment and ships it, and the Order page shows the Shipment,
  *   its Tracking events as the mock carrier sends them, then `Delivered`, and the Payment charged.
  *   An Order without a Shipment, placed but never paid, shows no Shipment panel.
+ * - A Customer returns a delivered phone from its Order's page, choosing its IMEI, and sees the RMA
+ *   `Requested` with its Refund amount; once Staff approve, receive and accept it through the
+ *   gateway, the RMA page shows where to send it, then `Refunded`, and the Order its Refund and
+ *   `Returned` (Sprint 6).
  */
 
 // The first checkout compares Stock before and after, so nothing else may check out meanwhile:
@@ -842,6 +846,121 @@ test.describe('Sprint 5', () => {
     await expect(page.locator('.status-placed')).toHaveText('Placed')
     expect((await asked).status()).toBe(404)
     await expect(page.getByRole('region', { name: 'Shipment' })).toHaveCount(0)
+  })
+})
+
+test.describe('Sprint 6', () => {
+  test('a Customer returns a delivered phone by its IMEI, sees it Requested with its Refund amount, then Refunded', async ({
+    page,
+    request,
+  }) => {
+    // Checkout, the fulfillment Saga and the mock carrier's delivery, then the returns Saga's Refund.
+    test.setTimeout(300_000)
+    const customer = signedUp()
+    const token = await tokenFor(request, customer)
+    const phone = await aProductInStockIn(request, 'phones')
+    await putInCart(request, token, phone.variantId)
+
+    await page.goto('/checkout')
+    await signInOnKeycloak(page, customer)
+    await expect(page.getByRole('timer', { name: 'Time left' })).toBeVisible()
+    await shipTo(page)
+    await testCard(page, 'Approve').check()
+    await page.getByRole('button', { name: /^Pay/ }).click()
+    await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/)
+    const orderId = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!)
+
+    // Staff pick and pack it with its IMEI; the Saga ships it and the mock carrier delivers it.
+    const staffHeaders = { Authorization: `Bearer ${await tokenFor(request, staff)}` }
+    const shipment = await shipmentOf(request, staffHeaders, orderId)
+    const imei = anImei()
+    const shipmentUrl = `/api/fulfillment-shipping/shipments/${shipment.id}`
+    expect((await request.post(`${shipmentUrl}/pick`, { headers: staffHeaders })).ok()).toBeTruthy()
+    const packed = await request.post(`${shipmentUrl}/pack`, {
+      headers: staffHeaders,
+      data: { serialNumbers: { [phone.variantId]: [imei] } },
+    })
+    expect(packed.ok()).toBeTruthy()
+    await expect
+      .poll(async () => (await orderOf(request, token, orderId)).status, { timeout: 150_000, intervals: [2_000] })
+      .toBe('DELIVERED')
+    // Returns & Warranty answers once it has projected the delivery.
+    await expect
+      .poll(
+        async () =>
+          (
+            await request.get(`/api/returns-warranty/rmas/eligibility?orderId=${encodeURIComponent(orderId)}`, {
+              headers: { Authorization: `Bearer ${token}` },
+            })
+          ).status(),
+        { timeout: 30_000 },
+      )
+      .toBe(200)
+
+    // The Customer returns it from the Order's page, choosing its IMEI.
+    await page.goto(`/orders/${orderId}`)
+    const returns = page.getByRole('region', { name: 'Returns and warranty' })
+    await expect(returns).toContainText(/Return until/)
+    await returns.getByRole('button', { name: /^Return or claim warranty/ }).click()
+    const form = page.getByRole('form', { name: /^Return or claim warranty/ })
+    await expect(form.getByRole('radio', { name: /^Return/ })).toBeChecked()
+    await form.getByRole('checkbox', { name: imei }).check()
+    await form.getByLabel('What’s wrong?').fill('Not what I expected')
+    await form.getByRole('button', { name: 'Send request' }).click()
+
+    // Requested, with its Refund amount: the Order's total less Shipping, as it is the only unit.
+    await expect(page).toHaveURL(/\/returns\/[^/]+$/)
+    const rmaId = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!)
+    await expect(page.locator('.page-heading .rma-requested')).toHaveText('Requested')
+    const order = await orderOf(request, token, orderId)
+    const currencies = await currenciesOfCatalog(request)
+    const refund = money(
+      { ...order.total, amountMinor: order.total.amountMinor - order.shippingOption!.cost.amountMinor },
+      currencies,
+    )
+    const refundCard = page.getByRole('region', { name: 'Refund' })
+    await expect(refundCard).toContainText(refund)
+    await expect(refundCard).toContainText("Shipping isn't refunded")
+    const reference = (await page.getByRole('heading', { level: 1 }).textContent())!
+    expect(reference).toMatch(/^RMA-[0-9A-F]{8}$/)
+
+    // The Returns page, from the account menu, lists it first.
+    await page.getByRole('button', { name: 'Customer menu' }).click()
+    await page.getByRole('link', { name: 'My Returns', exact: true }).click()
+    const first = page.getByRole('list', { name: 'Returns' }).getByRole('listitem').first()
+    await expect(first).toContainText(reference)
+    await expect(first).toContainText('Requested')
+
+    // Approved, the page says where to send it and what to write on the parcel.
+    const rmaUrl = `/api/returns-warranty/rmas/${rmaId}`
+    expect((await request.post(`${rmaUrl}/approve`, { headers: staffHeaders, data: {} })).ok()).toBeTruthy()
+    await first.getByRole('link').click()
+    const sendBack = page.getByRole('region', { name: 'Send it back' })
+    await expect(sendBack).toContainText(`Write ${reference} on the parcel.`)
+    // Shipped from Berlin, it goes back to the Berlin Warehouse.
+    await expect(sendBack.locator('address')).toContainText('Ecomm Returns Berlin')
+
+    // Staff receive and accept it; the returns Saga refunds it, and the page follows by itself.
+    const step = (path: string, data: object) =>
+      request.post(`${rmaUrl}/${path}`, {
+        headers: { ...staffHeaders, 'Idempotency-Key': crypto.randomUUID() },
+        data,
+      })
+    expect((await step('receive', { serialNumbers: [imei] })).ok()).toBeTruthy()
+    await page.reload()
+    await expect(page.locator('.page-heading .rma-received')).toHaveText('Received')
+    expect((await step('inspect', { outcome: 'ACCEPTED' })).ok()).toBeTruthy()
+    await expect(page.locator('.page-heading .rma-refunded')).toHaveText('Refunded', { timeout: 90_000 })
+    await expect(refundCard).toContainText(`${refund} refunded to your card`)
+    await expect(page.getByRole('list', { name: 'RMA progress' })).toContainText('Inspected: accepted')
+
+    // The Order shows the Refund on its Payment, and is Returned once every unit is refunded.
+    await page.getByRole('region', { name: 'Return summary' }).getByRole('link').click()
+    // Shipping isn't refunded, so the Payment is only partly refunded.
+    await expect(page.locator('.payment-partially_refunded')).toHaveText('Partly refunded')
+    await expect(page.getByRole('list', { name: 'Payments' })).toContainText(`Refunded ${refund} of`)
+    await expect(page.getByRole('list', { name: 'Payment activity' })).toContainText(`Refunded for ${reference}`)
+    await expect(page.locator('.status-returned')).toHaveText('Returned', { timeout: 30_000 })
   })
 })
 

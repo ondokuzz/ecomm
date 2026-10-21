@@ -270,7 +270,14 @@ describe('paymentTransactionsOf', () => {
     outcome: PaymentTransaction['outcome'],
     at: string,
     declineReason: string | null = null,
-  ): PaymentTransaction => ({ kind, outcome, amount: { amountMinor: 79900, currency: 'EUR' }, declineReason, at })
+  ): PaymentTransaction => ({
+    kind,
+    outcome,
+    amount: { amountMinor: 79900, currency: 'EUR' },
+    declineReason,
+    at,
+    reference: null,
+  })
 
   it('says what each Payment transaction did to the Customer’s money, oldest first', () => {
     const rows = paymentTransactionsOf({
@@ -311,6 +318,17 @@ describe('paymentTransactionsOf', () => {
 
     expect(rows.map((row) => row.label)).toEqual(['Refunded', 'Refund refused'])
   })
+
+  it('names the RMA a refund was for', () => {
+    const rows = paymentTransactionsOf({
+      transactions: [
+        { ...transaction('REFUND', 'APPROVED', '2026-10-20T09:00:00Z'), reference: 'RMA-3F2A9C1B' },
+        { ...transaction('REFUND', 'DECLINED', '2026-10-20T09:01:00Z'), reference: 'RMA-3F2A9C1B' },
+      ],
+    })
+
+    expect(rows.map((row) => row.label)).toEqual(['Refunded for RMA-3F2A9C1B', 'Refund refused for RMA-3F2A9C1B'])
+  })
 })
 
 describe('refundedOf', () => {
@@ -320,6 +338,7 @@ describe('refundedOf', () => {
     amount: { amountMinor, currency: 'EUR' },
     declineReason: null,
     at: '2026-10-20T09:00:00Z',
+    reference: null,
   })
 
   it('adds up the approved refunds, leaving out refused ones', () => {

@@ -2789,3 +2789,104 @@ main {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Returns and warranty: a delivered Order's lines, the request form, and an RMA's page */
+.order-returns-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-4);
+}
+.order-returns-line + .order-returns-line {
+  border-top: 1px solid var(--color-line);
+  padding-top: var(--space-4);
+}
+.order-returns-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.order-returns-dates {
+  list-style: none;
+  margin: var(--space-1) 0 0;
+  padding: 0;
+  font-size: var(--text-sm);
+}
+.rma-form {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+.rma-form .field {
+  display: flex;
+}
+.rma-units {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.rma-units legend {
+  margin-bottom: var(--space-2);
+  padding: 0;
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+.rma-unit {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+}
+.rma-unit input {
+  accent-color: var(--color-primary);
+}
+.rma-timeline {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+}
+.rma-timeline .timeline-step {
+  display: grid;
+  grid-template-columns: 1.75rem auto;
+  justify-content: start;
+  column-gap: var(--space-3);
+  row-gap: 0;
+}
+.rma-timeline .timeline-step + .timeline-step::before {
+  grid-column: 1;
+  justify-self: center;
+  width: 2px;
+  height: 1rem;
+}
+.rma-timeline .timeline-marker {
+  grid-column: 1;
+}
+.timeline-note {
+  font-weight: 500;
+  color: var(--color-muted);
+}
+.rma-send-back address {
+  display: flex;
+  flex-direction: column;
+  font-style: normal;
+  margin-bottom: var(--space-3);
+}
+.rma-parcel {
+  margin: 0 0 var(--space-2);
+}
+.rma-refund-amount {
+  font-size: var(--text-lg);
+}
+.rma-serials {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.rma-reason {
+  overflow-wrap: anywhere;
+}

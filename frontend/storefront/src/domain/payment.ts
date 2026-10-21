@@ -195,13 +195,17 @@ export const paymentStatuses: readonly PaymentStatus[] = [
   'REFUNDED',
 ]
 
-/** One interaction with the payment gateway on a Payment, as the Customer reads it. */
+/**
+ * One interaction with the payment gateway on a Payment, as the Customer reads it; `reference` is
+ * what a Refund was for, such as an RMA reference, and null for any other kind.
+ */
 export interface PaymentTransaction {
   kind: 'AUTHORIZATION' | 'VOID' | 'CAPTURE' | 'REFUND'
   outcome: 'APPROVED' | 'DECLINED' | 'PENDING'
   amount: Money
   declineReason: string | null
   at: string
+  reference: string | null
 }
 
 /**
@@ -269,7 +273,11 @@ export interface PaymentTransactionRow {
   at: string
 }
 
-function transactionLabel({ kind, outcome }: Pick<PaymentTransaction, 'kind' | 'outcome'>): string {
+function transactionLabel({
+  kind,
+  outcome,
+  reference,
+}: Pick<PaymentTransaction, 'kind' | 'outcome' | 'reference'>): string {
   switch (kind) {
     case 'AUTHORIZATION':
       return outcome === 'APPROVED' ? 'Amount held' : outcome === 'DECLINED' ? 'Declined' : 'Sent to your bank'
@@ -277,8 +285,10 @@ function transactionLabel({ kind, outcome }: Pick<PaymentTransaction, 'kind' | '
       return outcome === 'APPROVED' ? 'Charged' : 'Charge refused'
     case 'VOID':
       return 'Hold released'
-    case 'REFUND':
-      return outcome === 'APPROVED' ? 'Refunded' : 'Refund refused'
+    case 'REFUND': {
+      const label = outcome === 'APPROVED' ? 'Refunded' : 'Refund refused'
+      return reference ? `${label} for ${reference}` : label
+    }
   }
 }
 
@@ -293,9 +303,9 @@ export function refundedOf(payment: {
   return { amountMinor, currency: payment.amount.currency }
 }
 
-/** A Payment's transactions for the Customer, oldest first. */
+/** A Payment's transactions for the Customer, oldest first, a Refund with the RMA it was for. */
 export function paymentTransactionsOf(payment: {
-  transactions: readonly Pick<PaymentTransaction, 'kind' | 'outcome' | 'amount' | 'at'>[]
+  transactions: readonly Pick<PaymentTransaction, 'kind' | 'outcome' | 'amount' | 'at' | 'reference'>[]
 }): PaymentTransactionRow[] {
   return payment.transactions.map((transaction) => ({
     label: transactionLabel(transaction),

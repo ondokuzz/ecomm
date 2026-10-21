@@ -290,8 +290,9 @@ class RmaController {
   /**
    * A page of RMAs: a Customer's own, or for Staff, everyone's (the RMA queue). {@code status}, one
    * or more, repeated or comma-separated, and {@code orderId} narrow it when given; {@code page}
-   * counts from 0; {@code size} is 1 to {@value #MAX_PAGE_SIZE}. {@code APPROVED} alone is by
-   * Send-back deadline, soonest first; any other list is oldest first.
+   * counts from 0; {@code size} is 1 to {@value #MAX_PAGE_SIZE}. A Customer's are newest first.
+   * Staff's {@code APPROVED} alone is by Send-back deadline, soonest first; any other list of
+   * theirs is oldest first.
    */
   @GetMapping
   @PreAuthorize("hasAnyRole('CUSTOMER', 'STAFF')")

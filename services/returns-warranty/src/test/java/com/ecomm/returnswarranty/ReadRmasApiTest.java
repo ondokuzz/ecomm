@@ -8,9 +8,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
- * A Customer reads their own RMAs and nobody else's; Staff read any, and list them by status,
- * oldest first, a page at a time. Orchestration reads any one, as the returns Saga re-reads its
- * RMA, but lists none.
+ * A Customer reads their own RMAs, newest first, and nobody else's; Staff read any, and list them
+ * by status, oldest first, a page at a time. Orchestration reads any one, as the returns Saga
+ * re-reads its RMA, but lists none.
  */
 class ReadRmasApiTest extends RmasApiTest {
 
@@ -67,6 +67,24 @@ class ReadRmasApiTest extends RmasApiTest {
     assertThat(list(OTHER_CUSTOMER, "").items())
         .extracting(RmaView::customerId)
         .containsOnly("customer-43");
+  }
+
+  @Test
+  void aCustomerListsTheirRmasNewestFirst() {
+    var charger = newVariant("CHARGER");
+    var shipment =
+        Shipments.shipment(CUSTOMER_ID).line(charger, "Charger", 3, "NONE").delivered(RECENTLY);
+    awaitShipmentsProjected();
+    var second = requestedAt(Duration.ofHours(2), shipment.orderId(), charger);
+    var first = requestedAt(Duration.ofHours(1), shipment.orderId(), charger);
+    var third = requestedAt(Duration.ofHours(3), shipment.orderId(), charger);
+
+    assertThat(list(CUSTOMER, "?orderId=" + shipment.orderId()).items())
+        .extracting(RmaView::id)
+        .containsExactly(third.id(), second.id(), first.id());
+    assertThat(list(STAFF, "?orderId=" + shipment.orderId()).items())
+        .extracting(RmaView::id)
+        .containsExactly(first.id(), second.id(), third.id());
   }
 
   @Test

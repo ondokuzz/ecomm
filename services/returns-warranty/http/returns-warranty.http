@@ -100,7 +100,7 @@ Content-Type: application/json
 {"orderId": "{{orderId}}", "variantId": "{{variantId}}", "quantity": 1, "kind": "RETURN",
  "reason": "Not what I expected"}
 
-### The Customer's own RMAs, oldest first
+### The Customer's own RMAs, newest first, as their Returns page lists them
 GET {{gateway}}/api/returns-warranty/rmas
 Authorization: Bearer {{customerToken}}
 

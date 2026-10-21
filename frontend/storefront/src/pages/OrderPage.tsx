@@ -8,6 +8,7 @@ import { usePayments } from '../api/payments'
 import { CheckoutSteps } from '../components/CheckoutSteps'
 import { OrderConfirmation } from '../components/OrderConfirmation'
 import { OrderPayments } from '../components/OrderPayments'
+import { OrderReturns } from '../components/OrderReturns'
 import { OrderShipment } from '../components/OrderShipment'
 import { OrderStatusBadge } from '../components/OrderStatusBadge'
 import { OrderTimeline } from '../components/OrderTimeline'
@@ -25,7 +26,7 @@ import { addressLines, shippingOptionName } from '../domain/shipping'
 /**
  * An Order, its Order Status, its Payments, where it ships and how, and its lines, read from Order
  * Management and Payment; an Order placed before Shipping shows no Shipping card, and one without a
- * Shipment no Shipment card;
+ * Shipment no Shipment card; a delivered Order's lines, each with "Return or claim warranty";
  * after checkout, the confirmation first. A cancelled Order says why, when its Payment does.
  */
 export function OrderPage() {
@@ -116,6 +117,7 @@ export function OrderPage() {
             </Card>
           )}
           <OrderShipment orderId={order.id} />
+          <OrderReturns orderId={order.id} delivered={order.status === 'DELIVERED'} />
           <Card>
             <h2 className="card-title">Products</h2>
             <LookupError failure={variantsFailure} title="We couldn't load the products' names and pictures" />

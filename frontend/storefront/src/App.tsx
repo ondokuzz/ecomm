@@ -11,6 +11,8 @@ import { OrderPage } from './pages/OrderPage'
 import { OrdersPage } from './pages/OrdersPage'
 import { ProductDetailPage } from './pages/ProductDetailPage'
 import { ProductListPage } from './pages/ProductListPage'
+import { ReturnsPage } from './pages/ReturnsPage'
+import { RmaPage } from './pages/RmaPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -60,6 +62,22 @@ export function App() {
                   element={
                     <RequireAuth>
                       <OrderPage />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="returns"
+                  element={
+                    <RequireAuth>
+                      <ReturnsPage />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="returns/:id"
+                  element={
+                    <RequireAuth>
+                      <RmaPage />
                     </RequireAuth>
                   }
                 />

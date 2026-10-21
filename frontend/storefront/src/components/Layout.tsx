@@ -118,6 +118,14 @@ function CustomerMenu() {
           <Icon name="orders" size={18} />
           My Orders
         </Link>
+        <Link
+          to="/returns"
+          className={buttonClass({ variant: 'ghost' }, 'menu-item')}
+          onClick={() => menu.current?.hidePopover()}
+        >
+          <Icon name="arrowLeft" size={18} />
+          My Returns
+        </Link>
         <Button variant="ghost" className="menu-item" onClick={signout}>
           <Icon name="logout" size={18} />
           Log out
@@ -190,6 +198,7 @@ function Footer() {
           <Link to="/">All products</Link>
           <Link to="/cart">Your cart</Link>
           <Link to="/orders">Your orders</Link>
+          <Link to="/returns">Your returns</Link>
         </nav>
       </div>
     </footer>

@@ -83,7 +83,7 @@ export function orderStatusLabel(status: OrderStatus): string {
 }
 
 /** A short handle for an Order to show the Customer: the start of its ID, which is a random UUID. */
-export function orderReference(order: Order): string {
+export function orderReference(order: Pick<Order, 'id'>): string {
   return order.id.slice(0, 8).toUpperCase()
 }
 

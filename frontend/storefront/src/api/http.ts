@@ -44,12 +44,15 @@ export type Service =
   | 'reviews-ratings'
   | 'recommendations'
   | 'fulfillment-shipping'
+  | 'returns-warranty'
 
 interface RequestOptions {
   method?: string
   body?: unknown
   /** The Customer's access token, for endpoints that need one. */
   token?: string
+  /** For a command the service replays when it is repeated under the same key. */
+  idempotencyKey?: string
 }
 
 /** Calls a service's endpoint and returns its JSON body, or undefined for an empty one. */
@@ -73,6 +76,7 @@ export async function apiResponse<T>(
   const headers: Record<string, string> = { Accept: 'application/json' }
   if (options.token) headers.Authorization = `Bearer ${options.token}`
   if (options.body !== undefined) headers['Content-Type'] = 'application/json'
+  if (options.idempotencyKey) headers['Idempotency-Key'] = options.idempotencyKey
 
   const response = await fetch(`/api/${service}${path}`, {
     method: options.method ?? 'GET',
