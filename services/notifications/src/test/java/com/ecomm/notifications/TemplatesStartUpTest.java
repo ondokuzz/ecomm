@@ -14,14 +14,27 @@ import org.springframework.core.NestedExceptionUtils;
 import org.springframework.test.context.DynamicPropertyRegistry;
 
 /**
- * The service refuses to start when a Message type lacks a template for a channel: here, an
- * application context of its own whose templates have {@code ORDER_CONFIRMED}'s email without its
- * text part.
+ * The service refuses to start when a Message type lacks a template for a channel, or an SMS
+ * rendered with its sample doesn't fit 160 characters: each an application context of its own,
+ * whose templates have {@code ORDER_CONFIRMED}'s email without its text part, or {@code
+ * ORDER_SHIPPED}'s SMS too long.
  */
 class TemplatesStartUpTest {
 
   @Test
   void aMissingTemplateStopsTheServiceStarting() {
+    assertThatStartingFails(
+        "classpath:/incomplete-templates/", "order-confirmed/email/en/text.mustache is missing");
+  }
+
+  @Test
+  void anSmsOver160CharactersStopsTheServiceStarting() {
+    assertThatStartingFails(
+        "classpath:/long-sms-templates/",
+        "order-shipped/sms/en/text.mustache renders its sample in");
+  }
+
+  private static void assertThatStartingFails(String templates, String problem) {
     var properties = new HashMap<String, Object>();
     DynamicPropertyRegistry registry = (name, value) -> properties.put(name, value);
     FakeKeycloak.registerWith(registry);
@@ -33,8 +46,7 @@ class TemplatesStartUpTest {
     registry.add("server.port", () -> "0");
     registry.add("ecomm.notifications.dispatch.enabled", () -> "false");
     registry.add("spring.kafka.listener.auto-startup", () -> "false");
-    registry.add(
-        "ecomm.notifications.templates.location", () -> "classpath:/incomplete-templates/");
+    registry.add("ecomm.notifications.templates.location", () -> templates);
 
     assertThatThrownBy(
             () ->
@@ -44,7 +56,7 @@ class TemplatesStartUpTest {
         .satisfies(
             e ->
                 assertThat(NestedExceptionUtils.getMostSpecificCause(e).getMessage())
-                    .contains("order-confirmed/email/en/text.mustache is missing"));
+                    .contains(problem));
   }
 
   /** As command-line arguments, which outrank {@code application.yml}. */

@@ -1,7 +1,6 @@
 package com.ecomm.notifications.adapter.in.web;
 
 import com.ecomm.notifications.domain.Notification;
-import com.ecomm.notifications.domain.Recipient;
 import java.time.Instant;
 import java.util.List;
 
@@ -37,7 +36,7 @@ record NotificationResponse(
         n.customerId(),
         n.orderId(),
         n.rmaId(),
-        Recipient.mask(n.recipient()),
+        n.channel().mask(n.recipient()),
         n.status().name(),
         message == null ? null : new Message(message.subject(), message.html(), message.text()),
         n.attempts().stream()

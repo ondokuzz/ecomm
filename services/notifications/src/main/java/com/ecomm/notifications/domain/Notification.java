@@ -87,7 +87,7 @@ public final class Notification {
   public void sent(Instant at, Recipient to, RenderedMessage rendered, String reference) {
     requirePending();
     attempts.add(new Attempt(attempts.size() + 1, at, Outcome.SENT, null));
-    recipient = to.email();
+    recipient = to.addressOn(channel);
     message = rendered;
     providerReference = reference;
     status = NotificationStatus.SENT;
@@ -110,7 +110,7 @@ public final class Notification {
     var outcome = failure.isTransient() ? Outcome.TRANSIENT_FAILURE : Outcome.PERMANENT_FAILURE;
     attempts.add(new Attempt(attempts.size() + 1, at, outcome, failure.reason()));
     if (to != null) {
-      recipient = to.email();
+      recipient = to.addressOn(channel);
     }
     if (rendered != null) {
       message = rendered;

@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Your Order {{order.reference}} is on its way</title></head>
+<body style="font-family: Helvetica, Arial, sans-serif; color: #1f2937; line-height: 1.5;">
+  <p>Hello {{customer.givenName}},</p>
+  <p>Your Order <strong>{{order.reference}}</strong> has shipped:</p>
+  <ul>
+    {{#lines}}
+    <li>{{quantity}} × {{name}}</li>
+    {{/lines}}
+  </ul>
+  {{#tracking}}
+  <p>It's with {{carrier}}, tracking number <strong>{{number}}</strong>.</p>
+  {{/tracking}}
+  <p>Ecomm</p>
+</body>
+</html>

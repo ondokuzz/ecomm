@@ -16,6 +16,7 @@ React, TypeScript, React Router and TanStack Query.
 | `/orders?page=` | My Orders as cards, newest first, 12 to a page; `page` counts from 1 | yes |
 | `/returns?page=` | My Returns: the Customer's RMAs as cards, newest first, 20 to a page; in the account menu. See [Returns](#returns) | yes |
 | `/returns/{id}` | An RMA, followed: its timeline, where to send it back, its Refund amount, its replacement | yes |
+| `/notification-preferences` | Notification preferences, in the account menu: email always on, text messages to a mobile number, and push. See [Notification preferences](#notification-preferences) | yes |
 
 ## Design
 
@@ -216,6 +217,16 @@ more), item count, total and Order Status badge, and "Saved with Audio week, WEL
 Discount it got (`discountNames`); the Order page lists them in its summary as checkout did. Each Order Status badge has a colour of its own
 ([`orderStatusTones`](./src/components/orderStatusTones.ts)), always with its name, so colour is
 never the only cue.
+
+## Notification preferences
+
+The account menu's "Notification preferences" reads Notifications' `GET /preferences/me` and saves
+with `PUT /preferences/me`. Email is shown on and can't be turned off; text messages (SMS) and push
+are checkboxes, with the mobile number under SMS. The form checks the number before it is sent
+(`preferencesErrorsOf` in [`src/domain/preferences.ts`](./src/domain/preferences.ts)): in
+international form, a plus and the country code first, spaces allowed and dropped, and required
+with SMS on. Notifications refuses the same with a 422 `invalidPhoneNumber`, shown beside the
+number. Saved, a toast says so, and the form starts again from what Notifications kept.
 
 ## Product images
 
@@ -453,7 +464,7 @@ Sign in as `demo@ecomm.local` / `demo`, or register a new Customer.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: failed responses as messages and support references, Money formatting by Catalog's Minor units, Cart pricing, checkout problems, the session countdown and the price breakdown with each Discount and the Shipping cost, address violations mapped to their fields, Shipping options and addresses in words, whether a session can be paid, Coupon rejections, test cards and payment failures, an Order's Payment statuses and transactions and why a cancelled Order was cancelled, quantities, Stock levels and Cart lines' availability, toasts, the search's URL and its Facets as chips and filters, rating stars and summaries and the review form's validation, Product specs by their Category's definitions, Warranty terms in words, Customer initials, Orders and their timeline from the Order Status history, Shipment statuses in words, Tracking events oldest first and when the Order page refreshes them, the Orders list's paging, Order Status colours, RMA kinds offered or disabled with why, the request form's checks, Returns & Warranty's refusals by field, the RMA timeline and when its page refreshes, Refunds named by their RMA, seed Product images, the Keycloak theme's and the Admin Console's copies of the tokens
+npm test          # Vitest: failed responses as messages and support references, Money formatting by Catalog's Minor units, Cart pricing, checkout problems, the session countdown and the price breakdown with each Discount and the Shipping cost, address violations mapped to their fields, Shipping options and addresses in words, whether a session can be paid, Coupon rejections, test cards and payment failures, an Order's Payment statuses and transactions and why a cancelled Order was cancelled, quantities, Stock levels and Cart lines' availability, toasts, the search's URL and its Facets as chips and filters, rating stars and summaries and the review form's validation, Product specs by their Category's definitions, Warranty terms in words, Customer initials, Orders and their timeline from the Order Status history, Shipment statuses in words, Tracking events oldest first and when the Order page refreshes them, the Orders list's paging, Order Status colours, RMA kinds offered or disabled with why, the request form's checks, Returns & Warranty's refusals by field, the RMA timeline and when its page refreshes, Refunds named by their RMA, the Notification preferences form's mobile number, seed Product images, the Keycloak theme's and the Admin Console's copies of the tokens
 npm run test:e2e  # Playwright smoke, search, product-page and error-states tests against the running compose stack (`make up`)
 ```
 
@@ -497,7 +508,9 @@ and sees the RMA Requested with its Refund amount (the Order's total less Shippi
 Returns; once Staff approve it through the gateway it sees the Return address and "Write RMA-… on
 the parcel", and once they receive and accept it, the RMA turns Refunded by itself, the Order's
 Payment shows "Refunded for RMA-…" and is Partly refunded (Shipping isn't refunded), and the Order
-Returned. The error-states test
+Returned. Another opens Notification preferences from the account menu, sees email on and the rest
+off, has a mobile number without its country code refused beside the field, saves one with text
+messages on, and reads them back after a reload. The error-states test
 ([`e2e/error-states.spec.ts`](./e2e/error-states.spec.ts)) opens unknown route, Product and Order
 addresses and sees the Not Found page, answers the Product list with a 500 and sees the panel's
 reference and "Try again" recover, fails the Product page's Stock lookup and sees it say so with its

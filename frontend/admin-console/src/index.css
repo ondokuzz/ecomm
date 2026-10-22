@@ -953,7 +953,8 @@ textarea.input {
 }
 
 /* Message templates: an email's HTML in a sandboxed frame, its text as sent. */
-.template-preview .template-html {
+.template-preview .template-html,
+.notification-message .template-html {
   display: block;
   width: 100%;
   min-height: 420px;
@@ -962,9 +963,23 @@ textarea.input {
   background: #ffffff;
 }
 
-.template-preview .template-text {
+.template-preview .template-text,
+.notification-message .template-text {
   overflow-x: auto;
   white-space: pre-wrap;
   font-family: var(--font-mono);
   font-size: var(--text-sm);
+}
+
+/* A Notification's message on the Order page, opened under its Message type. */
+.notification-message {
+  margin-top: var(--space-1);
+  font-weight: 400;
+}
+.notification-message .template-html {
+  min-width: 32rem;
+  min-height: 320px;
+}
+.notification-message p {
+  margin: var(--space-1) 0;
 }

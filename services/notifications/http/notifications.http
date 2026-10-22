@@ -1,13 +1,17 @@
 # Exercises Notifications against the compose stack (`make up`): Staff preview the Message templates
-# and read the Notifications about an Order, and the demo Customer reads their own. Run the token
+# and read the Notifications about an Order, the demo Customer reads their own and saves their
+# Notification preferences, and Staff read what the mock SMS and push providers took. Run the token
 # requests first; they store tokens for the ones after them.
 # A Notification needs a paid Order: check one out in the Storefront as demo@ecomm.local, then set
-# @orderId to its ID. Its confirmation is in Mailpit, on http://localhost:8025, a second later.
+# @orderId to its ID. Its confirmation is in Mailpit, on http://localhost:8025, a second later. Pick
+# and pack its Shipment in the Admin Console, and its ORDER_SHIPPED messages follow; with SMS and
+# push on (below), the mock providers take them too.
 
 @notifications = http://localhost:8101
 @gateway = http://localhost:8000
 @keycloak = http://localhost:8180/realms/ecomm/protocol/openid-connect/token
 @orderId = <a paid Order's ID>
+@demoCustomerId = <the demo Customer's ID: the customerId of their Notifications, or their token's sub>
 
 ### The demo Customer's token
 POST {{keycloak}}
@@ -27,6 +31,14 @@ grant_type=password&client_id=dev-cli&username=staff@ecomm.local&password=staff
 
 ### Every Message type on every channel, rendered with its sample content, through the gateway
 GET {{gateway}}/api/notifications/templates
+Authorization: Bearer {{staffToken}}
+
+### The shipped SMS: a Message type on a channel it goes on
+POST {{notifications}}/templates/ORDER_SHIPPED/SMS/preview
+Authorization: Bearer {{staffToken}}
+
+### A channel the Message type doesn't go on: 404
+POST {{notifications}}/templates/ORDER_CONFIRMED/SMS/preview
 Authorization: Bearer {{staffToken}}
 
 ### One of them; the body's locale is optional, and falls back to en
@@ -58,3 +70,36 @@ Authorization: Bearer {{customerToken}}
 
 ### What Mailpit caught: the newest emails first (no token)
 GET http://localhost:8025/api/v1/messages?limit=5
+
+### The demo Customer's Notification preferences: email only, until they save theirs
+GET {{gateway}}/api/notifications/preferences/me
+Authorization: Bearer {{customerToken}}
+
+### Turn on SMS, with a mobile number in E.164 form (spaces are dropped), and push
+PUT {{gateway}}/api/notifications/preferences/me
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"phoneNumber": "+49 151 12345678", "sms": true, "push": true}
+
+### A number without its country code: 422 invalidPhoneNumber
+PUT {{notifications}}/preferences/me
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"phoneNumber": "015112345678", "sms": true, "push": false}
+
+### What the mock SMS provider took for the demo Customer, newest first, the number masked
+GET {{gateway}}/api/notifications/mock-providers/sms?customerId={{demoCustomerId}}
+Authorization: Bearer {{staffToken}}
+
+### And the mock push provider
+GET {{notifications}}/mock-providers/push?customerId={{demoCustomerId}}
+Authorization: Bearer {{staffToken}}
+
+### Back to email only
+PUT {{notifications}}/preferences/me
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"phoneNumber": null, "sms": false, "push": false}

@@ -1,24 +1,32 @@
 # Notifications
 
 The messages Customers get about their Orders. Notifications consumes other contexts' integration
-events, records a **Notification** in its ledger for each message an event triggers, renders it from
-its **Message templates** and sends it through the **Notification channel**'s `NotificationProvider`.
-It keeps its ledger and a projection of Product names in its own Postgres database,
-`notifications`, and publishes no events. Built from
+events, records a **Notification** in its ledger for each message an event triggers on each channel
+the Customer's **Notification preferences** allow, renders it from its **Message templates** and
+sends it through the **Notification channel**'s `NotificationProvider`. It keeps its ledger, the
+Notification preferences, what the mock SMS and push providers took, and a projection of Product
+names in its own Postgres database, `notifications`, and publishes no events. Built from
 [`platform/service-template`](../../platform/service-template/README.md), so its layout, security and
 testing conventions apply here.
 
-So far it sends one message, by email: `ORDER_CONFIRMED`, when an Order is paid. SMS, push,
-Notification preferences, and the Shipment, Payment and RMA messages come with #83's next ticket.
+It sends the Order's confirmation, its Shipment shipped and delivered, a replacement shipped, and a
+Refund. The RMA messages come with #93.
 
 ## What is sent
 
 | Message type | Trigger | Channels | Says |
 |---|---|---|---|
 | `ORDER_CONFIRMED` | An `order-management.order` event with `change` `STATUS_CHANGED` to `PAID` | `EMAIL` | The Order reference and when it was placed, each line's quantity, Product name (with its Variant's axis values) and total, the subtotal, Discounts, Shipping cost, Tax and total |
+| `ORDER_SHIPPED` | A `fulfillment-shipping.shipment` event with `change` `SHIPPED` for an `ORDER` Shipment (or one with no `kind`) | `EMAIL`, `SMS`, `PUSH` | The Order reference, each line's quantity and Product name, the Carrier and tracking number |
+| `ORDER_DELIVERED` | The same with `change` `DELIVERED` | `EMAIL`, `SMS`, `PUSH` | The Order reference, the day it was delivered (`deliveredAt`, or when the event occurred), and its lines |
+| `REPLACEMENT_SHIPPED` | The same with `change` `SHIPPED` for a `REPLACEMENT` Shipment | `EMAIL`, `SMS`, `PUSH` | The RMA reference, the Order reference, its lines, the Carrier and tracking number; it is about the Order and the RMA |
+| `PAYMENT_REFUNDED` | A `payment.payment` event with `change` `REFUNDED` | `EMAIL`, `SMS`, `PUSH` | The Refund's amount (the Payment's last approved `REFUND`), what it was for (its `reference`, such as an RMA reference) and the day, and the Order reference |
 
+Email is always sent; SMS and push only to a Customer whose Notification preferences turn them on.
 Nothing else triggers a message: an Order placed, cancelled, fulfilled, shipped, delivered or
-returned records nothing yet.
+returned, a Payment authorized, declined, voided or captured (a Capture is covered by
+`ORDER_SHIPPED`), a Refund declined, any other Shipment change, and a replacement delivered record
+nothing.
 
 ## The Notification ledger
 
@@ -40,7 +48,8 @@ reference and every attempt, with when it was made and what came of it.
 
   | Reason | Kind | When |
   |---|---|---|
-  | `noRecipient` | permanent | Keycloak doesn't know the Customer, or they have no email address |
+  | `noRecipient` | permanent | Keycloak doesn't know the Customer, or they have no email address; for an SMS, no mobile number |
+  | `optedOut` | permanent | An SMS or push whose channel the Customer's Notification preferences turned off after it was recorded |
   | `directoryUnavailable` | transient | Keycloak didn't answer, or refused Notifications' token |
   | `invalidAddress` | permanent | The address isn't one |
   | `smtp 5xx: …` | permanent | The mail server refused the recipient or the message |
@@ -50,14 +59,30 @@ reference and every attempt, with when it was made and what came of it.
 - Every attempt logs a line, such as `ORDER_CONFIRMED EMAIL Notification 6c1e… for Customer
   0b6f…: attempt 1 SENT`.
 
+## Notification preferences
+
+Per Customer, which channels besides email their messages go on. Email is always on, since every
+message is about their own Orders, Payments and RMAs. SMS is off until the Customer saves a mobile
+number in E.164 form (`+4915112345678`; spaces are dropped) and turns it on; push is off until they
+turn it on, and needs no device while its provider is a mock. A Customer who never saved theirs has
+email only.
+
+- **Recording** reads them in the consumer's transaction: an event's Message type is recorded on
+  email, and on SMS and push when the type goes on them and the Customer turned them on.
+- **Sending** reads them again: an SMS goes to the mobile number saved then, and an SMS or push
+  whose channel was turned off since fails as `optedOut`.
+
 ## API
 
 | Endpoint | Who | |
 |---|---|---|
 | `GET /notifications?orderId=` (or `rmaId=`, or `customerId=`) | Staff | The Notifications about an Order or RMA, or to a Customer |
 | `GET /notifications/me` | Customer | Their own |
-| `GET /templates` | Staff | Every Message type on every channel, rendered with its sample content |
+| `GET /templates` | Staff | Every Message type on each channel it goes on, rendered with its sample content |
 | `POST /templates/{type}/{channel}/preview` | Staff | One of them; an optional body `{"locale": "en"}` |
+| `GET /preferences/me` | Customer | Their Notification preferences |
+| `PUT /preferences/me` | Customer | Saves them: `{"phoneNumber": "+4915112345678", "sms": true, "push": false}` |
+| `GET /mock-providers/sms?customerId=` (or `push`) | Staff | What the mock SMS or push provider took for the Customer, newest first |
 
 The lists are newest first, a page at a time (`page` from 0, `size` 1 to 100, 20 by default), as
 `{"items": [...], "page": 0, "size": 20, "total": 1}`. Staff name exactly one of `orderId`, `rmaId`
@@ -71,10 +96,22 @@ and `customerId`; otherwise it is a 400. Each Notification reads:
  "createdAt": "2026-10-21T19:45:01Z", "sentAt": "2026-10-21T19:45:02Z", "nextAttemptAt": null}
 ```
 
-`recipient` is masked: the first character of the address's local part, then `***`. `message` is
-`null` until it was rendered, and `outcome` is `SENT`, `TRANSIENT_FAILURE` or `PERMANENT_FAILURE`.
-A preview reads `{"messageType", "channel", "locale", "subject", "html", "text"}`; a Message type or
-channel there is none of is a 404. The Admin Console's **Messages** page shows every preview.
+`recipient` is masked: for email the first character of the address's local part, then `***`; for
+SMS the mobile number's first three characters and last two (`+49***78`); for push the Customer's
+ID, where it went. `message` is `null` until it was rendered; `subject` is an email's subject or a
+push's title, and `html` is `null` but for email. `outcome` is `SENT`, `TRANSIENT_FAILURE` or
+`PERMANENT_FAILURE`. A preview reads `{"messageType", "channel", "locale", "subject", "html",
+"text"}` alike; a Message type or channel there is none of, or a channel the type doesn't go on, is a
+404. The Admin Console's **Messages** page shows every preview, and its Order page the Order's
+Notifications.
+
+Notification preferences read
+`{"email": true, "sms": true, "phoneNumber": "+4915112345678", "push": false, "updatedAt": "…"}`,
+`updatedAt` `null` until first saved. Saving needs `sms` and `push` (a 400 without them); a
+`phoneNumber` that isn't E.164, or `sms` on without one, is a 422 with `"reason":
+"invalidPhoneNumber"`. The mock providers' reads are pages of `{"reference", "channel",
+"customerId", "to", "title", "text", "sentAt"}`, `to` masked as above and `title` push's only; `email`
+is a 404, since its provider isn't a mock.
 
 [`http/notifications.http`](./http/notifications.http) exercises them against the compose stack.
 
@@ -82,7 +119,8 @@ channel there is none of is a 404. The Admin Console's **Messages** page shows e
 
 A Message type has one template per channel and locale, each part its own JMustache file under
 `src/main/resources/templates/<message-type>/<channel>/<locale>/`: for email, `subject.mustache`,
-`html.mustache` and `text.mustache`. The HTML part escapes what it is given; the others don't.
+`html.mustache` and `text.mustache`; for SMS, `text.mustache`; for push, `title.mustache` and
+`text.mustache`. The HTML part escapes what it is given; the others don't.
 
 - **The model** comes from the triggering event, kept on the Notification, with Money and dates
   written for the locale (`€1,598.00`, `October 21, 2026`), and `customer.givenName` and
@@ -90,10 +128,13 @@ A Message type has one template per channel and locale, each part its own JMusta
 - **Locales.** A Customer's locale is Keycloak's `locale` attribute, or `en`. The lookup takes the
   locale, then its language, then `en`. Only `en` exists so far, so a market's language slots in by
   adding its directory (ADR 0005).
-- **Checked at start-up.** Every Message type must have every part of every channel in `en`, every
-  locale must be complete, and every part must render its Message type's sample content, a name the
-  model lacks included. Otherwise the service refuses to start, naming every problem. The sample
-  content is what Staff preview.
+- **Checked at start-up.** Every Message type must have every part of each channel it goes on in
+  `en`, and none for a channel it doesn't; every locale must be complete; every part must render its
+  Message type's sample content, a name the model lacks included; and an SMS rendered so must fit 160
+  characters. Otherwise the service refuses to start, naming every problem. The sample content is
+  what Staff preview.
+- **Every SMS fits 160 characters.** One whose content is unusually long, such as a very long
+  Carrier name, is cut at 159 and an ellipsis when it is sent.
 
 ## Channels and providers
 
@@ -105,6 +146,11 @@ answers the provider's reference, or a transient or permanent failure (ADR 0005)
   **Mailpit**, which catches every message: read them on http://localhost:8025, or through its API
   (`GET /api/v1/messages`), as the Playwright suites do. A real relay is a matter of
   `spring.mail.*`.
+- **SMS and push** go to mock providers: each sends nothing, but records what it would have sent,
+  with its reference (`mock-sms-…`, `mock-push-…`), in a table of its own (`mock_sms_message`,
+  `mock_push_message`), which Staff read at `/mock-providers/sms` and `/push`, and logs it, such as
+  `Mock SMS mock-sms-… to +49***78: Ecomm: your Order #3F2A9C1B has shipped. …`. A real SMS gateway
+  or push service, with device registration, replaces each as an adapter of its own (ADR 0005).
 
 ## Recipients
 
@@ -123,11 +169,14 @@ Answers, a Customer it doesn't know included, are kept for 10 minutes
 | Topic | Group | First start | Becomes |
 |---|---|---|---|
 | `order-management.order` | `notifications.orders` | latest offset | The Notifications an Order's change triggers |
+| `fulfillment-shipping.shipment` | `notifications.shipments` | latest offset | The Notifications a Shipment's change triggers |
+| `payment.payment` | `notifications.payments` | latest offset | The Notifications a Refund triggers |
 | `catalog.product` | `notifications.products` | earliest offset | A row in `product` per SKU, its name and version, and in `product_variant` each Variant's axis values |
 
-- **Nothing from before.** `notifications.orders` reads from the latest offset on its first start,
-  so nobody is emailed about an Order paid before Notifications existed. From then on it resumes
-  where it left off, so an Order paid while Notifications was down is still confirmed.
+- **Nothing from before.** `notifications.orders`, `.shipments` and `.payments` read from the latest
+  offset on their first start, so nobody is told about an Order paid, a Shipment shipped or a Refund
+  made before Notifications existed. From then on each resumes where it left off, so what happened
+  while Notifications was down is still told.
 - **Product names.** Order events name only Variants, so the confirmation names each line from the
   projection of `catalog.product`, kept at each Product's newest version, by Variant ID while it
   hasn't caught up. `make notifications-rebuild` rebuilds it from the topic: it stops the service,
@@ -160,16 +209,20 @@ SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_NOTIFICATIONS_CLIENT_SECRET="$(cat .s
 
 ## Tests
 
-- **The HTTP seam and the topics** (`OrderConfirmedApiTest`, `LedgerApiTest`,
-  `DispatchFailuresApiTest`, `TemplatesApiTest`): events are published as Order Management and
-  Catalog would, each checked against its schema first, and the ledger is read over HTTP. Email
-  goes to a test double of the `NotificationProvider`, and Keycloak's token endpoint and admin API
-  are WireMock. They cover the confirmation's content, the same event twice recorded once, changes
-  that trigger nothing, reads by Staff and owner, retries then `FAILED`, permanent failures,
-  `noRecipient`, Keycloak down then back, and the previews. Postgres, Kafka and the registry run in
-  Testcontainers.
+- **The HTTP seam and the topics** (`OrderConfirmedApiTest`, `ShipmentMessagesApiTest`,
+  `RefundMessagesApiTest`, `PreferencesApiTest`, `LedgerApiTest`, `DispatchFailuresApiTest`,
+  `TemplatesApiTest`): events are published as Order Management, Catalog, Fulfillment & Shipping
+  and Payment would, each checked against its schema first, and the ledger is read over HTTP. Email
+  goes to a test double of the `NotificationProvider`; SMS and push go to the mock providers, read
+  over HTTP as Staff read them; Keycloak's token endpoint and admin API are WireMock. They cover
+  each message's content, the same event twice recorded once, changes that trigger nothing, the
+  Notification preferences (defaults, saving, an invalid number, SMS without one), an opted-in
+  Customer's SMS and push, `optedOut`, reads by Staff and owner, retries then `FAILED`, permanent
+  failures, `noRecipient`, Keycloak down then back, and the previews, every SMS within 160
+  characters. Postgres, Kafka and the registry run in Testcontainers.
 - **Start-up** (`TemplatesStartUpTest`): an application of its own, whose templates lack the
-  confirmation's text part, refuses to start.
+  confirmation's text part, refuses to start, and so does one whose shipped SMS is over 160
+  characters.
 - **The outbound ports**: `EmailDeliveryTest` sends through the SMTP provider to a GreenMail
   container and reads the message over IMAP (subject, both bodies, recipient), fails an invalid
   address at once, and with the container paused, so the server stops answering, tries six times

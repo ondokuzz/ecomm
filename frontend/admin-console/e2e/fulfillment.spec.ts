@@ -13,6 +13,7 @@ import {
   signInOnKeycloak,
   staffToken,
   subjectOf,
+  theOneEmail,
 } from './stack'
 
 /**
@@ -20,7 +21,8 @@ import {
  * through the gateway as the Storefront would; the checkout Saga marks the Order paid, and the
  * fulfillment Saga creates its Shipment. Staff find it in the queue under the Berlin Warehouse,
  * pick it, have an invalid IMEI refused, pack it with a valid one, and see the fulfillment Saga
- * capture the Payment and dispatch it with a tracking number. A second Order, paid with
+ * capture the Payment and dispatch it with a tracking number. Notifications emails the Customer that
+ * it shipped, once, and the Order page lists what was sent. A second Order, paid with
  * `tok_capture_decline`, is authorized but refused at capture, so its packed Shipment goes on hold
  * with the payment gateway's reason.
  *
@@ -106,6 +108,24 @@ test('Staff pick and pack a Shipment from the queue, and the fulfillment Saga di
   const onOrder = page.getByRole('region', { name: 'Shipment', exact: true })
   await expect(onOrder).toContainText(/Shipped|Delivered/)
   await expect(onOrder).toContainText(dispatched.trackingNumber!)
+
+  // Notifications emailed the Customer that it shipped, with its tracking number, once; Mailpit
+  // caught it, and the Order page lists it under the confirmation.
+  const shipped = await theOneEmail(request, `Your Order ${reference} is on its way`)
+  expect(shipped.To.map((to) => to.Address)).toEqual([customer.email])
+  expect(shipped.Text).toContain(dispatched.trackingNumber!)
+  const notifications = page.getByRole('table', { name: 'Notifications' })
+  const shippedRow = notifications.getByRole('row').filter({ hasText: 'Order shipped' })
+  await expect(shippedRow).toContainText('Email')
+  await expect(shippedRow).toContainText('Sent')
+  await expect(shippedRow).toContainText(`${customer.email[0]}***@ecomm.local`)
+  await shippedRow.getByText('Message').click()
+  await expect(shippedRow).toContainText(`Subject: Your Order ${reference} is on its way`)
+  await expect(
+    page.frameLocator('iframe[title="Order shipped: as HTML"]').getByText(dispatched.trackingNumber!),
+  ).toBeVisible()
+  await expect(notifications.getByRole('row').filter({ hasText: 'Order confirmed' })).toContainText('Sent')
+
   await onOrder.getByRole('link', { name: 'Open the Shipment' }).click()
   await expect(page).toHaveURL(new RegExp(`/fulfillment/${shipment.id}$`))
 })

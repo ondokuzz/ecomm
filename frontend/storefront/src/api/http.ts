@@ -37,6 +37,7 @@ export type Service =
   | 'catalog'
   | 'inventory'
   | 'cart'
+  | 'notifications'
   | 'checkout-pricing'
   | 'order-management'
   | 'payment'

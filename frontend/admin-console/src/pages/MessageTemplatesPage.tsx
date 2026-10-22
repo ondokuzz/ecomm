@@ -1,10 +1,10 @@
 import { useTemplatePreviews } from '../api/templates'
 import { ErrorMessage } from '../components/Status'
 import { Badge } from '../components/ui/Badge'
-import { type TemplatePreview, channelLabel, messageTypeLabel } from '../domain/template'
+import { type TemplatePreview, channelLabel, messageTypeLabel, subjectLabel } from '../domain/template'
 
 /**
- * `/message-templates`: every Message type on every Notification channel, as a Customer would get it, rendered
+ * `/message-templates`: every Message type on each Notification channel it goes on, as a Customer would get it, rendered
  * with made-up sample content. Read only: the templates live in the Notifications service.
  */
 export function MessageTemplatesPage() {
@@ -42,19 +42,19 @@ function Preview({ preview }: { preview: TemplatePreview }) {
   const id = `template-${preview.messageType}-${preview.channel}`.toLowerCase()
   const name = messageTypeLabel(preview.messageType)
   return (
-    <section className="panel template-preview" aria-labelledby={id}>
+    <section className="panel template-preview" aria-label={`${name}: ${channelLabel(preview.channel)}`}>
       <div className="panel-heading">
         <h2 id={id}>{name}</h2>
         <Badge tone="primary">{channelLabel(preview.channel)}</Badge>
         <code>{preview.messageType}</code>
         <span className="muted">{preview.locale}</span>
       </div>
-      {preview.subject !== undefined && (
+      {preview.subject != null && (
         <p>
-          <strong>Subject:</strong> {preview.subject}
+          <strong>{subjectLabel(preview.channel)}:</strong> {preview.subject}
         </p>
       )}
-      {preview.html !== undefined && (
+      {preview.html != null && (
         <iframe
           title={`${name}: ${channelLabel(preview.channel)} as HTML`}
           srcDoc={preview.html}
@@ -62,12 +62,15 @@ function Preview({ preview }: { preview: TemplatePreview }) {
           className="template-html"
         />
       )}
-      {preview.text !== undefined && (
-        <details>
-          <summary>Plain text</summary>
+      {preview.text != null &&
+        (preview.html != null ? (
+          <details>
+            <summary>Plain text</summary>
+            <pre className="template-text">{preview.text}</pre>
+          </details>
+        ) : (
           <pre className="template-text">{preview.text}</pre>
-        </details>
-      )}
+        ))}
     </section>
   )
 }

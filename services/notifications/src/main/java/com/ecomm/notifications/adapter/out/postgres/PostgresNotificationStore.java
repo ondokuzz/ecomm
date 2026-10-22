@@ -10,7 +10,11 @@ import com.ecomm.notifications.domain.Notification.Attempt;
 import com.ecomm.notifications.domain.NotificationChannel;
 import com.ecomm.notifications.domain.NotificationStatus;
 import com.ecomm.notifications.domain.OrderConfirmation;
+import com.ecomm.notifications.domain.OrderDelivered;
+import com.ecomm.notifications.domain.OrderShipped;
+import com.ecomm.notifications.domain.PaymentRefunded;
 import com.ecomm.notifications.domain.RenderedMessage;
+import com.ecomm.notifications.domain.ReplacementShipped;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -179,6 +183,10 @@ class PostgresNotificationStore implements NotificationStore {
   private static Class<? extends MessageContent> contentOf(MessageType type) {
     return switch (type) {
       case ORDER_CONFIRMED -> OrderConfirmation.class;
+      case ORDER_SHIPPED -> OrderShipped.class;
+      case ORDER_DELIVERED -> OrderDelivered.class;
+      case REPLACEMENT_SHIPPED -> ReplacementShipped.class;
+      case PAYMENT_REFUNDED -> PaymentRefunded.class;
     };
   }
 

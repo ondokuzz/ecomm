@@ -15,16 +15,24 @@ import java.util.UUID;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Test-only: the events Notifications consumes, as Order Management and Catalog publish them. Each
- * is checked against its topic's schema in {@code platform/event-schemas} before it is sent, so a
- * test can't rely on an event no producer could publish.
+ * Test-only: the events Notifications consumes, as Order Management, Catalog, Fulfillment &
+ * Shipping and Payment publish them. Each is checked against its topic's schema in {@code
+ * platform/event-schemas} before it is sent, so a test can't rely on an event no producer could
+ * publish.
  */
 final class Events {
 
   static final String ORDERS = "order-management.order";
   static final String PRODUCTS = "catalog.product";
-  static final List<String> TOPICS = List.of(ORDERS, PRODUCTS);
-  static final List<String> GROUPS = List.of("notifications.orders", "notifications.products");
+  static final String SHIPMENTS = "fulfillment-shipping.shipment";
+  static final String PAYMENTS = "payment.payment";
+  static final List<String> TOPICS = List.of(ORDERS, PRODUCTS, SHIPMENTS, PAYMENTS);
+  static final List<String> GROUPS =
+      List.of(
+          "notifications.orders",
+          "notifications.products",
+          "notifications.shipments",
+          "notifications.payments");
 
   private static final JsonMapper JSON = new JsonMapper();
   private static final JsonSchemaFactory SCHEMAS =
@@ -35,6 +43,21 @@ final class Events {
   /** A new Order of the Customer's, placed now, with no lines yet. */
   static OrderEvent order(String customerId) {
     return new OrderEvent(UUID.randomUUID().toString(), customerId);
+  }
+
+  /** A new {@code ORDER} Shipment of the Customer's Order, with one line of Pixel 9s. */
+  static ShipmentEvent shipment(String orderId, String customerId) {
+    return new ShipmentEvent(orderId, customerId, null);
+  }
+
+  /** A new {@code REPLACEMENT} Shipment for the RMA of the Customer's Order. */
+  static ShipmentEvent replacement(String orderId, String rmaId, String customerId) {
+    return new ShipmentEvent(orderId, customerId, rmaId);
+  }
+
+  /** A new Payment of {@code amountMinor} euros for the Customer's Order, not yet published. */
+  static PaymentEvent payment(String orderId, String customerId, long amountMinor) {
+    return new PaymentEvent(orderId, customerId, amountMinor);
   }
 
   /** A Product with one Variant per {@code variantIds}, each with no axis values. */
@@ -208,6 +231,197 @@ final class Events {
       event.put("change", version == 1 ? "CREATED" : "UPDATED");
       event.put("product", product);
       send(PRODUCTS, sku, event);
+    }
+  }
+
+  static final class ShipmentEvent {
+    private final String shipmentId = UUID.randomUUID().toString();
+    private final String orderId;
+    private final String customerId;
+    private final String rmaId;
+    private final List<Map<String, Object>> history = new ArrayList<>();
+    private final Map<String, Object> lastEvent = new LinkedHashMap<>();
+    private String carrier;
+    private String trackingNumber;
+    private long version;
+
+    private ShipmentEvent(String orderId, String customerId, String rmaId) {
+      this.orderId = orderId;
+      this.customerId = customerId;
+      this.rmaId = rmaId;
+    }
+
+    /** The RMA a replacement is for, or {@code null}. */
+    String rmaId() {
+      return rmaId;
+    }
+
+    /** Publishes it {@code CREATED}, awaiting pick. */
+    ShipmentEvent created() {
+      return publish("CREATED", "AWAITING_PICK");
+    }
+
+    ShipmentEvent changedTo(String status) {
+      return publish(status, status);
+    }
+
+    /** Publishes it {@code SHIPPED}, booked with the Carrier under {@code trackingNumber}. */
+    ShipmentEvent shipped(String carrier, String trackingNumber) {
+      this.carrier = carrier;
+      this.trackingNumber = trackingNumber;
+      return publish("SHIPPED", "SHIPPED");
+    }
+
+    ShipmentEvent delivered() {
+      return publish("DELIVERED", "DELIVERED");
+    }
+
+    /** Publishes the last event again, the same event ID included: a redelivery. */
+    ShipmentEvent redelivered() {
+      send(SHIPMENTS, shipmentId, lastEvent);
+      return this;
+    }
+
+    private ShipmentEvent publish(String change, String status) {
+      version++;
+      var now = Instant.now().toString();
+      history.add(Map.of("status", status, "at", now, "by", "ORCHESTRATION"));
+      var shipment = new LinkedHashMap<String, Object>();
+      shipment.put("kind", rmaId == null ? "ORDER" : "REPLACEMENT");
+      if (rmaId != null) {
+        shipment.put("rmaId", rmaId);
+      }
+      shipment.put("orderId", orderId);
+      shipment.put("customerId", customerId);
+      shipment.put("warehouseId", "WH-BER");
+      shipment.put("status", status);
+      shipment.put(
+          "lines",
+          List.of(
+              Map.of(
+                  "variantId",
+                  "PHN-PIXEL-9-BLK-128",
+                  "productName",
+                  "Pixel 9",
+                  "quantity",
+                  2,
+                  "serialTracking",
+                  "NONE",
+                  "serialNumbers",
+                  List.of())));
+      if (carrier != null) {
+        shipment.put("carrier", carrier);
+        shipment.put("trackingNumber", trackingNumber);
+      }
+      shipment.put("trackingEvents", List.of());
+      if (status.equals("DELIVERED")) {
+        shipment.put("deliveredAt", "2026-10-23T14:05:00Z");
+      }
+      shipment.put("statusHistory", List.copyOf(history));
+      shipment.put("createdAt", history.getFirst().get("at"));
+      lastEvent.clear();
+      lastEvent.put("eventId", UUID.randomUUID().toString());
+      lastEvent.put("occurredAt", now);
+      lastEvent.put("shipmentId", shipmentId);
+      lastEvent.put("version", version);
+      lastEvent.put("change", change);
+      lastEvent.put("shipment", shipment);
+      send(SHIPMENTS, shipmentId, lastEvent);
+      return this;
+    }
+  }
+
+  static final class PaymentEvent {
+    private final String paymentId = UUID.randomUUID().toString();
+    private final String orderId;
+    private final String customerId;
+    private final long amountMinor;
+    private final List<Map<String, Object>> transactions = new ArrayList<>();
+    private final Map<String, Object> lastEvent = new LinkedHashMap<>();
+    private long refundedMinor;
+
+    private PaymentEvent(String orderId, String customerId, long amountMinor) {
+      this.orderId = orderId;
+      this.customerId = customerId;
+      this.amountMinor = amountMinor;
+    }
+
+    PaymentEvent authorized() {
+      transactions.add(transaction("AUTHORIZATION", amountMinor, "APPROVED", null));
+      return publish("AUTHORIZED", "AUTHORIZED", null);
+    }
+
+    PaymentEvent declined() {
+      transactions.add(transaction("AUTHORIZATION", amountMinor, "DECLINED", null));
+      return publish("DECLINED", "DECLINED", "insufficient_funds");
+    }
+
+    PaymentEvent captured() {
+      transactions.add(transaction("CAPTURE", amountMinor, "APPROVED", null));
+      return publish("CAPTURED", "CAPTURED", null);
+    }
+
+    /** An approved Refund of {@code refundMinor}, for {@code reference} unless it is null. */
+    PaymentEvent refunded(long refundMinor, String reference) {
+      refundedMinor += refundMinor;
+      transactions.add(transaction("REFUND", refundMinor, "APPROVED", reference));
+      return publish(
+          "REFUNDED", refundedMinor == amountMinor ? "REFUNDED" : "PARTIALLY_REFUNDED", null);
+    }
+
+    /** A Refund of {@code refundMinor} the gateway refused. */
+    PaymentEvent refundDeclined(long refundMinor) {
+      transactions.add(transaction("REFUND", refundMinor, "DECLINED", null));
+      return publish("REFUND_DECLINED", (String) lastPayment().get("status"), null);
+    }
+
+    /** Publishes the last event again, the same event ID included: a redelivery. */
+    PaymentEvent redelivered() {
+      send(PAYMENTS, paymentId, lastEvent);
+      return this;
+    }
+
+    private Map<?, ?> lastPayment() {
+      return (Map<?, ?>) lastEvent.get("payment");
+    }
+
+    private Map<String, Object> transaction(
+        String kind, long amount, String outcome, String reference) {
+      var transaction = new LinkedHashMap<String, Object>();
+      transaction.put("kind", kind);
+      transaction.put("amount", Map.of("amountMinor", amount, "currency", "EUR"));
+      transaction.put("outcome", outcome);
+      transaction.put("gatewayReference", "mock-" + UUID.randomUUID());
+      if (outcome.equals("DECLINED")) {
+        transaction.put("declineReason", "insufficient_funds");
+      }
+      transaction.put("at", Instant.now().toString());
+      transaction.put("backfilled", false);
+      if (reference != null) {
+        transaction.put("reference", reference);
+      }
+      return transaction;
+    }
+
+    private PaymentEvent publish(String change, String status, String declineReason) {
+      var payment = new LinkedHashMap<String, Object>();
+      payment.put("orderId", orderId);
+      payment.put("customerId", customerId);
+      payment.put("amount", Map.of("amountMinor", amountMinor, "currency", "EUR"));
+      payment.put("status", status);
+      if (declineReason != null) {
+        payment.put("declineReason", declineReason);
+      }
+      payment.put("transactions", List.copyOf(transactions));
+      lastEvent.clear();
+      lastEvent.put("eventId", UUID.randomUUID().toString());
+      lastEvent.put("occurredAt", Instant.now().toString());
+      lastEvent.put("paymentId", paymentId);
+      lastEvent.put("version", transactions.size());
+      lastEvent.put("change", change);
+      lastEvent.put("payment", payment);
+      send(PAYMENTS, paymentId, lastEvent);
+      return this;
     }
   }
 

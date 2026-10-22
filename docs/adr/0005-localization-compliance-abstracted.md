@@ -19,3 +19,7 @@ Each concern is a clearly marked seam — a `PaymentGatewayPort`, a `TaxCalculat
 ## Revised 2026-10-21
 
 `NotificationProvider` as built (#91), in Notifications; there is no conflict with the decision above. Each Notification channel has one: `send(recipient, message)` answers the provider's reference, or a failure that is transient, and retried with backoff, or permanent. Email's adapter speaks SMTP, which in the compose stack goes to Mailpit, catching every message for its UI and the Playwright suites; a real relay or email service replaces it through `spring.mail.*` or an adapter of its own. SMS and push join with mock adapters in #83's next ticket. Messages are rendered from Message templates per Message type, channel and locale, looked up by the Customer's locale, then its language, then `en`, the only one written so far, so a market's language slots in as a directory of templates without touching the domain.
+
+## Revised 2026-10-22
+
+SMS and push `NotificationProvider`s as built (#92), in Notifications; there is no conflict with the decision above. Both are mocks: each sends nothing, but records what it would have sent, in a table of its own that Staff read (`/mock-providers/sms` and `/push`), and in the log. A real SMS gateway, or a push service with device registration, replaces its mock as an adapter of its own. Each Message type names the channels it goes on, with a template for each; an SMS template must fit 160 characters with its sample content, and a message with unusually long content is cut to fit when it is sent.

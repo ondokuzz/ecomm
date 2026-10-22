@@ -390,9 +390,11 @@ services:
       postgres-databases: { condition: service_completed_successfully }
       keycloak: { condition: service_healthy }
 
-  # Notifications: Customers' messages about their Orders, triggered by Order Management's events,
-  # rendered from Message templates and kept in a ledger in Postgres's notifications database. Email
-  # goes to Mailpit over SMTP (ADR 0005), and recipients come from Keycloak's admin API.
+  # Notifications: Customers' messages about their Orders, triggered by Order Management's,
+  # Fulfillment & Shipping's and Payment's events, rendered from Message templates and kept in a
+  # ledger in Postgres's notifications database. Email goes to Mailpit over SMTP; SMS and push go to
+  # mock providers, which record them in the same database (ADR 0005). Recipients come from
+  # Keycloak's admin API.
   notifications:
     <<: *spring-service
     build:

@@ -7,7 +7,8 @@ import java.util.Map;
  * What a Notification is about, taken from the event that triggered it: everything its message is
  * rendered from but the Recipient.
  */
-public sealed interface MessageContent permits OrderConfirmation {
+public sealed interface MessageContent
+    permits OrderConfirmation, OrderShipped, OrderDelivered, ReplacementShipped, PaymentRefunded {
 
   MessageType type();
 

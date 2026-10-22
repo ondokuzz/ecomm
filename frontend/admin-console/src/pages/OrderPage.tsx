@@ -1,6 +1,7 @@
 import { Link, useLocation, useParams } from 'react-router'
 import { useCurrencies } from '../api/currencies'
 import { isNotFound } from '../api/failure'
+import { useOrderNotifications } from '../api/notifications'
 import { useOrder } from '../api/orders'
 import { usePayments } from '../api/payments'
 import { useOrderRmas } from '../api/rmas'
@@ -13,6 +14,7 @@ import { ErrorMessage } from '../components/Status'
 import { Badge, type Tone } from '../components/ui/Badge'
 import { Icon } from '../components/ui/Icon'
 import { type Currencies, type Money, formatMoney } from '../domain/money'
+import type { Notification, NotificationStatus } from '../domain/notification'
 import { type Order, discountLabel, formatTime, historyRowsOf, orderReference } from '../domain/order'
 import {
   type Payment,
@@ -23,11 +25,13 @@ import {
   transactionRowsOf,
 } from '../domain/payment'
 import { type Rma, rmaKindLabel } from '../domain/rma'
+import { channelLabel, messageTypeLabel, subjectLabel } from '../domain/template'
 import type { FromListState } from './OrderListPage'
 
 /**
  * `/orders/:id`: one Order, whoever it belongs to, how it got to its Status, its Payments, its
- * Shipment, its RMAs with their replacement Shipments and Refunds. Read only.
+ * Shipment, its RMAs with their replacement Shipments and Refunds, and the Notifications its Customer
+ * was sent about it. Read only.
  */
 export function OrderPage() {
   const { id } = useParams()
@@ -80,6 +84,7 @@ function OrderDetail({ order, currencies }: { order: Order; currencies: Currenci
   const payments = usePayments(order.id)
   const rmas = useOrderRmas(order.id)
   const shipment = useOrderShipment(order.id)
+  const notifications = useOrderNotifications(order.id)
   const money = (amount: Money) => formatMoney(amount, currencies)
   return (
     <>
@@ -209,6 +214,11 @@ function OrderDetail({ order, currencies }: { order: Order; currencies: Currenci
       <section className="panel" aria-labelledby="order-refunds">
         <h2 id="order-refunds">Refunds</h2>
         <Refunds payments={payments} rmas={rmas.data?.items ?? []} money={money} />
+      </section>
+
+      <section className="panel" aria-labelledby="order-notifications">
+        <h2 id="order-notifications">Notifications</h2>
+        <Notifications notifications={notifications} />
       </section>
 
       <section className="panel" aria-labelledby="order-history">
@@ -511,6 +521,100 @@ function Refunds({
         </tbody>
       </table>
     </div>
+  )
+}
+
+type NotificationsQuery = ReturnType<typeof useOrderNotifications>
+
+const notificationTones: Record<NotificationStatus, Tone> = { PENDING: 'warning', SENT: 'success', FAILED: 'danger' }
+
+/**
+ * Every Notification sent about the Order, newest first: its Message type, channel, masked recipient,
+ * status and time, with the message as rendered behind "Message".
+ */
+function Notifications({ notifications }: { notifications: NotificationsQuery }) {
+  if (notifications.error) {
+    return (
+      <ErrorMessage
+        error={notifications.error}
+        title="Couldn't load the Notifications"
+        retrying={notifications.isFetching}
+        onRetry={() => notifications.refetch()}
+      />
+    )
+  }
+  if (!notifications.data) {
+    return (
+      <div aria-busy="true">
+        <span className="skeleton heading-skeleton" />
+        <span className="visually-hidden">Loading…</span>
+      </div>
+    )
+  }
+  if (notifications.data.items.length === 0) return <p className="muted">No Notification was sent about it.</p>
+  return (
+    <div className="table-scroll">
+      <table className="table" aria-labelledby="order-notifications">
+        <thead>
+          <tr>
+            <th scope="col">Message</th>
+            <th scope="col">Channel</th>
+            <th scope="col">To</th>
+            <th scope="col">Status</th>
+            <th scope="col">When</th>
+          </tr>
+        </thead>
+        <tbody>
+          {notifications.data.items.map((notification) => (
+            <NotificationRow key={notification.id} notification={notification} />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function NotificationRow({ notification }: { notification: Notification }) {
+  const { message, status, attempts } = notification
+  const last = attempts.at(-1)
+  const at = notification.sentAt ?? last?.at ?? notification.createdAt
+  return (
+    <tr>
+      <th scope="row">
+        {messageTypeLabel(notification.messageType)}
+        {message && (
+          <details className="notification-message">
+            <summary>Message</summary>
+            {message.subject && (
+              <p>
+                <strong>{subjectLabel(notification.channel)}:</strong> {message.subject}
+              </p>
+            )}
+            {message.html ? (
+              <iframe
+                title={`${messageTypeLabel(notification.messageType)}: as HTML`}
+                srcDoc={message.html}
+                sandbox=""
+                className="template-html"
+              />
+            ) : (
+              message.text && <pre className="template-text">{message.text}</pre>
+            )}
+          </details>
+        )}
+      </th>
+      <td>{channelLabel(notification.channel)}</td>
+      <td>{notification.recipient ? <code>{notification.recipient}</code> : <span className="muted">—</span>}</td>
+      <td>
+        <Badge tone={notificationTones[status]} dot>
+          {status === 'PENDING' ? 'Pending' : status === 'SENT' ? 'Sent' : 'Failed'}
+        </Badge>
+        {status !== 'SENT' && last?.reason && <small className="hint">{last.reason}</small>}
+      </td>
+      <td>
+        <time dateTime={at}>{formatTime(at)}</time>
+      </td>
+    </tr>
   )
 }
 

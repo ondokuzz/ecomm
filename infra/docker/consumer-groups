@@ -18,3 +18,5 @@ orchestration.shipments
 orchestration.rmas
 notifications.orders
 notifications.products
+notifications.shipments
+notifications.payments

@@ -188,3 +188,29 @@ export async function deleteCustomer(request: APIRequestContext, customer: Custo
   })
   expect(response.status()).toBe(204)
 }
+
+/** Mailpit's API, where the stack's email lands. */
+const mailpitUrl = process.env.MAILPIT_URL ?? 'http://localhost:8025'
+
+export interface Email {
+  Subject: string
+  To: { Address: string }[]
+  Text: string
+}
+
+/**
+ * The email with exactly `subject`, once Mailpit has it, checking no second one came: the
+ * dispatcher sends within a second or two of the event, so a duplicate would be there by then.
+ */
+export async function theOneEmail(request: APIRequestContext, subject: string): Promise<Email> {
+  const search = `${mailpitUrl}/api/v1/search?query=${encodeURIComponent(`subject:"${subject}"`)}`
+  const found = async () =>
+    ((await (await request.get(search)).json()) as { messages: { ID: string; Subject: string }[] }).messages.filter(
+      (message) => message.Subject === subject,
+    )
+  await expect.poll(async () => (await found()).length, { timeout: 30_000 }).toBeGreaterThan(0)
+  await new Promise((resolve) => setTimeout(resolve, 3_000))
+  const messages = await found()
+  expect(messages).toHaveLength(1)
+  return (await (await request.get(`${mailpitUrl}/api/v1/message/${messages[0].ID}`)).json()) as Email
+}

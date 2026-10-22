@@ -4,6 +4,7 @@ import com.ecomm.notifications.application.port.in.DispatchUseCase;
 import com.ecomm.notifications.application.port.out.CustomerDirectory;
 import com.ecomm.notifications.application.port.out.CustomerDirectory.DirectoryUnavailableException;
 import com.ecomm.notifications.application.port.out.MessageTemplates;
+import com.ecomm.notifications.application.port.out.NotificationPreferencesStore;
 import com.ecomm.notifications.application.port.out.NotificationProvider;
 import com.ecomm.notifications.application.port.out.NotificationStore;
 import com.ecomm.notifications.application.port.out.TimeSource;
@@ -23,14 +24,16 @@ import org.slf4j.LoggerFactory;
  * Sends each due {@code PENDING} Notification in a transaction of its own, holding its row so no
  * other dispatcher sends it too: looks up its Recipient, renders its message in their locale, and
  * hands it to its channel's provider. A Customer the directory doesn't know, or one without an
- * address, fails it permanently as {@code noRecipient}; a directory that can't answer, or a
- * provider that throws, fails it transiently.
+ * address on its channel, fails it permanently as {@code noRecipient}, and one whose Notification
+ * preferences no longer allow its channel as {@code optedOut}; a directory that can't answer, or a
+ * provider that throws, fails it transiently. An SMS is cut to fit 160 characters.
  */
 public class DispatchService implements DispatchUseCase {
 
   private static final Logger log = LoggerFactory.getLogger(DispatchService.class);
 
   private final NotificationStore notifications;
+  private final NotificationPreferencesStore preferences;
   private final CustomerDirectory directory;
   private final MessageTemplates templates;
   private final Map<NotificationChannel, NotificationProvider> providers;
@@ -40,6 +43,7 @@ public class DispatchService implements DispatchUseCase {
 
   public DispatchService(
       NotificationStore notifications,
+      NotificationPreferencesStore preferences,
       CustomerDirectory directory,
       MessageTemplates templates,
       List<NotificationProvider> providers,
@@ -47,6 +51,7 @@ public class DispatchService implements DispatchUseCase {
       Transactions transactions,
       TimeSource time) {
     this.notifications = notifications;
+    this.preferences = preferences;
     this.directory = directory;
     this.templates = templates;
     this.providers = new EnumMap<>(NotificationChannel.class);
@@ -97,20 +102,31 @@ public class DispatchService implements DispatchUseCase {
 
   private void attempt(Notification notification) {
     var now = time.now();
+    var channel = notification.channel();
     try {
-      var recipient = directory.find(notification.customerId()).orElse(null);
-      if (recipient == null) {
+      var preferred = preferences.preferencesOf(notification.customerId());
+      if (!preferred.allows(channel)) {
+        notification.failed(now, null, null, SendOutcome.Failed.permanent("optedOut"), retries);
+        return;
+      }
+      var recipient =
+          directory
+              .find(notification.customerId())
+              .map(r -> r.withPhoneNumber(preferred.phoneNumber()))
+              .orElse(null);
+      if (recipient == null || recipient.addressOn(channel) == null) {
         notification.failed(now, null, null, SendOutcome.Failed.permanent("noRecipient"), retries);
         return;
       }
       var locale = templates.localeFor(recipient.locale());
       var message =
-          templates.render(
-              notification.type(),
-              notification.channel(),
-              locale,
-              Messages.model(notification.content(), recipient, locale));
-      switch (providers.get(notification.channel()).send(recipient, message)) {
+          channel.fit(
+              templates.render(
+                  notification.type(),
+                  channel,
+                  locale,
+                  Messages.model(notification.content(), recipient, locale)));
+      switch (providers.get(channel).send(recipient, message)) {
         case SendOutcome.Sent sent -> notification.sent(now, recipient, message, sent.reference());
         case SendOutcome.Failed failed ->
             notification.failed(now, recipient, message, failed, retries);

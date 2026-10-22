@@ -1,17 +1,27 @@
 package com.ecomm.notifications;
 
 import com.ecomm.notifications.application.DispatchService;
+import com.ecomm.notifications.application.MockProviderReadsService;
 import com.ecomm.notifications.application.NotificationReadsService;
 import com.ecomm.notifications.application.OrderEventsService;
+import com.ecomm.notifications.application.PaymentEventsService;
+import com.ecomm.notifications.application.PreferencesService;
 import com.ecomm.notifications.application.ProductNamesService;
+import com.ecomm.notifications.application.ShipmentEventsService;
 import com.ecomm.notifications.application.TemplatesService;
 import com.ecomm.notifications.application.port.in.DispatchUseCase;
+import com.ecomm.notifications.application.port.in.MockProviderReadsUseCase;
 import com.ecomm.notifications.application.port.in.NotificationReadsUseCase;
 import com.ecomm.notifications.application.port.in.OrderEventsUseCase;
+import com.ecomm.notifications.application.port.in.PaymentEventsUseCase;
+import com.ecomm.notifications.application.port.in.PreferencesUseCase;
 import com.ecomm.notifications.application.port.in.ProductNamesUseCase;
+import com.ecomm.notifications.application.port.in.ShipmentEventsUseCase;
 import com.ecomm.notifications.application.port.in.TemplatesUseCase;
 import com.ecomm.notifications.application.port.out.CustomerDirectory;
 import com.ecomm.notifications.application.port.out.MessageTemplates;
+import com.ecomm.notifications.application.port.out.MockProviderLog;
+import com.ecomm.notifications.application.port.out.NotificationPreferencesStore;
 import com.ecomm.notifications.application.port.out.NotificationProvider;
 import com.ecomm.notifications.application.port.out.NotificationStore;
 import com.ecomm.notifications.application.port.out.ProductNames;
@@ -34,10 +44,39 @@ class UseCaseConfiguration {
   @Bean
   OrderEventsUseCase orderEventsUseCase(
       NotificationStore notifications,
+      NotificationPreferencesStore preferences,
       ProductNames products,
       Transactions transactions,
       TimeSource time) {
-    return new OrderEventsService(notifications, products, transactions, time);
+    return new OrderEventsService(notifications, preferences, products, transactions, time);
+  }
+
+  @Bean
+  ShipmentEventsUseCase shipmentEventsUseCase(
+      NotificationStore notifications,
+      NotificationPreferencesStore preferences,
+      Transactions transactions,
+      TimeSource time) {
+    return new ShipmentEventsService(notifications, preferences, transactions, time);
+  }
+
+  @Bean
+  PaymentEventsUseCase paymentEventsUseCase(
+      NotificationStore notifications,
+      NotificationPreferencesStore preferences,
+      Transactions transactions,
+      TimeSource time) {
+    return new PaymentEventsService(notifications, preferences, transactions, time);
+  }
+
+  @Bean
+  PreferencesUseCase preferencesUseCase(NotificationPreferencesStore preferences, TimeSource time) {
+    return new PreferencesService(preferences, time);
+  }
+
+  @Bean
+  MockProviderReadsUseCase mockProviderReadsUseCase(MockProviderLog log) {
+    return new MockProviderReadsService(log);
   }
 
   @Bean
@@ -58,6 +97,7 @@ class UseCaseConfiguration {
   @Bean
   DispatchUseCase dispatchUseCase(
       NotificationStore notifications,
+      NotificationPreferencesStore preferences,
       CustomerDirectory directory,
       MessageTemplates templates,
       List<NotificationProvider> providers,
@@ -67,6 +107,7 @@ class UseCaseConfiguration {
       TimeSource time) {
     return new DispatchService(
         notifications,
+        preferences,
         directory,
         templates,
         providers,

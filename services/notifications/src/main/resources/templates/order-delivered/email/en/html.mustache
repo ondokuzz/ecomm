@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Your Order {{order.reference}} was delivered</title></head>
+<body style="font-family: Helvetica, Arial, sans-serif; color: #1f2937; line-height: 1.5;">
+  <p>Hello {{customer.givenName}},</p>
+  <p>Your Order <strong>{{order.reference}}</strong> was delivered on {{deliveredOn}}:</p>
+  <ul>
+    {{#lines}}
+    <li>{{quantity}} × {{name}}</li>
+    {{/lines}}
+  </ul>
+  <p>If you weren't home, look for a note from the Carrier. Enjoy!</p>
+  <p>Ecomm</p>
+</body>
+</html>

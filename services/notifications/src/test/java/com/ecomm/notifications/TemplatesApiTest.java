@@ -13,7 +13,10 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.core.ParameterizedTypeReference;
 
-/** Staff preview every Message template, rendered with its Message type's sample content. */
+/**
+ * Staff preview every Message template, rendered with its Message type's sample content, on each
+ * channel the type goes on; every SMS fits 160 characters.
+ */
 class TemplatesApiTest extends NotificationsApiTest {
 
   record Preview(
@@ -43,7 +46,7 @@ class TemplatesApiTest extends NotificationsApiTest {
             Stream.of(MessageType.values())
                 .flatMap(
                     t ->
-                        Stream.of(NotificationChannel.values())
+                        t.channels().stream()
                             .map(c -> org.assertj.core.groups.Tuple.tuple(t.name(), c.name())))
                 .toList());
     var confirmed = previews.getFirst();
@@ -60,7 +63,7 @@ class TemplatesApiTest extends NotificationsApiTest {
 
   static Stream<Arguments> everyMessageTypeAndChannel() {
     return Stream.of(MessageType.values())
-        .flatMap(t -> Stream.of(NotificationChannel.values()).map(c -> Arguments.of(t, c)));
+        .flatMap(t -> t.channels().stream().map(c -> Arguments.of(t, c)));
   }
 
   @ParameterizedTest
@@ -76,17 +79,38 @@ class TemplatesApiTest extends NotificationsApiTest {
 
     assertThat(preview.messageType()).isEqualTo(type.name());
     assertThat(preview.channel()).isEqualTo(channel.name());
-    if (channel == NotificationChannel.EMAIL) {
-      assertThat(preview.subject()).isNotBlank().doesNotContain("\n");
-      assertThat(preview.html()).isNotBlank();
-      assertThat(preview.text()).isNotBlank();
+    assertThat(preview.text()).isNotBlank();
+    switch (channel) {
+      case EMAIL -> {
+        assertThat(preview.subject()).isNotBlank().doesNotContain("\n");
+        assertThat(preview.html()).isNotBlank();
+      }
+      case SMS -> {
+        assertThat(preview.subject()).isNull();
+        assertThat(preview.text()).hasSizeLessThanOrEqualTo(160).doesNotContain("\n");
+      }
+      case PUSH -> assertThat(preview.subject()).isNotBlank().doesNotContain("\n");
     }
+  }
+
+  @Test
+  void theShippedSmsAndPushReadAsTheCustomerGetsThem() {
+    var sms = preview("ORDER_SHIPPED", "SMS", STAFF).expectBody(Preview.class).returnResult();
+    var push = preview("ORDER_SHIPPED", "PUSH", STAFF).expectBody(Preview.class).returnResult();
+
+    assertThat(sms.getResponseBody().text())
+        .isEqualTo("Ecomm: your Order #3F2A9C1B has shipped. Mock Carrier tracking: MC0012345678");
+    assertThat(push.getResponseBody().subject()).isEqualTo("Your Order #3F2A9C1B is on its way");
+    assertThat(push.getResponseBody().text())
+        .isEqualTo(
+            "1 × Google Pixel 9 (128 GB, Obsidian) and 1 more, with Mock Carrier: MC0012345678");
   }
 
   @Test
   void anUnknownMessageTypeOrChannelIsNotFound() {
     preview("NO_SUCH_TYPE", "EMAIL", STAFF).expectStatus().isNotFound();
     preview("ORDER_CONFIRMED", "PIGEON", STAFF).expectStatus().isNotFound();
+    preview("ORDER_CONFIRMED", "SMS", STAFF).expectStatus().isNotFound();
   }
 
   @Test

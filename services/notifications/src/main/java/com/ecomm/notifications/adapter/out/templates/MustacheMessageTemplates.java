@@ -29,9 +29,10 @@ import org.springframework.stereotype.Component;
  * order-confirmed/email/en/subject.mustache}. The HTML part escapes what it is given; the others
  * don't. A name the model lacks fails the render rather than leaving a gap.
  *
- * <p>Built at start-up, it checks that every Message type has every part of every Notification
- * channel in {@code en}, that every locale it has is complete, and that each renders its Message
- * type's sample content; otherwise it throws, naming every problem, and the service doesn't start.
+ * <p>Built at start-up, it checks that every Message type has every part of each Notification
+ * channel it goes on in {@code en}, and no templates for a channel it doesn't, that every locale it
+ * has is complete, that each renders its Message type's sample content, and that an SMS rendered so
+ * fits 160 characters; otherwise it throws, naming every problem, and the service doesn't start.
  */
 @Component
 class MustacheMessageTemplates implements MessageTemplates {
@@ -56,6 +57,10 @@ class MustacheMessageTemplates implements MessageTemplates {
         continue;
       }
       var part = segments[3].substring(0, segments[3].length() - ".mustache".length());
+      if (!key.type().channels().contains(key.channel())) {
+        problems.add(path + ": " + key.type() + " doesn't go on " + key.channel());
+        continue;
+      }
       if (!key.channel().parts().contains(part)) {
         problems.add(path + ": " + key.channel() + " has no part " + part);
         continue;
@@ -83,7 +88,7 @@ class MustacheMessageTemplates implements MessageTemplates {
 
   private void check(List<String> problems) {
     for (var type : MessageType.values()) {
-      for (var channel : NotificationChannel.values()) {
+      for (var channel : type.channels()) {
         if (!templates.containsKey(new Key(type, channel, FALLBACK.toLanguageTag()))) {
           problems.add(dir(type) + "/" + dir(channel) + "/en/ is missing");
         }
@@ -102,7 +107,19 @@ class MustacheMessageTemplates implements MessageTemplates {
           parts.forEach(
               (part, template) -> {
                 try {
-                  template.execute(model);
+                  var rendered = template.execute(model).strip();
+                  var max = key.channel().maxTextLength();
+                  if (part.equals("text") && rendered.length() > max) {
+                    problems.add(
+                        where
+                            + part
+                            + ".mustache renders its sample in "
+                            + rendered.length()
+                            + " characters, over "
+                            + key.channel()
+                            + "'s "
+                            + max);
+                  }
                 } catch (RuntimeException e) {
                   problems.add(
                       where + part + ".mustache doesn't render its sample: " + e.getMessage());

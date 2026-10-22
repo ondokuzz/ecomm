@@ -272,16 +272,20 @@ One message to one Customer on one Notification channel, triggered by one Integr
 _Avoid_: Message (what a Notification sends), Alert, Email (one channel)
 
 **Message type**:
-What a Notification says, and what triggers it, such as `ORDER_CONFIRMED` on an Order's change to `PAID`. Each has a Message template for every Notification channel and sample content that Staff preview it with.
+What a Notification says, and what triggers it, such as `ORDER_CONFIRMED` on an Order's change to `PAID`. Each goes by email, and those a Customer would want on their phone, such as `ORDER_SHIPPED`, by SMS and push too; it has a Message template for each of its Notification channels and sample content that Staff preview it with.
 _Avoid_: Event type (an Integration event's `change`), Template (one Message type's wording on one channel)
 
 **Message template**:
-The wording of one Message type on one Notification channel in one locale, kept in Notifications as Mustache files, one per part: for email, a subject, an HTML body and a text body. It is rendered against a model built from the triggering event, with Money and dates written for the locale and the Customer's names from Identity & Access. A Customer's locale falls back to its language, then to `en`, the only one so far. The service refuses to start if a Message type lacks one for a channel or one doesn't render its sample content. Staff preview them in the Admin Console, and can't edit them.
+The wording of one Message type on one Notification channel in one locale, kept in Notifications as Mustache files, one per part: for email, a subject, an HTML body and a text body; for SMS, a text of at most 160 characters; for push, a title and a text. It is rendered against a model built from the triggering event, with Money and dates written for the locale and the Customer's names from Identity & Access. A Customer's locale falls back to its language, then to `en`, the only one so far. The service refuses to start if a Message type lacks one for a channel it goes on, one doesn't render its sample content, or an SMS rendered with it is over 160 characters; an SMS with unusually long content is cut to fit. Staff preview them in the Admin Console, and can't edit them.
 _Avoid_: Email template (one channel's), Content
 
 **Notification channel**:
-How a Notification reaches its Customer: `EMAIL` so far, with SMS and push to come. Each has a `NotificationProvider` that sends it and answers a reference or a failure, transient or permanent (ADR 0005). Email goes over SMTP, to Mailpit in the local stack.
+How a Notification reaches its Customer: `EMAIL`, `SMS` or `PUSH`. Each has a `NotificationProvider` that sends it and answers a reference or a failure, transient or permanent (ADR 0005). Email goes over SMTP, to Mailpit in the local stack; SMS and push go to mock providers, which record what they would send for Staff to read. Email is always sent; SMS and push only as a Customer's Notification preferences allow.
 _Avoid_: Medium, Transport, Provider (what sends on a channel)
+
+**Notification preferences**:
+Which Notification channels besides email a Customer's messages go on, kept per Customer in Notifications. Email is always on, since every message is about their own Orders, Payments and RMAs. SMS is off until the Customer saves a mobile number in E.164 form, such as `+4915112345678`, and turns it on; push is off until they turn it on, and needs no device while its provider is a mock. They decide which channels an event's Notifications are recorded on, and are read again when each is sent, so an SMS or push the Customer turned off since fails as `optedOut`. The Customer sets them on the Storefront's Notification preferences page.
+_Avoid_: Settings, Subscriptions, Consent (marketing's, out of scope)
 
 **Support Assistant**:
 The AI-driven conversational agent that answers a Customer's questions about their own Order, Payment, or RMA, grounded in that Customer's real data.

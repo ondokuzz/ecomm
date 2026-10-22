@@ -1,0 +1,13 @@
+Hello {{customer.givenName}},
+
+The replacement for your return {{rma.reference}}, from Order {{order.reference}}, has shipped:
+
+{{#lines}}
+{{quantity}} × {{name}}
+{{/lines}}
+{{#tracking}}
+
+It's with {{carrier}}, tracking number {{number}}.
+{{/tracking}}
+
+Ecomm

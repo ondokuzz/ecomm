@@ -4,11 +4,11 @@ export interface TemplatePreview {
   channel: string
   /** The locale it was rendered in, such as `en`. */
   locale: string
-  /** An email's subject; absent on a channel without one. */
-  subject?: string
-  /** An email's HTML body, a whole document. */
-  html?: string
-  text?: string
+  /** An email's subject, or a push's title; absent for an SMS. */
+  subject?: string | null
+  /** An email's HTML body, a whole document; absent for SMS and push. */
+  html?: string | null
+  text?: string | null
 }
 
 /** Initialisms a Message type keeps in capitals. */
@@ -31,4 +31,9 @@ const channelLabels: Record<string, string> = { EMAIL: 'Email', SMS: 'SMS', PUSH
 /** A Notification channel's name. */
 export function channelLabel(channel: string): string {
   return channelLabels[channel] ?? channel
+}
+
+/** What a message's `subject` is on its channel: an email's subject, a push's title. */
+export function subjectLabel(channel: string): string {
+  return channel === 'PUSH' ? 'Title' : 'Subject'
 }

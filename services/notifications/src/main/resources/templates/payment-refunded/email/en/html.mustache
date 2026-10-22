@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>We've refunded {{amount}} for your Order {{order.reference}}</title></head>
+<body style="font-family: Helvetica, Arial, sans-serif; color: #1f2937; line-height: 1.5;">
+  <p>Hello {{customer.givenName}},</p>
+  <p>We've refunded <strong>{{amount}}</strong> to the card you paid for Order
+    <strong>{{order.reference}}</strong> with{{#for}}, for {{.}}{{/for}}, on {{refundedOn}}.</p>
+  <p>It can take a few days to show on your statement.</p>
+  <p>Ecomm</p>
+</body>
+</html>

@@ -24,12 +24,12 @@ Vite, React, TypeScript, React Router and TanStack Query, with `oidc-client-ts`.
 | `/promotions/campaigns/new` | A new Campaign |
 | `/promotions/campaigns/{id}` | A Campaign |
 | `/orders` | Every Customer's Orders, newest first, 20 to a page: Order reference, when placed, Customer ID, items, total and Order Status. Filter by Status, Customer ID, the days placed and Order reference |
-| `/orders/{id}` | An Order: its ID, Customer ID, lines, each Discount by its Campaign or Coupon, tax and total, its Payments with their transactions, its Shipment, its RMAs with their statuses, their replacement Shipments, its Refunds, and its Order Status history |
+| `/orders/{id}` | An Order: its ID, Customer ID, lines, each Discount by its Campaign or Coupon, tax and total, its Payments with their transactions, its Shipment, its RMAs with their statuses, their replacement Shipments, its Refunds, the Notifications its Customer was sent about it, and its Order Status history |
 | `/fulfillment` | The fulfillment queue: Shipments awaiting pick, picked, packed or on hold, one tab each with its count, oldest first, 20 to a page (`?status=&page=&kind=`), from the Warehouse chosen or all, of one kind or both: Order reference, "Replacement · RMA-…" for a replacement, linking to the RMA, how long ago it was paid, Warehouse, destination country and units |
 | `/fulfillment/{id}` | A Shipment: its RMA for a replacement, its Order, Warehouse, Shipping option, Shipping address and lines. Pick it, pack it with a Serial number per unit, and see its tracking, its hold reason and its status history |
 | `/rmas` | The RMA queue: Requested, Awaiting units, Received, On hold and Closed, one tab each with its count, 20 to a page (`?tab=&page=`): RMA reference, kind, Order reference, Product, the status where a tab holds several, and how long ago it was requested, or, awaiting units, its Send-back deadline |
 | `/rmas/{id}` | An RMA: its Order, Customer, Product and Variant, quantity, Serial numbers, kind, the Customer's reason, its Refund amount, Send-back deadline, Warehouse and Inspection, the window it was checked against, and its RMA history. Approve or reject a requested one, receive an approved one's units, inspect a received one, and see its resolution |
-| `/message-templates` | Message templates: each Message type on each Notification channel as Notifications renders it with its sample content, an email's subject, its HTML in a sandboxed frame, and its plain text. Read only |
+| `/message-templates` | Message templates: each Message type on each Notification channel it goes on, as Notifications renders it with its sample content: an email's subject, its HTML in a sandboxed frame and its plain text, an SMS's text, a push's title and text. Read only |
 
 `/` opens the Products. Every page needs a Staff sign-in.
 
@@ -291,9 +291,16 @@ the console only reads what it did.
 
 The **Messages** page calls Notifications' `GET /templates`, which renders every Message template
 with its Message type's sample content for a made-up Customer, as the service's start-up check does.
-Each Message type and channel is a panel: its name and code, the channel, the locale, and for email
-the subject, the HTML body in an `iframe` with an empty `sandbox` (no scripts, no forms, no
-navigation) and the text body under "Plain text". Staff can't edit the templates, which live in the
+Each Message type and channel is a panel, named for both: its name and code, the channel, the
+locale, and for email the subject, the HTML body in an `iframe` with an empty `sandbox` (no scripts,
+no forms, no navigation) and the text body under "Plain text"; for SMS its text; for push its title
+and text.
+
+An Order's page lists the Notifications its Customer was sent about it, from Notifications' `GET
+/notifications?orderId=`, newest first: the Message type, the channel, the recipient as
+Notifications masks it, the status (with the last attempt's reason for a pending or failed one) and
+when, and under "Message" the subject, or a push's title, and the message as rendered: an email's
+HTML in a sandboxed frame, an SMS's or push's text. Staff can't edit the templates, which live in the
 [Notifications](../../services/notifications/README.md#message-templates) service.
 
 ## Validation errors
@@ -383,7 +390,7 @@ how to apply the client to an existing realm.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: failed requests as messages and references, field errors from problem details, the STAFF role in an access token, a Category, a Product with its Warranty terms and Serial tracking, a Coupon and a Campaign to and from their editor's form, decimals to and from Money, the Order list's filters to Order Management's query, an Order's Status history, Payment statuses and transactions, Stock movements and their balance, RMA statuses and kinds, Message type and Notification channel names, the RMA queue's tabs, URL and query, a Send-back deadline and its flag, an RMA's window, its RMA history, a decision, a receipt and an Inspection before they are sent, each Serial number received as it is typed, Returns & Warranty's refusals of a receipt, an RMA's resolution, an Order's Refunds, Shipment and Tracking event statuses, the fulfillment queue's URL and query, an IMEI or serial number as it is typed, a Pack request, a Shipment's status history, and how long ago
+npm test          # Vitest: failed requests as messages and references, field errors from problem details, the STAFF role in an access token, a Category, a Product with its Warranty terms and Serial tracking, a Coupon and a Campaign to and from their editor's form, decimals to and from Money, the Order list's filters to Order Management's query, an Order's Status history, Payment statuses and transactions, Stock movements and their balance, RMA statuses and kinds, Message type and Notification channel names and what a message's subject is called, the RMA queue's tabs, URL and query, a Send-back deadline and its flag, an RMA's window, its RMA history, a decision, a receipt and an Inspection before they are sent, each Serial number received as it is typed, Returns & Warranty's refusals of a receipt, an RMA's resolution, an Order's Refunds, Shipment and Tracking event statuses, the fulfillment queue's URL and query, an IMEI or serial number as it is typed, a Pack request, a Shipment's status history, and how long ago
 npm run build
 npm run test:e2e  # Playwright against the running compose stack (`make up`)
 ```
@@ -459,8 +466,11 @@ of its own it buys a seeded phone through the gateway, shipped to Berlin, Standa
 Berlin Warehouse (remembered past a reload) with its country and how long ago it was paid, picks
 it, has an IMEI with a wrong check digit refused as typed, and packs it with a valid one of the
 run's own. Within a minute the Saga captures the Payment and dispatches it: the page shows it
-Shipped by the Fulfillment Saga with the tracking number Fulfillment & Shipping gives, and the
-Order page shows the Shipment and links back to it. A second Order, paid with
+Shipped by the Fulfillment Saga with the tracking number Fulfillment & Shipping gives. Notifications
+emails the Customer "Your Order #… is on its way" with that tracking number, once, read from
+Mailpit's API (`MAILPIT_URL`, default `http://localhost:8025`); the Order page shows the Shipment and
+links back to it, and lists the shipped email, sent to the masked address, with its message, under
+the Order's confirmation. A second Order, paid with
 `tok_capture_decline`, is picked and packed through the API; its Shipment goes on hold with the
 gateway's reason, without tracking, and is listed under On hold.
 

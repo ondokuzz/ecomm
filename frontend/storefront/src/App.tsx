@@ -7,6 +7,7 @@ import { NotFound } from './components/NotFound'
 import { Toaster } from './components/ui/Toast'
 import { CartPage } from './pages/CartPage'
 import { CheckoutPage } from './pages/CheckoutPage'
+import { NotificationPreferencesPage } from './pages/NotificationPreferencesPage'
 import { OrderPage } from './pages/OrderPage'
 import { OrdersPage } from './pages/OrdersPage'
 import { ProductDetailPage } from './pages/ProductDetailPage'
@@ -78,6 +79,14 @@ export function App() {
                   element={
                     <RequireAuth>
                       <RmaPage />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="notification-preferences"
+                  element={
+                    <RequireAuth>
+                      <NotificationPreferencesPage />
                     </RequireAuth>
                   }
                 />

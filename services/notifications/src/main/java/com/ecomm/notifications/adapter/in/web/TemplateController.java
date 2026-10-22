@@ -50,14 +50,17 @@ class TemplateController {
     this.templates = templates;
   }
 
-  /** Every Message type on every channel, in {@code en}. */
+  /** Every Message type on each channel it goes on, in {@code en}. */
   @GetMapping
   @PreAuthorize("hasRole('STAFF')")
   List<PreviewResponse> templates() {
     return templates.previews().stream().map(PreviewResponse::of).toList();
   }
 
-  /** One Message type on one channel; 404 for a type or channel there is none of. */
+  /**
+   * One Message type on one channel; 404 for a type or channel there is none of, or a channel the
+   * type doesn't go on.
+   */
   @PostMapping("/{type}/{channel}/preview")
   @PreAuthorize("hasRole('STAFF')")
   PreviewResponse preview(
@@ -73,8 +76,10 @@ class TemplateController {
         body == null || body.locale() == null
             ? Locale.ENGLISH
             : Locale.forLanguageTag(body.locale());
-    return PreviewResponse.of(
-        templates.preview(messageType.get(), notificationChannel.get(), locale));
+    return templates
+        .preview(messageType.get(), notificationChannel.get(), locale)
+        .map(PreviewResponse::of)
+        .orElseThrow(() -> new NoSuchTemplateException(type, channel));
   }
 
   private static <E extends Enum<E>> Optional<E> valueOf(Class<E> type, String name) {

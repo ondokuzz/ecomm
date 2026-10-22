@@ -35,4 +35,9 @@ final class Formats {
   static String orderReference(String orderId) {
     return "#" + orderId.substring(0, Math.min(8, orderId.length())).toUpperCase(Locale.ROOT);
   }
+
+  /** The RMA reference: {@code RMA-} and the first eight characters of its ID, upper-cased. */
+  static String rmaReference(String rmaId) {
+    return "RMA-" + rmaId.substring(0, Math.min(8, rmaId.length())).toUpperCase(Locale.ROOT);
+  }
 }

@@ -126,6 +126,14 @@ function CustomerMenu() {
           <Icon name="arrowLeft" size={18} />
           My Returns
         </Link>
+        <Link
+          to="/notification-preferences"
+          className={buttonClass({ variant: 'ghost' }, 'menu-item')}
+          onClick={() => menu.current?.hidePopover()}
+        >
+          <Icon name="bell" size={18} />
+          Notification preferences
+        </Link>
         <Button variant="ghost" className="menu-item" onClick={signout}>
           <Icon name="logout" size={18} />
           Log out

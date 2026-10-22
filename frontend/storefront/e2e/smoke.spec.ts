@@ -560,6 +560,43 @@ test('a new Customer registers on Keycloak and comes back signed in', async ({ p
   await deleteCustomer(request, { id, email, password: 'smoke-password' })
 })
 
+test('a Customer turns on text messages with their mobile number in Notification preferences', async ({ page }) => {
+  const customer = signedUp()
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Log in' }).click()
+  await signInOnKeycloak(page, customer)
+  await page.getByRole('button', { name: 'Customer menu' }).click()
+  await page.getByRole('link', { name: 'Notification preferences' }).click()
+
+  await expect(page).toHaveURL(/\/notification-preferences$/)
+  await expect(page.getByRole('heading', { name: 'Notification preferences' })).toBeVisible()
+  const form = page.getByRole('form', { name: 'Notification preferences' })
+  // Email is always on; the rest are off until the Customer turns them on.
+  await expect(form.getByRole('checkbox', { name: /Email/ })).toBeChecked()
+  await expect(form.getByRole('checkbox', { name: /Email/ })).toBeDisabled()
+  const sms = form.getByRole('checkbox', { name: /Text messages/ })
+  await expect(sms).not.toBeChecked()
+  await expect(form.getByRole('checkbox', { name: /Push/ })).not.toBeChecked()
+
+  // A number without its country code is refused before it is sent.
+  await sms.check()
+  const number = form.getByRole('textbox', { name: /^Mobile number/ })
+  await number.fill('0151 12345678')
+  await form.getByRole('button', { name: 'Save' }).click()
+  await expect(form.getByRole('alert')).toContainText('international form')
+  await expect(number).toHaveAttribute('aria-invalid', 'true')
+
+  await number.fill('+49 151 12345678')
+  await form.getByRole('button', { name: 'Save' }).click()
+  await expect(page.locator('.toast').filter({ hasText: 'Notification preferences saved' })).toBeVisible()
+
+  // Notifications kept them: they read back after a reload.
+  await page.reload()
+  await expect(sms).toBeChecked()
+  await expect(number).toHaveValue('+4915112345678')
+  await expect(form.getByRole('checkbox', { name: /Push/ })).not.toBeChecked()
+})
+
 test('a Customer’s Orders come a page at a time, newest first', async ({ page }) => {
   // A new Customer has too few Orders for a second page, so Order Management's answer is stood in for.
   const requested: string[] = []

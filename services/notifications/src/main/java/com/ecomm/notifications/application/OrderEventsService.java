@@ -1,14 +1,12 @@
 package com.ecomm.notifications.application;
 
 import com.ecomm.notifications.application.port.in.OrderEventsUseCase;
+import com.ecomm.notifications.application.port.out.NotificationPreferencesStore;
 import com.ecomm.notifications.application.port.out.NotificationStore;
 import com.ecomm.notifications.application.port.out.ProductNames;
 import com.ecomm.notifications.application.port.out.TimeSource;
 import com.ecomm.notifications.application.port.out.Transactions;
-import com.ecomm.notifications.domain.Notification;
-import com.ecomm.notifications.domain.NotificationChannel;
 import com.ecomm.notifications.domain.OrderConfirmation;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -18,20 +16,19 @@ import java.util.List;
  */
 public class OrderEventsService implements OrderEventsUseCase {
 
-  private final NotificationStore notifications;
+  private final Ledger ledger;
   private final ProductNames products;
   private final Transactions transactions;
-  private final TimeSource time;
 
   public OrderEventsService(
       NotificationStore notifications,
+      NotificationPreferencesStore preferences,
       ProductNames products,
       Transactions transactions,
       TimeSource time) {
-    this.notifications = notifications;
+    this.ledger = new Ledger(notifications, preferences, time);
     this.products = products;
     this.transactions = transactions;
-    this.time = time;
   }
 
   @Override
@@ -61,13 +58,7 @@ public class OrderEventsService implements OrderEventsUseCase {
                   event.shipping(),
                   event.tax(),
                   event.total());
-          var recorded = new ArrayList<String>();
-          var notification =
-              Notification.record(event.eventId(), NotificationChannel.EMAIL, content, time.now());
-          if (notifications.recordIfNew(notification)) {
-            recorded.add(notification.type() + " " + notification.channel());
-          }
-          return recorded;
+          return ledger.record(event.eventId(), content);
         });
   }
 }

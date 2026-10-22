@@ -1,0 +1,13 @@
+Hello {{customer.givenName}},
+
+Your Order {{order.reference}} has shipped:
+
+{{#lines}}
+{{quantity}} × {{name}}
+{{/lines}}
+{{#tracking}}
+
+It's with {{carrier}}, tracking number {{number}}.
+{{/tracking}}
+
+Ecomm
