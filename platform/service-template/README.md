@@ -267,9 +267,11 @@ JWTs (`JwtResourceServerAutoConfiguration`):
   gets 401, a missing role gets 403, and both come back as problem details.
 - Guard role-restricted operations with `@PreAuthorize("hasRole('STAFF')")`. Realm roles from
   `realm_access.roles` become `ROLE_` authorities.
-- Declare a `CurrentCustomer` controller parameter to get the calling Customer. Its `id` is the
-  token's `sub`. Pass the plain ID into use cases; security types stay out of `application` and
-  `domain`.
+- Declare a `CurrentCustomer` controller parameter to get the calling Customer when the endpoint
+  needs only who they are. Its `id` is the token's `sub`. An endpoint that also decides by role,
+  such as one Staff and Customers share, takes the `Authentication` instead and reads `getName()`
+  and its authorities. Pass the plain ID into use cases; security types stay out of `application`
+  and `domain`.
 - Keys come from `ecomm.security.jwt.jwk-set-uri`, and `iss` must equal
   `ecomm.security.jwt.issuer-uri`, which defaults to `http://localhost:8180/realms/ecomm`. Outside
   Docker the JWK set URI is derived from the issuer; `application-docker.yml` points it at
@@ -325,6 +327,25 @@ rules such as state transitions. Integration events have a second seam, the topi
 a change publishes there, and on what a consumer makes of the events sent to it (see
 [Testing](#testing)).
 
+### When tests run against each other
+
+- **Stop the compose stack first.** On the 8 GB Docker VM the Testcontainers don't fit beside it,
+  and start-up timeouts follow (root README, "Memory").
+- **One Spring context at a time** for a service that runs anything in the background, such as
+  Kafka listeners, a Temporal worker or a scheduled dispatcher: add
+  `tasks.test { systemProperty("spring.test.context.cache.maxSize", "1") }` to its build file.
+  Spring caches every context a test class asks for, and a cached one keeps consuming, so it takes
+  the next class's events in the same consumer group (Orchestration, Notifications).
+- **Two consumer groups race.** An event on one topic and an event it depends on from another are
+  consumed in either order, whatever order the test sent them in. To wait for one group's
+  projection, observe it the way a client would, through an API or what the service then does, as
+  Notifications' `projectedVariant` does, rather than sleeping.
+- **A group that starts at the latest offset** (`auto.offset.reset=latest`) misses what was sent
+  before its consumer joined, so a test's first events can vanish. Send them from a retrying
+  wait, as above, rather than once.
+- **An application a test starts itself**, such as one that must fail to start: pass its
+  properties as command-line arguments (`SpringApplicationBuilder.run("--name=value", ...)`).
+  `SpringApplicationBuilder.properties(...)` sets defaults, which `application.yml` overrides.
 ## Creating a new service
 
 1. Copy this directory to `services/<context>` and delete `build/` if present. A service that
@@ -340,6 +361,24 @@ a change publishes there, and on what a consumer makes of the events sent to it 
 5. Add `":services:<context>"` to the root `settings.gradle.kts`.
 6. Run `./gradlew :services:<context>:check`.
 7. Add a committed `http/<context>.http` file for exercising the endpoints by hand.
+8. Wire it into the stack:
+   - **Compose** (`infra/docker/compose.yaml`): an entry built on `*spring-service`, with its image,
+     its next host port, the secrets it needs, and what it waits for.
+   - **Secrets:** a new one goes in `infra/docker/secrets.sh` and the file's `secrets:` too, and a
+     confidential Keycloak client's also in the `keycloak-realm` entry's secrets, with the client
+     in `services/identity-access/realm/realm-ecomm.json`.
+   - **Consumers:** each `@KafkaListener` group in `infra/docker/consumer-groups`.
+   - **Metrics:** a target in `infra/docker/prometheus/prometheus.yml`.
+   - **Reset and rebuild:** a Postgres service is stopped by `make seed-reset`, and its database
+     dropped there. A projection gets a `make <context>-rebuild`.
+   - **Gateway:** a routed service gets its entry in the gateway's `application.yml` and
+     `application-docker.yml`, in `GatewayApiTest`'s list and `RoutingApiTest`'s cases, in the
+     gateway's Compose `depends_on`, and in its README's table.
+   - **Docs:** the root README's ports, secrets and commands tables, and `GLOSSARY-MAP.md`.
+
+   `infra/docker/stack-wiring-check.py`, which CI runs, fails naming each list the service is
+   missing from, of those it can read: Gradle, Prometheus, the databases and `make seed-reset`, the
+   consumer groups, and the gateway's routes and `depends_on`.
 
 ## Run it
 

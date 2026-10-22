@@ -20,7 +20,19 @@ dependencies {
 
 tasks.withType<JavaCompile>().configureEach { options.compilerArgs.add("-parameters") }
 
-tasks.withType<Test>().configureEach { useJUnitPlatform() }
+tasks.withType<Test>().configureEach {
+  useJUnitPlatform()
+  // A failed test says why on the console, its assertion and causes in full, rather than only in
+  // the HTML report and the JUnit XML, with `-q` too, which keeps everything else quiet.
+  testLogging {
+    for (level in listOf(lifecycle, quiet)) {
+      level.events("failed")
+      level.exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+      level.showCauses = true
+      level.showStackTraces = true
+    }
+  }
+}
 
 spotless {
   java {

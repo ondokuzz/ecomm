@@ -13,3 +13,6 @@ bin/
 .secrets/
 # The JetBrains HTTP client's private environment: the stack's secrets for the .http files
 http-client.private.env.json
+
+# Each machine's own Claude Code settings, such as its PATH.
+.claude/settings.local.json

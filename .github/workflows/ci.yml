@@ -88,6 +88,8 @@ jobs:
       - run: make secrets
       - name: Check that Compose's resolved configuration holds none of the generated secrets
         run: infra/docker/compose-secrets-check.sh
+      - name: Check that every list of the stack's services names each one
+        run: python3 -B infra/docker/stack-wiring-check.py
 
   frontend:
     strategy:

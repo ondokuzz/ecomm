@@ -12,7 +12,7 @@ RETURNS_GROUPS := $(filter returns-warranty.%,$(GROUPS))
 NOTIFICATIONS_PRODUCT_GROUPS := notifications.products
 DEAD_LETTER_TOPICS := $(foreach group,$(GROUPS),$(group).dlt $(group).redrive)
 
-.PHONY: secrets up down status seed-reset search-rebuild reviews-rebuild recommendations-rebuild fulfillment-rebuild returns-rebuild notifications-rebuild dlt-redrive upgrade-from upgrade-to upgrade-clean
+.PHONY: secrets up down status memory seed-reset search-rebuild reviews-rebuild recommendations-rebuild fulfillment-rebuild returns-rebuild notifications-rebuild dlt-redrive upgrade-from upgrade-to upgrade-clean
 
 ## Write each of the stack's secrets that is missing to .secrets/<project>/, never overwriting one
 ## (infra/docker/secrets.sh). `make up` runs it first.
@@ -31,6 +31,11 @@ down:
 ## whether it was killed for its memory cap.
 status:
 	@infra/docker/stack-status.sh
+
+## Say what the running stack uses: each container against its cap, the total, the caps' sum, and
+## the Docker VM's free memory and swap (docs/agents/memory-reading.md).
+memory:
+	@python3 -B infra/docker/memory-report.py
 
 ## Put the seed Categories, Products, Stock and Coupons back and drop every Cart, Checkout Session,
 ## Reservation, Order, Payment, review, Shipment, RMA and Notification. Keycloak is left alone, so

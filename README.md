@@ -389,6 +389,8 @@ UI at 64 MB, Prometheus and Grafana at 256 MB each, Mailpit at 64 MB, the Kafka 
 and the init steps at 256 MB or less. Couchbase, Postgres and Redis are uncapped. After both suites
 the default stack uses about 5.65 GB (`docker stats`), and fits in about 8 GB of Docker memory, with
 its swap nearly full ([Sprint 6's reading](./docs/roadmap.md#sprint-6-weeks-1112--returns-completion)).
+`make memory` reports it, and [`docs/agents/memory-reading.md`](./docs/agents/memory-reading.md)
+says how a reading is taken.
 That leaves little over: with 8 GB given to Docker on a 16 GB host that also runs a browser and an
 IDE, the host swaps the VM out, and requests stall for tens of seconds.
 
@@ -397,7 +399,11 @@ Building the images takes about 1.3 GB more while it runs, so on 8 GB, `make dow
 memory, and the kernel then kills a container, often Kafka or Keycloak. `make status` names it as
 killed for memory under its cap, since Docker doesn't say which ran out, and `make up` starts it
 again. The services' images build from the Gradle build alone (`.dockerignore`), so editing the
-Compose file, the Makefile or a doc, or running Playwright, doesn't rebuild them.
+Compose file, the Makefile, a doc or a `.http` file, or running Playwright, doesn't rebuild them.
+
+The Gradle tests' Testcontainers (Postgres, Kafka, Apicurio and others) don't fit beside the running
+stack either: with it up, their containers time out starting. `docker compose stop` before
+`./gradlew check`, which keeps the stack's data, and `make up` after.
 
 ## CI
 

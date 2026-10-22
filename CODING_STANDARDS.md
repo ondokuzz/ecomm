@@ -13,7 +13,8 @@ sets out: a Rating summary is not a rating, a Customer is not a user.
 
 - A test asserts what can be observed from outside: an HTTP status or body, a later read, what
   appears on a topic, what the page shows. Internal classes, tables and collections are not
-  observed.
+  observed. A test double standing in for an outbound port, such as a `NotificationProvider` or a
+  clock, is an outside party too: what it was handed is observable.
 - An end-to-end test makes the data it needs (a Customer through Keycloak's admin API, a Product,
   a Coupon, a Campaign) and deletes it in `afterEach` or `finally`, so a failed run leaves the
   stack as it found it. Orders can't be deleted and stay.
@@ -25,6 +26,12 @@ sets out: a Rating summary is not a rating, a Customer is not a user.
 A pattern, abstraction or option earns its place by a requirement that forces it, named in the
 spec, an ADR or the change's own reasoning. When an ADR's decision changes, the ADR is revised in
 place with a dated note.
+
+## Controllers
+
+A controller takes `CurrentCustomer` when it needs only who the caller is, and the `Authentication`
+when it also decides by role, as an endpoint Staff and Customers share does
+([service template](./platform/service-template/README.md#security)).
 
 ## Docs
 

@@ -4,6 +4,8 @@ Start with `README.md`, `GLOSSARY-MAP.md`, `GLOSSARY.md`, and `docs/roadmap.md`.
 
 A sprint's definition-of-done pass proves a stack from the sprint before upgrades: `docs/agents/upgrade-check.md`.
 
+A memory reading, before and after a change that adds a container, or a sprint's: `docs/agents/memory-reading.md`.
+
 ## Agent skills
 
 ### Issue tracker

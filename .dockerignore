@@ -13,3 +13,9 @@ infra/
 docs/
 **/*.md
 Makefile
+# The same for each service's .http file and ADRs, and Identity & Access, which is the realm file
+# and login theme Compose mounts into Keycloak: adding a .http file once rebuilt every image
+# (2026-10-21). Only services/*/http/, not **/http/, since Java packages are named http too.
+services/*/http/
+services/*/docs/
+services/identity-access/
