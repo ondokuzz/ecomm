@@ -28,7 +28,7 @@ Vite, React, TypeScript, React Router and TanStack Query, with `oidc-client-ts`.
 | `/fulfillment` | The fulfillment queue: Shipments awaiting pick, picked, packed or on hold, one tab each with its count, oldest first, 20 to a page (`?status=&page=&kind=`), from the Warehouse chosen or all, of one kind or both: Order reference, "Replacement · RMA-…" for a replacement, linking to the RMA, how long ago it was paid, Warehouse, destination country and units |
 | `/fulfillment/{id}` | A Shipment: its RMA for a replacement, its Order, Warehouse, Shipping option, Shipping address and lines. Pick it, pack it with a Serial number per unit, and see its tracking, its hold reason and its status history |
 | `/rmas` | The RMA queue: Requested, Awaiting units, Received, On hold and Closed, one tab each with its count, 20 to a page (`?tab=&page=`): RMA reference, kind, Order reference, Product, the status where a tab holds several, and how long ago it was requested, or, awaiting units, its Send-back deadline |
-| `/rmas/{id}` | An RMA: its Order, Customer, Product and Variant, quantity, Serial numbers, kind, the Customer's reason, its Refund amount, Send-back deadline, Warehouse and Inspection, the window it was checked against, and its RMA history. Approve or reject a requested one, receive an approved one's units, inspect a received one, and see its resolution |
+| `/rmas/{id}` | An RMA: its Order, Customer, Product and Variant, quantity, Serial numbers, kind, the Customer's reason, its Refund amount, Send-back deadline, Warehouse and Inspection, the window it was checked against, its RMA history, and the Notifications its Customer was sent about it. Approve or reject a requested one, receive an approved one's units, inspect a received one, and see its resolution |
 | `/message-templates` | Message templates: each Message type on each Notification channel it goes on, as Notifications renders it with its sample content: an email's subject, its HTML in a sandboxed frame and its plain text, an SMS's text, a push's title and text. Read only |
 
 `/` opens the Products. Every page needs a Staff sign-in.
@@ -256,6 +256,8 @@ the console only reads what it did.
   approved, its Send-back deadline and the Warehouse its units go back to; and the window it was
   checked against, as it was then: the Return Period, or the Warranty Window with its Warranty
   terms, such as "12 months, from JBL", each from delivery to its end, in the browser's time zone.
+  Last, the Notifications its Customer was emailed about each step, from Notifications' `GET
+  /notifications?rmaId=`, listed as on the Order page.
 - **Deciding**: a requested RMA can be approved, with an optional note, or rejected, with a reason
   the Customer is told. A rejection without a reason, or either text over 1,000 characters, is
   refused beside its field before anything is sent. Once decided, the page offers neither again; an
@@ -447,18 +449,21 @@ deliver it, about 30 seconds. As the demo Customer it then requests a return of 
 warranty claim on the other through the gateway. In the console it finds the return on the queue's
 last page, checks its page, approves it with a note and sees the decision in its history; then it
 opens the warranty claim, sees its Warranty Window of 12 months from JBL, is refused a rejection
-without a reason, and rejects it with one, then opens the Closed tab. The Order page lists both RMAs
-with their statuses.
+without a reason, and rejects it with one, which Mailpit has one email of, to the demo Customer,
+with the reason; then it opens the Closed tab. The Order page lists both RMAs with their statuses.
 
 A second test there needs the fulfillment and returns Sagas. As a Customer of its own it buys a
 seeded phone through the gateway, packs its Shipment through the API with an IMEI of the run's own,
 and waits while the fulfillment Saga captures the Payment and dispatches it and the mock carrier
 delivers it. It requests a return of the phone as that Customer and approves it as Staff, through
-the API. In the console the RMA page shows its Send-back deadline, Warehouse and Refund amount;
-another IMEI is refused as it is typed, and Receive sends nothing; the right one receives it. Staff
-inspect it as Accepted, and within the Saga's run the page shows it Refunded, with the Refund's
-amount and the gateway reference Returns & Warranty recorded. The Order page lists the RMA as
-Refunded and the Refund, Approved, with the same reference.
+the API, and Mailpit has one email of each: the request, and the approval with `WH-BER`'s Return
+address and the Send-back deadline. In the console the RMA page shows its Send-back deadline,
+Warehouse and Refund amount; another IMEI is refused as it is typed, and Receive sends nothing; the
+right one receives it, and its email follows. Staff inspect it as Accepted, and within the Saga's
+run the page shows it Refunded, with the Refund's amount and the gateway reference Returns &
+Warranty recorded. Reloaded, it lists the three emails, newest first, sent to the masked address,
+the approval's HTML showing the Return address. The Order page lists the RMA as Refunded and the
+Refund, Approved, with the same reference.
 
 [`e2e/fulfillment.spec.ts`](./e2e/fulfillment.spec.ts) needs the fulfillment Saga. As a Customer
 of its own it buys a seeded phone through the gateway, shipped to Berlin, Standard, and pays with

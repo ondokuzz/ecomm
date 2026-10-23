@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.FormatStyle;
+import java.util.List;
 import java.util.Locale;
 
 /** How a message writes Money, dates and references for its locale. */
@@ -29,6 +30,14 @@ final class Formats {
     return DateTimeFormatter.ofLocalizedDate(FormatStyle.LONG)
         .withLocale(locale)
         .format(instant.atZone(ZoneOffset.UTC));
+  }
+
+  /**
+   * An optional part of a message as a Mustache section: one item, {@code value}, or none when it
+   * is {@code null}, so a template can leave out what goes with it.
+   */
+  static List<Object> section(Object value) {
+    return value == null ? List.of() : List.of(value);
   }
 
   /** The Order reference: {@code #} and the first eight characters of its ID, upper-cased. */

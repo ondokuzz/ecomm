@@ -4,9 +4,11 @@ import { useCurrencies } from '../api/currencies'
 import { isNotFound } from '../api/failure'
 import { fieldErrorsOf } from '../api/fieldErrors'
 import { ApiError } from '../api/http'
+import { useRmaNotifications } from '../api/notifications'
 import { useDecideRma, useRma, useStepRma } from '../api/rmas'
 import { useReplacement } from '../api/shipments'
 import { NotFound } from '../components/NotFound'
+import { Notifications } from '../components/Notifications'
 import { RmaStatusBadge } from '../components/RmaStatusBadge'
 import { SendBackDeadline } from '../components/SendBackDeadline'
 import { ShipmentStatusBadge } from '../components/ShipmentStatusBadge'
@@ -40,7 +42,8 @@ import type { FromQueueState } from './RmaQueuePage'
  * `/rmas/:id`: one RMA, whoever requested it, with what it claims, the window it was checked
  * against, its Refund amount and its RMA history. A requested one can be approved, with an optional
  * note, or rejected, with a reason, once; an approved one's units received at its Warehouse by the
- * Send-back deadline; a received one inspected. Then it shows how the returns Saga resolved it.
+ * Send-back deadline; a received one inspected. Then it shows how the returns Saga resolved it. The
+ * Notifications its Customer was sent about it are listed last.
  */
 export function RmaPage() {
   const { id } = useParams()
@@ -96,6 +99,7 @@ function RmaDetail({ rma, money, now }: { rma: Rma; money: (amount: Money) => st
   const window = windowOf(rma.window)
   const history = historyRowsOf(rma)
   const resolution = resolutionOf(rma)
+  const notifications = useRmaNotifications(rma.id)
   return (
     <>
       <BackLink />
@@ -261,6 +265,11 @@ function RmaDetail({ rma, money, now }: { rma: Rma; money: (amount: Money) => st
             </tbody>
           </table>
         </div>
+      </section>
+
+      <section className="panel" aria-labelledby="rma-notifications">
+        <h2 id="rma-notifications">Notifications</h2>
+        <Notifications notifications={notifications} labelledBy="rma-notifications" />
       </section>
     </>
   )

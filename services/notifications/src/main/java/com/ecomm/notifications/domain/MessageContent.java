@@ -8,7 +8,12 @@ import java.util.Map;
  * rendered from but the Recipient.
  */
 public sealed interface MessageContent
-    permits OrderConfirmation, OrderShipped, OrderDelivered, ReplacementShipped, PaymentRefunded {
+    permits OrderConfirmation,
+        OrderShipped,
+        OrderDelivered,
+        ReplacementShipped,
+        PaymentRefunded,
+        RmaMessage {
 
   MessageType type();
 

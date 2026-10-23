@@ -16,9 +16,9 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Test-only: the events Notifications consumes, as Order Management, Catalog, Fulfillment &
- * Shipping and Payment publish them. Each is checked against its topic's schema in {@code
- * platform/event-schemas} before it is sent, so a test can't rely on an event no producer could
- * publish.
+ * Shipping, Payment and Returns & Warranty publish them. Each is checked against its topic's schema
+ * in {@code platform/event-schemas} before it is sent, so a test can't rely on an event no producer
+ * could publish.
  */
 final class Events {
 
@@ -26,13 +26,15 @@ final class Events {
   static final String PRODUCTS = "catalog.product";
   static final String SHIPMENTS = "fulfillment-shipping.shipment";
   static final String PAYMENTS = "payment.payment";
-  static final List<String> TOPICS = List.of(ORDERS, PRODUCTS, SHIPMENTS, PAYMENTS);
+  static final String RMAS = "returns-warranty.rma";
+  static final List<String> TOPICS = List.of(ORDERS, PRODUCTS, SHIPMENTS, PAYMENTS, RMAS);
   static final List<String> GROUPS =
       List.of(
           "notifications.orders",
           "notifications.products",
           "notifications.shipments",
-          "notifications.payments");
+          "notifications.payments",
+          "notifications.rmas");
 
   private static final JsonMapper JSON = new JsonMapper();
   private static final JsonSchemaFactory SCHEMAS =
@@ -58,6 +60,11 @@ final class Events {
   /** A new Payment of {@code amountMinor} euros for the Customer's Order, not yet published. */
   static PaymentEvent payment(String orderId, String customerId, long amountMinor) {
     return new PaymentEvent(orderId, customerId, amountMinor);
+  }
+
+  /** A new return of one unit of the Customer's Order, not yet published. */
+  static RmaEvent rma(String orderId, String customerId) {
+    return new RmaEvent(orderId, customerId);
   }
 
   /** A Product with one Variant per {@code variantIds}, each with no axis values. */
@@ -421,6 +428,142 @@ final class Events {
       lastEvent.put("change", change);
       lastEvent.put("payment", payment);
       send(PAYMENTS, paymentId, lastEvent);
+      return this;
+    }
+  }
+
+  static final class RmaEvent {
+    private final String rmaId = UUID.randomUUID().toString();
+    private final String orderId;
+    private final String customerId;
+    private final List<Map<String, Object>> decisions = new ArrayList<>();
+    private final Map<String, Object> lastEvent = new LinkedHashMap<>();
+    private final Instant requestedAt = Instant.now();
+    private String kind = "RETURN";
+    private String warehouseId;
+    private String sendBackBy;
+    private Map<String, Object> inspection;
+    private long version;
+
+    private RmaEvent(String orderId, String customerId) {
+      this.orderId = orderId;
+      this.customerId = customerId;
+    }
+
+    String rmaId() {
+      return rmaId;
+    }
+
+    /** Its RMA reference, such as {@code RMA-3F2A9C1B}. */
+    String reference() {
+      return "RMA-" + rmaId.substring(0, 8).toUpperCase();
+    }
+
+    /** A warranty claim rather than a return; before it is published. */
+    RmaEvent warrantyClaim() {
+      kind = "WARRANTY_CLAIM";
+      return this;
+    }
+
+    RmaEvent requested() {
+      return publish("REQUESTED", "REQUESTED", null);
+    }
+
+    /**
+     * Approved, its units to go back to {@code warehouseId} (none if null) by {@code sendBackBy}.
+     */
+    RmaEvent approved(String warehouseId, String sendBackBy) {
+      this.warehouseId = warehouseId;
+      this.sendBackBy = sendBackBy;
+      return publish("APPROVED", "APPROVED", null);
+    }
+
+    RmaEvent rejected(String reason) {
+      return publish("REJECTED", "REJECTED", reason);
+    }
+
+    RmaEvent received() {
+      return publish("RECEIVED", "RECEIVED", null);
+    }
+
+    RmaEvent expired() {
+      return publish("EXPIRED", "EXPIRED", null);
+    }
+
+    /** Inspected with {@code outcome}, and {@code note} unless it is null. */
+    RmaEvent inspected(String outcome, String note) {
+      inspection = new LinkedHashMap<>();
+      inspection.put("outcome", outcome);
+      if (note != null) {
+        inspection.put("note", note);
+      }
+      return publish("INSPECTED", "INSPECTED", note);
+    }
+
+    /** Resolved as {@code status}: {@code REFUNDED}, {@code EXCHANGED} or {@code CLOSED}. */
+    RmaEvent resolved(String status) {
+      return publish(status, status, null);
+    }
+
+    /** Publishes the last event again, the same event ID included: a redelivery. */
+    RmaEvent redelivered() {
+      send(RMAS, rmaId, lastEvent);
+      return this;
+    }
+
+    private RmaEvent publish(String change, String status, String note) {
+      version++;
+      var now = Instant.now().toString();
+      var decision = new LinkedHashMap<String, Object>();
+      decision.put("status", status);
+      decision.put("decidedBy", change.equals("REQUESTED") ? "CUSTOMER" : "staff-7");
+      decision.put("decidedAt", now);
+      if (note != null) {
+        decision.put("note", note);
+      }
+      decisions.add(decision);
+      var rma = new LinkedHashMap<String, Object>();
+      rma.put("reference", reference());
+      rma.put("orderId", orderId);
+      rma.put("customerId", customerId);
+      rma.put("variantId", "PHN-PIXEL-9-BLK-128");
+      rma.put("productName", "Pixel 9");
+      rma.put("quantity", 1);
+      rma.put("serialNumbers", List.of("490154203237518"));
+      rma.put("kind", kind);
+      rma.put("reason", "Not what I expected.");
+      var window = new LinkedHashMap<String, Object>();
+      window.put("kind", kind.equals("RETURN") ? "RETURN_PERIOD" : "WARRANTY_WINDOW");
+      window.put("startsAt", "2026-10-10T09:30:00Z");
+      window.put("endsAt", "2026-10-24T09:30:00Z");
+      if (kind.equals("WARRANTY_CLAIM")) {
+        window.put("warranty", Map.of("months", 24, "manufacturer", "Google"));
+      }
+      rma.put("window", window);
+      rma.put("status", status);
+      rma.put("requestedAt", requestedAt.toString());
+      rma.put("refundAmount", Map.of("amountMinor", 79900, "currency", "EUR"));
+      if (sendBackBy != null) {
+        rma.put("sendBackBy", sendBackBy);
+      }
+      if (warehouseId != null) {
+        rma.put("warehouseId", warehouseId);
+      }
+      if (inspection != null) {
+        rma.put("inspection", inspection);
+      }
+      if (List.of("REFUNDED", "EXCHANGED", "CLOSED").contains(status)) {
+        rma.put("resolution", Map.of());
+      }
+      rma.put("decisions", List.copyOf(decisions));
+      lastEvent.clear();
+      lastEvent.put("eventId", UUID.randomUUID().toString());
+      lastEvent.put("occurredAt", now);
+      lastEvent.put("rmaId", rmaId);
+      lastEvent.put("version", version);
+      lastEvent.put("change", change);
+      lastEvent.put("rma", rma);
+      send(RMAS, rmaId, lastEvent);
       return this;
     }
   }

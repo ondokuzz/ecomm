@@ -196,7 +196,7 @@ A place Orders ship from, such as `WH-BER` in Berlin: an ID, a name, an address 
 _Avoid_: Depot, Fulfillment center, Location
 
 **Return address**:
-Where Customers send an RMA's units back to a Warehouse: a name to address the parcel to, a street, a postcode, a city and a country. Each Warehouse's configuration has one, and the service doesn't start without it. Any signed-in Customer may read a Warehouse's name and return address.
+Where Customers send an RMA's units back to a Warehouse: a name to address the parcel to, a street, a postcode, a city and a country. Each Warehouse's configuration has one, and the service doesn't start without it. Any signed-in Customer may read a Warehouse's name and return address, and Notifications reads it for the email approving an RMA.
 _Avoid_: Returns address, Return location, Warehouse address (where it ships from)
 
 **Carrier**:
@@ -272,7 +272,7 @@ One message to one Customer on one Notification channel, triggered by one Integr
 _Avoid_: Message (what a Notification sends), Alert, Email (one channel)
 
 **Message type**:
-What a Notification says, and what triggers it, such as `ORDER_CONFIRMED` on an Order's change to `PAID`. Each goes by email, and those a Customer would want on their phone, such as `ORDER_SHIPPED`, by SMS and push too; it has a Message template for each of its Notification channels and sample content that Staff preview it with.
+What a Notification says, and what triggers it, such as `ORDER_CONFIRMED` on an Order's change to `PAID`. Each goes by email, and those a Customer would want on their phone, such as `ORDER_SHIPPED`, by SMS and push too; each step of an RMA, such as `RMA_APPROVED` with its Return address and Send-back deadline, goes by email alone; it has a Message template for each of its Notification channels and sample content that Staff preview it with.
 _Avoid_: Event type (an Integration event's `change`), Template (one Message type's wording on one channel)
 
 **Message template**:

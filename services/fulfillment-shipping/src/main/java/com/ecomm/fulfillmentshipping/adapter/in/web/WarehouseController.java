@@ -12,7 +12,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Staff read the configured Warehouses. Any signed-in Customer reads one's name and return address,
- * to send an RMA's units back; Staff and Orchestration read it too.
+ * to send an RMA's units back; Staff, Orchestration and Notifications, for the RMA's approval
+ * email, read it too.
  */
 @RestController
 class WarehouseController {
@@ -50,7 +51,7 @@ class WarehouseController {
 
   /** 404 for a Warehouse that isn't configured. */
   @GetMapping("/warehouses/{id}")
-  @PreAuthorize("hasAnyRole('CUSTOMER', 'STAFF', 'ORCHESTRATION')")
+  @PreAuthorize("hasAnyRole('CUSTOMER', 'STAFF', 'ORCHESTRATION', 'NOTIFICATIONS')")
   ResponseEntity<ReturnAddressResponse> warehouse(@PathVariable String id) {
     return ResponseEntity.of(warehouses.warehouse(id).map(ReturnAddressResponse::of));
   }

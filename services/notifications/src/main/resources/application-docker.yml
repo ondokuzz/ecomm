@@ -23,6 +23,7 @@ ecomm:
   notifications:
     keycloak:
       admin-url: http://keycloak:8080/admin/realms/ecomm
+    fulfillment-shipping-url: http://fulfillment-shipping:8080
 
 # One JSON (ECS) object per line, with the service name and the MDC, including correlationId.
 logging:

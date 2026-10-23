@@ -15,3 +15,15 @@ export function useOrderNotifications(orderId: string) {
       }),
   })
 }
+
+/** The Notifications sent about an RMA, newest first: a handful at most, so one page of 100. Staff only. */
+export function useRmaNotifications(rmaId: string) {
+  const token = useAuth().user?.access_token
+  return useQuery({
+    queryKey: ['notifications', 'rma', rmaId],
+    queryFn: () =>
+      api<Page<Notification>>('notifications', `/notifications?${new URLSearchParams({ rmaId, size: '100' })}`, {
+        token,
+      }),
+  })
+}

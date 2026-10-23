@@ -1,5 +1,6 @@
 package com.ecomm.fulfillmentshipping;
 
+import com.ecomm.commons.security.FakeKeycloak;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.json.JsonCompareMode;
@@ -9,6 +10,8 @@ import org.springframework.test.json.JsonCompareMode;
  * reads one Warehouse's name and return address, to send an RMA's units back.
  */
 class WarehouseApiTest extends FulfillmentShippingApiTest {
+
+  static final String NOTIFICATIONS = FakeKeycloak.token("notifications", "NOTIFICATIONS");
 
   @Test
   void staffSeeTheConfiguredWarehousesWithBerlinTheDefault() {
@@ -54,8 +57,8 @@ class WarehouseApiTest extends FulfillmentShippingApiTest {
   }
 
   @Test
-  void aCustomerReadsAWarehousesNameAndReturnAddress() {
-    for (var token : List.of(CUSTOMER, STAFF, ORCHESTRATION)) {
+  void aCustomerStaffOrchestrationAndNotificationsReadAWarehousesNameAndReturnAddress() {
+    for (var token : List.of(CUSTOMER, STAFF, ORCHESTRATION, NOTIFICATIONS)) {
       http.get()
           .uri("/warehouses/WH-AMS")
           .headers(h -> h.setBearerAuth(token))

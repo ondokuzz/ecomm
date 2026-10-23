@@ -1,16 +1,17 @@
 # Notifications
 
-The messages Customers get about their Orders. Notifications consumes other contexts' integration
-events, records a **Notification** in its ledger for each message an event triggers on each channel
-the Customer's **Notification preferences** allow, renders it from its **Message templates** and
-sends it through the **Notification channel**'s `NotificationProvider`. It keeps its ledger, the
-Notification preferences, what the mock SMS and push providers took, and a projection of Product
-names in its own Postgres database, `notifications`, and publishes no events. Built from
-[`platform/service-template`](../../platform/service-template/README.md), so its layout, security and
-testing conventions apply here.
+The messages Customers get about their Orders and RMAs. Notifications consumes other contexts'
+integration events, records a **Notification** in its ledger for each message an event triggers on
+each channel the Customer's **Notification preferences** allow, renders it from its **Message
+templates** and sends it through the **Notification channel**'s `NotificationProvider`. It keeps its
+ledger, the Notification preferences, what the mock SMS and push providers took, and a projection of
+Product names in its own Postgres database, `notifications`, and publishes no events. It reads
+Warehouses' Return addresses from Fulfillment & Shipping. Built from
+[`platform/service-template`](../../platform/service-template/README.md), so its layout, security
+and testing conventions apply here.
 
-It sends the Order's confirmation, its Shipment shipped and delivered, a replacement shipped, and a
-Refund. The RMA messages come with #93.
+It sends the Order's confirmation, its Shipment shipped and delivered, a replacement shipped, a
+Refund, and each step of an RMA.
 
 ## What is sent
 
@@ -21,12 +22,19 @@ Refund. The RMA messages come with #93.
 | `ORDER_DELIVERED` | The same with `change` `DELIVERED` | `EMAIL`, `SMS`, `PUSH` | The Order reference, the day it was delivered (`deliveredAt`, or when the event occurred), and its lines |
 | `REPLACEMENT_SHIPPED` | The same with `change` `SHIPPED` for a `REPLACEMENT` Shipment | `EMAIL`, `SMS`, `PUSH` | The RMA reference, the Order reference, its lines, the Carrier and tracking number; it is about the Order and the RMA |
 | `PAYMENT_REFUNDED` | A `payment.payment` event with `change` `REFUNDED` | `EMAIL`, `SMS`, `PUSH` | The Refund's amount (the Payment's last approved `REFUND`), what it was for (its `reference`, such as an RMA reference) and the day, and the Order reference |
+| `RMA_REQUESTED` | A `returns-warranty.rma` event with `change` `REQUESTED` | `EMAIL` | The RMA reference and kind (return or warranty claim), its units and Product name, and the Order reference; every RMA message says these, and is about the Order and the RMA |
+| `RMA_APPROVED` | The same with `change` `APPROVED` | `EMAIL` | The Return address of its Warehouse (`warehouseId`), read from Fulfillment & Shipping, to write the RMA reference on the parcel, and the Send-back deadline (`sendBackBy`); with no Warehouse, or one Fulfillment & Shipping doesn't know, that its RMA page shows where |
+| `RMA_REJECTED` | The same with `change` `REJECTED` | `EMAIL` | The rejection's reason: the note of its `REJECTED` step in `decisions` |
+| `RMA_RECEIVED` | The same with `change` `RECEIVED` | `EMAIL` | That its units arrived, to be inspected |
+| `RMA_CLOSED` | The same with `change` `CLOSED` | `EMAIL` | That it was closed with no Refund or replacement, and the Inspection's note (`inspection.note`) |
+| `RMA_EXPIRED` | The same with `change` `EXPIRED` | `EMAIL` | That its units didn't arrive by the Send-back deadline |
 
-Email is always sent; SMS and push only to a Customer whose Notification preferences turn them on.
-Nothing else triggers a message: an Order placed, cancelled, fulfilled, shipped, delivered or
-returned, a Payment authorized, declined, voided or captured (a Capture is covered by
-`ORDER_SHIPPED`), a Refund declined, any other Shipment change, and a replacement delivered record
-nothing.
+Email is always sent; SMS and push only to a Customer whose Notification preferences turn them on,
+and never an RMA's step. Nothing else triggers a message: an Order placed, cancelled, fulfilled,
+shipped, delivered or returned, a Payment authorized, declined, voided or captured (a Capture is
+covered by `ORDER_SHIPPED`), a Refund declined, any other Shipment change, a replacement delivered,
+and an RMA inspected, put on hold or backfilled, `REFUNDED` (covered by `PAYMENT_REFUNDED`, which
+names the RMA reference) or `EXCHANGED` (covered by `REPLACEMENT_SHIPPED`) record nothing.
 
 ## The Notification ledger
 
@@ -102,8 +110,8 @@ ID, where it went. `message` is `null` until it was rendered; `subject` is an em
 push's title, and `html` is `null` but for email. `outcome` is `SENT`, `TRANSIENT_FAILURE` or
 `PERMANENT_FAILURE`. A preview reads `{"messageType", "channel", "locale", "subject", "html",
 "text"}` alike; a Message type or channel there is none of, or a channel the type doesn't go on, is a
-404. The Admin Console's **Messages** page shows every preview, and its Order page the Order's
-Notifications.
+404. The Admin Console's **Messages** page shows every preview, its Order page the Order's
+Notifications, and its RMA page the RMA's.
 
 Notification preferences read
 `{"email": true, "sms": true, "phoneNumber": "+4915112345678", "push": false, "updatedAt": "…"}`,
@@ -172,7 +180,7 @@ answers the provider's reference, or a transient or permanent failure (ADR 0005)
 The `CustomerDirectory` port answers a Customer's email address, given name and family name, so
 Notifications keeps no copy of identity data. Its adapter reads Keycloak's admin API
 (`GET /admin/realms/ecomm/users/{id}`) with Notifications' own client-credentials token, from the
-`notifications` client, whose service account holds only realm-management's `view-users`
+`notifications` client, whose service account holds realm-management's `view-users`
 ([Identity & Access ADR 0002](../identity-access/docs/adr/0002-service-identity-by-client-credentials.md)).
 Answers, a Customer it doesn't know included, are kept for 10 minutes
 (`ecomm.notifications.keycloak.cache-for`). Its secret is the Compose secret
@@ -186,12 +194,13 @@ Answers, a Customer it doesn't know included, are kept for 10 minutes
 | `order-management.order` | `notifications.orders` | latest offset | The Notifications an Order's change triggers |
 | `fulfillment-shipping.shipment` | `notifications.shipments` | latest offset | The Notifications a Shipment's change triggers |
 | `payment.payment` | `notifications.payments` | latest offset | The Notifications a Refund triggers |
+| `returns-warranty.rma` | `notifications.rmas` | latest offset | The Notifications an RMA's step triggers |
 | `catalog.product` | `notifications.products` | earliest offset | A row in `product` per SKU, its name and version, and in `product_variant` each Variant's axis values |
 
-- **Nothing from before.** `notifications.orders`, `.shipments` and `.payments` read from the latest
-  offset on their first start, so nobody is told about an Order paid, a Shipment shipped or a Refund
-  made before Notifications existed. From then on each resumes where it left off, so what happened
-  while Notifications was down is still told.
+- **Nothing from before.** `notifications.orders`, `.shipments`, `.payments` and `.rmas` read from
+  the latest offset on their first start, so nobody is told about an Order paid, a Shipment shipped,
+  a Refund made or an RMA's step taken before Notifications existed. From then on each resumes where
+  it left off, so what happened while Notifications was down is still told.
 - **Product names.** Order events name only Variants, so the confirmation names each line from the
   projection of `catalog.product`, kept at each Product's newest version, by Variant ID while it
   hasn't caught up. `make notifications-rebuild` rebuilds it from the topic: it stops the service,
@@ -201,6 +210,18 @@ Answers, a Customer it doesn't know included, are kept for 10 minutes
   dlt-redrive GROUP=<group>` redrives it once the cause is fixed
   ([service template](../../platform/service-template/README.md#consuming)). A redriven Order event
   records nothing it recorded before.
+
+## Return addresses
+
+`RMA_APPROVED` gives the Return address of the RMA's Warehouse. The `ReturnAddresses` port reads it
+from Fulfillment & Shipping's `GET /warehouses/{id}`
+(`ecomm.notifications.fulfillment-shipping-url`) with Notifications' own token from the
+`notifications` client, whose service account holds the `NOTIFICATIONS` realm role for it. It is
+read when the approval's event is consumed, before its transaction, so the email keeps the address
+as it was then. A Warehouse it answers 404 for is sent without an address, with a warning in the
+log. If Fulfillment & Shipping doesn't answer, the event is retried, then dead-lettered to
+`notifications.rmas.dlt`; `make dlt-redrive GROUP=notifications.rmas` records it once it answers
+again.
 
 ## Run it
 
@@ -225,16 +246,20 @@ SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_NOTIFICATIONS_CLIENT_SECRET="$(cat .s
 ## Tests
 
 - **The HTTP seam and the topics** (`OrderConfirmedApiTest`, `ShipmentMessagesApiTest`,
-  `RefundMessagesApiTest`, `PreferencesApiTest`, `LedgerApiTest`, `DispatchFailuresApiTest`,
-  `TemplatesApiTest`): events are published as Order Management, Catalog, Fulfillment & Shipping
-  and Payment would, each checked against its schema first, and the ledger is read over HTTP. Email
-  goes to a test double of the `NotificationProvider`; SMS and push go to the mock providers, read
-  over HTTP as Staff read them; Keycloak's token endpoint and admin API are WireMock. They cover
-  each message's content, the same event twice recorded once, changes that trigger nothing, the
-  Notification preferences (defaults, saving, an invalid number, SMS without one), an opted-in
-  Customer's SMS and push, `optedOut`, reads by Staff and owner, retries then `FAILED`, permanent
-  failures, `noRecipient`, Keycloak down then back, and the previews, every SMS within 160
-  characters. Postgres, Kafka and the registry run in Testcontainers.
+  `RefundMessagesApiTest`, `RmaMessagesApiTest`, `PreferencesApiTest`, `LedgerApiTest`,
+  `DispatchFailuresApiTest`, `TemplatesApiTest`): events are published as Order Management,
+  Catalog, Fulfillment & Shipping, Payment and Returns & Warranty would, each checked against its
+  schema first, and the ledger is read over HTTP. Email goes to a test double of the
+  `NotificationProvider`; SMS and push go to the mock providers, read over HTTP as Staff read them;
+  Keycloak's token endpoint and admin API, and Fulfillment & Shipping's Warehouse read, are
+  WireMock. They cover each message's content, the same event twice recorded once, changes that
+  trigger nothing, the Notification preferences (defaults, saving, an invalid number, SMS without
+  one), an opted-in Customer's SMS and push, and their RMA messages by email alone, each RMA step
+  (the approval's Return address read with Notifications' token, read again after Fulfillment &
+  Shipping failed, and left out for a Warehouse it doesn't know), `optedOut`, reads by Staff and
+  owner, retries then `FAILED`, permanent failures, `noRecipient`, Keycloak down then back, and the
+  previews, every SMS within 160 characters and the approval's text as the Customer reads it.
+  Postgres, Kafka and the registry run in Testcontainers.
 - **Start-up** (`TemplatesStartUpTest`): an application of its own, whose templates lack the
   confirmation's text part, refuses to start, and so does one whose shipped SMS is over 160
   characters.

@@ -107,6 +107,49 @@ class TemplatesApiTest extends NotificationsApiTest {
   }
 
   @Test
+  void theRmaApprovalReadsAsTheCustomerGetsIt() {
+    var email = preview("RMA_APPROVED", "EMAIL", STAFF).expectBody(Preview.class).returnResult();
+
+    assertThat(email.getResponseBody().subject())
+        .isEqualTo("Your return RMA-7C4B2E1A is approved: send it back by November 6, 2026");
+    assertThat(email.getResponseBody().text())
+        .isEqualTo(
+            """
+            Hello Ada,
+
+            We've approved your return RMA-7C4B2E1A for 1 × Google Pixel 9 (128 GB, Obsidian) \
+            from Order #3F2A9C1B.
+
+            Send it to:
+
+            Ecomm Returns Berlin
+            Lagerstraße 1
+            10115 Berlin
+            Germany
+
+            Write RMA-7C4B2E1A on the parcel, so we know what it is. It must reach us by \
+            November 6, 2026, or the return expires.
+
+            Ecomm""");
+  }
+
+  @Test
+  void anRmasStepsGoByEmailAlone() {
+    for (var type :
+        List.of(
+            "RMA_REQUESTED",
+            "RMA_APPROVED",
+            "RMA_REJECTED",
+            "RMA_RECEIVED",
+            "RMA_CLOSED",
+            "RMA_EXPIRED")) {
+      preview(type, "EMAIL", STAFF).expectStatus().isOk();
+      preview(type, "SMS", STAFF).expectStatus().isNotFound();
+      preview(type, "PUSH", STAFF).expectStatus().isNotFound();
+    }
+  }
+
+  @Test
   void anUnknownMessageTypeOrChannelIsNotFound() {
     preview("NO_SUCH_TYPE", "EMAIL", STAFF).expectStatus().isNotFound();
     preview("ORDER_CONFIRMED", "PIGEON", STAFF).expectStatus().isNotFound();

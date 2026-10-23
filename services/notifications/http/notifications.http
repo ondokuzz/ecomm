@@ -5,12 +5,15 @@
 # A Notification needs a paid Order: check one out in the Storefront as demo@ecomm.local, then set
 # @orderId to its ID. Its confirmation is in Mailpit, on http://localhost:8025, a second later. Pick
 # and pack its Shipment in the Admin Console, and its ORDER_SHIPPED messages follow; with SMS and
-# push on (below), the mock providers take them too.
+# push on (below), the mock providers take them too. Request a return of a delivered Order's unit in
+# the Storefront and set @rmaId to its ID; each step Staff take on it in the Admin Console is
+# emailed.
 
 @notifications = http://localhost:8101
 @gateway = http://localhost:8000
 @keycloak = http://localhost:8180/realms/ecomm/protocol/openid-connect/token
 @orderId = <a paid Order's ID>
+@rmaId = <an RMA's ID>
 @demoCustomerId = <the demo Customer's ID: the customerId of their Notifications, or their token's sub>
 
 ### The demo Customer's token
@@ -54,6 +57,14 @@ Authorization: Bearer {{staffToken}}
 
 ### The Notifications about the Order, newest first, the address masked: its ORDER_CONFIRMED email, SENT
 GET {{gateway}}/api/notifications/notifications?orderId={{orderId}}
+Authorization: Bearer {{staffToken}}
+
+### The RMA approval, with the Return address and Send-back deadline: an RMA's steps go by email alone
+POST {{notifications}}/templates/RMA_APPROVED/EMAIL/preview
+Authorization: Bearer {{staffToken}}
+
+### The Notifications about the RMA, newest first: RMA_REQUESTED, then one per step Staff took
+GET {{gateway}}/api/notifications/notifications?rmaId={{rmaId}}
 Authorization: Bearer {{staffToken}}
 
 ### Staff list by exactly one of orderId, rmaId and customerId: naming none is a 400

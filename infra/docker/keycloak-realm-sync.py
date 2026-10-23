@@ -1,8 +1,9 @@
-"""Adds what the realm file has and the running ecomm realm lacks: realm roles, and clients with their
-service accounts' realm roles and other clients' roles, such as realm-management's view-users.
-Keycloak's import skips a realm that already exists, so without this a stack from an earlier sprint
-never gets a client or role added since. Anything else that already
-exists is left as it is, so it is safe on every `docker compose up`.
+"""Adds what the realm file has and the running ecomm realm lacks: realm roles, clients, and their
+service accounts' realm roles and other clients' roles, such as realm-management's view-users, an
+existing service account's included. Keycloak's import skips a realm that already exists, so without
+this a stack from an earlier sprint never gets a client, role or role mapping added since. Anything
+else that already exists, a role mapping the file lacks included, is left as it is, so it is safe on
+every `docker compose up`.
 
 The one thing it changes is each confidential client's secret, set on every run from the secret
 `make secrets` wrote for it, <clientId>-client-secret (the realm file holds none). That way the realm
@@ -100,7 +101,21 @@ def main():
     }
     for new_client in realm.get("clients", []):
         client_id = new_client["clientId"]
-        if client(client_id) is not None:
+        existing = client(client_id)
+        if existing is not None:
+            account = service_accounts.get(client_id)
+            if existing.get("serviceAccountsEnabled") and account is not None:
+                added = give_missing(
+                    base,
+                    token,
+                    existing,
+                    account.get("realmRoles", []),
+                    account.get("clientRoles", {}),
+                    role,
+                    client,
+                )
+                if added:
+                    print(f"Gave client {client_id}'s service account {', '.join(added)}")
             continue
         request("POST", f"{base}/clients", token, new_client)
         created = client(client_id)
@@ -129,6 +144,37 @@ def main():
         existing["secret"] = secret(f"{client_id}-client-secret")
         request("PUT", f"{base}/clients/{existing['id']}", token, existing)
         print(f"Set client {client_id}'s secret from its file")
+
+
+def give_missing(base, token, client, realm_roles, client_roles, role, find_client):
+    """Gives an existing client's service account those of these realm roles, and these roles of
+    other clients, that it lacks, taking none away; answers what it gave, such as NOTIFICATIONS."""
+    user = request("GET", f"{base}/clients/{client['id']}/service-account-user", token)
+    mappings = f"{base}/users/{user['id']}/role-mappings"
+    added = []
+    held = {r["name"] for r in request("GET", f"{mappings}/realm", token) or []}
+    missing = [r for r in realm_roles if r not in held]
+    if missing:
+        request("POST", f"{mappings}/realm", token, [role(r) for r in missing])
+        added += missing
+    for owner_id, names in client_roles.items():
+        owner = find_client(owner_id)
+        if owner is None:
+            sys.exit(f"Client {owner_id} doesn't exist, and the realm file names its roles")
+        path = f"{mappings}/clients/{owner['id']}"
+        held = {r["name"] for r in request("GET", path, token) or []}
+        roles = []
+        for name in names:
+            if name in held:
+                continue
+            found = request("GET", f"{base}/clients/{owner['id']}/roles/{urllib.parse.quote(name)}", token)
+            if found is None:
+                sys.exit(f"Client {owner_id} has no role {name}, and the realm file names it")
+            roles.append(found)
+        if roles:
+            request("POST", path, token, roles)
+            added += [f"{owner_id}'s {r['name']}" for r in roles]
+    return added
 
 
 def give_only(base, token, client, realm_roles, client_roles, role, find_client):

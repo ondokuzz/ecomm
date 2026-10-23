@@ -23,8 +23,9 @@ spring:
   security:
     oauth2:
       client:
-        # Notifications' own identity for Keycloak's admin API (Identity & Access ADR 0002). Its
-        # client-secret has no default; compose gives it as a secret.
+        # Notifications' own identity for Keycloak's admin API and Fulfillment & Shipping's Warehouse
+        # read (Identity & Access ADR 0002). Its client-secret has no default; compose gives it as a
+        # secret.
         registration:
           notifications:
             provider: keycloak
@@ -47,6 +48,10 @@ ecomm:
       admin-url: http://localhost:8180/admin/realms/ecomm
       cache-for: 10m
       timeout: 5s
+    # Fulfillment & Shipping, for a Warehouse's Return address in RMA_APPROVED, and how long a call
+    # may take to connect and to answer.
+    fulfillment-shipping-url: http://localhost:8099
+    fulfillment-shipping-timeout: 5s
     dispatch:
       # How often the dispatcher looks for due Notifications, and how it retries a transient
       # failure: 6 attempts in all, waiting 2, 4, 8, 16 and 32 minutes between them, about an hour.

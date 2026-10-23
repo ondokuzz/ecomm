@@ -110,7 +110,7 @@ and publishes the Shipment, in one transaction under the Shipment's row lock.
 | Endpoint | Who | |
 |---|---|---|
 | `GET /warehouses` | Staff | Every Warehouse, in configuration order |
-| `GET /warehouses/{id}` | Customer, Staff, `ORCHESTRATION` | The Warehouse's name and return address; 404 for one not configured |
+| `GET /warehouses/{id}` | Customer, Staff, `ORCHESTRATION`, `NOTIFICATIONS` | The Warehouse's name and return address; 404 for one not configured |
 | `POST /shipping/quotes` | `CHECKOUT` | The Warehouse and Shipping options for a destination |
 | `POST /shipments` | `ORCHESTRATION`, `Idempotency-Key` | 201: the Order's Shipment, or with `"kind": "REPLACEMENT"` and `"rmaId"` the RMA's replacement, awaiting pick; 409 `shipmentExists` with the existing `shipment`; 503 `productsNotKnownYet` |
 | `POST /shipments/{id}/dispatch` | `ORCHESTRATION`, `Idempotency-Key` | `PACKED` → `SHIPPED`, booked with the Carrier |
@@ -237,7 +237,7 @@ webhook secret. Outside Docker, give them as
 - `WarehouseApiTest` and `ShippingQuoteApiTest` call the API over HTTP with
   [`FakeKeycloak`](../../platform/service-commons/src/testFixtures/java/com/ecomm/commons/security/FakeKeycloak.java)
   tokens, with the service's own configuration: the Warehouses for Staff only, a Warehouse's
-  return address for a Customer, assignment by
+  return address for a Customer, Staff, Orchestration and Notifications, assignment by
   country and default, domestic and EU prices, `shippingUnavailable` for an unserved country or
   Currency, quotes for `CHECKOUT` only, and each malformed field. Postgres runs in Testcontainers.
 - The Shipment tests run the same way, against Kafka and the schema registry too

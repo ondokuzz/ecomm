@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Your {{rma.kind}} {{rma.reference}} is approved</title></head>
+<body style="font-family: Helvetica, Arial, sans-serif; color: #1f2937; line-height: 1.5;">
+  <p>Hello {{customer.givenName}},</p>
+  <p>We've approved your {{rma.kind}} <strong>{{rma.reference}}</strong> for {{units}} from Order
+    {{order.reference}}.</p>
+  {{#returnAddress}}
+  <p>Send it to:</p>
+  <address style="font-style: normal; margin: 0 0 1em 1em;">
+    {{name}}<br>
+    {{street}}<br>
+    {{postcode}} {{city}}<br>
+    {{country}}
+  </address>
+  {{/returnAddress}}
+  {{^returnAddress}}
+  <p>Your RMA's page in your account shows where to send it.</p>
+  {{/returnAddress}}
+  <p>Write <strong>{{rma.reference}}</strong> on the parcel, so we know what it is.{{#sendBackBy}}
+    It must reach us by <strong>{{.}}</strong>, or the {{rma.kind}} expires.{{/sendBackBy}}</p>
+  <p>Ecomm</p>
+</body>
+</html>

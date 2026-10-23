@@ -20,9 +20,10 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * Base for HTTP-seam tests: the app runs against one Postgres container shared by every test class,
  * the shared Kafka and schema registry from {@link EventBackbone} with the topics Notifications
  * consumes and its groups' dead-letter and redrive topics, {@link FakeKeycloak} tokens, and
- * Keycloak's admin API in WireMock ({@link Keycloak}). Email goes to {@link TestEmailProvider}
- * instead of SMTP. The dispatcher looks for due Notifications every 50 ms, and retries a transient
- * failure after 20 ms, doubling, so six attempts take well under a second.
+ * Keycloak's admin API and Fulfillment & Shipping's Warehouse read in WireMock ({@link Keycloak},
+ * {@link FulfillmentShipping}). Email goes to {@link TestEmailProvider} instead of SMTP. The
+ * dispatcher looks for due Notifications every 50 ms, and retries a transient failure after 20 ms,
+ * doubling, so six attempts take well under a second.
  */
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
@@ -53,6 +54,7 @@ abstract class NotificationsApiTest {
     FakeKeycloak.registerWith(registry);
     EventBackbone.registerWith(registry);
     Keycloak.registerWith(registry);
+    FulfillmentShipping.registerWith(registry);
     registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
     registry.add("spring.datasource.username", POSTGRES::getUsername);
     registry.add("spring.datasource.password", POSTGRES::getPassword);
@@ -64,8 +66,9 @@ abstract class NotificationsApiTest {
   @Autowired TestEmailProvider email;
 
   @BeforeEach
-  void resetKeycloak() {
+  void resetStubs() {
     Keycloak.reset();
+    FulfillmentShipping.reset();
   }
 
   /** A new Customer's ID, as Keycloak's user IDs are. */

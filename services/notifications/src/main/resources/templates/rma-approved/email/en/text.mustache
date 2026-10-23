@@ -1,0 +1,20 @@
+Hello {{customer.givenName}},
+
+We've approved your {{rma.kind}} {{rma.reference}} for {{units}} from Order {{order.reference}}.
+{{#returnAddress}}
+
+Send it to:
+
+{{name}}
+{{street}}
+{{postcode}} {{city}}
+{{country}}
+{{/returnAddress}}
+{{^returnAddress}}
+
+Your RMA's page in your account shows where to send it.
+{{/returnAddress}}
+
+Write {{rma.reference}} on the parcel, so we know what it is.{{#sendBackBy}} It must reach us by {{.}}, or the {{rma.kind}} expires.{{/sendBackBy}}
+
+Ecomm

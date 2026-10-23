@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Your {{rma.kind}} {{rma.reference}} is closed</title></head>
+<body style="font-family: Helvetica, Arial, sans-serif; color: #1f2937; line-height: 1.5;">
+  <p>Hello {{customer.givenName}},</p>
+  <p>We've inspected what you sent for {{rma.kind}} <strong>{{rma.reference}}</strong>, {{units}}
+    from Order {{order.reference}}, and closed it with no Refund or replacement.</p>
+  {{#note}}
+  <p>What we found: {{.}}</p>
+  {{/note}}
+  <p>If you'd like the item back, or think we got it wrong, reply to this email.</p>
+  <p>Ecomm</p>
+</body>
+</html>

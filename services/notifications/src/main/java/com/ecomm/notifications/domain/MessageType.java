@@ -10,14 +10,14 @@ import java.util.function.Supplier;
 /**
  * What a Notification says, and so the Message templates it is rendered from: one per Notification
  * channel it goes on and locale. Email is always one of them; SMS and push are for the messages a
- * Customer would want on their phone, and are sent only when their Notification preferences opt in.
- * Each has sample content, which its templates must render at start-up and which Staff preview them
- * with.
+ * Customer would want on their phone, and are sent only when their Notification preferences opt in;
+ * an RMA's steps go by email alone. Each has sample content, which its templates must render at
+ * start-up and which Staff preview them with.
  */
 public enum MessageType {
   /** An Order's change to {@code PAID}: what was bought, and what was paid. */
   ORDER_CONFIRMED(
-      EnumSet.of(NotificationChannel.EMAIL),
+      Samples.EMAIL,
       () ->
           new OrderConfirmation(
               Samples.ORDER_ID,
@@ -70,7 +70,36 @@ public enum MessageType {
               Samples.CUSTOMER_ID,
               eur(79900),
               "RMA-7C4B2E1A",
-              Instant.parse("2026-10-30T11:00:00Z")));
+              Instant.parse("2026-10-30T11:00:00Z"))),
+  /** A Customer's RMA requested, for Staff to approve or reject. */
+  RMA_REQUESTED(Samples.EMAIL, () -> new RmaRequested(RmaSummary.sample("RETURN"))),
+  /** An RMA approved: where to send its units back, and by when. */
+  RMA_APPROVED(
+      Samples.EMAIL,
+      () ->
+          new RmaApproved(
+              RmaSummary.sample("RETURN"),
+              new ReturnAddress("Ecomm Returns Berlin", "Lagerstraße 1", "10115", "Berlin", "DE"),
+              Instant.parse("2026-11-06T12:05:00Z"))),
+  /** An RMA rejected, with Staff's reason. */
+  RMA_REJECTED(
+      Samples.EMAIL,
+      () ->
+          new RmaRejected(
+              RmaSummary.sample("WARRANTY_CLAIM"),
+              "The damage to the screen isn't covered by the manufacturer's warranty.")),
+  /** An RMA's units received at its Warehouse, to be inspected. */
+  RMA_RECEIVED(Samples.EMAIL, () -> new RmaReceived(RmaSummary.sample("RETURN"))),
+  /** An RMA closed after an Inspection refused it, with the Inspection's note. */
+  RMA_CLOSED(
+      Samples.EMAIL,
+      () ->
+          new RmaClosed(
+              RmaSummary.sample("RETURN"), "The seal is broken and the charger is missing.")),
+  /** An RMA whose units weren't received by its Send-back deadline. */
+  RMA_EXPIRED(
+      Samples.EMAIL,
+      () -> new RmaExpired(RmaSummary.sample("RETURN"), Instant.parse("2026-11-06T12:05:00Z")));
 
   private final Set<NotificationChannel> channels;
   private final Supplier<MessageContent> sample;
@@ -98,6 +127,7 @@ public enum MessageType {
   private static final class Samples {
     static final String ORDER_ID = "3f2a9c1b-7d4e-4f0a-9b8c-2d1e0f3a4b5c";
     static final String CUSTOMER_ID = "sample-customer";
+    static final Set<NotificationChannel> EMAIL = EnumSet.of(NotificationChannel.EMAIL);
     static final Set<NotificationChannel> PHONE_CHANNELS =
         EnumSet.of(NotificationChannel.EMAIL, NotificationChannel.SMS, NotificationChannel.PUSH);
     static final List<ShippedLine> SHIPPED_LINES =

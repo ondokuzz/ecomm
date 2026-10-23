@@ -71,6 +71,14 @@ final class NotificationsClient {
         .until(() -> staffList(staff, "orderId=" + orderId).items(), until);
   }
 
+  /** The RMA's Notifications, as Staff read them, once {@code until} holds. */
+  List<NotificationView> awaitForRma(
+      String staff, String rmaId, Predicate<List<NotificationView>> until) {
+    return await()
+        .atMost(Duration.ofSeconds(20))
+        .until(() -> staffList(staff, "rmaId=" + rmaId).items(), until);
+  }
+
   /** The Order's one Notification, once it is no longer {@code PENDING}. */
   NotificationView awaitSettled(String staff, String orderId) {
     return awaitForOrder(

@@ -13,11 +13,6 @@ import java.util.Optional;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.oauth2.client.AuthorizedClientServiceOAuth2AuthorizedClientManager;
-import org.springframework.security.oauth2.client.ClientCredentialsOAuth2AuthorizedClientProvider;
-import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService;
-import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.client.web.client.OAuth2ClientHttpRequestInterceptor;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
@@ -25,20 +20,14 @@ import org.springframework.web.client.RestClient;
 
 /**
  * Reads Customers from Keycloak's admin API ({@code GET /users/{id}}) with Notifications' own
- * client-credentials token, from the {@code notifications} client, whose service account holds only
- * realm-management's {@code view-users} (Identity & Access ADR 0002). The token is cached until it
- * has less than a minute left, and dropped on a 401. Answers, a Customer Keycloak doesn't know
- * included, are cached for {@code ecomm.notifications.keycloak.cache-for} (10 minutes), so a burst
- * of a Customer's messages reads them once. Anything but a user or a 404 is the directory being
- * unavailable.
+ * client-credentials token, from the {@code notifications} client, whose service account holds
+ * realm-management's {@code view-users} (Identity & Access ADR 0002). Answers, a Customer Keycloak
+ * doesn't know included, are cached for {@code ecomm.notifications.keycloak.cache-for} (10
+ * minutes), so a burst of a Customer's messages reads them once. Anything but a user or a 404 is
+ * the directory being unavailable.
  */
 @Component
 class KeycloakCustomerDirectory implements CustomerDirectory {
-
-  static final String REGISTRATION = "notifications";
-
-  private static final UsernamePasswordAuthenticationToken NOTIFICATIONS =
-      UsernamePasswordAuthenticationToken.unauthenticated(REGISTRATION, null);
 
   /** The fields of Keycloak's UserRepresentation Notifications reads. */
   record User(
@@ -49,19 +38,10 @@ class KeycloakCustomerDirectory implements CustomerDirectory {
 
   KeycloakCustomerDirectory(
       RestClient.Builder builder,
-      ClientRegistrationRepository registrations,
-      OAuth2AuthorizedClientService authorizedClients,
+      OAuth2ClientHttpRequestInterceptor serviceIdentity,
       @Value("${ecomm.notifications.keycloak.admin-url}") String adminUrl,
       @Value("${ecomm.notifications.keycloak.cache-for}") Duration cacheFor,
       @Value("${ecomm.notifications.keycloak.timeout}") Duration timeout) {
-    var manager =
-        new AuthorizedClientServiceOAuth2AuthorizedClientManager(registrations, authorizedClients);
-    manager.setAuthorizedClientProvider(new ClientCredentialsOAuth2AuthorizedClientProvider());
-    var oauth2 = new OAuth2ClientHttpRequestInterceptor(manager);
-    oauth2.setClientRegistrationIdResolver(request -> REGISTRATION);
-    oauth2.setPrincipalResolver(request -> NOTIFICATIONS);
-    oauth2.setAuthorizationFailureHandler(
-        OAuth2ClientHttpRequestInterceptor.authorizationFailureHandler(authorizedClients));
     var requests =
         new JdkClientHttpRequestFactory(HttpClient.newBuilder().connectTimeout(timeout).build());
     requests.setReadTimeout(timeout);
@@ -70,7 +50,7 @@ class KeycloakCustomerDirectory implements CustomerDirectory {
             .clone()
             .baseUrl(adminUrl)
             .requestFactory(requests)
-            .requestInterceptor(oauth2)
+            .requestInterceptor(serviceIdentity)
             .build();
     cache = Caffeine.newBuilder().expireAfterWrite(cacheFor).maximumSize(10_000).build();
   }

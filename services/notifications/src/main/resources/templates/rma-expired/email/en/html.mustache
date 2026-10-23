@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Your {{rma.kind}} {{rma.reference}} has expired</title></head>
+<body style="font-family: Helvetica, Arial, sans-serif; color: #1f2937; line-height: 1.5;">
+  <p>Hello {{customer.givenName}},</p>
+  <p>Your {{rma.kind}} <strong>{{rma.reference}}</strong> for {{units}} from Order
+    {{order.reference}} has expired: we didn't receive it{{#sendBackBy}} by {{.}}{{/sendBackBy}}.</p>
+  <p>If it's already on its way, reply to this email with its tracking number.</p>
+  <p>Ecomm</p>
+</body>
+</html>

@@ -15,6 +15,12 @@ import com.ecomm.notifications.domain.OrderShipped;
 import com.ecomm.notifications.domain.PaymentRefunded;
 import com.ecomm.notifications.domain.RenderedMessage;
 import com.ecomm.notifications.domain.ReplacementShipped;
+import com.ecomm.notifications.domain.RmaApproved;
+import com.ecomm.notifications.domain.RmaClosed;
+import com.ecomm.notifications.domain.RmaExpired;
+import com.ecomm.notifications.domain.RmaReceived;
+import com.ecomm.notifications.domain.RmaRejected;
+import com.ecomm.notifications.domain.RmaRequested;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -187,6 +193,12 @@ class PostgresNotificationStore implements NotificationStore {
       case ORDER_DELIVERED -> OrderDelivered.class;
       case REPLACEMENT_SHIPPED -> ReplacementShipped.class;
       case PAYMENT_REFUNDED -> PaymentRefunded.class;
+      case RMA_REQUESTED -> RmaRequested.class;
+      case RMA_APPROVED -> RmaApproved.class;
+      case RMA_REJECTED -> RmaRejected.class;
+      case RMA_RECEIVED -> RmaReceived.class;
+      case RMA_CLOSED -> RmaClosed.class;
+      case RMA_EXPIRED -> RmaExpired.class;
     };
   }
 

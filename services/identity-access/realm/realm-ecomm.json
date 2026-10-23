@@ -23,6 +23,10 @@
         "description": "The Orchestration service, calling the command APIs a Saga's steps need."
       },
       {
+        "name": "NOTIFICATIONS",
+        "description": "The Notifications service, reading what its messages say from other services."
+      },
+      {
         "name": "default-roles-ecomm",
         "description": "Granted to every new user, including self-registered ones.",
         "composite": true,
@@ -104,7 +108,7 @@
     {
       "clientId": "notifications",
       "name": "Notifications service",
-      "description": "Client credentials for Notifications' reads of Customers through the admin API, as realm-management's view-users only. Its secret is set from the stack's secrets on every start, by realm sync.",
+      "description": "Client credentials for Notifications' reads of Customers through the admin API, as realm-management's view-users, and of Warehouses' return addresses, as NOTIFICATIONS. Its secret is set from the stack's secrets on every start, by realm sync.",
       "enabled": true,
       "publicClient": false,
       "clientAuthenticatorType": "client-secret",
@@ -152,7 +156,7 @@
       "username": "service-account-notifications",
       "enabled": true,
       "serviceAccountClientId": "notifications",
-      "realmRoles": [],
+      "realmRoles": ["NOTIFICATIONS"],
       "clientRoles": { "realm-management": ["view-users"] }
     }
   ]

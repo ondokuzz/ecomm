@@ -20,3 +20,4 @@ notifications.orders
 notifications.products
 notifications.shipments
 notifications.payments
+notifications.rmas

@@ -16,15 +16,18 @@ import {
   staff,
   staffToken,
   subjectOf,
+  theOneEmail,
   tokenOf,
 } from './stack'
 
 /**
  * Staff work RMAs in the RMA queue. In the first test the demo Customer returns one of two speakers
  * delivered on an Order, and claims the warranty on the other, through the API; Staff approve the
- * return with a note and reject the claim with a reason, and the Order page lists both. In the
- * second a Customer of the test's own buys a phone and returns it; Staff receive it, a wrong IMEI
- * refused, inspect it, and see the returns Saga's Refund.
+ * return with a note and reject the claim with a reason, which the demo Customer is emailed, and the
+ * Order page lists both. In the second a Customer of the test's own buys a phone and returns it;
+ * Staff receive it, a wrong IMEI refused, inspect it, and see the returns Saga's Refund. The
+ * Customer is emailed the request, the approval with the return address and the receipt, and the
+ * RMA page lists those Notifications.
  *
  * The Order and its Shipment are made as the checkout and fulfillment Sagas would, straight at
  * Order Management and Fulfillment & Shipping, since the gateway routes neither placing an Order
@@ -138,6 +141,11 @@ test('Staff approve a return and reject a warranty claim from the RMA queue', as
   await expect(rejection.nth(1)).toContainText('Water damage is not covered')
   await expect(page.getByRole('button', { name: 'Reject' })).toHaveCount(0)
 
+  // Notifications emailed the demo Customer the rejection, with its reason, once.
+  const rejected = await theOneEmail(request, `Your warranty claim ${claimed.reference} was not approved`)
+  expect(rejected.To.map((to) => to.Address)).toEqual([demo.email])
+  expect(rejected.Text).toContain('Water damage is not covered')
+
   // The rejected one is closed.
   await page.getByRole('main').getByRole('link', { name: 'RMAs' }).click()
   await page
@@ -182,6 +190,9 @@ test('Staff receive a returned phone, refused a wrong IMEI, inspect it, and see 
     kind: 'RETURN',
     reason: 'Changed my mind',
   })
+  // Notifications emails the Customer each step, once; Mailpit catches each.
+  const requestedEmail = await theOneEmail(request, `We've received your return request ${returned.reference}`)
+  expect(requestedEmail.To.map((to) => to.Address)).toEqual([customer.email])
   const staffHeaders = bearer(await staffToken(request))
   const approved = await request.post(`/api/returns-warranty/rmas/${returned.id}/approve`, {
     headers: staffHeaders,
@@ -189,6 +200,15 @@ test('Staff receive a returned phone, refused a wrong IMEI, inspect it, and see 
   })
   expect(approved.ok()).toBeTruthy()
   const rma = (await approved.json()) as Rma
+  const sendBackBy = new Date(rma.sendBackBy!).toLocaleDateString('en-US', { dateStyle: 'long', timeZone: 'UTC' })
+  const approvedEmail = await theOneEmail(
+    request,
+    `Your return ${rma.reference} is approved: send it back by ${sendBackBy}`,
+  )
+  // WH-BER's Return address, which Notifications read from Fulfillment & Shipping.
+  // Over SMTP its lines end in CRLF.
+  expect(approvedEmail.Text).toMatch(/Ecomm Returns Berlin\r?\nLagerstraße 3\r?\n10115 Berlin\r?\nGermany/)
+  expect(approvedEmail.Text).toContain(`Write ${rma.reference} on the parcel`)
 
   // Awaiting its units: the Send-back deadline, the Warehouse they go back to and the Refund amount.
   await page.goto(`/rmas/${rma.id}`)
@@ -218,6 +238,7 @@ test('Staff receive a returned phone, refused a wrong IMEI, inspect it, and see 
   await expect(history.nth(1)).toContainText('Received')
   await expect(history.nth(1)).toContainText(subjectOf(await staffToken(request)))
   await expect(page.getByRole('form', { name: 'Receive' })).toHaveCount(0)
+  await theOneEmail(request, `We've received your return ${rma.reference}`)
 
   // Inspected as accepted, the returns Saga refunds it.
   const inspect = page.getByRole('form', { name: 'Inspect' })
@@ -232,6 +253,24 @@ test('Staff receive a returned phone, refused a wrong IMEI, inspect it, and see 
   await expect(resolution).toContainText(euros(rma.refundAmount!.amountMinor))
   await expect(resolution).toContainText(reference)
   await expect(history.nth(1)).toContainText('Returns Saga')
+
+  // The RMA page lists what its Customer was emailed about it, newest first; the Refund is told
+  // about the Order, by PAYMENT_REFUNDED, not about the RMA.
+  await page.reload()
+  const notifications = page.getByRole('table', { name: 'Notifications' })
+  await expect(notifications.getByRole('row')).toHaveCount(4)
+  for (const [i, type] of ['RMA received', 'RMA approved', 'RMA requested'].entries()) {
+    const row = notifications.getByRole('row').nth(i + 1)
+    await expect(row).toContainText(type)
+    await expect(row).toContainText('Email')
+    await expect(row).toContainText('Sent')
+    await expect(row).toContainText(`${customer.email[0]}***@ecomm.local`)
+  }
+  const approvedRow = notifications.getByRole('row').nth(2)
+  await approvedRow.getByText('Message').click()
+  await expect(
+    page.frameLocator('iframe[title="RMA approved: as HTML"]').getByText('Ecomm Returns Berlin'),
+  ).toBeVisible()
 
   // The Order lists the RMA as refunded, and the Refund it was given.
   await facts.getByRole('link', { name: `#${orderId.slice(0, 8).toUpperCase()}` }).click()

@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Your {{rma.kind}} {{rma.reference}} was not approved</title></head>
+<body style="font-family: Helvetica, Arial, sans-serif; color: #1f2937; line-height: 1.5;">
+  <p>Hello {{customer.givenName}},</p>
+  <p>We're sorry: we couldn't approve your {{rma.kind}} <strong>{{rma.reference}}</strong> for
+    {{units}} from Order {{order.reference}}.</p>
+  {{#reason}}
+  <p>Our reason: {{.}}</p>
+  {{/reason}}
+  <p>Please don't send anything back for it. If you think we got it wrong, reply to this email.</p>
+  <p>Ecomm</p>
+</body>
+</html>
