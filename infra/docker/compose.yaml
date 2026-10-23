@@ -519,7 +519,9 @@ services:
       interval: 5s
       timeout: 3s
       retries: 30
-      start_period: 10s
+      # A cold start beside the image builds ran past 10s + 30 x 5s once (#92); a pass during the
+      # start period still counts at once.
+      start_period: 120s
 
   # Creates the default namespace with a 7-day retention, or sets that retention, then exits; see
   # the script.

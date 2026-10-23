@@ -136,6 +136,21 @@ A Message type has one template per channel and locale, each part its own JMusta
 - **Every SMS fits 160 characters.** One whose content is unusually long, such as a very long
   Carrier name, is cut at 159 and an ellipsis when it is sent.
 
+### Adding a Message type
+
+1. Its content: a record in `domain/`, added to `MessageContent`'s `permits`.
+2. Its constant in `MessageType`, with the channels it goes on and a sample of that content, which
+   Staff preview and the start-up check renders. The compiler then asks for its case in
+   `PostgresNotificationStore.contentOf`, which reads a stored Notification back.
+3. Its templates, under `templates/<message-type>/`, every part of each of its channels; the
+   start-up check names what is missing.
+4. The event that triggers it: a use case recording it through `Ledger`, and, for a new topic, a
+   listener whose group goes in [`infra/docker/consumer-groups`](../../infra/docker/consumer-groups)
+   for its dead-letter and redrive topics (`infra/docker/stack-wiring-check.py` checks the group).
+5. Nothing checks that the type is ever recorded, so a test at the HTTP seam that the event sends it (see [Tests](#tests)), its row in
+   [What is sent](#what-is-sent), and the glossary's **Message type**. The Admin Console names a type
+   from its constant, so it needs nothing.
+
 ## Channels and providers
 
 Each Notification channel sends through a `NotificationProvider` port: `send(recipient, message)`

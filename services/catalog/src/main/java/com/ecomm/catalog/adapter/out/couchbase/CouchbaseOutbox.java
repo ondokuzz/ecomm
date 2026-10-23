@@ -11,7 +11,6 @@ import java.time.Clock;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
@@ -38,11 +37,7 @@ class CouchbaseOutbox implements IntegrationEventPublisher {
   private final JsonMapper json;
   private final Clock clock;
 
-  CouchbaseOutbox(
-      Bucket bucket,
-      CouchbaseTransactions transactions,
-      JsonMapper json,
-      ObjectProvider<Clock> clock) {
+  CouchbaseOutbox(Bucket bucket, CouchbaseTransactions transactions, JsonMapper json, Clock clock) {
     this.collection = bucket.defaultCollection();
     this.transactions = transactions;
     this.json =
@@ -50,7 +45,7 @@ class CouchbaseOutbox implements IntegrationEventPublisher {
             .changeDefaultPropertyInclusion(
                 inclusion -> inclusion.withValueInclusion(JsonInclude.Include.NON_ABSENT))
             .build();
-    this.clock = clock.getIfAvailable(Clock::systemUTC);
+    this.clock = clock;
   }
 
   @Override

@@ -7,7 +7,7 @@ A from-scratch e-commerce platform, architected as fifteen bounded contexts acro
 You need Docker with about 8 GB of memory, `make`, and Node 24 for the smoke tests.
 
 ```sh
-make up           # build and start the stack; returns once every service is healthy
+make up           # build and start the stack; returns once every service is healthy and the checkout path warm
 ```
 
 The first build takes several minutes. Then open the Storefront on http://localhost:8080, where you can:
@@ -325,7 +325,7 @@ d=.secrets/ecomm; printf '{"dev": {"checkoutClientSecret": "%s", "orchestrationC
 
 | Command | |
 |---|---|
-| `make up` | Write the secrets the stack lacks, build and start the stack, and wait until it is healthy |
+| `make up` | Write the secrets the stack lacks, build and start the stack, wait until it is healthy, and warm the checkout path ([`warm-up.py`](./infra/docker/warm-up.py)) |
 | `make secrets` | Write each secret the stack lacks to `.secrets/<project>/`, never overwriting one ([Secrets](#secrets)) |
 | `make down` | Stop the stack, keeping its data |
 | `make status` | Say whether every service is running and healthy, naming any that isn't with its exit code and whether it was killed for its memory cap. Both Playwright suites run it first |

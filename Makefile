@@ -19,9 +19,11 @@ DEAD_LETTER_TOPICS := $(foreach group,$(GROUPS),$(group).dlt $(group).redrive)
 secrets:
 	@infra/docker/secrets.sh
 
-## Build and start the default stack, and wait until every service is healthy.
+## Build and start the default stack, wait until every service is healthy, then warm the checkout
+## path, so the first checkout answers as fast as later ones (infra/docker/warm-up.py).
 up: secrets
 	$(COMPOSE) up -d --build --wait
+	@python3 -B infra/docker/warm-up.py
 
 ## Stop the stack, keeping its data.
 down:
@@ -149,12 +151,13 @@ upgrade-from:
 	if [ -f .env ]; then cp .env $(UPGRADE_DIR)/.env; fi
 	cd $(UPGRADE_DIR) && $(UPGRADE) IMAGE_TAG=upgrade-from $(COMPOSE) up -d --build --wait
 
-## Bring the upgrade-from stack up to this tree, keeping its data, and check it is healthy. Its
+## Bring the upgrade-from stack up to this tree, keeping its data, check it is healthy and warm it. Its
 ## secrets are its own, in .secrets/ecomm-upgrade/.
 upgrade-to:
 	$(UPGRADE) infra/docker/secrets.sh
 	$(UPGRADE) $(COMPOSE) up -d --build --wait --remove-orphans
 	@$(UPGRADE) infra/docker/stack-status.sh
+	@$(UPGRADE) python3 -B infra/docker/warm-up.py
 
 ## Remove the upgrade stack, its data, its secrets, its worktree and its images.
 upgrade-clean:

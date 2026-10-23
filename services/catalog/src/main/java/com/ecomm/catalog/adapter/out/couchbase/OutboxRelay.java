@@ -11,8 +11,8 @@ import com.couchbase.client.java.kv.MutateInSpec;
 import com.couchbase.client.java.query.QueryScanConsistency;
 import com.ecomm.commons.web.CorrelationId;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
@@ -60,16 +60,19 @@ class OutboxRelay implements SmartLifecycle {
   private final Collection collection;
   private final KafkaOperations<String, Object> kafka;
   private final Duration interval;
+  private final Clock clock;
   private ScheduledExecutorService scheduler;
 
   OutboxRelay(
       Bucket bucket,
       KafkaOperations<String, Object> kafka,
-      @Value("${ecomm.catalog.outbox.relay-every:500ms}") Duration interval) {
+      @Value("${ecomm.catalog.outbox.relay-every:500ms}") Duration interval,
+      Clock clock) {
     this.scope = bucket.defaultScope();
     this.collection = bucket.defaultCollection();
     this.kafka = kafka;
     this.interval = interval;
+    this.clock = clock;
     scope.query(
         "CREATE INDEX idx_outbox_pending IF NOT EXISTS ON `_default`(topic, `key`, version)"
             + " WHERE type = 'outbox' AND sentAt IS MISSING");
@@ -164,7 +167,7 @@ class OutboxRelay implements SmartLifecycle {
   private void markSent(String id) {
     collection.mutateIn(
         id,
-        List.of(MutateInSpec.upsert("sentAt", Instant.now().toString())),
+        List.of(MutateInSpec.upsert("sentAt", clock.instant().toString())),
         mutateInOptions().expiry(KEEP_SENT));
   }
 

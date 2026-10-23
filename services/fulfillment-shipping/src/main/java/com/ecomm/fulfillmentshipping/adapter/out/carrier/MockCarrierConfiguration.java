@@ -1,6 +1,7 @@
 package com.ecomm.fulfillmentshipping.adapter.out.carrier;
 
 import com.ecomm.fulfillmentshipping.application.port.out.ShippingProvider;
+import com.ecomm.fulfillmentshipping.application.port.out.TimeSource;
 import java.time.Duration;
 import java.util.Currency;
 import java.util.LinkedHashMap;
@@ -78,7 +79,8 @@ class MockCarrierConfiguration {
   }
 
   @Bean
-  ShippingProvider mockCarrier(MockCarrierProperties properties, MockCarrierWebhooks webhooks) {
+  ShippingProvider mockCarrier(
+      MockCarrierProperties properties, MockCarrierWebhooks webhooks, TimeSource time) {
     var prices = new LinkedHashMap<Currency, List<MockCarrier.Option>>();
     properties
         .prices()
@@ -89,7 +91,7 @@ class MockCarrierConfiguration {
                     options.entrySet().stream()
                         .map(option -> option(code, option.getKey(), option.getValue()))
                         .toList()));
-    return new MockCarrier(properties.name(), properties.countries(), prices, webhooks);
+    return new MockCarrier(properties.name(), properties.countries(), prices, webhooks, time);
   }
 
   private static MockCarrier.Option option(

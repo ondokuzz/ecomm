@@ -5,6 +5,8 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
+import java.time.Clock;
+import java.time.Instant;
 
 /**
  * The hexagonal layering every service follows. Include it in a service's tests with {@code
@@ -17,7 +19,10 @@ import com.tngtech.archunit.lang.ArchRule;
  *       through Kafka or the outbox behind it. It never sees idempotency keys: a command's
  *       transaction joins the one {@code com.ecomm.commons.idempotency} opens around it
  *   <li>{@code adapter.in.web}, {@code adapter.out.<tech>}: reach use cases only through ports,
- *       never depend on each other
+ *       never depend on each other. An inbound adapter drives use cases through {@code port.in} and
+ *       never sees {@code port.out}
+ *   <li>the current time comes from the service's {@code TimeSource} or {@code Clock} bean, made in
+ *       {@code adapter.out.clock}, so tests can fix it
  * </ul>
  *
  * <p>A service need not have every layer (a stateless service may have no outbound adapter), so
@@ -89,6 +94,32 @@ public final class HexagonalRules {
           .dependOnClassesThat()
           .resideInAPackage("..adapter.out..")
           .because("inbound adapters go through use cases, not around them")
+          .allowEmptyShould(true);
+
+  @ArchTest
+  public static final ArchRule inboundAdaptersDoNotSeeOutboundPorts =
+      noClasses()
+          .that()
+          .resideInAPackage("..adapter.in..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("..application.port.out..")
+          .because("inbound adapters drive use cases through port.in; port.out is for use cases")
+          .allowEmptyShould(true);
+
+  @ArchTest
+  public static final ArchRule theTimeComesFromTheClockAdapter =
+      noClasses()
+          .that()
+          .resideOutsideOfPackage("..adapter.out.clock..")
+          .should()
+          .callMethod(Instant.class, "now")
+          .orShould()
+          .callMethod(Clock.class, "systemUTC")
+          .orShould()
+          .callMethod(Clock.class, "systemDefaultZone")
+          .because(
+              "the current time comes from the service's TimeSource or Clock, so tests can fix it")
           .allowEmptyShould(true);
 
   @ArchTest

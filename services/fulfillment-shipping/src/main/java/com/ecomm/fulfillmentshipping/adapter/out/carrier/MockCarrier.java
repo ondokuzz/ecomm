@@ -2,13 +2,13 @@ package com.ecomm.fulfillmentshipping.adapter.out.carrier;
 
 import com.ecomm.commons.money.Money;
 import com.ecomm.fulfillmentshipping.application.port.out.ShippingProvider;
+import com.ecomm.fulfillmentshipping.application.port.out.TimeSource;
 import com.ecomm.fulfillmentshipping.domain.Booking;
 import com.ecomm.fulfillmentshipping.domain.Line;
 import com.ecomm.fulfillmentshipping.domain.Shipment;
 import com.ecomm.fulfillmentshipping.domain.ShippingOption;
 import com.ecomm.fulfillmentshipping.domain.Warehouse;
 import java.security.SecureRandom;
-import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Collections;
 import java.util.Currency;
@@ -46,6 +46,7 @@ class MockCarrier implements ShippingProvider {
   private final Set<String> countries;
   private final Map<Currency, List<Option>> prices;
   private final MockCarrierWebhooks webhooks;
+  private final TimeSource time;
   private final SecureRandom random = new SecureRandom();
   private final Map<String, Booking> bookings =
       Collections.synchronizedMap(
@@ -64,11 +65,13 @@ class MockCarrier implements ShippingProvider {
       String name,
       Set<String> countries,
       Map<Currency, List<Option>> prices,
-      MockCarrierWebhooks webhooks) {
+      MockCarrierWebhooks webhooks,
+      TimeSource time) {
     this.name = name;
     this.countries = Set.copyOf(countries);
     this.prices = Map.copyOf(prices);
     this.webhooks = webhooks;
+    this.time = time;
   }
 
   @Override
@@ -78,7 +81,7 @@ class MockCarrier implements ShippingProvider {
     if (first != null) {
       return first;
     }
-    webhooks.scheduleFor(booked.trackingNumber(), Instant.now().truncatedTo(ChronoUnit.MILLIS));
+    webhooks.scheduleFor(booked.trackingNumber(), time.now().truncatedTo(ChronoUnit.MILLIS));
     return booked;
   }
 

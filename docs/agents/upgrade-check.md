@@ -35,8 +35,8 @@ alone: its data migrated, its projections complete, nothing reset. This is how t
 
    Add whatever the coming upgrade migrates or backfills that this doesn't cover. Upgrade within 15
    minutes, while the Reservation is still active.
-3. `make upgrade-to` brings the same project up to this tree, keeping its data, and runs
-   `make status` against it. First it writes the project's secrets to `.secrets/ecomm-upgrade/`
+3. `make upgrade-to` brings the same project up to this tree, keeping its data, runs
+   `make status` against it and warms its checkout path. First it writes the project's secrets to `.secrets/ecomm-upgrade/`
    (the root README's "Secrets"): from a stack made before Sprint 5, the dev passwords its volumes
    were made with, and new client and webhook secrets.
 4. Check, against what the upgrade promises, that the data came through: each migrated aggregate

@@ -47,6 +47,7 @@ class MockCarrierTest {
                   new Option(
                       "SLOW",
                       Map.of(Zone.DOMESTIC, new Rate(1000, 5), Zone.EU, new Rate(3000, 9))))),
+          null,
           null);
 
   @Test
