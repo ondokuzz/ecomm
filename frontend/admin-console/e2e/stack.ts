@@ -200,7 +200,8 @@ export interface Email {
 
 /**
  * The email with exactly `subject`, once Mailpit has it, checking no second one came: the
- * dispatcher sends within a second or two of the event, so a duplicate would be there by then.
+ * dispatcher sends within a second or two of the event, so a duplicate would be there by then. Its
+ * `Text` comes over SMTP with CRLF line endings, given back as `\n`.
  */
 export async function theOneEmail(request: APIRequestContext, subject: string): Promise<Email> {
   const search = `${mailpitUrl}/api/v1/search?query=${encodeURIComponent(`subject:"${subject}"`)}`
@@ -212,5 +213,6 @@ export async function theOneEmail(request: APIRequestContext, subject: string): 
   await new Promise((resolve) => setTimeout(resolve, 3_000))
   const messages = await found()
   expect(messages).toHaveLength(1)
-  return (await (await request.get(`${mailpitUrl}/api/v1/message/${messages[0].ID}`)).json()) as Email
+  const email = (await (await request.get(`${mailpitUrl}/api/v1/message/${messages[0].ID}`)).json()) as Email
+  return { ...email, Text: email.Text.replace(/\r\n/g, '\n') }
 }

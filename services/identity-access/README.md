@@ -15,6 +15,8 @@ has and the running realm lacks, through Keycloak's admin API
   realm roles and other clients' roles from the file's `service-account-<client>` user;
 - for a client that exists, each of those roles its service account lacks.
 
+Then it reads the realm back, and fails `make up`, naming each gap, if any of that is still missing.
+
 It changes and removes nothing that already exists, a role, a client or a role mapping, so it is safe to run
 every time, and the next role or client added to the file reaches every existing stack the same
 way. A change to something that already exists, such as a client's redirect URIs, still needs
@@ -23,7 +25,7 @@ applying by hand (below), or deleting the realm in the admin console (http://loc
 
 This is how a Sprint 3 realm gains the `orchestration` client and the `ORCHESTRATION` role, and a
 Sprint 5 realm the `notifications` client with `view-users` and the `NOTIFICATIONS` role. To see
-what it did: `docker compose logs keycloak-realm`.
+what it did: `docker compose logs keycloak-realm`. `make realm-sync` runs it again on its own.
 
 ## What the realm holds
 

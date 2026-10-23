@@ -182,7 +182,9 @@ definition:
   publishes nothing.
 - On startup, every Product and Category stored before these events (on a Sprint 2 stack, all of
   them) is published once with `change: BACKFILLED`, Categories first. A restart publishes nothing
-  more.
+  more. A cold Couchbase can time out its first query, so a failed backfill is tried again after 2,
+  4, 8 and 16 seconds (`ecomm.catalog.backfill.*`), skipping what it already published, before it
+  fails the start-up.
 
 Delivery is at least once. The change and its event are written in one Couchbase transaction, so
 neither is stored without the other. A relay in the service then sends the event to Kafka, taking

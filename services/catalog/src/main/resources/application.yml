@@ -26,6 +26,11 @@ ecomm:
     # The local cluster is one node, with no replica to make a write durable on; a production
     # cluster leaves this out and keeps the SDK's MAJORITY.
     transaction-durability: NONE
+    # The start-up backfill's retries, for a cold Couchbase's first query timing out: 5 attempts,
+    # waiting 2, 4, 8 and 16 seconds between them.
+    backfill:
+      attempts: 5
+      first-retry-after: 2s
     # Loaded on startup, only into an empty bucket: Categories first, then their Products.
     seed:
       categories: classpath:seed/categories.json

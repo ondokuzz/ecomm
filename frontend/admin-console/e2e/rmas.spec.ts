@@ -206,8 +206,7 @@ test('Staff receive a returned phone, refused a wrong IMEI, inspect it, and see 
     `Your return ${rma.reference} is approved: send it back by ${sendBackBy}`,
   )
   // WH-BER's Return address, which Notifications read from Fulfillment & Shipping.
-  // Over SMTP its lines end in CRLF.
-  expect(approvedEmail.Text).toMatch(/Ecomm Returns Berlin\r?\nLagerstraße 3\r?\n10115 Berlin\r?\nGermany/)
+  expect(approvedEmail.Text).toContain('Ecomm Returns Berlin\nLagerstraße 3\n10115 Berlin\nGermany')
   expect(approvedEmail.Text).toContain(`Write ${rma.reference} on the parcel`)
 
   // Awaiting its units: the Send-back deadline, the Warehouse they go back to and the Refund amount.

@@ -12,7 +12,7 @@ RETURNS_GROUPS := $(filter returns-warranty.%,$(GROUPS))
 NOTIFICATIONS_PRODUCT_GROUPS := notifications.products
 DEAD_LETTER_TOPICS := $(foreach group,$(GROUPS),$(group).dlt $(group).redrive)
 
-.PHONY: secrets up down status memory seed-reset search-rebuild reviews-rebuild recommendations-rebuild fulfillment-rebuild returns-rebuild notifications-rebuild dlt-redrive upgrade-from upgrade-to upgrade-clean
+.PHONY: secrets up down status memory realm-sync seed-reset search-rebuild reviews-rebuild recommendations-rebuild fulfillment-rebuild returns-rebuild notifications-rebuild dlt-redrive upgrade-from upgrade-to upgrade-clean
 
 ## Write each of the stack's secrets that is missing to .secrets/<project>/, never overwriting one
 ## (infra/docker/secrets.sh). `make up` runs it first.
@@ -33,6 +33,12 @@ down:
 ## whether it was killed for its memory cap.
 status:
 	@infra/docker/stack-status.sh
+
+## Bring the running realm up to its file again, then check it holds every role, client and
+## service-account role the file names: what `make up` does once Keycloak is healthy
+## (infra/docker/keycloak-realm-sync.py).
+realm-sync:
+	$(COMPOSE) run --rm --no-deps keycloak-realm
 
 ## Say what the running stack uses: each container against its cap, the total, the caps' sum, and
 ## the Docker VM's free memory and swap (docs/agents/memory-reading.md).
