@@ -104,7 +104,8 @@ abstract class OrchestrationTest {
             "cart",
             "checkout-pricing",
             "fulfillment-shipping",
-            "returns-warranty")) {
+            "returns-warranty",
+            "promotions")) {
       registry.add("ecomm.orchestration." + service + "-url", DOWNSTREAM::baseUrl);
     }
     registry.add(

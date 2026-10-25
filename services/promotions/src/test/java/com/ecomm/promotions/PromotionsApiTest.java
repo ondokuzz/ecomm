@@ -117,6 +117,61 @@ abstract class PromotionsApiTest {
     return FakeKeycloak.token("checkout", "CHECKOUT");
   }
 
+  /** Orchestration's own token: the only caller allowed to redeem a Coupon. */
+  static String orchestrationToken() {
+    return FakeKeycloak.token("orchestration", "ORCHESTRATION");
+  }
+
+  /**
+   * Holds a redemption of {@code code} for the Checkout Session {@code sessionId}, as Checkout,
+   * until {@code expiresAt}.
+   */
+  RestTestClient.ResponseSpec hold(
+      String sessionId, String customerId, String code, Instant expiresAt) {
+    return hold(
+        checkoutToken(),
+        """
+        {"sessionId": "%s", "customerId": "%s", "couponCode": "%s", "expiresAt": "%s"}
+        """
+            .formatted(sessionId, customerId, code, expiresAt));
+  }
+
+  RestTestClient.ResponseSpec hold(String token, String body) {
+    return http.post()
+        .uri("/redemptions/holds")
+        .headers(h -> h.setBearerAuth(token))
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(body)
+        .exchange();
+  }
+
+  /** Releases the Checkout Session's hold, as Checkout. */
+  RestTestClient.ResponseSpec release(String sessionId) {
+    return http.delete()
+        .uri("/redemptions/holds/{sessionId}", sessionId)
+        .headers(h -> h.setBearerAuth(checkoutToken()))
+        .exchange();
+  }
+
+  /** Redeems {@code code} for the Checkout Session {@code sessionId}, as Orchestration. */
+  RestTestClient.ResponseSpec redeem(String sessionId, String customerId, String code) {
+    return redeem(
+        orchestrationToken(),
+        """
+        {"sessionId": "%s", "customerId": "%s", "couponCode": "%s"}
+        """
+            .formatted(sessionId, customerId, code));
+  }
+
+  RestTestClient.ResponseSpec redeem(String token, String body) {
+    return http.post()
+        .uri("/redemptions")
+        .headers(h -> h.setBearerAuth(token))
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(body)
+        .exchange();
+  }
+
   /** Creates the Coupon in the JSON {@code body} as Staff. */
   RestTestClient.ResponseSpec create(String body) {
     return create(staffToken(), body);

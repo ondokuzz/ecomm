@@ -75,10 +75,20 @@ It answers `{"status", "orderId", "declineReason"}`, `status` being `PAID`, `DEC
 4. **Mark the Order paid** (`PATCH /orders/{id}/status`), retried until it succeeds: the Stock is
    committed, so there is no going back. The outcome is `PAID` from here, kept in the run's memo as
    `outcome`, where Checkout reads it while the run goes on.
-5. **Clear the Cart** (`POST /carts/clear`).
-6. **End the Checkout Session** (`POST /checkout/sessions/{id}/end`).
+5. **Redeem the Coupon** (`POST /redemptions` on Promotions, `{"sessionId", "customerId",
+   "couponCode"}`), when the session has a Coupon's Discount; a session without one calls Promotions
+   not at all. It turns the session's Redemption hold into a Coupon redemption, or records one
+   anyway when the hold has lapsed or the session was priced before holds, so a Coupon's
+   redemptions can pass its Usage limit by the runs that outlasted their hold
+   ([Promotions](../promotions/README.md#usage-limits-and-redemptions)). It is retried until it
+   succeeds, like marking the Order paid. It comes after that step, so Promotions being down never
+   keeps the Customer from `PAID`, only holds up the steps after it. Since Sprint 6, behind
+   `Workflow.getVersion("coupon-redemption")`: a run that was past this point before the upgrade
+   replays without redeeming.
+6. **Clear the Cart** (`POST /carts/clear`).
+7. **End the Checkout Session** (`POST /checkout/sessions/{id}/end`).
 
-Steps 5 and 6 are retried for up to an hour, then logged and given up: the Customer keeps the paid
+Steps 6 and 7 are retried for up to an hour, then logged and given up: the Customer keeps the paid
 Order either way. The compensations, cancelling the Order and voiding the Payment, are retried until
 they succeed, with backoff up to a minute.
 
@@ -91,7 +101,8 @@ rather than Temporal abandoning it while its call still waits.
 Each command that takes one carries the `Idempotency-Key` `<workflowId>:<runId>:<step>`: `placeOrder`,
 `authorizePayment`, `markOrderPaid` and `cancelOrder`. A retry of a step sends the same key, so it
 replays; paying the session again after a decline is a new run, with keys of its own. Committing,
-voiding, clearing and ending need none. Every call names the Customer, carries Orchestration's token,
+voiding, redeeming, clearing and ending need none: a session redeems its Coupon once however often
+it is asked. Every call names the Customer, carries Orchestration's token,
 and carries the Correlation ID of the Customer's Pay request: the workflow puts it in its MDC, and
 `CorrelationIdPropagator` hands it to each activity's thread, so the calls and every log line carry
 it.
@@ -361,8 +372,10 @@ Orchestration calls:
   retried with the same key, a refused placement, a gateway that keeps failing, a failing
   compensation and a failing mark-paid retried, a Cart that can't be cleared, two runs for one
   session with keys of their own, the Order placed with its Shipping, a run started with Sprint 4's
-  input (no Shipping) ending `FAILED` with nothing to undo, and the counters on
-  `/actuator/prometheus`;
+  input (no Shipping) ending `FAILED` with nothing to undo, the Coupon redeemed after the commit and
+  retried until it succeeds, a session without one calling Promotions not at all, a history
+  recorded before the redeem step replayed without it (`WorkflowReplayer`, from
+  `src/test/resources/histories/`), and the counters on `/actuator/prometheus`;
 - `CheckoutMetricsTest`: every counter at 0 before any checkout, and a run counting on those same
   series;
 - `FulfillmentWorkflowTest`: the fulfillment Saga from Kafka in (a Kafka container, with the

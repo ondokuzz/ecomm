@@ -17,9 +17,9 @@ Vite, React, TypeScript, React Router and TanStack Query, with `oidc-client-ts`.
 | `/categories` | Every Category in a table: name, slug, attribute definitions (Variant axes highlighted), Product count. Edit or delete each |
 | `/categories/new` | A new Category: name, slug and attribute definitions |
 | `/categories/{slug}` | A Category's name and attribute definitions. The slug can't change, since Products name their Category by it |
-| `/promotions/coupons` | Every Coupon in a table: code, discount, minimum, validity and whether it is on. Switch each on or off, edit or delete it. `/promotions` opens here |
+| `/promotions/coupons` | Every Coupon in a table: code, discount, minimum, validity, how much it is used (`40 of 100 used, 2 held`) and its state (active, scheduled, expired, off or exhausted). Switch each on or off, edit or delete it. `/promotions` opens here |
 | `/promotions/coupons/new` | A new Coupon |
-| `/promotions/coupons/{code}` | A Coupon. The code can't change, since Orders record it |
+| `/promotions/coupons/{code}` | A Coupon, with how many redemptions it has and how many Checkout Sessions hold it now. The code can't change, since Orders record it |
 | `/promotions/campaigns` | Every Campaign by priority: name, discount, Categories, minimum, validity and its state, running, scheduled, over or off. Switch each on or off, edit or delete it |
 | `/promotions/campaigns/new` | A new Campaign |
 | `/promotions/campaigns/{id}` | A Campaign |
@@ -137,7 +137,9 @@ editors share the discount, the minimum subtotal, the validity window and the sw
   back as it is with only `active` changed.
 
 A new Coupon or Campaign starts as a percentage off, switched on, from the current minute for a week.
-A Coupon also has its code, typed once. A Campaign has a name, a priority, which no other Campaign
+A Coupon also has its code, typed once, and its Usage limits: a usage limit in all and a
+per-Customer limit, each a whole number of at least 1, blank for none. Lowering one keeps the uses
+Checkout Sessions already hold; raising it lets the Coupon apply again. A Campaign has a name, a priority, which no other Campaign
 may have, and the Categories it is limited to, ticked from Catalog's list. None ticked means every
 line. A Category the Campaign has but Catalog no longer does is still listed, marked "not in
 Catalog", so it can be unticked.
@@ -402,7 +404,10 @@ share, from tokens to a Customer of their own and buying a phone through the gat
 [`e2e/stack.ts`](./e2e/stack.ts).
 [`e2e/promotions.spec.ts`](./e2e/promotions.spec.ts) creates, edits, switches off and deletes a
 Coupon and a Campaign, checking each through Promotions' API, and sees Promotions refuse a window
-that ends before it starts and the seeded Audio week's priority beside the field. It also creates a
+that ends before it starts and the seeded Audio week's priority beside the field. It creates a
+Coupon with a usage limit of 1, buys a phone with it as a Customer of its own through the gateway
+(`buy` in `e2e/stack.ts`), and sees the Coupon `1 of 1 used` and `Exhausted` once the checkout Saga
+has redeemed it, deleting the Customer and the Coupon after. It also creates a
 Campaign of 25% off `laptops`, then, as a Customer it makes in Keycloak for the test (through
 Keycloak's admin API, as `admin`), puts a laptop in the Cart, opens checkout on the Storefront in a
 browser of the Customer's own, and sees the Campaign's Discount there without entering anything. It

@@ -62,7 +62,8 @@ function BackLink() {
 }
 
 /**
- * The Coupon form: its code when it is new, its discount, minimum and validity. Fields that can't
+ * The Coupon form: its code when it is new, its discount, minimum, validity and Usage limits, with
+ * its redemptions and holds once saved. Fields that can't
  * be sent are marked before anything is; Promotions checks the rest, and each field it refuses shows
  * its message beside that field until it is edited.
  */
@@ -149,6 +150,49 @@ function CouponEditor({ coupon, currencies }: { coupon?: Coupon; currencies: Cur
         currencies={currencies}
         errors={fieldErrors}
       />
+
+      <section className="panel" aria-labelledby={`${id}-limits`}>
+        <h2 id={`${id}-limits`}>Usage limits</h2>
+        {coupon && (
+          <p className="muted">
+            {coupon.redemptions} {coupon.redemptions === 1 ? 'redemption' : 'redemptions'}, {coupon.holds}{' '}
+            {coupon.holds === 1 ? 'Checkout Session holding it' : 'Checkout Sessions holding it'} now.
+          </p>
+        )}
+        <div className="form-grid">
+          <label className="field">
+            Usage limit
+            <Input
+              value={form.usageLimit}
+              onChange={(e) => {
+                setForm({ ...form, usageLimit: e.target.value })
+                clearError('usageLimit')
+              }}
+              inputMode="numeric"
+              {...field('usageLimit')}
+            />
+            <span className="hint">Redemptions in all, such as 100 for the first hundred. Blank for no limit.</span>
+            <FieldError id={errorId('usageLimit')} message={errors.usageLimit} />
+          </label>
+          <label className="field">
+            Per-Customer limit
+            <Input
+              value={form.perCustomerLimit}
+              onChange={(e) => {
+                setForm({ ...form, perCustomerLimit: e.target.value })
+                clearError('perCustomerLimit')
+              }}
+              inputMode="numeric"
+              {...field('perCustomerLimit')}
+            />
+            <span className="hint">Redemptions by each Customer, such as 1 for once each. Blank for no limit.</span>
+            <FieldError id={errorId('perCustomerLimit')} message={errors.perCustomerLimit} />
+          </label>
+        </div>
+        <p className="hint">
+          Lowering a limit keeps the uses Checkout Sessions already hold; raising it lets the Coupon apply again.
+        </p>
+      </section>
 
       <div className="form-actions">
         <Button type="submit" variant="primary" loading={save.isPending}>

@@ -196,6 +196,35 @@ class EvaluateDiscountApiTest extends PromotionsApiTest {
   }
 
   @Test
+  void aWindowRunsFromValidFromUpToButNotIncludingValidUntilInUtcToTheSecond() {
+    var year = inYear(2212);
+    created(coupon(year, "EVAL-EDGE", 10, null));
+    var edge = createdCampaign(campaign(year, "Edge 20", 2212_10, 20, "[]"));
+    // Other tests' Campaigns may run then too.
+    var edgeCampaign = "$.discounts[?(@.campaignId == '%s')]".formatted(edge);
+
+    time.set(Instant.parse("2211-12-31T23:59:59Z"));
+    expectRejected(evaluateLines(lines(PHONE), "EVAL-EDGE"), "notYetValid");
+    evaluateLines(lines(PHONE), null).expectBody().jsonPath(edgeCampaign).isEmpty();
+
+    for (var inside : new String[] {"2212-01-01T00:00:00Z", "2212-12-31T23:59:59Z"}) {
+      time.set(Instant.parse(inside));
+      evaluateLines(lines(PHONE), "EVAL-EDGE")
+          .expectStatus()
+          .isOk()
+          .expectBody()
+          .jsonPath(edgeCampaign + ".campaignName")
+          .isEqualTo("Edge 20")
+          .jsonPath("$.discounts[-1:].couponCode")
+          .isEqualTo("EVAL-EDGE");
+    }
+
+    time.set(Instant.parse("2213-01-01T00:00:00Z"));
+    expectRejected(evaluateLines(lines(PHONE), "EVAL-EDGE"), "expired");
+    evaluateLines(lines(PHONE), null).expectBody().jsonPath(edgeCampaign).isEmpty();
+  }
+
+  @Test
   void aFixedAmountOrMinimumInAnotherCurrencyIsACurrencyMismatch() {
     var year = inYear(2210);
     created(

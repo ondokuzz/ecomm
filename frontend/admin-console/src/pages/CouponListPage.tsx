@@ -4,16 +4,24 @@ import { useCoupons, useDeleteCoupon, useSwitchCoupon } from '../api/coupons'
 import { useCurrencies } from '../api/currencies'
 import { PromotionsNav } from '../components/PromotionsNav'
 import { ErrorMessage, SkeletonRows } from '../components/Status'
-import { Badge } from '../components/ui/Badge'
+import { Badge, type Tone } from '../components/ui/Badge'
 import { Button, ButtonLink } from '../components/ui/Button'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { Icon } from '../components/ui/Icon'
-import type { Coupon } from '../domain/coupon'
+import { type Coupon, type CouponState, describeUse } from '../domain/coupon'
 import { formatMoney } from '../domain/money'
 import { describeDiscount, describeWindow } from '../domain/promotion'
 import type { SavedState } from './CategoryListPage'
 
-const columns = 6
+const columns = 7
+
+const states: Record<CouponState, { label: string; tone: Tone }> = {
+  active: { label: 'Active', tone: 'success' },
+  scheduled: { label: 'Scheduled', tone: 'info' },
+  expired: { label: 'Expired', tone: 'neutral' },
+  off: { label: 'Off', tone: 'warning' },
+  exhausted: { label: 'Exhausted', tone: 'danger' },
+}
 
 export function CouponListPage() {
   const coupons = useCoupons()
@@ -61,7 +69,8 @@ export function CouponListPage() {
       </div>
       <PromotionsNav />
       <p className="muted page-intro">
-        A Coupon is a code a Customer enters at checkout for a Discount. One Checkout Session takes one Coupon.
+        A Coupon is a code a Customer enters at checkout for a Discount. One Checkout Session takes one Coupon, and
+        holds one of its uses until it is paid or expires.
       </p>
 
       <div role="status">
@@ -93,7 +102,8 @@ export function CouponListPage() {
                 <th scope="col">Discount</th>
                 <th scope="col">Minimum</th>
                 <th scope="col">Valid</th>
-                <th scope="col">Status</th>
+                <th scope="col">Used</th>
+                <th scope="col">State</th>
                 <th scope="col">
                   <span className="visually-hidden">Actions</span>
                 </th>
@@ -124,7 +134,12 @@ export function CouponListPage() {
                       )}
                     </td>
                     <td>{describeWindow(coupon)}</td>
-                    <td>{coupon.active ? <Badge tone="success">On</Badge> : <Badge tone="warning">Off</Badge>}</td>
+                    <td>{describeUse(coupon)}</td>
+                    <td>
+                      <Badge tone={states[coupon.state].tone} dot>
+                        {states[coupon.state].label}
+                      </Badge>
+                    </td>
                     <td className="actions">
                       <Button
                         variant="ghost"

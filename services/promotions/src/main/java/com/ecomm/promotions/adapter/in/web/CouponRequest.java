@@ -5,7 +5,8 @@ import com.ecomm.promotions.domain.InvalidPromotionException;
 
 /**
  * A Coupon as Staff send it: {@code {"code", "discount", "minimumSubtotal", "validFrom",
- * "validUntil", "active"}}, with {@code minimumSubtotal} optional. On update the code comes from
+ * "validUntil", "active", "usageLimit", "perCustomerLimit"}}, with {@code minimumSubtotal} and both
+ * Usage limits optional: a Coupon without them is used without limit. On update the code comes from
  * the path and may be left out here. The values are taken raw so that nothing is coerced.
  */
 record CouponRequest(
@@ -14,7 +15,9 @@ record CouponRequest(
     Amount minimumSubtotal,
     Object validFrom,
     Object validUntil,
-    Object active) {
+    Object active,
+    Object usageLimit,
+    Object perCustomerLimit) {
 
   Coupon toCoupon() {
     if (!(code instanceof String text)) {
@@ -37,6 +40,14 @@ record CouponRequest(
     var minimum = minimumSubtotal == null ? null : minimumSubtotal.toMoney("minimumSubtotal");
     var from = Fields.instant("validFrom", validFrom);
     var until = Fields.instant("validUntil", validUntil);
-    return new Coupon(code, rule, minimum, from, until, Fields.bool("active", active));
+    return new Coupon(
+        code,
+        rule,
+        minimum,
+        from,
+        until,
+        Fields.bool("active", active),
+        Fields.optionalInteger("usageLimit", usageLimit),
+        Fields.optionalInteger("perCustomerLimit", perCustomerLimit));
   }
 }

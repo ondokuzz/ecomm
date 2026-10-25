@@ -12,6 +12,7 @@ import com.ecomm.orchestration.application.port.out.OrderActivities;
 import com.ecomm.orchestration.application.port.out.OrderActivities.PlacedOrder;
 import com.ecomm.orchestration.application.port.out.PaymentActivities;
 import com.ecomm.orchestration.application.port.out.PaymentActivities.Authorization;
+import com.ecomm.orchestration.application.port.out.PromotionsActivities;
 import com.ecomm.orchestration.application.port.out.Refusals;
 import io.temporal.activity.ActivityOptions;
 import io.temporal.common.RetryOptions;
@@ -34,7 +35,8 @@ import org.slf4j.MDC;
  * <p>Up to the commit, a step that fails for good undoes what came before it: the Order is
  * cancelled, and an authorized Payment voided. Once the Stock is committed nothing is undone: the
  * Order is marked paid however long that takes, and the outcome is {@code PAID} from then on, kept
- * in the memo as {@value #OUTCOME_MEMO} while the Cart is cleared and the session ended.
+ * in the memo as {@value #OUTCOME_MEMO} while the session's Coupon, if any, is redeemed, however
+ * long that takes, and the Cart is cleared and the session ended.
  */
 public class CheckoutSaga implements CheckoutWorkflow {
 
@@ -47,6 +49,12 @@ public class CheckoutSaga implements CheckoutWorkflow {
    * Workflow#DEFAULT_VERSION}; every other run records version 1 and takes the new one.
    */
   static final String SHIPPING_ON_ORDERS = "shipping-on-orders";
+
+  /**
+   * The change ID of redeeming the Coupon once the Order is paid (Sprint 6). A run past that point
+   * before the change replays without redeeming; every other run records version 1 and redeems.
+   */
+  static final String COUPON_REDEMPTION = "coupon-redemption";
 
   private static final Logger log = Workflow.getLogger(CheckoutSaga.class);
 
@@ -107,7 +115,10 @@ public class CheckoutSaga implements CheckoutWorkflow {
                   .build())
           .build();
 
-  /** Marking the Order paid and the compensations: retried until they succeed, refusals too. */
+  /**
+   * Marking the Order paid, redeeming its Coupon and the compensations: retried until they succeed,
+   * refusals too.
+   */
   private static final ActivityOptions UNTIL_DONE =
       ActivityOptions.newBuilder()
           .setStartToCloseTimeout(ATTEMPT)
@@ -135,6 +146,8 @@ public class CheckoutSaga implements CheckoutWorkflow {
       Workflow.newActivityStub(PaymentActivities.class, UNTIL_DONE);
   private final InventoryActivities inventoryForAMinute =
       Workflow.newActivityStub(InventoryActivities.class, TRANSIENT_FOR_A_MINUTE);
+  private final PromotionsActivities promotionsUntilDone =
+      Workflow.newActivityStub(PromotionsActivities.class, UNTIL_DONE);
   private final CartActivities cart = Workflow.newActivityStub(CartActivities.class, FOR_AN_HOUR);
   private final CheckoutSessionActivities sessions =
       Workflow.newActivityStub(CheckoutSessionActivities.class, FOR_AN_HOUR);
@@ -214,6 +227,21 @@ public class CheckoutSaga implements CheckoutWorkflow {
     var paid = new CheckoutOutcome(Status.PAID, orderId, null);
     Workflow.upsertMemo(Map.of(OUTCOME_MEMO, paid));
     count("checkout_workflows", "outcome", Status.PAID.name());
+
+    // After the Order is paid, so Promotions being down never keeps the Customer from PAID. The
+    // session's hold becomes a redemption, or, if it lapsed meanwhile, one is recorded anyway.
+    var redeems =
+        Workflow.getVersion(COUPON_REDEMPTION, Workflow.DEFAULT_VERSION, 1)
+            != Workflow.DEFAULT_VERSION;
+    var couponCode =
+        request.discounts().stream()
+            .filter(d -> "COUPON".equals(d.source()))
+            .map(CheckoutRequest.Discount::couponCode)
+            .findFirst();
+    if (redeems && couponCode.isPresent()) {
+      promotionsUntilDone.redeemCoupon(
+          customerId, request.checkoutSessionId(), couponCode.orElseThrow());
+    }
 
     try {
       cart.clearCart(customerId);

@@ -18,6 +18,7 @@ import static com.github.tomakehurst.wiremock.stubbing.Scenario.STARTED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
+import com.ecomm.orchestration.application.CheckoutSaga;
 import com.ecomm.orchestration.application.port.in.CheckoutOutcome;
 import com.ecomm.orchestration.application.port.in.CheckoutRequest;
 import com.ecomm.orchestration.application.port.in.CheckoutRequest.Amount;
@@ -32,6 +33,8 @@ import com.github.tomakehurst.wiremock.verification.LoggedRequest;
 import io.temporal.client.WorkflowClient;
 import io.temporal.client.WorkflowOptions;
 import io.temporal.client.WorkflowStub;
+import io.temporal.testing.WorkflowReplayer;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Comparator;
 import java.util.List;
@@ -45,8 +48,9 @@ import org.springframework.test.web.servlet.client.RestTestClient;
 
 /**
  * The checkout Saga, run on the {@code checkout} task queue with its real activities, which call
- * WireMock stubs of Order Management, Payment, Inventory, Cart and Checkout with Orchestration's
- * own token. Retries' backoffs are skipped, so a step retried for minutes takes moments here.
+ * WireMock stubs of Order Management, Payment, Inventory, Promotions, Cart and Checkout with
+ * Orchestration's own token. Retries' backoffs are skipped, so a step retried for minutes takes
+ * moments here.
  */
 class CheckoutWorkflowTest extends OrchestrationTest {
 
@@ -86,8 +90,81 @@ class CheckoutWorkflowTest extends OrchestrationTest {
             "POST /payments",
             "POST " + COMMIT,
             "PATCH " + STATUS,
+            "POST /redemptions",
             "POST /carts/clear",
             "POST /checkout/sessions/" + sessionId + "/end");
+  }
+
+  @Test
+  void theCouponIsRedeemedForTheSessionOnceTheReservationIsCommitted() {
+    stubEveryStep();
+
+    checkout();
+
+    DOWNSTREAM.verify(
+        postRequestedFor(urlEqualTo("/redemptions"))
+            .withHeader("Authorization", equalTo("Bearer orchestration-token"))
+            .withRequestBody(
+                equalToJson(
+                    """
+                    {"sessionId": "%s", "customerId": "customer-42", "couponCode": "WELCOME10"}
+                    """
+                        .formatted(sessionId))));
+  }
+
+  @Test
+  void aSessionWithoutACouponCallsPromotionsNotAtAll() {
+    stubEveryStep();
+
+    var stub =
+        temporal.newUntypedWorkflowStub(
+            "checkout",
+            WorkflowOptions.newBuilder().setTaskQueue("checkout").setWorkflowId(sessionId).build());
+    var campaignsOnly =
+        new CheckoutRequest(
+            sessionId,
+            CUSTOMER_ID,
+            List.of(new Line("PHN-PIXEL-9", 2, eur(79900))),
+            List.of(new Discount("CAMPAIGN", null, "c-1", "Audio week", eur(4185))),
+            eur(0),
+            ADDRESS,
+            EXPRESS,
+            RESERVATION_ID,
+            "tok_approve",
+            CORRELATION_ID);
+    stub.start(campaignsOnly);
+
+    assertThat(stub.getResult(CheckoutOutcome.class).status())
+        .isEqualTo(CheckoutOutcome.Status.PAID);
+    assertThat(calls()).doesNotContain("POST /redemptions");
+  }
+
+  @Test
+  void aRedemptionThatFailsIsRetriedUntilItSucceeds() {
+    stubEveryStep();
+    stubInSequence(
+        () -> post("/redemptions"), aResponse().withStatus(503), aResponse().withStatus(204));
+
+    var outcome = checkout();
+
+    assertThat(outcome.status()).isEqualTo(CheckoutOutcome.Status.PAID);
+    assertThat(calls()).filteredOn("POST /redemptions"::equals).hasSize(2);
+    assertThat(calls())
+        .endsWith("POST /carts/clear", "POST /checkout/sessions/" + sessionId + "/end");
+  }
+
+  @Test
+  void aRunRecordedBeforeCouponRedemptionReplaysWithoutRedeeming() throws Exception {
+    // A paid run with WELCOME10, recorded before the redeem step: replaying it takes the old path,
+    // or fails for a step its history doesn't have.
+    var history =
+        new String(
+            getClass()
+                .getResourceAsStream("/histories/checkout-before-coupon-redemption.json")
+                .readAllBytes(),
+            StandardCharsets.UTF_8);
+
+    WorkflowReplayer.replayWorkflowExecution(history, CheckoutSaga.class);
   }
 
   @Test
@@ -192,6 +269,7 @@ class CheckoutWorkflowTest extends OrchestrationTest {
             "GET " + READ_PAYMENT,
             "POST " + COMMIT,
             "PATCH " + STATUS,
+            "POST /redemptions",
             "POST /carts/clear",
             "POST /checkout/sessions/" + sessionId + "/end");
     DOWNSTREAM.verify(
@@ -556,6 +634,7 @@ class CheckoutWorkflowTest extends OrchestrationTest {
     DOWNSTREAM.stubFor(statusChange().willReturn(okJson("{\"id\": \"" + ORDER_ID + "\"}")));
     DOWNSTREAM.stubFor(post(VOID).willReturn(payment("VOIDED", null, 200)));
     DOWNSTREAM.stubFor(post("/carts/clear").willReturn(aResponse().withStatus(204)));
+    DOWNSTREAM.stubFor(post("/redemptions").willReturn(aResponse().withStatus(204)));
     DOWNSTREAM.stubFor(
         post(urlPathMatching("/checkout/sessions/[^/]+/end"))
             .willReturn(aResponse().withStatus(204)));

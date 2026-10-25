@@ -1,6 +1,9 @@
 package com.ecomm.promotions.domain;
 
-/** Why a Coupon doesn't apply to a subtotal, as the {@code reason} a client reads. */
+/**
+ * Why a Coupon doesn't apply to a subtotal, or can't be held for a Checkout Session, as the {@code
+ * reason} a client reads.
+ */
 public enum CouponRejection {
   /** No Coupon has the code. */
   UNKNOWN("unknown"),
@@ -13,7 +16,11 @@ public enum CouponRejection {
   /** The subtotal is less than its minimum. */
   BELOW_MINIMUM("belowMinimum"),
   /** Its fixed amount or its minimum is in another currency than the subtotal. */
-  CURRENCY_MISMATCH("currencyMismatch");
+  CURRENCY_MISMATCH("currencyMismatch"),
+  /** Its redemptions and live Redemption holds reach its {@code usageLimit}. */
+  EXHAUSTED("exhausted"),
+  /** The Customer's own redemptions and live holds reach its {@code perCustomerLimit}. */
+  ALREADY_REDEEMED("alreadyRedeemed");
 
   private final String reason;
 

@@ -39,8 +39,9 @@ ecomm:
         webhooks: [POST /webhooks/gateway]
       promotions:
         uri: http://localhost:8087
-        # Only Checkout evaluates Coupons, so nobody can probe codes from outside a checkout.
-        internal: [/discounts/**]
+        # Only Checkout evaluates Coupons, so nobody can probe codes from outside a checkout, and
+        # holds and releases them; only the checkout Saga redeems them.
+        internal: [/discounts/**, /redemptions/**]
       search-discovery:
         uri: http://localhost:8089
         public-reads: [/search]

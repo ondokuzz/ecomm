@@ -6,8 +6,9 @@ and testing conventions apply here. Data lives in the `promotions` database on t
 with the schema under Flyway ([`db/migration`](./src/main/resources/db/migration)).
 
 A Checkout Session gets every running Campaign it qualifies for by itself, and takes one Coupon on
-top ([Evaluation](#api)). Usage limits and redemption tracking arrive in Sprint 6 (see the
-[roadmap](../../docs/roadmap.md)).
+top ([Evaluation](#api)). A Coupon may have Usage limits: applying it holds one of its uses for
+the session, and the checkout Saga redeems it once the session is paid
+([Redemptions](#usage-limits-and-redemptions)).
 
 ## Coupons
 
@@ -20,15 +21,34 @@ A Coupon is:
 - an optional **`minimumSubtotal`** (`Money`, zero or more);
 - **`validFrom`** and **`validUntil`**, ISO 8601 instants: it is valid from `validFrom` up to, but
   not including, `validUntil`, which must be later;
-- **`active`**: whether Staff have it switched on.
+- **`active`**: whether Staff have it switched on;
+- an optional **`usageLimit`**, the most Coupon redemptions it may have in all, and an optional
+  **`perCustomerLimit`**, the most each Customer may redeem it: whole numbers, at least 1. Without
+  them it is used without limit, as every Coupon from before Sprint 6 is.
+
+Each Coupon is answered with its **`redemptions`**, its live Redemption **`holds`** and its
+**`state`** at Promotions' clock:
+
+| `state` | When |
+|---|---|
+| `off` | it isn't `active`, whatever its window |
+| `scheduled` | it is active, before `validFrom` |
+| `expired` | it is active, at `validUntil` or later |
+| `exhausted` | it is active and within its window, but its redemptions and live holds reach `usageLimit` |
+| `active` | otherwise: it applies |
 
 ```json
 {"code": "SPRING25",
  "discount": {"type": "AMOUNT_OFF", "percentOff": null,
               "amountOff": {"amountMinor": 2500, "currency": "EUR"}},
  "minimumSubtotal": {"amountMinor": 10000, "currency": "EUR"},
- "validFrom": "2026-03-01T00:00:00Z", "validUntil": "2026-06-01T00:00:00Z", "active": true}
+ "validFrom": "2026-03-01T00:00:00Z", "validUntil": "2026-06-01T00:00:00Z", "active": true,
+ "usageLimit": 100, "perCustomerLimit": 1, "redemptions": 40, "holds": 2, "state": "active"}
 ```
+
+A validity window is `[validFrom, validUntil)` in UTC, to the second: a Coupon valid until
+`2027-01-01T00:00:00Z` applies at `2026-12-31T23:59:59Z` and is `expired` a second later. Campaigns'
+windows are the same.
 
 ### Discount rules
 
@@ -51,6 +71,38 @@ Otherwise its Discount is:
 - either way, never more than the subtotal, so it can bring a total to zero but not below.
 
 A `PERCENT_OFF` Coupon applies to a subtotal in any currency, unless its minimum is in another one.
+
+### Usage limits and redemptions
+
+A Checkout Session holds one use of its Coupon while it lasts, and redeems it once it is paid.
+Both are internal, keyed by the session's ID, and the gateway never routes them:
+
+| Endpoint | Called by | |
+|---|---|---|
+| `POST /redemptions/holds` | Checkout | `{"sessionId", "customerId", "couponCode", "expiresAt"}`: holds a use of the Coupon for the session until `expiresAt`, the session's own expiry, in place of any Coupon it held; 204 |
+| `DELETE /redemptions/holds/{sessionId}` | Checkout | Releases the session's hold; 204 whether or not it had one |
+| `POST /redemptions` | Orchestration | `{"sessionId", "customerId", "couponCode"}`: redeems the Coupon for the paid session; 204 |
+
+- **Holding.** The Coupon's redemptions plus its live holds, by every other session, are weighed
+  against its limits, the Coupon locked meanwhile so two sessions can't both take its last use. A
+  hold is refused as a 422 with `reason` `exhausted` when they reach `usageLimit`, or else
+  `alreadyRedeemed` when the Customer's own reach `perCustomerLimit`, and `unknown` when there is no
+  such Coupon. A refusal leaves the session's hold as it was. Holding again for the same session
+  doesn't count its own hold, and holding another Coupon for it releases the first. Holding checks
+  only the limits; whether the Coupon applies at all is evaluation's to say.
+- **Lapsing.** A hold counts until its `expiresAt` and nothing from then on, so a session that
+  expires unpaid frees its use by itself.
+- **Redeeming.** The session's hold becomes a redemption. With no hold, from a session priced before
+  Usage limits or one whose hold lapsed while its Saga ran, the redemption is recorded anyway, since
+  paying honours the Discount the session was priced with, as it does for a Coupon that has since
+  expired, been switched off, been used up or been deleted. **So `redemptions` can pass
+  `usageLimit`** by the Sagas that ran past their hold. A session redeems once however often it is
+  asked, and redeeming is never refused, so the Saga's retries always end.
+- **Changing limits.** Lowering a limit below what is already used keeps every hold and redemption
+  made and refuses new holds; raising it lets the Coupon be held again. A redemption is never given
+  back, even when the Order is later `Cancelled` or `Returned`.
+- **Deleting** a Coupon deletes its holds but keeps its redemptions, so a code made again still
+  counts them: a "once per Customer" Coupon can't be reset by deleting it.
 
 ## Campaigns
 
@@ -109,7 +161,7 @@ and so gives both a fresh year.
 
 | Endpoint | Called by | |
 |---|---|---|
-| `GET /coupons` | Staff | Every Coupon, by code |
+| `GET /coupons` | Staff | Every Coupon, by code, each with its `redemptions`, `holds` and `state` |
 | `POST /coupons` | Staff | Creates a Coupon; 201 with it and its URL in `Location`; 409 when the code is taken, in any case |
 | `GET /coupons/{code}` | Staff | The Coupon; 404 for an unknown code |
 | `PUT /coupons/{code}` | Staff | Replaces every field but the code, which the body may leave out or repeat in any case; 404 for an unknown code |
@@ -120,8 +172,11 @@ and so gives both a fresh year.
 | `PUT /campaigns/{id}` | Staff | Replaces every field but the ID; 404 for an unknown ID |
 | `DELETE /campaigns/{id}` | Staff | 204; 404 for an unknown ID |
 | `POST /discounts/evaluate` | Checkout | Every Discount a Checkout Session's lines are due: the running Campaigns', then a Coupon's |
+| `POST /redemptions/holds`, `DELETE /redemptions/holds/{sessionId}` | Checkout | A session's Redemption hold ([above](#usage-limits-and-redemptions)) |
+| `POST /redemptions` | Orchestration | A paid session's Coupon redemption |
 
-Coupons and Campaigns are Staff-only: a `CUSTOMER` or `CHECKOUT` token gets 403, no token 401. Staff
+Coupons and Campaigns are Staff-only: a `CUSTOMER` or `CHECKOUT` token gets 403, no token 401. Only
+`CHECKOUT` may hold and release, and only `ORCHESTRATION` redeem; any other token gets 403. Staff
 manage both in the [Admin Console](../../frontend/admin-console/README.md#promotions).
 
 ### Errors
@@ -139,7 +194,9 @@ A field is named by its path in the JSON: `name`, `code`, `discount`, `discount.
 `discount.percentOff`, `discount.amountOff`, `discount.amountOff.amountMinor`,
 `discount.amountOff.currency`, `categories`, `categories[1]`, `minimumSubtotal`,
 `minimumSubtotal.amountMinor`, `minimumSubtotal.currency`, `validFrom`, `validUntil`, `active`,
-`priority`, `couponCode`, `lines`, or a line's field such as `lines[1].quantity`. A Campaign's Category Catalog doesn't have, or the same
+`priority`, `usageLimit`, `perCustomerLimit`, `couponCode`, `lines`, or a line's field such as
+`lines[1].quantity`; for holds and redemptions, `sessionId`, `customerId`, `couponCode` and
+`expiresAt`. A Campaign's Category Catalog doesn't have, or the same
 Category twice, is `categories[i]`, by its place in the list sent. A priority another Campaign has is
 `priority`. The first field at fault is named.
 
@@ -200,9 +257,21 @@ docker compose up -d --build promotions   # from the repo root; listens on local
 
 That host port bypasses the API gateway, for development only. Through the gateway, Staff reach
 `/api/promotions/coupons` and `/api/promotions/campaigns`, and `/api/promotions/discounts/evaluate`
-is a 404. Outside Docker, Promotions finds Catalog on its host port, 8081
+and `/api/promotions/redemptions/**` are 404s. Outside Docker, Promotions finds Catalog on its host port, 8081
 (`ecomm.promotions.catalog-url`).
 
 Since Sprint 5 its database password is a Compose secret, mounted as the file
 `spring.datasource.password` (see the root README's "Secrets"); `application.yml` has none. Outside
 Docker, give it as `SPRING_DATASOURCE_PASSWORD="$(cat .secrets/ecomm/postgres-password)"`.
+
+## Tests
+
+`./gradlew :services:promotions:check`. The application runs against Postgres in Testcontainers,
+with WireMock standing in for Catalog and a clock the tests set (`TimeSource`). `RedemptionApiTest`
+covers holds against each limit, `exhausted` and `alreadyRedeemed`, holding again or another
+Coupon for the same session, a lapsed hold freeing its use, release, redeeming with and without a
+hold and once per session, a Coupon ended or switched off while held still redeemed, lowering and
+raising limits, Coupon state, deleting a Coupon keeping its redemptions, and who may call what.
+`EvaluateDiscountApiTest` pins the window's edges to the second. `CouponLimitsTest` is pure JUnit
+for the limit and hold arithmetic and Coupon state, a deliberate exception to testing at the HTTP
+seam, as `DiscountStackingTest` and `DiscountCalculationTest` are for the Discounts.

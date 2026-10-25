@@ -78,8 +78,9 @@ signed in as `staff@ecomm.local` / `staff`; the demo Customer is refused there. 
    Status history with each change's time and caller, and its Payments with their Payment
    transactions: each authorization and void, with its outcome, amount, gateway reference and time.
    Nothing there changes an Order or a Payment;
-2. under **Promotions**, manage Coupons, and Campaigns with their state (running, scheduled, over
-   or off). A Campaign created there, say 20% off `laptops`, applies to the next Checkout Session
+2. under **Promotions**, manage Coupons, with their Usage limits, redemptions, holds and state
+   (active, scheduled, expired, off or exhausted), and Campaigns with their state (running,
+   scheduled, over or off). A Campaign created there, say 20% off `laptops`, applies to the next Checkout Session
    with a laptop in it;
 3. create and edit Products with their Variants, Prices and Stock, and Categories with their
    attribute definitions. A new Product, or a changed Price, shows in the Storefront's listing within

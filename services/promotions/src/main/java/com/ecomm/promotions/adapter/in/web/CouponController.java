@@ -37,6 +37,7 @@ class CouponController {
     this.coupons = coupons;
   }
 
+  /** Every Coupon by code, each with its redemptions, live holds and state now. */
   @GetMapping
   List<CouponResponse> coupons() {
     return coupons.coupons().stream().map(CouponResponse::of).toList();
@@ -53,22 +54,23 @@ class CouponController {
   /** 201 with the Coupon, its code upper-cased, and its URL in {@code Location}. */
   @PostMapping
   ResponseEntity<CouponResponse> create(@RequestBody CouponRequest request) {
-    var coupon = coupons.create(request.toCoupon());
+    var view = coupons.create(request.toCoupon());
+    var coupon = view.coupon();
     log.info("Created Coupon {}", coupon.code());
     var location =
         UriComponentsBuilder.fromPath("/coupons/{code}")
             .buildAndExpand(coupon.code())
             .encode()
             .toUri();
-    return ResponseEntity.created(location).body(CouponResponse.of(coupon));
+    return ResponseEntity.created(location).body(CouponResponse.of(view));
   }
 
   /** Replaces every field of the Coupon but its code. */
   @PutMapping("/{code}")
   CouponResponse update(@PathVariable String code, @RequestBody CouponRequest request) {
-    var coupon = coupons.update(request.toCouponWithCode(code));
-    log.info("Updated Coupon {}", coupon.code());
-    return CouponResponse.of(coupon);
+    var view = coupons.update(request.toCouponWithCode(code));
+    log.info("Updated Coupon {}", view.coupon().code());
+    return CouponResponse.of(view);
   }
 
   @DeleteMapping("/{code}")

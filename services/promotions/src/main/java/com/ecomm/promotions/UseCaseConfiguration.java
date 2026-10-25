@@ -3,10 +3,13 @@ package com.ecomm.promotions;
 import com.ecomm.promotions.application.CampaignService;
 import com.ecomm.promotions.application.CouponService;
 import com.ecomm.promotions.application.DiscountService;
+import com.ecomm.promotions.application.RedemptionService;
 import com.ecomm.promotions.application.port.out.CampaignRepository;
 import com.ecomm.promotions.application.port.out.CatalogPort;
 import com.ecomm.promotions.application.port.out.CouponRepository;
+import com.ecomm.promotions.application.port.out.RedemptionRepository;
 import com.ecomm.promotions.application.port.out.TimeSource;
+import com.ecomm.promotions.application.port.out.Transactions;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -19,8 +22,19 @@ class UseCaseConfiguration {
 
   /** Serves managing Coupons. */
   @Bean
-  CouponService couponService(CouponRepository coupons, TimeSource time) {
-    return new CouponService(coupons, time);
+  CouponService couponService(
+      CouponRepository coupons, RedemptionRepository redemptions, TimeSource time) {
+    return new CouponService(coupons, redemptions, time);
+  }
+
+  /** Serves holding and redeeming Coupons. */
+  @Bean
+  RedemptionService redemptionService(
+      CouponRepository coupons,
+      RedemptionRepository redemptions,
+      Transactions transactions,
+      TimeSource time) {
+    return new RedemptionService(coupons, redemptions, transactions, time);
   }
 
   /** Serves evaluating every Discount a Checkout Session is due. */

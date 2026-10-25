@@ -8,6 +8,7 @@ import com.ecomm.checkoutpricing.domain.PricedCart;
 import com.ecomm.checkoutpricing.domain.PricedLine;
 import com.ecomm.commons.money.Money;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -18,10 +19,10 @@ import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 /**
- * Promotions' internal {@code POST /discounts/evaluate}, called with Checkout's token. A Coupon
- * that doesn't apply is a 422 whose problem detail says why in its {@code reason}. An answer that
- * couldn't be right, such as Discounts worth more than the lines or a Coupon's Discount that wasn't
- * asked for, is a downstream failure, never kept.
+ * Promotions' internal {@code POST /discounts/evaluate} and {@code /redemptions/holds}, called with
+ * Checkout's token. A Coupon that doesn't apply, or can't be held, is a 422 whose problem detail
+ * says why in its {@code reason}. An answer that couldn't be right, such as Discounts worth more
+ * than the lines or a Coupon's Discount that wasn't asked for, is a downstream failure, never kept.
  */
 @Component
 class PromotionsClient implements PromotionsPort {
@@ -47,6 +48,9 @@ class PromotionsClient implements PromotionsPort {
   }
 
   private record AnswerBody(List<DiscountBody> discounts) {}
+
+  private record HoldBody(
+      String sessionId, String customerId, String couponCode, Instant expiresAt) {}
 
   private record DiscountBody(
       String source, String couponCode, String campaignId, String campaignName, Amount amount) {}
@@ -84,6 +88,31 @@ class PromotionsClient implements PromotionsPort {
       throw new DownstreamFailureException("Promotions answered no Discounts", null);
     }
     return checked(answer.discounts(), lines, couponCode.isPresent());
+  }
+
+  @Override
+  public void hold(String sessionId, String customerId, String couponCode, Instant expiresAt) {
+    var body = new HoldBody(sessionId, customerId, couponCode, expiresAt);
+    Downstream.run(
+        "Promotions",
+        () -> {
+          try {
+            http.post().uri("/redemptions/holds").body(body).retrieve().toBodilessEntity();
+          } catch (HttpClientErrorException.UnprocessableContent e) {
+            throw new CouponNotApplicableException(reason(e));
+          }
+        });
+  }
+
+  @Override
+  public void release(String sessionId) {
+    Downstream.run(
+        "Promotions",
+        () ->
+            http.delete()
+                .uri("/redemptions/holds/{sessionId}", sessionId)
+                .retrieve()
+                .toBodilessEntity());
   }
 
   /**

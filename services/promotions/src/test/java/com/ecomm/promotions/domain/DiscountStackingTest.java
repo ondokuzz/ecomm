@@ -360,7 +360,7 @@ class DiscountStackingTest {
   }
 
   private static Coupon coupon(String code, DiscountRule rule, Money minimum) {
-    return new Coupon(code, rule, minimum, FROM, UNTIL, true);
+    return new Coupon(code, rule, minimum, FROM, UNTIL, true, null, null);
   }
 
   private static DiscountRule percent(int percent) {

@@ -9,12 +9,23 @@ describe('couponRejection', () => {
     ['expired', 'That code has expired.'],
     ['belowMinimum', "Your order doesn't reach that code's minimum spend yet."],
     ['currencyMismatch', "That code can't be used with this order's currency."],
+    ['exhausted', 'That code has been used up.'],
+    ['alreadyRedeemed', "You've already used that code as often as it allows."],
   ])('says why a %s Coupon does not apply', (reason, message) => {
     expect(couponRejection(422, { reason })).toEqual({ reason, message })
   })
 
   it('gives each reason its own message', () => {
-    const reasons = ['unknown', 'inactive', 'notYetValid', 'expired', 'belowMinimum', 'currencyMismatch']
+    const reasons = [
+      'unknown',
+      'inactive',
+      'notYetValid',
+      'expired',
+      'belowMinimum',
+      'currencyMismatch',
+      'exhausted',
+      'alreadyRedeemed',
+    ]
     const messages = reasons.map((reason) => couponRejection(422, { reason })?.message)
     expect(new Set(messages).size).toBe(reasons.length)
   })

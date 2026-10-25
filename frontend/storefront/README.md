@@ -359,8 +359,9 @@ session it answers with replaces the one shown, so the Discount lines, the total
 follow at once. A running Campaign's Discount is there from the start, with no code; applying or
 removing a Coupon brings the Campaigns' up to date too. A code that doesn't apply (422) says why next to the field, one message per
 Promotions `reason` (`couponRejection` in [`src/domain/coupon.ts`](./src/domain/coupon.ts)):
-`unknown`, `inactive`, `notYetValid`, `expired`, `belowMinimum` and `currencyMismatch`, with a
-general one for a reason it doesn't know. The session keeps whatever Coupon it had. Once one is
+`unknown`, `inactive`, `notYetValid`, `expired`, `belowMinimum` and `currencyMismatch`, and, since
+Sprint 6, `exhausted` ("That code has been used up.") and `alreadyRedeemed` for a Coupon whose
+Usage limits are reached, with a general one for a reason it doesn't know. The session keeps whatever Coupon it had. Once one is
 applied, the field shows its code with "Remove", which takes it off, leaving the Campaigns'
 Discounts. Typing clears the message;
 Pay waits while a Coupon is being applied, and the Coupon field while a payment is in flight. The
@@ -510,7 +511,10 @@ the parcel", and once they receive and accept it, the RMA turns Refunded by itse
 Payment shows "Refunded for RMA-…" and is Partly refunded (Shipping isn't refunded), and the Order
 Returned. Another opens Notification preferences from the account menu, sees email on and the rest
 off, has a mobile number without its country code refused beside the field, saves one with text
-messages on, and reads them back after a reload. The error-states test
+messages on, and reads them back after a reload. Another creates a Coupon with one use as Staff,
+has a second Customer of its own apply it to their Checkout Session through the gateway, so that
+session holds its use, and is told "That code has been used up." when applying it at checkout,
+deleting the second Customer and the Coupon after. The error-states test
 ([`e2e/error-states.spec.ts`](./e2e/error-states.spec.ts)) opens unknown route, Product and Order
 addresses and sees the Not Found page, answers the Product list with a 500 and sees the panel's
 reference and "Try again" recover, fails the Product page's Stock lookup and sees it say so with its

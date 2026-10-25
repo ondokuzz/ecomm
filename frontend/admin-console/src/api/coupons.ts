@@ -1,11 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from 'react-oidc-context'
-import { type Coupon, switched } from '../domain/coupon'
+import { type Coupon, type CouponRequest, switched } from '../domain/coupon'
 import { api } from './http'
 
 const couponsKey = ['coupons'] as const
 
-/** Every Coupon, by code. Staff only, so the token goes with every read too. */
+/** Every Coupon, by code, with its use and state now. Staff only, so the token goes with every read too. */
 export function useCoupons() {
   const token = useAuth().user?.access_token
   return useQuery({
@@ -28,7 +28,7 @@ export function useSaveCoupon(code: string | undefined) {
   const token = useAuth().user?.access_token
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (coupon: Coupon) =>
+    mutationFn: (coupon: CouponRequest) =>
       code === undefined
         ? api<Coupon>('promotions', '/coupons', { method: 'POST', body: coupon, token })
         : api<Coupon>('promotions', `/coupons/${encodeURIComponent(code)}`, { method: 'PUT', body: coupon, token }),

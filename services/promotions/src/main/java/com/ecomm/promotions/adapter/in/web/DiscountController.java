@@ -9,7 +9,6 @@ import java.util.Currency;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -58,10 +57,7 @@ class DiscountController {
   @ExceptionHandler(CouponNotApplicableException.class)
   ProblemDetail notApplicable(CouponNotApplicableException e) {
     log.info("Coupon rejected: {}", e.rejection().reason());
-    var problem =
-        ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, e.getMessage());
-    problem.setProperty("reason", e.rejection().reason());
-    return problem;
+    return Problems.notApplicable(e);
   }
 
   @ExceptionHandler(InvalidPromotionException.class)

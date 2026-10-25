@@ -66,8 +66,8 @@ Its `total` is the `subtotal`, less every Discount, plus the `tax`:
 3. ask Promotions for every Discount the lines are due with no Coupon: the running Campaigns'
    (`POST /discounts/evaluate`, with Checkout's own token), and work out the tax on the subtotal less
    them. This comes before any Stock is held, so a Promotions failure holds none;
-4. if the Customer already has a session, release its Reservation and drop it: a Customer has at
-   most one;
+4. if the Customer already has a session, release its Reservation, and its Coupon's Redemption hold
+   if it has a Coupon, and drop it: a Customer has at most one;
 5. reserve the Cart's Stock in Inventory (`POST /reservations`) until 2 minutes after the session
    expires, so a payment started in the session's last moments can still commit it;
 6. keep the session for 15 minutes, with the Reservation's ID, and return it.
@@ -88,24 +88,37 @@ out the tax again on the subtotal less every Discount, and keeps the session wit
 of its life: its `expiresAt` doesn't move. A session holds one Coupon, so applying another replaces
 the first.
 
+Before keeping it, Checkout asks Promotions to hold one of the Coupon's uses for the session until
+the session's `expiresAt` (`POST /redemptions/holds` with the session's ID, the Customer, the
+Coupon's upper-case code and `expiresAt`, with Checkout's own token), in place of any Coupon the
+session held ([Promotions](../promotions/README.md#usage-limits-and-redemptions)). So a Coupon whose
+Usage limits are reached is refused now, never after paying, and one the session holds stays its
+own while the session lasts, even if others use up the rest. The checkout Saga redeems it once the
+session is paid.
+
 Checkout checks Promotions' answer before keeping it: every Discount names a Campaign or a Coupon,
 is in the session's currency and not negative, together they come to no more than the subtotal, and
 a Coupon's comes last exactly when a Coupon was asked about. Anything else is a 502, and the session
 stays as it was.
 
 A Coupon that doesn't apply is a 422 whose `reason` is Promotions' own: `unknown`, `inactive`,
-`notYetValid`, `expired`, `belowMinimum` or `currencyMismatch`. The session is left as it was,
-with any Coupon it already had. A missing, blank or non-string `code`, or one past 64 characters,
+`notYetValid`, `expired`, `belowMinimum` or `currencyMismatch`; one that can't be held is a 422
+with `exhausted` (its Usage limit is reached) or `alreadyRedeemed` (the Customer's per-Customer
+limit is), new in Sprint 6. Either way the session is left as it was, with any Coupon it already had
+and that Coupon's hold. Promotions failing to hold is a 502, changing nothing. A missing, blank or non-string `code`, or one past 64 characters,
 is a 400 and never reaches Promotions.
 
 `DELETE /checkout/sessions/{id}/coupon` takes the Coupon off: it asks Promotions again with no
-Coupon, keeps the Campaigns' Discounts it answers, and works out the tax again. Both answer with the session, and, like paying, are a 410
+Coupon, releases the session's hold (`DELETE /redemptions/holds/{sessionId}`), keeps the Campaigns'
+Discounts it answers, and works out the tax again. A session without a Coupon releases nothing.
+Promotions failing to release is a 502, and the session keeps its Coupon. Both answer with the session, and, like paying, are a 410
 once the session has expired and a 404 for a session the Customer doesn't have, asking Promotions
 nothing.
 
 The Discounts are Promotions' answer when the session started or its Coupon last changed, and
-paying honours them just as it honours the session's Prices, even if a Campaign or the Coupon ends
-in the meantime.
+paying honours them just as it honours the session's Prices, even if a Campaign or the Coupon ends,
+is switched off or is used up in the meantime: paying asks Promotions nothing, so a Campaign that
+starts mid-session isn't added to the Order either. Changing the Coupon asks again, as above.
 
 ### Shipping
 
@@ -217,9 +230,9 @@ Every error is a problem detail.
 | 404 | No live session (`current`), paying or changing the Coupon or Shipping of one the Customer doesn't have, or reading the payment of one never paid or not theirs |
 | 409 | Starting: `unknownVariants`: Catalog no longer has these Variants. `outOfStock`: Inventory can't hold these. Also a Cart priced in more than one currency. Paying: `shippingIncomplete` |
 | 402 | Paying: the gateway declined the payment; `declineReason` gives its reason |
-| 422 | Applying a Coupon that doesn't apply; `reason` says why, as Promotions does. Setting a Shipping address: `invalidShippingAddress` with `errors`, or `undeliverableCountry`. Choosing an option: `shippingOptionNotQuoted` |
+| 422 | Applying a Coupon that doesn't apply, or can't be held (`exhausted`, `alreadyRedeemed`); `reason` says why, as Promotions does. Setting a Shipping address: `invalidShippingAddress` with `errors`, or `undeliverableCountry`. Choosing an option: `shippingOptionNotQuoted` |
 | 410 | Paying, or changing the Coupon of, a session that has expired. Paying, with `reason` `holdExpired`: the hold ran out during the Saga |
-| 502 | Starting or changing a Coupon: another service failed or answered unexpectedly, or Promotions answered Discounts that can't be right. Paying: the Saga failed |
+| 502 | Starting or changing a Coupon: another service failed or answered unexpectedly, Promotions answered Discounts that can't be right, or it couldn't hold or release the Coupon. Paying: the Saga failed |
 | 503 | Keycloak couldn't issue Checkout's own token, or, paying, Temporal can't be reached (`checkoutUnavailable`), or, setting a Shipping address, Fulfillment & Shipping can't quote (`shippingUnavailable`) |
 
 Starting a session changes nothing when it fails, except that a replaced session is gone and its
@@ -261,7 +274,7 @@ Checkout calls each service with the identity that service expects
 - **Catalog**: no token; reads are public.
 - **Inventory, Promotions, Fulfillment & Shipping**: Checkout's own token, from the confidential
   `checkout` client (client credentials, `CHECKOUT` role). The Customer goes in the body as
-  `customerId`, on `POST /reservations` and its release. `POST /discounts/evaluate` names no
+  `customerId`, on `POST /reservations` and its release, and on `POST /redemptions/holds`. `POST /discounts/evaluate` names no
   Customer: a Coupon applies the same to everyone, and neither does `POST /shipping/quotes`.
 
 Order Management, Payment, Inventory's commit, Cart's clear and Checkout's own end-session command
@@ -317,5 +330,10 @@ refused with field violations or `undeliverableCountry`, Fulfillment & Shipping'
 down (503, nothing changed), the request the quote sends, only quoted options chosen, the cost kept
 and untouched by Discounts, re-quoting on a new address, and Pay refused while incomplete;
 `SessionStorageApiTest` pays a session stored as Sprint 4 stored it once it is shipped.
+`SessionCouponHoldApiTest` covers applying a Coupon holding it for the session until its
+`expiresAt`, `exhausted` and `alreadyRedeemed` as 422s that change nothing, a Coupon that doesn't
+apply never held, replacing, removing and starting over releasing it, Promotions failing to hold or
+release, and a Campaign started, a Campaign ended and a Coupon expired mid-session leaving the paid
+session's Discounts as they were.
 `MockAddressValidatorTest` is pure JUnit for the mock validator's table of countries and postcode
 formats, a deliberate exception to testing at the HTTP seam.

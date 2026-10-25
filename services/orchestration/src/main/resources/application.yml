@@ -21,6 +21,7 @@ spring:
           - inventoryActivities
           - cartActivities
           - checkoutSessionActivities
+          - promotionsActivities
       - task-queue: fulfillment
         workflow-classes:
           - com.ecomm.orchestration.application.FulfillmentSaga
@@ -83,3 +84,4 @@ ecomm:
     checkout-pricing-url: http://localhost:8086
     fulfillment-shipping-url: http://localhost:8099
     returns-warranty-url: http://localhost:8100
+    promotions-url: http://localhost:8087

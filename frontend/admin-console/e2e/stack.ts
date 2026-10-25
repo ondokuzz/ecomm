@@ -16,14 +16,16 @@ export interface Customer {
 
 /**
  * Buys one unit of `variantId` as the Customer, through the gateway: Cart, Checkout Session,
- * Berlin, Standard, and pay with `paymentMethod`. A cold Saga may still be processing when the pay
- * call returns, so it asks for the session's payment until it is paid. Returns the Order ID.
+ * Berlin, Standard, `couponCode` if given, and pay with `paymentMethod`. A cold Saga may still be
+ * processing when the pay call returns, so it asks for the session's payment until it is paid.
+ * Returns the Order ID.
  */
 export async function buy(
   request: APIRequestContext,
   customer: Customer,
   variantId: string,
   paymentMethod: string,
+  couponCode?: string,
 ): Promise<string> {
   const headers = bearer(await tokenOf(request, password(customer)))
   const put = await request.put(`/api/cart/cart/items/${encodeURIComponent(variantId)}`, {
@@ -48,6 +50,9 @@ export async function buy(
   expect(
     (await request.put(`${session}/shipping-option`, { headers, data: { optionId: 'STANDARD' } })).ok(),
   ).toBeTruthy()
+  if (couponCode) {
+    expect((await request.put(`${session}/coupon`, { headers, data: { code: couponCode } })).ok()).toBeTruthy()
+  }
 
   const paid = await request.post(`${session}/pay`, { headers, data: { paymentMethod }, timeout: 60_000 })
   expect([200, 202]).toContain(paid.status())

@@ -3,7 +3,7 @@ package com.ecomm.checkoutpricing.domain;
 /**
  * Promotions found that a Coupon doesn't apply to the Checkout Session, for {@code reason}: {@code
  * unknown}, {@code inactive}, {@code notYetValid}, {@code expired}, {@code belowMinimum} or {@code
- * currencyMismatch}.
+ * currencyMismatch}; or that it can't be held for it, {@code exhausted} or {@code alreadyRedeemed}.
  */
 public class CouponNotApplicableException extends RuntimeException {
 

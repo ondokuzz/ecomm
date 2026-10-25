@@ -37,6 +37,8 @@ import { stackSecret } from './secrets'
  *   `Requested` with its Refund amount; once Staff approve, receive and accept it through the
  *   gateway, the RMA page shows where to send it, then `Refunded`, and the Order its Refund and
  *   `Returned` (Sprint 6).
+ * - A Coupon whose one use another Customer's Checkout Session holds is refused as used up when
+ *   applied (Sprint 6).
  */
 
 // The first checkout compares Stock before and after, so nothing else may check out meanwhile:
@@ -921,6 +923,58 @@ test.describe('Sprint 5', () => {
 })
 
 test.describe('Sprint 6', () => {
+  test('a Coupon another Customer’s Checkout Session holds the last use of is refused as used up', async ({
+    page,
+    request,
+  }) => {
+    const customer = signedUp()
+    const staffHeaders = { Authorization: `Bearer ${await tokenFor(request, staff)}` }
+    const code = `E2E-ONCE-${Date.now().toString(36)}`.toUpperCase()
+    const created = await request.post('/api/promotions/coupons', {
+      headers: staffHeaders,
+      data: {
+        code,
+        discount: { type: 'PERCENT_OFF', percentOff: 10 },
+        validFrom: '2026-01-01T00:00:00Z',
+        validUntil: '2100-01-01T00:00:00Z',
+        active: true,
+        usageLimit: 1,
+      },
+    })
+    expect(created.status()).toBe(201)
+    let other: Customer | undefined
+    try {
+      other = await createCustomer(request)
+      // The other Customer applies it first, and their session holds its one use.
+      const otherToken = await tokenFor(request, other)
+      const otherHeaders = { Authorization: `Bearer ${otherToken}` }
+      const phone = await aProductInStockIn(request, 'phones')
+      await putInCart(request, otherToken, phone.variantId)
+      const started = await request.post('/api/checkout-pricing/checkout/sessions', { headers: otherHeaders })
+      expect(started.status()).toBe(201)
+      const otherSession = ((await started.json()) as { id: string }).id
+      const applied = await request.put(`/api/checkout-pricing/checkout/sessions/${otherSession}/coupon`, {
+        headers: otherHeaders,
+        data: { code },
+      })
+      expect(applied.ok()).toBeTruthy()
+
+      await putInCart(request, await tokenFor(request, customer), phone.variantId)
+      await page.goto('/checkout')
+      await signInOnKeycloak(page, customer)
+      await expect(page.getByRole('timer', { name: 'Time left' })).toBeVisible()
+      const summary = page.getByRole('region', { name: 'Order summary' })
+      await summary.getByLabel('Coupon code').fill(code)
+      await summary.getByRole('button', { name: 'Apply' }).click()
+      await expect(summary.getByRole('alert')).toHaveText('That code has been used up.')
+      await expect(summary.getByText(`Coupon: ${code}`)).toBeHidden()
+    } finally {
+      if (other) await deleteCustomer(request, other)
+      const deleted = await request.delete(`/api/promotions/coupons/${code}`, { headers: staffHeaders })
+      expect(deleted.status()).toBe(204)
+    }
+  })
+
   test('a Customer returns a delivered phone by its IMEI, sees it Requested with its Refund amount, then Refunded', async ({
     page,
     request,

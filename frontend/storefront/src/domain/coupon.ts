@@ -1,6 +1,7 @@
 /**
- * Why a Coupon doesn't apply to the Checkout Session, as Promotions' `reason` says, with what to tell
- * the Customer. Applying it changed nothing.
+ * Why a Coupon doesn't apply to the Checkout Session, or can't be held for it once its Usage limits
+ * are reached, as Promotions' `reason` says, with what to tell the Customer. Applying it changed
+ * nothing.
  */
 export interface CouponRejection {
   reason: string | undefined
@@ -14,6 +15,8 @@ const messages: Record<string, string> = {
   expired: 'That code has expired.',
   belowMinimum: "Your order doesn't reach that code's minimum spend yet.",
   currencyMismatch: "That code can't be used with this order's currency.",
+  exhausted: 'That code has been used up.',
+  alreadyRedeemed: "You've already used that code as often as it allows.",
 }
 
 /** Reads a rejected Coupon's status and problem detail (a 422 with a `reason`); undefined for any other failure. */

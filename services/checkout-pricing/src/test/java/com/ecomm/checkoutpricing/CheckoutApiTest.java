@@ -1,6 +1,7 @@
 package com.ecomm.checkoutpricing;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.delete;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
@@ -444,6 +445,33 @@ abstract class CheckoutApiTest {
                     .formatted(reason)));
   }
 
+  static final String HOLDS_PATH = "/redemptions/holds";
+
+  /** Promotions holds every Coupon asked for, and releases every hold. */
+  static void stubHolds() {
+    stubHold(aResponse().withStatus(204));
+    DOWNSTREAM.stubFor(
+        delete(urlPathMatching(HOLDS_PATH + "/[^/]+")).willReturn(aResponse().withStatus(204)));
+  }
+
+  static void stubHold(ResponseDefinitionBuilder response) {
+    DOWNSTREAM.stubFor(post(HOLDS_PATH).willReturn(response));
+  }
+
+  /** Promotions refuses to hold the Coupon, for {@code reason}. */
+  static void stubRefusedHold(String reason) {
+    stubHold(
+        aResponse()
+            .withStatus(422)
+            .withHeader("Content-Type", "application/problem+json")
+            .withBody(
+                """
+                {"type": "about:blank", "title": "Unprocessable Content", "status": 422,
+                 "detail": "Coupon X doesn't apply: %1$s", "reason": "%1$s"}
+                """
+                    .formatted(reason)));
+  }
+
   /** Promotions answers every evaluation, with a Coupon or without, so. */
   static void stubEvaluation(ResponseDefinitionBuilder response) {
     DOWNSTREAM.stubFor(post(EVALUATE_PATH).atPriority(0).willReturn(response));
@@ -460,6 +488,7 @@ abstract class CheckoutApiTest {
     stubCampaigns();
     stubReserve();
     stubRelease();
+    stubHolds();
     stubDomesticQuote();
   }
 

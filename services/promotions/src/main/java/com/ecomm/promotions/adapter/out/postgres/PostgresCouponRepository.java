@@ -19,7 +19,8 @@ class PostgresCouponRepository implements CouponRepository {
   private static final String COLUMNS =
       """
       code, discount_type, percent_off, amount_off_minor, amount_off_currency,
-      minimum_subtotal_minor, minimum_subtotal_currency, valid_from, valid_until, active
+      minimum_subtotal_minor, minimum_subtotal_currency, valid_from, valid_until, active,
+      usage_limit, per_customer_limit
       """;
 
   private static final RowMapper<Coupon> COUPON =
@@ -30,7 +31,9 @@ class PostgresCouponRepository implements CouponRepository {
               TermColumns.minimumSubtotal(rs),
               rs.getTimestamp("valid_from").toInstant(),
               rs.getTimestamp("valid_until").toInstant(),
-              rs.getBoolean("active"));
+              rs.getBoolean("active"),
+              rs.getObject("usage_limit", Integer.class),
+              rs.getObject("per_customer_limit", Integer.class));
 
   private final JdbcClient jdbc;
 
@@ -48,7 +51,7 @@ class PostgresCouponRepository implements CouponRepository {
                   ) VALUES (
                     :code, :discountType, :percentOff, :amountOffMinor, :amountOffCurrency,
                     :minimumSubtotalMinor, :minimumSubtotalCurrency, :validFrom, :validUntil,
-                    :active)
+                    :active, :usageLimit, :perCustomerLimit)
                   """)
           .params(params(coupon))
           .update();
@@ -67,7 +70,8 @@ class PostgresCouponRepository implements CouponRepository {
                   amount_off_minor = :amountOffMinor, amount_off_currency = :amountOffCurrency,
                   minimum_subtotal_minor = :minimumSubtotalMinor,
                   minimum_subtotal_currency = :minimumSubtotalCurrency,
-                  valid_from = :validFrom, valid_until = :validUntil, active = :active
+                  valid_from = :validFrom, valid_until = :validUntil, active = :active,
+                  usage_limit = :usageLimit, per_customer_limit = :perCustomerLimit
                 WHERE code = :code
                 """)
             .params(params(coupon))
@@ -89,6 +93,14 @@ class PostgresCouponRepository implements CouponRepository {
   }
 
   @Override
+  public Optional<Coupon> lock(String code) {
+    return jdbc.sql("SELECT " + COLUMNS + " FROM coupon WHERE code = :code FOR UPDATE")
+        .param("code", code)
+        .query(COUPON)
+        .optional();
+  }
+
+  @Override
   public List<Coupon> all() {
     return jdbc.sql("SELECT " + COLUMNS + " FROM coupon ORDER BY code").query(COUPON).list();
   }
@@ -100,6 +112,8 @@ class PostgresCouponRepository implements CouponRepository {
     params.put("validFrom", Timestamp.from(coupon.validFrom()));
     params.put("validUntil", Timestamp.from(coupon.validUntil()));
     params.put("active", coupon.active());
+    params.put("usageLimit", coupon.usageLimit());
+    params.put("perCustomerLimit", coupon.perCustomerLimit());
     return params;
   }
 }

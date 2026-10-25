@@ -32,6 +32,14 @@ final class Fields {
     return b;
   }
 
+  /** A whole number, or null when there is none, for the domain to check. */
+  static Integer optionalInteger(String field, Object value) {
+    if (value != null && !(value instanceof Integer)) {
+      throw new InvalidPromotionException(field, "must be a whole number");
+    }
+    return (Integer) value;
+  }
+
   /** A string, or null when there is none, for the domain to name. */
   static String string(String field, Object value) {
     if (value != null && !(value instanceof String)) {

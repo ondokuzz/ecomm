@@ -4,6 +4,7 @@ import type { Coupon } from '../src/domain/coupon'
 import { type Currencies, type Currency, type Money, currenciesOf, formatMoney } from '../src/domain/money'
 import type { Order } from '../src/domain/order'
 import { stackSecret } from './secrets'
+import { aPhoneInStock, buy } from './stack'
 
 /**
  * Staff list, create, edit, switch off and delete Coupons and Campaigns in the Admin Console, and
@@ -62,7 +63,8 @@ test.describe('Coupons', () => {
     await expect(page.getByRole('status')).toHaveText(`Saved ${code}.`)
     const row = page.getByRole('row').filter({ hasText: code })
     await expect(row).toContainText('off')
-    await expect(row).toContainText('On')
+    await expect(row).toContainText('Active')
+    await expect(row).toContainText('0 used')
     expect(await couponOf(request, code)).toMatchObject({
       code,
       discount: { type: 'AMOUNT_OFF', amountOff: { amountMinor: 500, currency: 'EUR' } },
@@ -95,6 +97,40 @@ test.describe('Coupons', () => {
     await expect(page.getByRole('row').filter({ hasText: code })).toHaveCount(0)
     const gone = await request.get(`/api/promotions/coupons/${code}`, { headers: await staffHeaders(request) })
     expect(gone.status()).toBe(404)
+  })
+
+  test('a Coupon limited to one use is shown exhausted once a Customer redeems it', async ({ page, request }) => {
+    await page.goto('/promotions/coupons/new')
+    await signInOnKeycloak(page, staff)
+    await page.getByLabel('Code').fill(code)
+    await percentage(page).fill('10')
+    await page.getByLabel('Valid from').fill('2026-01-01T00:00')
+    await page.getByLabel('Valid until').fill('2030-01-01T00:00')
+    await page.getByLabel('Usage limit').fill('1')
+    await page.getByLabel('Per-Customer limit').fill('1')
+    await page.getByRole('button', { name: 'Create Coupon' }).click()
+    const row = page.getByRole('row').filter({ hasText: code })
+    await expect(row).toContainText('0 of 1 used')
+    await expect(row).toContainText('Active')
+    expect(await couponOf(request, code)).toMatchObject({ usageLimit: 1, perCustomerLimit: 1, state: 'active' })
+
+    const buyer = await createCustomer(request)
+    try {
+      await buy(request, buyer, (await aPhoneInStock(request)).variantId, 'tok_approve', code)
+    } finally {
+      await deleteCustomer(request, buyer)
+    }
+
+    // The Saga redeems it just after the Order is paid.
+    await expect
+      .poll(async () => (await couponOf(request, code)).redemptions, { timeout: 30_000, intervals: [1_000] })
+      .toBe(1)
+    await page.reload()
+    await expect(row).toContainText('1 of 1 used')
+    await expect(row).toContainText('Exhausted')
+    await row.getByRole('link', { name: code, exact: true }).click()
+    await expect(page.getByText('1 redemption, 0 Checkout Sessions holding it now.')).toBeVisible()
+    await expect(page.getByLabel('Usage limit')).toHaveValue('1')
   })
 
   test('a window that ends before it starts is refused beside Valid until', async ({ page }) => {

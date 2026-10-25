@@ -18,6 +18,12 @@ public interface CouponRepository {
 
   Optional<Coupon> find(String code);
 
+  /**
+   * The Coupon with this code, locked until the surrounding transaction ends, so that only one
+   * Redemption hold is weighed against its Usage limits at a time.
+   */
+  Optional<Coupon> lock(String code);
+
   /** Every Coupon, by code. */
   List<Coupon> all();
 }

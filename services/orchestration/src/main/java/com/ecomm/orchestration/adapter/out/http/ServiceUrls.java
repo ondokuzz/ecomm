@@ -11,4 +11,5 @@ record ServiceUrls(
     String cartUrl,
     String checkoutPricingUrl,
     String fulfillmentShippingUrl,
-    String returnsWarrantyUrl) {}
+    String returnsWarrantyUrl,
+    String promotionsUrl) {}

@@ -23,7 +23,7 @@ stay with the services, which still check every token themselves.
 | `checkout-pricing` | | `POST /checkout/sessions/*/end`: ending a named Customer's session, which only Orchestration calls |
 | `order-management` | | `POST /orders`, `PATCH /orders/*/status` |
 | `payment` | | `POST /payments`, `POST /payments/*/void`, `POST /payments/*/capture`, `POST /payments/*/refunds`, `GET /payments/by-order`, `GET /payments/*/for-customer`: authorizing, voiding, capturing and refunding, and reading a named Customer's Payments, which only Orchestration calls |
-| `promotions` | | `/discounts/**`: Coupon evaluation, which only Checkout calls |
+| `promotions` | | `/discounts/**`: Coupon evaluation, and `/redemptions/**`: Redemption holds, which only Checkout calls, and Coupon redemptions, which only Orchestration calls |
 | `search-discovery` | `/search` | |
 | `reviews-ratings` | `/products/*/reviews`, `/products/*/rating-summary`, `/rating-summaries` | |
 | `recommendations` | `/products/*/also-bought` | |

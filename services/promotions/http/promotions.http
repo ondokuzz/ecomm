@@ -1,5 +1,6 @@
 # Exercises Promotions against the compose stack (`make up`): Staff manage Coupons and Campaigns,
-# and Checkout evaluates what a Checkout Session's lines are due. Run the requests top to bottom in the IntelliJ HTTP client; the token requests
+# Checkout evaluates what a Checkout Session's lines are due and holds a Coupon's use for a session,
+# and Orchestration redeems it. Run the requests top to bottom in the IntelliJ HTTP client; the token requests
 # store tokens for the ones after them.
 # Its client and webhook secrets are the stack's own: run it in the `dev` environment, whose
 # http-client.private.env.json holds them (the root README's "Secrets" says how to write it).
@@ -23,6 +24,14 @@ Content-Type: application/x-www-form-urlencoded
 grant_type=client_credentials&client_id=checkout&client_secret={{checkoutClientSecret}}
 
 > {% client.global.set("checkoutToken", response.body.access_token); %}
+
+### Orchestration's own token (client credentials)
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&client_id=orchestration&client_secret={{orchestrationClientSecret}}
+
+> {% client.global.set("orchestrationToken", response.body.access_token); %}
 
 ### Customer token
 POST {{keycloak}}
@@ -247,3 +256,80 @@ Content-Type: application/json
 {"lines": [{"variantId": "AUD-AIRPODS-PRO-2", "sku": "AUD-AIRPODS-PRO-2", "category": "audio",
             "quantity": 1, "unitPrice": {"amountMinor": 27900, "currency": "EUR"}}],
  "couponCode": "WELCOME10"}
+
+### Usage limits: the first two Customers, once each; it reads redemptions 0, holds 0, state active
+POST {{promotions}}/coupons
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{"code": "FIRST2", "discount": {"type": "PERCENT_OFF", "percentOff": 20},
+ "validFrom": "2026-01-01T00:00:00Z", "validUntil": "2030-01-01T00:00:00Z", "active": true,
+ "usageLimit": 2, "perCustomerLimit": 1}
+
+### Checkout holds it for session http-1 until the session expires: 204
+POST {{promotions}}/redemptions/holds
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"sessionId": "http-1", "customerId": "customer-a", "couponCode": "first2", "expiresAt": "2029-01-01T00:00:00Z"}
+
+### Holding it again for the same session counts it once: 204
+POST {{promotions}}/redemptions/holds
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"sessionId": "http-1", "customerId": "customer-a", "couponCode": "FIRST2", "expiresAt": "2029-01-01T00:00:00Z"}
+
+### The same Customer in another session: 422, reason alreadyRedeemed
+POST {{promotions}}/redemptions/holds
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"sessionId": "http-2", "customerId": "customer-a", "couponCode": "FIRST2", "expiresAt": "2029-01-01T00:00:00Z"}
+
+### A second Customer takes the last use: 204, and the Coupon reads holds 2, state exhausted
+POST {{promotions}}/redemptions/holds
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"sessionId": "http-3", "customerId": "customer-b", "couponCode": "FIRST2", "expiresAt": "2029-01-01T00:00:00Z"}
+
+### A third: 422, reason exhausted
+POST {{promotions}}/redemptions/holds
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"sessionId": "http-4", "customerId": "customer-c", "couponCode": "FIRST2", "expiresAt": "2029-01-01T00:00:00Z"}
+
+### The second Customer removes it from their session: 204, freeing its use
+DELETE {{promotions}}/redemptions/holds/http-3
+Authorization: Bearer {{checkoutToken}}
+
+### The checkout Saga redeems the first session's: 204; asked again, it is still one redemption
+POST {{promotions}}/redemptions
+Authorization: Bearer {{orchestrationToken}}
+Content-Type: application/json
+
+{"sessionId": "http-1", "customerId": "customer-a", "couponCode": "FIRST2"}
+
+### Redemptions 1, holds 0, state active
+GET {{promotions}}/coupons/FIRST2
+Authorization: Bearer {{staffToken}}
+
+### Checkout can't redeem: 403
+POST {{promotions}}/redemptions
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"sessionId": "http-1", "customerId": "customer-a", "couponCode": "FIRST2"}
+
+### Nor are holds routed through the gateway: 404
+POST {{gateway}}/api/promotions/redemptions/holds
+Authorization: Bearer {{checkoutToken}}
+Content-Type: application/json
+
+{"sessionId": "http-5", "customerId": "customer-d", "couponCode": "FIRST2", "expiresAt": "2029-01-01T00:00:00Z"}
+
+### Delete it, with its holds; its redemption stays, and counts if FIRST2 is made again: 204
+DELETE {{promotions}}/coupons/FIRST2
+Authorization: Bearer {{staffToken}}

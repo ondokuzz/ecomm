@@ -10,6 +10,7 @@
 @cart = http://localhost:8083
 @orders = http://localhost:8085
 @inventory = http://localhost:8082
+@promotions = http://localhost:8087
 @keycloak = http://localhost:8180/realms/ecomm/protocol/openid-connect/token
 
 ### Customer token
@@ -19,6 +20,14 @@ Content-Type: application/x-www-form-urlencoded
 grant_type=password&client_id=dev-cli&username=demo@ecomm.local&password=demo&scope=openid
 
 > {% client.global.set("customerToken", response.body.access_token); %}
+
+### Staff token, to set up a Coupon with a Usage limit and read its holds
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=dev-cli&username=staff@ecomm.local&password=staff
+
+> {% client.global.set("staffToken", response.body.access_token); %}
 
 ### An empty Cart can't be checked out: 400
 DELETE {{cart}}/cart
@@ -83,7 +92,26 @@ Content-Type: application/json
 DELETE {{checkout}}/checkout/sessions/{{sessionId}}/coupon
 Authorization: Bearer {{customerToken}}
 
-### And back on, to pay with it
+### A Coupon with one use in all (Staff, in Promotions)
+POST {{promotions}}/coupons
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{"code": "HTTP-ONCE", "discount": {"type": "PERCENT_OFF", "percentOff": 5},
+ "validFrom": "2026-01-01T00:00:00Z", "validUntil": "2030-01-01T00:00:00Z", "active": true, "usageLimit": 1}
+
+### Applying it holds its one use for the session until the session expires
+PUT {{checkout}}/checkout/sessions/{{sessionId}}/coupon
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"code": "HTTP-ONCE"}
+
+### It reads holds 1, state exhausted: another Customer applying it now gets 422 exhausted
+GET {{promotions}}/coupons/HTTP-ONCE
+Authorization: Bearer {{staffToken}}
+
+### And back on with WELCOME10, to pay with it: replacing HTTP-ONCE releases its hold
 PUT {{checkout}}/checkout/sessions/{{sessionId}}/coupon
 Authorization: Bearer {{customerToken}}
 Content-Type: application/json
@@ -96,6 +124,10 @@ Authorization: Bearer {{customerToken}}
 Content-Type: application/json
 
 {"paymentMethod": "tok_approve"}
+
+### HTTP-ONCE reads holds 0, state active again; delete it
+DELETE {{promotions}}/coupons/HTTP-ONCE
+Authorization: Bearer {{staffToken}}
 
 ### A German address with a postcode in the wrong format: 422 invalidShippingAddress, naming it
 PUT {{checkout}}/checkout/sessions/{{sessionId}}/shipping-address

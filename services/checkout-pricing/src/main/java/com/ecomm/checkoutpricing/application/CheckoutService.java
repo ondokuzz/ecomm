@@ -116,12 +116,26 @@ public class CheckoutService implements CheckoutUseCase {
   @Override
   public CheckoutSession applyCoupon(String customerId, String sessionId, String couponCode) {
     var session = live(customerId, sessionId);
-    return discounted(session, Optional.of(couponCode));
+    var discounted = discounted(session, Optional.of(couponCode));
+    // In place of any Coupon it held, which a refusal leaves held.
+    promotions.hold(
+        session.id(), customerId, discounted.couponCode().orElseThrow(), session.expiresAt());
+    try {
+      return replaced(discounted);
+    } catch (CheckoutSessionNotFoundException e) {
+      promotions.release(session.id());
+      throw e;
+    }
   }
 
   @Override
   public CheckoutSession removeCoupon(String customerId, String sessionId) {
-    return discounted(live(customerId, sessionId), Optional.empty());
+    var session = live(customerId, sessionId);
+    var discounted = discounted(session, Optional.empty());
+    if (session.couponCode().isPresent()) {
+      promotions.release(session.id());
+    }
+    return replaced(discounted);
   }
 
   @Override
@@ -189,14 +203,14 @@ public class CheckoutService implements CheckoutUseCase {
   }
 
   /**
-   * Keeps {@code session} with every Discount it is due now, with the Coupon {@code couponCode} or
+   * {@code session} with every Discount it is due now, with the Coupon {@code couponCode} or
    * without one, taxed again for them. The Campaigns are asked about again too, since one may have
    * started or ended since.
    */
   private CheckoutSession discounted(CheckoutSession session, Optional<String> couponCode) {
     var discounts = promotions.evaluate(session.cart().lines(), couponCode);
     var tax = taxes.tax(session.cart(), Discount.total(discounts, session.subtotal().currency()));
-    return replaced(session.withDiscounts(discounts, tax));
+    return session.withDiscounts(discounts, tax);
   }
 
   /** Keeps {@code updated} in place of the session it changes, unless that has gone meanwhile. */
@@ -235,9 +249,12 @@ public class CheckoutService implements CheckoutUseCase {
     return new PricedCart(priced);
   }
 
-  /** Gives a replaced session's Stock back and forgets it. */
+  /** Gives a replaced session's Stock and Coupon back and forgets it. */
   private void discard(CheckoutSession session) {
     inventory.release(session.customerId(), session.reservationId());
+    if (session.couponCode().isPresent()) {
+      promotions.release(session.id());
+    }
     sessions.delete(session);
     log.log(
         System.Logger.Level.INFO,
