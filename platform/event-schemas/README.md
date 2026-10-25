@@ -13,6 +13,7 @@ Changing an event means changing its schema here, in a reviewed pull request.
 | `payment.payment` | `paymentId` | Payment |
 | `fulfillment-shipping.shipment` | `shipmentId` | Fulfillment & Shipping |
 | `returns-warranty.rma` | `rmaId` | Returns & Warranty |
+| `cart.cart` | `customerId` | Cart |
 
 ## The shape of an event
 
@@ -27,6 +28,11 @@ its aggregate, keyed by the aggregate's ID. Every event has:
 - `change`: why it was published, from the topic's own set, such as `PLACED`, `STATUS_CHANGED` or
   `BACKFILLED` for an Order;
 - the aggregate's state, under its name, such as `order`.
+
+`cart.cart` differs in two ways. Cart publishes without an outbox, so `occurredAt` is when the
+event was sent, and its `eventId` is derived from the Customer and the Cart's last change: the same
+abandonment sent again has the same `eventId`. Its `version` is that last change, in epoch
+milliseconds.
 
 An aggregate that leaves, such as a Product removed from the Catalog, is published as a last
 snapshot that says so (`removed: true`), never as a tombstone. Topics are compacted, so replaying

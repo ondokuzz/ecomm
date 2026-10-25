@@ -1,6 +1,6 @@
 # Ledgers and outboxes, not event sourcing
 
-No context is event-sourced. A context keeps its current state in ordinary tables and, where a requirement calls for history, records it in an append-only table written in the same transaction as the state change. Every context that publishes integration events writes them to a transactional outbox in that same transaction, and a relay carries them to Kafka ([ADR 0006](./0006-kafka-as-single-event-backbone.md)).
+No context is event-sourced. A context keeps its current state in ordinary tables and, where a requirement calls for history, records it in an append-only table written in the same transaction as the state change. Every context that publishes integration events writes them to a transactional outbox in that same transaction, and a relay carries them to Kafka ([ADR 0006](./0006-kafka-as-single-event-backbone.md)). Cart, on Redis, is the one exception (see the 2026-10-25 note).
 
 The test for keeping a full history of facts is a ledger's: is the state *defined* as the sum of its facts, and must those facts be reconciled against an outside party? Where both hold, the facts are the source of truth and the current state is derived from them, or kept beside them in the same transaction. That is most of what event sourcing would give, without an event-sourcing framework, an event store or replayed projections.
 
@@ -41,3 +41,12 @@ This ADR used to be "CQRS + event sourcing: four contexts, not fifteen". It even
 ## Revised 2026-10-06
 
 The Postgres services' outbox now sends events one at a time and sends again, on startup, what it holds unsent. Before, sends ran concurrently, and an event whose send a crash cut short stayed in the outbox until someone resubmitted it by hand. Consumers still order events by version: neither setting makes Kafka's order strict.
+
+## Revised 2026-10-25
+
+Cart publishes `cart.cart` without an outbox. Cart keeps its Carts in Redis and has no Postgres, so there is no transaction for an outbox to share. A sweep finds Carts left unchanged for a day, publishes each straight to Kafka with the idempotent producer, and marks the Cart abandoned only once Kafka has acknowledged the event.
+
+- **Why it is safe:** the event is derived from the Cart's state, not from a change that happens once, and its ID is derived from the Customer and the Cart's last change. A publish that fails, or a sweep that stops between publishing and marking, leaves the Cart unmarked, so the next sweep publishes the same event, with the same ID, which a consumer dedupes.
+- **The alternative:** giving Cart a Postgres database only for an outbox, one more database and migration set for one event.
+
+Every other context still publishes through its outbox.

@@ -1,0 +1,82 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "cart.cart",
+  "description": "A Customer's Cart, published when it is abandoned: it held Variants and went unchanged for ecomm.cart.abandoned-after. Published at least once per abandonment, with the same eventId each time. Keyed by customerId.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "eventId",
+    "occurredAt",
+    "customerId",
+    "version",
+    "change",
+    "cart"
+  ],
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Derived from the Customer and lastChangedAt, so the same abandonment published twice has the same eventId."
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the event was published."
+    },
+    "customerId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The Customer whose Cart it is: the message key."
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "lastChangedAt in epoch milliseconds, which goes up with every change to the Cart. Apply an event only if it is newer than what you hold."
+    },
+    "change": {
+      "type": "string",
+      "enum": [
+        "ABANDONED"
+      ],
+      "description": "Why the event was published."
+    },
+    "cart": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "items",
+        "lastChangedAt"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "description": "The Cart's lines, in Variant ID order.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "variantId",
+              "quantity"
+            ],
+            "properties": {
+              "variantId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "quantity": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          }
+        },
+        "lastChangedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the Cart last changed, before it was abandoned."
+        }
+      }
+    }
+  }
+}

@@ -93,8 +93,12 @@ The smallest unit of a Currency, which Money counts in: the cent for EUR, the ye
 _Avoid_: Cents (one Currency's Minor unit), Decimals, Precision
 
 **Cart**:
-A Customer's in-progress, unconfirmed selection of Variants and quantities. Ephemeral — it is not an Order until checkout completes, and it lapses 7 days after the Customer last changed it. Each Customer has at most one Cart, and only they can see or change it.
+A Customer's in-progress, unconfirmed selection of Variants and quantities. Ephemeral — it is not an Order until checkout completes, and it lapses 7 days after the Customer last changed it. Each Customer has at most one Cart, and only they can see or change it. One that holds Variants and goes unchanged for a day becomes an Abandoned Cart, and stays the Customer's Cart as it was.
 _Avoid_: Basket, Bag
+
+**Abandoned Cart**:
+A Cart that holds Variants and hasn't changed for `ecomm.cart.abandoned-after`, 24 hours by default. Cart records it once per abandonment and publishes it as a `cart.cart` `ABANDONED` event, with its lines and when it last changed. A change after that makes it a candidate again, so a Cart can be abandoned more than once. A Cart emptied, by the Customer or by paying, is never abandoned, and one that lapses after 7 days was abandoned well before.
+_Avoid_: Lost Cart, Expired Cart (one that lapsed)
 
 **Checkout**:
 How a Customer turns their Cart into an Order, in two steps. Starting it opens a Checkout Session: the Cart's Variants are priced and their Stock reserved, which Checkout does itself. The Customer then gives the session a Shipping address and chooses a Shipping option. Paying the session starts the checkout Saga, a Payment attempt, which places the Order at those Prices, authorizes its Payment, commits the Reservation, marks the Order paid, redeems its Coupon, clears the Cart and ends the session. Checkout answers with the attempt's outcome, or that it is still being confirmed.
@@ -308,7 +312,7 @@ The ID that names one request as it passes from service to service, carried in t
 _Avoid_: Request ID, Trace ID (tracing is a separate concern)
 
 **Integration event**:
-What one context publishes to Kafka so that others can learn a change it made: a snapshot of one aggregate, such as an Order or a Variant's Stock, carrying the state its consumers need, its version and why it was published. Each topic carries one kind, and its JSON Schema in the repo defines it. It is published in the same transaction as the change, through the Outbox, and delivered at least once and not strictly in order, so a consumer applies it only if its version is newer than the one it holds. It describes a change that has happened; it never asks a context to do something.
+What one context publishes to Kafka so that others can learn a change it made: a snapshot of one aggregate, such as an Order or a Variant's Stock, carrying the state its consumers need, its version and why it was published. Each topic carries one kind, and its JSON Schema in the repo defines it. It is published in the same transaction as the change, through the Outbox (Cart's, derived from a Cart's state, is published without one), and delivered at least once and not strictly in order, so a consumer applies it only if its version is newer than the one it holds. It describes a change that has happened; it never asks a context to do something.
 _Avoid_: Domain event (one that stays inside a context), Message, Command
 
 **Outbox**:

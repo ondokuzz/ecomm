@@ -167,7 +167,8 @@ dashboards, under **ecomm**, are files in [`infra/docker/grafana`](./infra/docke
 
 - **Services:** request rate, 5xx rate and p95 latency per service, request rate per route,
   each Postgres service's outbox events not yet sent to Kafka (Catalog's Couchbase outbox isn't
-  measured), and Inventory's Stock cache: its hit ratio, and its hits, misses and Redis errors.
+  measured), Inventory's Stock cache: its hit ratio, and its hits, misses and Redis errors, and
+  Cart's Abandoned Carts, per hour.
 - **Event consumers:** lag per consumer group, and per group, topic and partition; consumption
   rate; retries; dead-lettered and redriven events. Lag comes from a Kafka exporter, which reads
   each group's committed offsets from the broker, so it keeps showing while a group is stopped or
@@ -184,7 +185,7 @@ dashboards, under **ecomm**, are files in [`infra/docker/grafana`](./infra/docke
 
 A panel plotting `rate()` or `increase()` counts a series only from its second sample, so a
 counter has to be on `/actuator/prometheus` at 0 before its first count, or that count is missed.
-Orchestration's checkout counters and Inventory's Stock cache counters are. Some can't be, since
+Orchestration's checkout counters, Inventory's Stock cache counters and Cart's `cart_abandoned_total` are. Some can't be, since
 what they are tagged with is known only when they count, so their panels miss the first count of
 each new series after a service starts: **Retries** (per group and topic), the **5xx rate** and
 **request rate per route** (per route and status), and Temporal's own **activity failures** and

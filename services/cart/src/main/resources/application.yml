@@ -6,3 +6,19 @@ spring:
       host: localhost
       # REDIS_PORT matches the compose override, for when something else holds 6379.
       port: ${REDIS_PORT:6379}
+  kafka:
+    bootstrap-servers: localhost:${KAFKA_PORT:9092}
+    # cart.cart goes straight to Kafka, with no outbox (ADR 0002), so each send is idempotent and
+    # waits for every in-sync replica.
+    producer:
+      acks: all
+      properties:
+        enable.idempotence: true
+
+ecomm:
+  cart:
+    # A Cart that holds Variants and is unchanged this long is abandoned; the sweep looks this often.
+    abandoned-after: 24h
+    abandonment-sweep: 5m
+  events:
+    schema-registry-url: http://localhost:${APICURIO_PORT:8088}/apis/registry/v3

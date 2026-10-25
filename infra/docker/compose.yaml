@@ -266,6 +266,7 @@ services:
     image: ${IMAGE_PREFIX:-ecomm}/cart:${IMAGE_TAG:-latest}
     ports: ["${CART_PORT:-8083}:8080"]
     depends_on:
+      <<: *event-backbone
       redis: { condition: service_healthy }
       keycloak: { condition: service_healthy }
 

@@ -1,7 +1,7 @@
 {
   "uid": "ecomm-services",
   "title": "Services",
-  "description": "Every Spring service's HTTP traffic, from Spring's request metrics, and, in a Postgres service, its outbox's events not yet sent to Kafka, and Inventory's Stock cache. Actuator requests (health checks and scrapes) are left out.",
+  "description": "Every Spring service's HTTP traffic, from Spring's request metrics, and, in a Postgres service, its outbox's events not yet sent to Kafka, Inventory's Stock cache, and Cart's Abandoned Carts. Actuator requests (health checks and scrapes) are left out.",
   "tags": [
     "ecomm"
   ],
@@ -448,6 +448,61 @@
           "legendFormat": "{{service}} errors"
         }
       ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Abandoned Carts",
+      "description": "Carts that held Variants and went unchanged for ecomm.cart.abandoned-after (24 hours), counted as Cart marks each abandoned and publishes it on cart.cart. Each bar is an hour's.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 34,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            },
+            "drawStyle": "bars"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "sum"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(cart_abandoned_total[1h]))",
+          "legendFormat": "abandoned"
+        }
+      ],
+      "interval": "1h"
     }
   ]
 }
