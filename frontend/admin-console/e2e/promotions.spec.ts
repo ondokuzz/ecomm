@@ -106,7 +106,7 @@ test.describe('Coupons', () => {
     await percentage(page).fill('10')
     await page.getByLabel('Valid from').fill('2026-01-01T00:00')
     await page.getByLabel('Valid until').fill('2030-01-01T00:00')
-    await page.getByLabel('Usage limit').fill('1')
+    await page.getByRole('textbox', { name: 'Usage limit' }).fill('1')
     await page.getByLabel('Per-Customer limit').fill('1')
     await page.getByRole('button', { name: 'Create Coupon' }).click()
     const row = page.getByRole('row').filter({ hasText: code })
@@ -130,7 +130,7 @@ test.describe('Coupons', () => {
     await expect(row).toContainText('Exhausted')
     await row.getByRole('link', { name: code, exact: true }).click()
     await expect(page.getByText('1 redemption, 0 Checkout Sessions holding it now.')).toBeVisible()
-    await expect(page.getByLabel('Usage limit')).toHaveValue('1')
+    await expect(page.getByRole('textbox', { name: 'Usage limit' })).toHaveValue('1')
   })
 
   test('a window that ends before it starts is refused beside Valid until', async ({ page }) => {
