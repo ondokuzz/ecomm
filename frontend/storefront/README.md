@@ -115,13 +115,22 @@ to a page, each with its author, date, "edited" if it was, and the Variant bough
 has several. Beside them, a Customer who isn't signed in is offered to log in; a signed-in one
 sees, from `GET /products/{sku}/eligibility`, the form to write a review, their own review with
 Edit and Delete, or why they can't review: "Only Customers who have bought this product can review
-it." Deleting asks first.
+it." Deleting asks first. Their own review says when it isn't shown to others: "Awaiting
+moderation" when the word screen held it, so posting or editing one thanks them with "awaits
+moderation" instead of "is up", or "Removed by our team:" with Staff's reason, when it can only be
+deleted, not edited. Only published reviews are listed and counted.
+
+A signed-in Customer may **Report** any review in the list but their own (the one eligibility gave
+them): a reason (spam or advertising, offensive, not about this product, or something else) and an
+optional note of up to 500 characters, checked before sending, with `POST /reviews/{id}/reports`.
+The review stays up, and the Customer is thanked in its place; Reviews & Ratings counts their report
+once however often they send it.
 
 The form checks itself before sending: a rating from 1 to 5 stars, a title of at most 120
 characters and a body of at most 2,000, both counted trimmed, with a counter under each. Each
 problem shows under its field once the Customer has pressed the button, and clears as they fix it.
-[`src/domain/reviews.ts`](./src/domain/reviews.ts) holds those rules, the stars' fill and the
-per-star shares. Posting, editing or deleting reloads the Product's summary, reviews and
+[`src/domain/reviews.ts`](./src/domain/reviews.ts) holds those rules, the report form's, the author's
+status line, the stars' fill and the per-star shares. Posting, editing or deleting reloads the Product's summary, reviews and
 eligibility, and the listing's summaries.
 
 ## Customers also bought
@@ -465,7 +474,7 @@ Sign in as `demo@ecomm.local` / `demo`, or register a new Customer.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: failed responses as messages and support references, Money formatting by Catalog's Minor units, Cart pricing, checkout problems, the session countdown and the price breakdown with each Discount and the Shipping cost, address violations mapped to their fields, Shipping options and addresses in words, whether a session can be paid, Coupon rejections, test cards and payment failures, an Order's Payment statuses and transactions and why a cancelled Order was cancelled, quantities, Stock levels and Cart lines' availability, toasts, the search's URL and its Facets as chips and filters, rating stars and summaries and the review form's validation, Product specs by their Category's definitions, Warranty terms in words, Customer initials, Orders and their timeline from the Order Status history, Shipment statuses in words, Tracking events oldest first and when the Order page refreshes them, the Orders list's paging, Order Status colours, RMA kinds offered or disabled with why, the request form's checks, Returns & Warranty's refusals by field, the RMA timeline and when its page refreshes, Refunds named by their RMA, the Notification preferences form's mobile number, seed Product images, the Keycloak theme's and the Admin Console's copies of the tokens
+npm test          # Vitest: failed responses as messages and support references, Money formatting by Catalog's Minor units, Cart pricing, checkout problems, the session countdown and the price breakdown with each Discount and the Shipping cost, address violations mapped to their fields, Shipping options and addresses in words, whether a session can be paid, Coupon rejections, test cards and payment failures, an Order's Payment statuses and transactions and why a cancelled Order was cancelled, quantities, Stock levels and Cart lines' availability, toasts, the search's URL and its Facets as chips and filters, rating stars and summaries, the review and report forms' validation and a review's status for its author, Product specs by their Category's definitions, Warranty terms in words, Customer initials, Orders and their timeline from the Order Status history, Shipment statuses in words, Tracking events oldest first and when the Order page refreshes them, the Orders list's paging, Order Status colours, RMA kinds offered or disabled with why, the request form's checks, Returns & Warranty's refusals by field, the RMA timeline and when its page refreshes, Refunds named by their RMA, the Notification preferences form's mobile number, seed Product images, the Keycloak theme's and the Admin Console's copies of the tokens
 npm run test:e2e  # Playwright smoke, search, product-page and error-states tests against the running compose stack (`make up`)
 ```
 
@@ -514,7 +523,10 @@ off, has a mobile number without its country code refused beside the field, save
 messages on, and reads them back after a reload. Another creates a Coupon with one use as Staff,
 has a second Customer of its own apply it to their Checkout Session through the gateway, so that
 session holds its use, and is told "That code has been used up." when applying it at checkout,
-deleting the second Customer and the Coupon after. The error-states test
+deleting the second Customer and the Coupon after. Another has a second Customer of its own check
+out a phone through the gateway and review it, then reports that review from the Product page,
+seeing a missing reason refused, and sees it still listed after a reload and the report, with its
+note, in Staff's view of it; the review is deleted by its author after. The error-states test
 ([`e2e/error-states.spec.ts`](./e2e/error-states.spec.ts)) opens unknown route, Product and Order
 addresses and sees the Not Found page, answers the Product list with a 500 and sees the panel's
 reference and "Try again" recover, fails the Product page's Stock lookup and sees it say so with its

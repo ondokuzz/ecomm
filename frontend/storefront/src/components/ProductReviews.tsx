@@ -6,6 +6,7 @@ import {
   useEligibility,
   usePostReview,
   useRatingSummary,
+  useReportReview,
   useReviews,
 } from '../api/reviews'
 import { useAuthPending, useSignin } from '../auth/session'
@@ -13,16 +14,22 @@ import type { Variant } from '../domain/catalog'
 import { pageCount } from '../domain/paging'
 import {
   type RatingSummary,
+  type ReportDraft,
+  type ReportErrors,
   type Review,
   type ReviewDraft,
   type ReviewErrors,
   draftOf,
   emptyDraft,
   refusalMessage,
+  reportNoteLimit,
+  reportReasons,
   reviewCountLabel,
   reviewLimits,
+  reviewStatusLine,
   reviewsPageSize,
   starShares,
+  validateReport,
   validateReview,
   variantBoughtLabel,
 } from '../domain/reviews'
@@ -37,7 +44,9 @@ import { useToast } from './ui/toasts'
 
 /**
  * A Product's ratings and reviews: the summary with its split by star, what the signed-in Customer
- * may do (write, edit or delete their review, or why they can't), and the reviews, newest first.
+ * may do (write, edit or delete their review, see whether it awaits moderation or was removed, or
+ * why they can't write one), and the published reviews, newest first, which a signed-in Customer
+ * may report unless they are their own.
  */
 export function ProductReviews({ sku, variants }: { sku: string; variants: Variant[] }) {
   const summary = useRatingSummary(sku)
@@ -157,7 +166,15 @@ function WriteReview({ sku }: { sku: string }) {
         submitLabel="Post review"
         submitting={post.isPending}
         error={post.error}
-        onSubmit={(draft) => post.mutate(draft, { onSuccess: () => toast({ message: 'Thanks! Your review is up.' }) })}
+        onSubmit={(draft) =>
+          post.mutate(draft, {
+            onSuccess: (review) =>
+              toast({
+                message:
+                  review.status === 'HELD' ? 'Thanks! Your review awaits moderation.' : 'Thanks! Your review is up.',
+              }),
+          })
+        }
       />
     </Card>
   )
@@ -179,8 +196,13 @@ function EditReview({ sku, review, onDone }: { sku: string; review: Review; onDo
           edit.mutate(
             { id: review.id, draft },
             {
-              onSuccess: () => {
-                toast({ message: 'Your review is updated.' })
+              onSuccess: (edited) => {
+                toast({
+                  message:
+                    edited.status === 'HELD'
+                      ? 'Your review is updated, and awaits moderation.'
+                      : 'Your review is updated.',
+                })
                 onDone()
               },
             },
@@ -195,16 +217,24 @@ function OwnReview({ sku, review, onEdit }: { sku: string; review: Review; onEdi
   const remove = useDeleteReview(sku)
   const toast = useToast()
   const [confirming, setConfirming] = useState(false)
+  const statusLine = reviewStatusLine(review)
   return (
     <Card className="own-review">
       <h3>Your review</h3>
+      {statusLine && (
+        <p className={review.status === 'REMOVED' ? 'review-status removed' : 'review-status'} role="status">
+          {statusLine}
+        </p>
+      )}
       <Stars rating={review.rating} />
       {review.title && <strong>{review.title}</strong>}
       <p className="review-body">{review.body}</p>
       <div className="own-review-actions">
-        <Button size="sm" onClick={onEdit}>
-          Edit
-        </Button>
+        {review.status !== 'REMOVED' && (
+          <Button size="sm" onClick={onEdit}>
+            Edit
+          </Button>
+        )}
         <Button size="sm" variant="ghost" onClick={() => setConfirming(true)}>
           Delete
         </Button>
@@ -223,7 +253,9 @@ function OwnReview({ sku, review, onEdit }: { sku: string; review: Review; onEdi
           })
         }
       >
-        Its rating leaves the product's average too. You can write a new one afterwards.
+        {review.status === 'PUBLISHED'
+          ? "Its rating leaves the product's average too. You can write a new one afterwards."
+          : 'You can write a new one afterwards.'}
       </ConfirmDialog>
     </Card>
   )
@@ -329,6 +361,10 @@ function FieldError({ id, message }: { id?: string; message: string | undefined 
 function ReviewList({ sku, variants }: { sku: string; variants: Variant[] }) {
   const [page, setPage] = useState(0)
   const reviews = useReviews(sku, page)
+  const auth = useAuth()
+  // Which review is the signed-in Customer's own, which they can't report; none is offered until known.
+  const eligibility = useEligibility(sku).data
+  const [reported, setReported] = useState<ReadonlySet<string>>(new Set())
   // Deleting the only review on the last page leaves it empty; step back to the one before.
   if (reviews.data && !reviews.isPlaceholderData && reviews.data.items.length === 0 && page > 0) setPage(page - 1)
 
@@ -362,6 +398,13 @@ function ReviewList({ sku, variants }: { sku: string; variants: Variant[] }) {
         {items.map((review) => (
           <li key={review.id}>
             <ReviewItem review={review} variants={variants} />
+            {auth.isAuthenticated && eligibility && review.id !== eligibility.review?.id && (
+              <ReportReview
+                review={review}
+                reported={reported.has(review.id)}
+                onReported={() => setReported((ids) => new Set(ids).add(review.id))}
+              />
+            )}
           </li>
         ))}
       </ul>
@@ -402,5 +445,84 @@ function ReviewItem({ review, variants }: { review: Review; variants: Variant[] 
         {bought && <span>{bought}</span>}
       </footer>
     </article>
+  )
+}
+
+/**
+ * Another Customer's review, reported: a reason and an optional note, once. Our team looks at it;
+ * it stays up until they do.
+ */
+function ReportReview({ review, reported, onReported }: { review: Review; reported: boolean; onReported: () => void }) {
+  const report = useReportReview()
+  const [open, setOpen] = useState(false)
+  const [draft, setDraft] = useState<ReportDraft>({ reason: null, note: '' })
+  const [tried, setTried] = useState(false)
+  const id = useId()
+  const errors: ReportErrors = tried ? validateReport(draft) : {}
+
+  if (reported) {
+    return (
+      <p className="review-reported muted" role="status">
+        Thanks for reporting it. Our team will take a look.
+      </p>
+    )
+  }
+  if (!open) {
+    return (
+      <Button size="sm" variant="ghost" className="review-report" onClick={() => setOpen(true)}>
+        Report
+      </Button>
+    )
+  }
+  const submit = (event: FormEvent) => {
+    event.preventDefault()
+    setTried(true)
+    if (Object.keys(validateReport(draft)).length === 0) {
+      report.mutate({ id: review.id, draft }, { onSuccess: onReported })
+    }
+  }
+  return (
+    <form className="report-form" onSubmit={submit} aria-label={`Report the review by ${review.author}`} noValidate>
+      <fieldset aria-describedby={errors.reason ? `${id}-reason` : undefined}>
+        <legend>Why are you reporting it?</legend>
+        {reportReasons.map(({ reason, label }) => (
+          <label key={reason} className="report-reason">
+            <input
+              type="radio"
+              name={`${id}-reason`}
+              value={reason}
+              checked={draft.reason === reason}
+              onChange={() => setDraft((d) => ({ ...d, reason }))}
+            />
+            {label}
+          </label>
+        ))}
+      </fieldset>
+      <FieldError id={`${id}-reason`} message={errors.reason} />
+      <label className="field review-field">
+        <span>
+          Note <span className="muted">(optional)</span>
+        </span>
+        <textarea
+          className="input textarea"
+          rows={2}
+          value={draft.note}
+          onChange={(e) => setDraft((d) => ({ ...d, note: e.target.value }))}
+          aria-invalid={errors.note ? true : undefined}
+          aria-describedby={`${id}-note`}
+        />
+        <Counter id={`${id}-note`} length={draft.note.trim().length} max={reportNoteLimit} />
+      </label>
+      <FieldError message={errors.note} />
+      {report.error ? <ErrorMessage error={report.error} /> : null}
+      <div className="review-form-actions">
+        <Button onClick={() => setOpen(false)} disabled={report.isPending}>
+          Cancel
+        </Button>
+        <Button type="submit" variant="primary" loading={report.isPending}>
+          Send report
+        </Button>
+      </div>
+    </form>
   )
 }

@@ -2,6 +2,8 @@ package com.ecomm.reviewsratings;
 
 import com.ecomm.commons.events.EventBackbone;
 import com.ecomm.commons.security.FakeKeycloak;
+import com.mongodb.client.MongoClients;
+import org.bson.Document;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.testcontainers.mongodb.MongoDBContainer;
 
@@ -30,5 +32,15 @@ final class TestInfrastructure {
     FakeKeycloak.registerWith(registry);
     EventBackbone.registerWith(registry);
     registry.add("spring.mongodb.uri", () -> MONGO.getReplicaSetUrl("reviews"));
+  }
+
+  /**
+   * Writes a review as a Sprint 5 stack held it, before moderation, so a test can read it back
+   * through the API as an upgraded stack would.
+   */
+  static void insertSprint5Review(Document review) {
+    try (var client = MongoClients.create(MONGO.getReplicaSetUrl("reviews"))) {
+      client.getDatabase("reviews").getCollection("reviews").insertOne(review);
+    }
   }
 }

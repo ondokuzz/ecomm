@@ -39,7 +39,9 @@ The first build takes several minutes. Then open the Storefront on http://localh
    **Captured**;
 5. go back to a Product you paid for and review it: rate it, and give it a title and a few words.
    Its stars show on its card and its page, and you can edit or delete your review there. On a
-   Product you haven't bought, the page says why you can't review it;
+   Product you haven't bought, the page says why you can't review it. A review with a screened
+   word, such as "scam", awaits moderation and isn't shown until Staff publish it, and you can
+   report another Customer's review as spam, offensive, off-topic or for another reason;
 6. see, under a Product's page, what Customers also bought with it: the Products most often in the
    same paid Orders, from [Recommendations](./services/recommendations/README.md), and its Warranty
    terms, such as "24 months, manufacturer's warranty (Samsung)";
@@ -97,7 +99,10 @@ signed in as `staff@ecomm.local` / `staff`; the demo Customer is refused there. 
    so. Paid with `tok_capture_decline`, the Shipment goes on hold with "Capture declined:
    authorization_expired", and the Order stays **Paid**;
 5. under **RMAs**, approve or reject each requested RMA with a note, each decision kept in its
-   history; an Order's page lists its Shipment and its RMAs.
+   history; an Order's page lists its Shipment and its RMAs;
+6. under **Reviews**, work the Review moderation queue of held and reported reviews, oldest first:
+   publish a held one, dismiss a published one's reports, or remove either with a reason its author
+   sees ([Reviews & Ratings](./services/reviews-ratings/README.md#moderation)).
 
 Every failed request on a Storefront page shows a support reference: the request's
 [Correlation ID](./GLOSSARY.md). The services log JSON lines carrying it, and the events a request

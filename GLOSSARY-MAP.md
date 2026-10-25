@@ -7,7 +7,7 @@
 | Identity & Access | Keycloak realm `ecomm` (config in `services/identity-access`) | Customer and Staff authentication, roles and permissions |
 | Catalog | `services/catalog` | Products, Variants, categories, specs, pricing |
 | Search & Discovery | `services/search-discovery` | Search and faceted filtering of the Catalog: a read projection over Catalog's and Inventory's events, in MongoDB |
-| Reviews & Ratings | `services/reviews-ratings` | Reviews and ratings by Customers who paid for what they review, in MongoDB, checked against a projection of Order Management's and Catalog's events |
+| Reviews & Ratings | `services/reviews-ratings` | Reviews and ratings by Customers who paid for what they review, in MongoDB, checked against a projection of Order Management's and Catalog's events; Customers' Reports of them, and Staff's Moderation |
 | Recommendations | `services/recommendations` | "Customers also bought": a projection of Order Management's and Catalog's events in Postgres, joined into Recommendations when asked |
 | Cart | `services/cart` | The ephemeral per-Customer Cart |
 | Checkout & Pricing | `services/checkout-pricing` | Checkout Sessions: pricing, tax, holding a Cart's Stock, and its Shipping address, validated behind an `AddressValidator` port, and Shipping option; paying one starts the checkout Saga |

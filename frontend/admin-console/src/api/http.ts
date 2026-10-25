@@ -42,6 +42,7 @@ export type Service =
   | 'payment'
   | 'promotions'
   | 'returns-warranty'
+  | 'reviews-ratings'
 
 interface RequestOptions {
   method?: string

@@ -4,8 +4,10 @@ import type { Page } from '../domain/paging'
 import {
   type Eligibility,
   type RatingSummary,
+  type ReportDraft,
   type Review,
   type ReviewDraft,
+  reportPayload,
   reviewPayload,
   reviewsPageSize,
 } from '../domain/reviews'
@@ -58,7 +60,7 @@ export function useEligibility(sku: string) {
 }
 
 /** Posts, edits or deletes the Customer's review; afterwards the Product's reviews, summary and eligibility reload. */
-function useReviewMutation<T>(sku: string, mutationFn: (token: string | undefined, variables: T) => Promise<unknown>) {
+function useReviewMutation<T, R>(sku: string, mutationFn: (token: string | undefined, variables: T) => Promise<R>) {
   const token = useAuth().user?.access_token
   const queryClient = useQueryClient()
   return useMutation({
@@ -95,4 +97,20 @@ export function useDeleteReview(sku: string) {
   return useReviewMutation(sku, (token, id: string) =>
     api<void>('reviews-ratings', `/reviews/${encodeURIComponent(id)}`, { method: 'DELETE', token }),
   )
+}
+
+/**
+ * Reports another Customer's review. Reporting it again answers the first report, and a report
+ * never hides a review by itself, so nothing on the page reloads.
+ */
+export function useReportReview() {
+  const token = useAuth().user?.access_token
+  return useMutation({
+    mutationFn: ({ id, draft }: { id: string; draft: ReportDraft }) =>
+      api<unknown>('reviews-ratings', `/reviews/${encodeURIComponent(id)}/reports`, {
+        method: 'POST',
+        body: reportPayload(draft),
+        token,
+      }),
+  })
 }

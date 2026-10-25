@@ -14,7 +14,14 @@ export interface Review {
   createdAt: string
   /** When they last edited it; null if they never have. */
   editedAt: string | null
+  /** Anyone sees only a published review; its author sees theirs whatever its status. */
+  status: ReviewStatus
+  /** Why our team removed it, for its author; null unless it is removed. */
+  removalReason: string | null
 }
+
+/** Whether a review is shown: a held one awaits Staff, a removed one was taken down. */
+export type ReviewStatus = 'PUBLISHED' | 'HELD' | 'REMOVED'
 
 export type Star = '1' | '2' | '3' | '4' | '5'
 
@@ -124,6 +131,51 @@ export function refusalMessage(reason: string | null): string {
   return reason && Object.hasOwn(refusals, reason)
     ? refusals[reason as RefusalReason]
     : "You can't review this product."
+}
+
+/** What the author is told of their review's status, or nothing for a published one. */
+export function reviewStatusLine(review: Pick<Review, 'status' | 'removalReason'>): string | null {
+  if (review.status === 'HELD') return 'Awaiting moderation: it is shown once our team has looked at it.'
+  if (review.status === 'REMOVED') return `Removed by our team: ${review.removalReason ?? 'no reason was given.'}`
+  return null
+}
+
+/** Why a Customer reports another's review, as Reviews & Ratings takes it. */
+export type ReportReason = 'SPAM' | 'OFFENSIVE' | 'OFF_TOPIC' | 'OTHER'
+
+/** The reasons a Customer chooses from, in the order offered. */
+export const reportReasons: { reason: ReportReason; label: string }[] = [
+  { reason: 'SPAM', label: 'Spam or advertising' },
+  { reason: 'OFFENSIVE', label: 'Offensive' },
+  { reason: 'OFF_TOPIC', label: 'Not about this product' },
+  { reason: 'OTHER', label: 'Something else' },
+]
+
+/** The most a report's note may hold, as Reviews & Ratings checks too. */
+export const reportNoteLimit = 500
+
+/** The report form as the Customer fills it in; no reason until they pick one. */
+export interface ReportDraft {
+  reason: ReportReason | null
+  note: string
+}
+
+export type ReportErrors = Partial<Record<keyof ReportDraft, string>>
+
+/** What is wrong with the report before it is sent; empty when nothing is. */
+export function validateReport(draft: ReportDraft): ReportErrors {
+  const errors: ReportErrors = {}
+  if (draft.reason === null) errors.reason = 'Choose why you are reporting it.'
+  const note = draft.note.trim()
+  if (note.length > reportNoteLimit) {
+    errors.note = `Keep the note to ${reportNoteLimit} characters (it has ${note.length}).`
+  }
+  return errors
+}
+
+/** What a valid report sends: the reason, and the note trimmed, a blank one as none. */
+export function reportPayload(draft: ReportDraft): { reason: ReportReason; note: string | null } {
+  return { reason: draft.reason ?? 'OTHER', note: draft.note.trim() || null }
 }
 
 /** Which Variant the reviewer bought, by its axis values; nothing when the Product has none, or the Variant is gone. */

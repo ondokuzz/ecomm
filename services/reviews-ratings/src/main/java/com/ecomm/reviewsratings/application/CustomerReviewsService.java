@@ -9,10 +9,12 @@ import com.ecomm.reviewsratings.domain.Eligibility;
 import com.ecomm.reviewsratings.domain.Order;
 import com.ecomm.reviewsratings.domain.ProductVariants;
 import com.ecomm.reviewsratings.domain.RefusalReason;
+import com.ecomm.reviewsratings.domain.ReportReason;
 import com.ecomm.reviewsratings.domain.Review;
 import com.ecomm.reviewsratings.domain.ReviewContent;
 import com.ecomm.reviewsratings.domain.ReviewNotFoundException;
 import com.ecomm.reviewsratings.domain.ReviewRefusedException;
+import com.ecomm.reviewsratings.domain.ReviewScreen;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -23,13 +25,19 @@ public class CustomerReviewsService implements CustomerReviewsUseCase {
   private final OrderStore orders;
   private final ProductStore products;
   private final TimeSource time;
+  private final ReviewScreen screen;
 
   public CustomerReviewsService(
-      ReviewStore reviews, OrderStore orders, ProductStore products, TimeSource time) {
+      ReviewStore reviews,
+      OrderStore orders,
+      ProductStore products,
+      TimeSource time,
+      ReviewScreen screen) {
     this.reviews = reviews;
     this.orders = orders;
     this.products = products;
     this.time = time;
+    this.screen = screen;
   }
 
   @Override
@@ -44,7 +52,7 @@ public class CustomerReviewsService implements CustomerReviewsUseCase {
       throw new ReviewRefusedException(eligibility.refusal().get());
     }
     var review =
-        new Review(
+        Review.posted(
             UUID.randomUUID().toString(),
             sku,
             customerId,
@@ -52,7 +60,7 @@ public class CustomerReviewsService implements CustomerReviewsUseCase {
             eligibility.variantBought().orElseThrow(),
             content,
             time.now(),
-            Optional.empty());
+            screen.holds(content));
     // Two posts at once both pass the check above; the store keeps only the first.
     if (!reviews.add(review)) {
       throw new ReviewRefusedException(RefusalReason.ALREADY_REVIEWED);
@@ -62,9 +70,30 @@ public class CustomerReviewsService implements CustomerReviewsUseCase {
 
   @Override
   public Review edit(String customerId, String reviewId, ReviewContent content) {
-    var edited = own(customerId, reviewId).edit(content, time.now());
-    reviews.replace(edited);
-    return edited;
+    var held = screen.holds(content);
+    var at = time.now();
+    return reviews
+        .update(reviewId, review -> own(customerId, review).edit(content, at, held))
+        .orElseThrow(() -> new ReviewNotFoundException(reviewId));
+  }
+
+  @Override
+  public Reported report(
+      String customerId, String reviewId, ReportReason reason, Optional<String> note) {
+    var at = time.now();
+    // The change may run again, on a newer review; its last run is the one kept.
+    var created = new boolean[1];
+    var reported =
+        reviews
+            .update(
+                reviewId,
+                review -> {
+                  var next = review.report(customerId, reason, note, at);
+                  created[0] = next != review;
+                  return next;
+                })
+            .orElseThrow(() -> new ReviewNotFoundException(reviewId));
+    return new Reported(reported.reportOf(customerId).orElseThrow(), created[0]);
   }
 
   @Override
@@ -75,8 +104,15 @@ public class CustomerReviewsService implements CustomerReviewsUseCase {
   private Review own(String customerId, String reviewId) {
     return reviews
         .find(reviewId)
-        .filter(r -> r.customerId().equals(customerId))
+        .map(review -> own(customerId, review))
         .orElseThrow(() -> new ReviewNotFoundException(reviewId));
+  }
+
+  private static Review own(String customerId, Review review) {
+    if (!review.customerId().equals(customerId)) {
+      throw new ReviewNotFoundException(review.id());
+    }
+    return review;
   }
 
   private Optional<String> variantBought(String customerId, String sku) {

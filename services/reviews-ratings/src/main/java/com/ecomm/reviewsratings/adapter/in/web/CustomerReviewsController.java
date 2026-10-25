@@ -5,12 +5,17 @@ import com.ecomm.reviewsratings.application.port.in.CustomerReviewsUseCase;
 import com.ecomm.reviewsratings.domain.DisplayName;
 import com.ecomm.reviewsratings.domain.InvalidReviewException;
 import com.ecomm.reviewsratings.domain.RefusalReason;
+import com.ecomm.reviewsratings.domain.Report;
+import com.ecomm.reviewsratings.domain.ReportReason;
 import com.ecomm.reviewsratings.domain.ReviewNotFoundException;
 import com.ecomm.reviewsratings.domain.ReviewRefusedException;
+import java.time.Instant;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -77,6 +82,34 @@ class CustomerReviewsController {
     return ReviewResponse.of(review);
   }
 
+  /** What a Customer reports: {@code {"reason", "note"}}, the note optional. */
+  record ReportRequest(String reason, String note) {}
+
+  record ReportResponse(String reason, String note, Instant reportedAt) {
+
+    static ReportResponse of(Report report) {
+      return new ReportResponse(
+          report.reason().name(), report.note().orElse(null), report.reportedAt());
+    }
+  }
+
+  /** Reports another Customer's review: 201, or 200 with the first report when asked again. */
+  @PostMapping("/reviews/{reviewId}/reports")
+  ResponseEntity<ReportResponse> report(
+      CurrentCustomer customer, @PathVariable String reviewId, @RequestBody ReportRequest request) {
+    var reported =
+        reviews.report(
+            customer.id(),
+            reviewId,
+            ReportReason.of(request.reason()),
+            Optional.ofNullable(request.note()));
+    if (reported.created()) {
+      log.info("Reported review {} as {}", reviewId, reported.report().reason());
+    }
+    return ResponseEntity.status(reported.created() ? HttpStatus.CREATED : HttpStatus.OK)
+        .body(ReportResponse.of(reported.report()));
+  }
+
   @DeleteMapping("/reviews/{reviewId}")
   @ResponseStatus(HttpStatus.NO_CONTENT)
   void delete(CurrentCustomer customer, @PathVariable String reviewId) {
@@ -90,15 +123,16 @@ class CustomerReviewsController {
   }
 
   /**
-   * A 403 when they haven't bought it, a 409 when they've reviewed it; {@code reason} says which.
+   * A 403 when they haven't bought it or report their own, a 409 when they've reviewed it or edit
+   * one Staff removed; {@code reason} says which.
    */
   @ExceptionHandler(ReviewRefusedException.class)
   ProblemDetail refused(ReviewRefusedException e) {
     log.info("Review refused: {}", e.reason().code());
     var status =
         switch (e.reason()) {
-          case NOT_PURCHASED -> HttpStatus.FORBIDDEN;
-          case ALREADY_REVIEWED -> HttpStatus.CONFLICT;
+          case NOT_PURCHASED, OWN_REVIEW -> HttpStatus.FORBIDDEN;
+          case ALREADY_REVIEWED, REVIEW_REMOVED -> HttpStatus.CONFLICT;
         };
     var problem = ProblemDetail.forStatusAndDetail(status, e.getMessage());
     problem.setProperty("reason", e.reason().code());

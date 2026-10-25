@@ -17,6 +17,8 @@ import { OrderPage } from './pages/OrderPage'
 import { ProductEditorPage } from './pages/ProductEditorPage'
 import { ProductListPage } from './pages/ProductListPage'
 import { RmaPage } from './pages/RmaPage'
+import { ReviewPage } from './pages/ReviewPage'
+import { ReviewQueuePage } from './pages/ReviewQueuePage'
 import { RmaQueuePage } from './pages/RmaQueuePage'
 import { ShipmentPage } from './pages/ShipmentPage'
 import { StockMovementsPage } from './pages/StockMovementsPage'
@@ -59,6 +61,8 @@ export function App() {
                 <Route path="fulfillment/:id" element={<ShipmentPage />} />
                 <Route path="rmas" element={<RmaQueuePage />} />
                 <Route path="rmas/:id" element={<RmaPage />} />
+                <Route path="reviews" element={<ReviewQueuePage />} />
+                <Route path="reviews/:id" element={<ReviewPage />} />
                 <Route path="message-templates" element={<MessageTemplatesPage />} />
                 <Route path="*" element={<NotFound />} />
               </Route>

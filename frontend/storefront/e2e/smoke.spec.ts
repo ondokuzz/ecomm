@@ -4,7 +4,7 @@ import { type Currencies, type Currency, type Money, currenciesOf, formatMoney }
 import { type Order, ordersPageSize } from '../src/domain/order'
 import type { Page as ListPage } from '../src/domain/paging'
 import type { AlsoBought } from '../src/domain/recommendations'
-import type { Eligibility, RatingSummary } from '../src/domain/reviews'
+import type { Eligibility, RatingSummary, Review } from '../src/domain/reviews'
 import type { SearchResults } from '../src/domain/search'
 import type { Shipment } from '../src/domain/shipment'
 import { stackSecret } from './secrets'
@@ -39,6 +39,8 @@ import { stackSecret } from './secrets'
  *   `Returned` (Sprint 6).
  * - A Coupon whose one use another Customer's Checkout Session holds is refused as used up when
  *   applied (Sprint 6).
+ * - A Customer reports another Customer's review from the Product page, with a reason and a note;
+ *   the review stays up, and Staff see the report in the moderation queue (Sprint 6).
  */
 
 // The first checkout compares Stock before and after, so nothing else may check out meanwhile:
@@ -975,6 +977,76 @@ test.describe('Sprint 6', () => {
     }
   })
 
+  test('a Customer reports another Customer’s review, which stays up for Staff to look at', async ({
+    page,
+    request,
+  }) => {
+    // The author's checkout, and Reviews learning of their paid Order from its event.
+    test.setTimeout(120_000)
+    const reporter = signedUp()
+    const author = await createCustomer(request)
+    let reviewId: string | undefined
+    const authorToken = await tokenFor(request, author)
+    try {
+      const phone = await aProductInStockIn(request, 'phones')
+      const sku = phone.product.sku
+      await checkOutThroughApi(request, authorToken, phone.variantId)
+      await expect
+        .poll(async () => (await eligibilityOf(request, authorToken, sku)).eligible, { timeout: 60_000 })
+        .toBe(true)
+      const body = `Ships fast, but read the manual first. (${Date.now().toString(36)})`
+      const posted = await request.post(`/api/reviews-ratings/products/${encodeURIComponent(sku)}/reviews`, {
+        headers: { Authorization: `Bearer ${authorToken}` },
+        data: { rating: 3, body },
+      })
+      expect(posted.status()).toBe(201)
+      reviewId = ((await posted.json()) as Review).id
+
+      await page.goto(`/products/${encodeURIComponent(sku)}`)
+      await page.getByRole('button', { name: 'Log in to review' }).click()
+      await signInOnKeycloak(page, reporter)
+      const item = page
+        .getByRole('list', { name: 'Reviews', exact: true })
+        .getByRole('listitem')
+        .filter({ hasText: body })
+      await item.getByRole('button', { name: 'Report' }).click()
+      const form = item.getByRole('form', { name: /^Report the review by/ })
+      await form.getByRole('button', { name: 'Send report' }).click()
+      await expect(form.getByRole('alert')).toHaveText('Choose why you are reporting it.')
+      await form.getByLabel('Spam or advertising').check()
+      await form.getByLabel('Note').fill('Links to another shop.')
+      await form.getByRole('button', { name: 'Send report' }).click()
+      await expect(item.getByRole('status')).toHaveText('Thanks for reporting it. Our team will take a look.')
+      // A report never hides a review by itself.
+      await page.reload()
+      await expect(page.getByRole('list', { name: 'Reviews', exact: true })).toContainText(body)
+
+      const moderated = await request.get(`/api/reviews-ratings/moderation/reviews/${reviewId}`, {
+        headers: { Authorization: `Bearer ${await tokenFor(request, staff)}` },
+      })
+      expect(moderated.ok()).toBeTruthy()
+      const { openReports, reports } = (await moderated.json()) as {
+        openReports: Record<string, number>
+        reports: { customerId: string; reason: string; note: string | null }[]
+      }
+      expect(openReports.SPAM).toBe(1)
+      expect(reports).toEqual([
+        expect.objectContaining({ customerId: reporter.id, reason: 'SPAM', note: 'Links to another shop.' }),
+      ])
+    } finally {
+      // The author goes whether or not their review could be deleted, which is checked last.
+      const deleted = reviewId
+        ? (
+            await request.delete(`/api/reviews-ratings/reviews/${reviewId}`, {
+              headers: { Authorization: `Bearer ${authorToken}` },
+            })
+          ).status()
+        : 204
+      await deleteCustomer(request, author)
+      expect(deleted).toBe(204)
+    }
+  })
+
   test('a Customer returns a delivered phone by its IMEI, sees it Requested with its Refund amount, then Refunded', async ({
     page,
     request,
@@ -1095,6 +1167,45 @@ async function putInCart(request: APIRequestContext, token: string, variantId: s
     data: { quantity: 1 },
   })
   expect(put.ok()).toBeTruthy()
+}
+
+/**
+ * Checks out the Customer's Cart with one unit of `variantId` through the gateway, as the Storefront
+ * would: Berlin, Standard, and a card that approves. A cold Saga may still be at work when the pay
+ * call returns, so it asks for the session's payment until it is paid.
+ */
+async function checkOutThroughApi(request: APIRequestContext, token: string, variantId: string) {
+  const headers = { Authorization: `Bearer ${token}` }
+  await putInCart(request, token, variantId)
+  const started = await request.post('/api/checkout-pricing/checkout/sessions', { headers })
+  expect(started.status()).toBe(201)
+  const session = `/api/checkout-pricing/checkout/sessions/${((await started.json()) as { id: string }).id}`
+  const address = {
+    recipientName: 'Erika Mustermann',
+    line1: 'Hauptstraße 5',
+    postcode: '10115',
+    city: 'Berlin',
+    country: 'DE',
+  }
+  expect((await request.put(`${session}/shipping-address`, { headers, data: address })).ok()).toBeTruthy()
+  expect(
+    (await request.put(`${session}/shipping-option`, { headers, data: { optionId: 'STANDARD' } })).ok(),
+  ).toBeTruthy()
+  const paid = await request.post(`${session}/pay`, {
+    headers,
+    data: { paymentMethod: 'tok_approve' },
+    timeout: 60_000,
+  })
+  expect([200, 202]).toContain(paid.status())
+  await expect
+    .poll(
+      async () => ((await (await request.get(`${session}/payment`, { headers })).json()) as { status: string }).status,
+      {
+        timeout: 60_000,
+        intervals: [2_000],
+      },
+    )
+    .toBe('PAID')
 }
 
 /** A Payment as the Customer reads it, with its Payment transactions oldest first. */

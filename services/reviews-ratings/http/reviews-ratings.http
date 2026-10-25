@@ -1,11 +1,15 @@
 # Exercises every Reviews & Ratings endpoint against the compose stack (`make up`). The reads need
 # no token. Writing a review needs a Customer who has paid for the Product: check out a Google
 # Pixel 9 as demo@ecomm.local on the Storefront first, or the post below is a 403 `notPurchased`.
-# Run the requests top to bottom in the IntelliJ HTTP client; the token request stores a token for
-# the ones after it, and the post stores the review's ID.
+# Run the requests top to bottom in the IntelliJ HTTP client; the token requests store tokens for
+# the ones after them, and the post stores the review's ID. Staff moderate as the seeded
+# staff@ecomm.local. Reporting the demo Customer's review needs a second Customer: register one on
+# the Storefront first, and put its email and password in @otherEmail and @otherPassword below.
 
 @reviews = http://localhost:8097
 @keycloak = http://localhost:8180/realms/ecomm/protocol/openid-connect/token
+@otherEmail = other@ecomm.local
+@otherPassword = change-me
 
 ### A Product's reviews, newest first: page from 0, 10 to a page unless `size` says (up to 50)
 GET {{reviews}}/products/PHN-PIXEL-9/reviews?page=0&size=10
@@ -40,6 +44,13 @@ Content-Type: application/json
 
 > {% client.global.set("reviewId", response.body.id); %}
 
+### A screened word, posted or edited, holds a review: HELD, not listed or counted until Staff publish it; its author sees its status in the eligibility answer, and an edit that clears the screen publishes it
+PUT {{reviews}}/reviews/{{reviewId}}
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"rating": 4, "title": "Not a scam", "body": "Sharp photos, and the battery lasts a day."}
+
 ### An invalid review: a rating outside 1 to 5, a title over 120 characters or a blank body is a 400
 POST {{reviews}}/products/PHN-PIXEL-9/reviews
 Authorization: Bearer {{customerToken}}
@@ -47,13 +58,63 @@ Content-Type: application/json
 
 {"rating": 6, "body": " "}
 
-### Edit my review: 200 with editedAt set; another Customer's is a 404
+### Staff token
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=dev-cli&username=staff@ecomm.local&password=staff
+
+> {% client.global.set("staffToken", response.body.access_token); %}
+
+### The moderation queue: held reviews and published ones with open reports, oldest first, with openReports by reason
+GET {{reviews}}/moderation/reviews?page=0&size=20
+Authorization: Bearer {{staffToken}}
+
+### Publish the held review: it is listed and counted; 409 notHeld once it is published
+POST {{reviews}}/reviews/{{reviewId}}/publish
+Authorization: Bearer {{staffToken}}
+
+### The second Customer's token, to report the demo Customer's review
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=dev-cli&username={{otherEmail}}&password={{otherPassword}}
+
+> {% client.global.set("otherToken", response.body.access_token); %}
+
+### Report it: SPAM, OFFENSIVE, OFF_TOPIC or OTHER, and an optional note. 201; again, 200 with the first report. My own review is a 403 ownReview.
+POST {{reviews}}/reviews/{{reviewId}}/reports
+Authorization: Bearer {{otherToken}}
+Content-Type: application/json
+
+{"reason": "OFF_TOPIC", "note": "About the seller, not the phone."}
+
+### Any review as Staff see it: its author's Customer ID, every report and its moderation history
+GET {{reviews}}/moderation/reviews/{{reviewId}}
+Authorization: Bearer {{staffToken}}
+
+### Dismiss a published review's open reports: it stays up and leaves the queue; 409 noOpenReports without any
+POST {{reviews}}/reviews/{{reviewId}}/dismiss-reports
+Authorization: Bearer {{staffToken}}
+
+### Remove a review with a reason its author sees: 400 without one, 409 alreadyRemoved once removed
+POST {{reviews}}/reviews/{{reviewId}}/remove
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{"reason": "Reviews are of the product, not of the seller."}
+
+### Its author sees it REMOVED with its removalReason
+GET {{reviews}}/products/PHN-PIXEL-9/eligibility
+Authorization: Bearer {{customerToken}}
+
+### Editing a removed review is a 409 reviewRemoved
 PUT {{reviews}}/reviews/{{reviewId}}
 Authorization: Bearer {{customerToken}}
 Content-Type: application/json
 
 {"rating": 5, "body": "Even better after the update."}
 
-### Delete my review: 204; then I may write another
+### Delete my review, whatever its status: 204; then I may write another
 DELETE {{reviews}}/reviews/{{reviewId}}
 Authorization: Bearer {{customerToken}}

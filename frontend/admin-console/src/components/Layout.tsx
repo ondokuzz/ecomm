@@ -40,6 +40,9 @@ export function Layout() {
             <NavLink to="/rmas" className="nav-link">
               RMAs
             </NavLink>
+            <NavLink to="/reviews" className="nav-link">
+              Reviews
+            </NavLink>
             <NavLink to="/message-templates" className="nav-link">
               Messages
             </NavLink>

@@ -25,7 +25,9 @@ final class ReviewsClient {
       String title,
       String body,
       Instant createdAt,
-      Instant editedAt) {}
+      Instant editedAt,
+      String status,
+      String removalReason) {}
 
   record ReviewPage(List<Review> items, int page, int size, long total) {}
 
@@ -34,6 +36,34 @@ final class ReviewsClient {
   record Eligibility(boolean eligible, String reason, Review review) {}
 
   record Problem(int status, String reason, String detail) {}
+
+  record Report(String reason, String note, Instant reportedAt) {}
+
+  /**
+   * A review as Staff moderate it, with its author's Customer ID, reports and moderation history.
+   */
+  record Moderated(
+      String id,
+      String sku,
+      String customerId,
+      String author,
+      String variantId,
+      int rating,
+      String title,
+      String body,
+      Instant createdAt,
+      Instant editedAt,
+      String status,
+      Map<String, Long> openReports,
+      List<ModeratedReport> reports,
+      List<HistoryEntry> history) {}
+
+  record ModeratedReport(
+      String customerId, String reason, String note, Instant reportedAt, boolean resolved) {}
+
+  record HistoryEntry(String action, String staffId, Instant at, String reason) {}
+
+  record ModerationPage(List<Moderated> items, int page, int size, long total) {}
 
   /** A Customer, with the token they sign in with. */
   record Customer(String id, String token) {}
@@ -145,6 +175,77 @@ final class ReviewsClient {
         .header("Authorization", "Bearer " + customer.token())
         .body(content)
         .exchange();
+  }
+
+  static Map<String, Object> report(String reason, String note) {
+    var report = new java.util.HashMap<String, Object>();
+    report.put("reason", reason);
+    report.put("note", note);
+    return report;
+  }
+
+  RestTestClient.ResponseSpec report(Customer customer, String reviewId, Map<String, Object> body) {
+    return http.post()
+        .uri("/reviews/" + reviewId + "/reports")
+        .header("Authorization", "Bearer " + customer.token())
+        .body(body)
+        .exchange();
+  }
+
+  /** A Staff member's token, under {@code staffId}. */
+  static String staff(String staffId) {
+    return FakeKeycloak.token(staffId, "STAFF");
+  }
+
+  ModerationPage queue(String query) {
+    return http.get()
+        .uri("/moderation/reviews" + (query.isEmpty() ? "" : "?" + query))
+        .header("Authorization", "Bearer " + staff("staff-queue"))
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody(ModerationPage.class)
+        .returnResult()
+        .getResponseBody();
+  }
+
+  /**
+   * The queue's reviews of {@code sku}, in its order, read a page at a time, since other tests'
+   * reviews are in it too.
+   */
+  List<Moderated> queueOf(String sku) {
+    var found = new java.util.ArrayList<Moderated>();
+    for (int page = 0; ; page++) {
+      var items = queue("page=" + page + "&size=50").items();
+      items.stream().filter(m -> m.sku().equals(sku)).forEach(found::add);
+      if (items.size() < 50) {
+        return found;
+      }
+    }
+  }
+
+  Moderated moderated(String reviewId) {
+    return http.get()
+        .uri("/moderation/reviews/" + reviewId)
+        .header("Authorization", "Bearer " + staff("staff-reader"))
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody(Moderated.class)
+        .returnResult()
+        .getResponseBody();
+  }
+
+  /**
+   * Staff's {@code action} on the review: publish, dismiss-reports or remove, with {@code body}.
+   */
+  RestTestClient.ResponseSpec moderate(
+      String staffId, String reviewId, String action, Map<String, Object> body) {
+    var request =
+        http.post()
+            .uri("/reviews/" + reviewId + "/" + action)
+            .header("Authorization", "Bearer " + staff(staffId));
+    return (body == null ? request : request.body(body)).exchange();
   }
 
   RestTestClient.ResponseSpec delete(Customer customer, String reviewId) {

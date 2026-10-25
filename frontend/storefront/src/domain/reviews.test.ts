@@ -5,10 +5,13 @@ import {
   emptyDraft,
   ratingLabel,
   refusalMessage,
+  reportPayload,
   reviewCountLabel,
   reviewPayload,
+  reviewStatusLine,
   starFills,
   starShares,
+  validateReport,
   validateReview,
   variantBoughtLabel,
 } from './reviews'
@@ -146,5 +149,43 @@ describe('variantBoughtLabel', () => {
   it('says nothing for a Product with a single Variant, or one no longer listed', () => {
     expect(variantBoughtLabel(variants, 'P-SKU')).toBeUndefined()
     expect(variantBoughtLabel(variants, 'GONE')).toBeUndefined()
+  })
+})
+
+describe('reviewStatusLine', () => {
+  it('tells the author a held review awaits moderation', () => {
+    expect(reviewStatusLine({ status: 'HELD', removalReason: null })).toBe(
+      'Awaiting moderation: it is shown once our team has looked at it.',
+    )
+  })
+
+  it('gives the reason Staff removed it', () => {
+    expect(reviewStatusLine({ status: 'REMOVED', removalReason: 'Abusive language' })).toBe(
+      'Removed by our team: Abusive language',
+    )
+  })
+
+  it('says nothing of a published review', () => {
+    expect(reviewStatusLine({ status: 'PUBLISHED', removalReason: null })).toBeNull()
+  })
+})
+
+describe('reportPayload', () => {
+  it('sends the reason, and the note trimmed, a blank one as none', () => {
+    expect(reportPayload({ reason: 'SPAM', note: '  Links to a shop ' })).toEqual({
+      reason: 'SPAM',
+      note: 'Links to a shop',
+    })
+    expect(reportPayload({ reason: 'OFF_TOPIC', note: '  ' })).toEqual({ reason: 'OFF_TOPIC', note: null })
+  })
+})
+
+describe('validateReport', () => {
+  it('needs a reason, and a note of at most 500 characters', () => {
+    expect(validateReport({ reason: null, note: '' })).toEqual({ reason: 'Choose why you are reporting it.' })
+    expect(validateReport({ reason: 'OTHER', note: 'n'.repeat(501) })).toEqual({
+      note: 'Keep the note to 500 characters (it has 501).',
+    })
+    expect(validateReport({ reason: 'OTHER', note: 'n'.repeat(500) })).toEqual({})
   })
 })

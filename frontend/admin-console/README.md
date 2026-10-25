@@ -29,6 +29,8 @@ Vite, React, TypeScript, React Router and TanStack Query, with `oidc-client-ts`.
 | `/fulfillment/{id}` | A Shipment: its RMA for a replacement, its Order, Warehouse, Shipping option, Shipping address and lines. Pick it, pack it with a Serial number per unit, and see its tracking, its hold reason and its status history |
 | `/rmas` | The RMA queue: Requested, Awaiting units, Received, On hold and Closed, one tab each with its count, 20 to a page (`?tab=&page=`): RMA reference, kind, Order reference, Product, the status where a tab holds several, and how long ago it was requested, or, awaiting units, its Send-back deadline |
 | `/rmas/{id}` | An RMA: its Order, Customer, Product and Variant, quantity, Serial numbers, kind, the Customer's reason, its Refund amount, Send-back deadline, Warehouse and Inspection, the window it was checked against, its RMA history, and the Notifications its Customer was sent about it. Approve or reject a requested one, receive an approved one's units, inspect a received one, and see its resolution |
+| `/reviews` | Review moderation: held reviews and published ones with open reports, oldest first, 20 to a page (`?page=`): the review's title or start, its author, Product, rating, status, open reports by reason, and how long ago it was posted |
+| `/reviews/:id` | A review, whatever its status: its Product, Variant, author and Customer ID, what it says, its reports and its moderation history; publish, dismiss its reports or remove it |
 | `/message-templates` | Message templates: each Message type on each Notification channel it goes on, as Notifications renders it with its sample content: an email's subject, its HTML in a sandboxed frame and its plain text, an SMS's text, a push's title and text. Read only |
 
 `/` opens the Products. Every page needs a Staff sign-in.
@@ -291,6 +293,31 @@ the console only reads what it did.
 [`src/domain/rma.ts`](./src/domain/rma.ts), and `formatAgo` in
 [`src/domain/ago.ts`](./src/domain/ago.ts), do this.
 
+## Review moderation
+
+The **Reviews** page and a review's page call Reviews & Ratings' `GET /moderation/reviews?page=&size=`
+and `GET /moderation/reviews/{id}`, and moderate with `POST /reviews/{id}/publish`,
+`/dismiss-reports` and `/remove`, as Staff (see the
+[Reviews & Ratings README](../../services/reviews-ratings/README.md#moderation)). Product names come
+from Catalog's Product list.
+
+- **The queue** lists what awaits Staff, oldest review first: a review the word screen held, and a
+  published one Customers reported, with its open reports counted by reason, most first, such as
+  "2 offensive · 1 spam". The page lives in the URL, and a review's back link returns to it.
+- **A review's page** shows its Product, linked to its editor, the Variant bought, its author's
+  display name and Customer ID, its rating, when it was posted and edited, and its text; then every
+  report, with its reason, note, Customer ID, time and whether it is open; and its moderation
+  history, newest first, each action with its time, Staff member's ID and a removal's reason.
+- **Moderating**: a held review can be published; a published one with open reports can have them
+  dismissed; either can be removed with a reason its author is told, refused beside its field before
+  anything is sent if it is blank or over 1,000 characters. Each action resolves the review's
+  reports, so it leaves the queue. A removed review offers nothing. One another Staff member
+  moderated first answers 409 (`notHeld`, `noOpenReports` or `alreadyRemoved`), which the page says,
+  showing the review as they left it.
+
+`openReportsLabel`, `actionsOf`, `removalOf` and `historyRowsOf` in
+[`src/domain/review.ts`](./src/domain/review.ts) do this.
+
 ## Message templates
 
 The **Messages** page calls Notifications' `GET /templates`, which renders every Message template
@@ -394,7 +421,7 @@ how to apply the client to an existing realm.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: failed requests as messages and references, field errors from problem details, the STAFF role in an access token, a Category, a Product with its Warranty terms and Serial tracking, a Coupon and a Campaign to and from their editor's form, decimals to and from Money, the Order list's filters to Order Management's query, an Order's Status history, Payment statuses and transactions, Stock movements and their balance, RMA statuses and kinds, Message type and Notification channel names and what a message's subject is called, the RMA queue's tabs, URL and query, a Send-back deadline and its flag, an RMA's window, its RMA history, a decision, a receipt and an Inspection before they are sent, each Serial number received as it is typed, Returns & Warranty's refusals of a receipt, an RMA's resolution, an Order's Refunds, Shipment and Tracking event statuses, the fulfillment queue's URL and query, an IMEI or serial number as it is typed, a Pack request, a Shipment's status history, and how long ago
+npm test          # Vitest: failed requests as messages and references, field errors from problem details, the STAFF role in an access token, a Category, a Product with its Warranty terms and Serial tracking, a Coupon and a Campaign to and from their editor's form, decimals to and from Money, the Order list's filters to Order Management's query, an Order's Status history, Payment statuses and transactions, Stock movements and their balance, RMA statuses and kinds, Message type and Notification channel names and what a message's subject is called, the RMA queue's tabs, URL and query, a Send-back deadline and its flag, an RMA's window, its RMA history, a decision, a receipt and an Inspection before they are sent, each Serial number received as it is typed, Returns & Warranty's refusals of a receipt, an RMA's resolution, an Order's Refunds, Shipment and Tracking event statuses, the fulfillment queue's URL and query, an IMEI or serial number as it is typed, a Pack request, a Shipment's status history, a review's open reports, what Staff may do to it, a removal before it is sent and its moderation history, and how long ago
 npm run build
 npm run test:e2e  # Playwright against the running compose stack (`make up`)
 ```
@@ -413,6 +440,13 @@ Keycloak's admin API, as `admin`), puts a laptop in the Cart, opens checkout on 
 browser of the Customer's own, and sees the Campaign's Discount there without entering anything. It
 pays, so no Stock stays held, finds the Discount on the Order, and then, as Staff, finds that Order
 by its reference and reads its history, Placed then Paid.
+[`e2e/reviews.spec.ts`](./e2e/reviews.spec.ts) has two Customers of its own buy a phone through the
+gateway and review it: the first's trips the word screen and is held, the second's is published and
+reported by the first. Staff find the held review in the queue on the page its age puts it, publish
+it and see it on the Product's public list; then find the reported one with "1 off-topic", see the
+report's note, have a removal without a reason refused, remove it with one, and see it Removed with
+its reports resolved, gone from the public list, and its reason in its author's eligibility. Both
+reviews are deleted by their authors after, and the Customers with them.
 [`e2e/products.spec.ts`](./e2e/products.spec.ts) creates a Product in `phones` with two Variants and
 their Stock.
 
