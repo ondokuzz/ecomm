@@ -38,3 +38,6 @@ when it also decides by role, as an endpoint Staff and Customers share does
 A README, roadmap or ADR that describes the code changes with it, in the same change, and says
 only what the code does: a count, a file name, a claim that "every test that does X is in Y" is
 checked against the diff.
+
+A `.http` file runs top to bottom against a freshly seeded stack, as the seeded users: each request
+comes after the ones whose results it uses, and nothing is deleted before a later request needs it.

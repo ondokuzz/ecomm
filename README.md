@@ -346,7 +346,9 @@ d=.secrets/ecomm; printf '{"dev": {"checkoutClientSecret": "%s", "orchestrationC
 | `make returns-rebuild` | Rebuild Returns & Warranty's projections of Shipments, Products and Orders from the topics, keeping the RMAs ([Returns & Warranty](./services/returns-warranty/README.md#rebuilding)) |
 | `make notifications-rebuild` | Rebuild Notifications' projection of Product names from `catalog.product`, keeping the Notification ledger and sending nothing again ([Notifications](./services/notifications/README.md#the-events-it-consumes)) |
 
-Every checkout takes Stock, so after many smoke-test runs `make seed-reset` refills it. To wipe
+Every checkout takes Stock, so after many smoke-test runs `make seed-reset` refills it. The
+Storefront's suite stops before its first test once any seeded Product's default Variant is sold
+out, and names them. To wipe
 everything, Keycloak's users included, run `docker compose down -v`.
 
 ### A stack from Sprint 4
@@ -407,6 +409,9 @@ memory, and the kernel then kills a container, often Kafka or Keycloak. `make st
 killed for memory under its cap, since Docker doesn't say which ran out, and `make up` starts it
 again. The services' images build from the Gradle build alone (`.dockerignore`), so editing the
 Compose file, the Makefile, a doc or a `.http` file, or running Playwright, doesn't rebuild them.
+A build is slow and quiet: on 2026-10-25, rebuilding Reviews & Ratings and both frontends took about
+10 minutes, most of it the Gradle build inside Docker, with no output until it ended.
+`--progress plain` shows its steps.
 
 The Gradle tests' Testcontainers (Postgres, Kafka, Apicurio and others) don't fit beside the running
 stack either: with it up, their containers time out starting. `docker compose stop` before

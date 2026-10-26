@@ -6,6 +6,8 @@ A sprint's definition-of-done pass proves a stack from the sprint before upgrade
 
 A memory reading, before and after a change that adds a container, or a sprint's: `docs/agents/memory-reading.md`.
 
+Rebuilding images, or running `./gradlew check`, beside the running stack: `README.md#memory` first; on 8 GB neither fits beside it.
+
 ## Agent skills
 
 ### Issue tracker
