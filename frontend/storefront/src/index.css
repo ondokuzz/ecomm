@@ -2779,6 +2779,9 @@ main {
   left: var(--space-2);
   box-shadow: var(--shadow-sm);
 }
+.product-card-label {
+  align-self: flex-start;
+}
 
 /* Checkout's Shipping: the address form, the address once validated, and the quoted options */
 .shipping {

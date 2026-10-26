@@ -1,5 +1,6 @@
 package com.ecomm.recommendations;
 
+import static com.ecomm.recommendations.Events.inStock;
 import static com.ecomm.recommendations.Events.order;
 import static com.ecomm.recommendations.Events.product;
 import static com.ecomm.recommendations.RecommendationsClient.newSku;
@@ -95,6 +96,7 @@ class ProjectionApiTest {
 
     product(p, p + "-V").publish();
     product(other, other + "-V").publish();
+    inStock(p + "-V", other + "-V");
 
     recommendations.awaitAlsoBought(p, a -> a.skus().contains(other));
     assertThat(recommendations.alsoBought(other).skus()).containsExactly(p);
@@ -105,6 +107,7 @@ class ProjectionApiTest {
     var p = newProduct();
     var other = newSku();
     product(other, other + "-OLD", other + "-NEW").publish();
+    inStock(other + "-NEW");
     order(p + "-V", other + "-OLD").at(2, "PAID").publish();
     recommendations.awaitAlsoBought(p, a -> a.skus().contains(other));
 
@@ -132,6 +135,7 @@ class ProjectionApiTest {
     var p = newProduct();
     var other = newSku();
     product(other, other + "-V").version(3).removed().publish();
+    inStock(other + "-V");
     order(p + "-V", other + "-V").at(2, "PAID").publish();
 
     product(other, other + "-V").version(3).publish();
@@ -140,17 +144,18 @@ class ProjectionApiTest {
     assertThat(skusOnceApplied(p)).doesNotContain(other);
   }
 
-  /** A new Product, with one Variant, {@code <sku>-V}. */
+  /** A new Product, with one Variant, {@code <sku>-V}, in Stock. */
   private static String newProduct() {
     var sku = newSku();
     product(sku, sku + "-V").publish();
+    inStock(sku + "-V");
     return sku;
   }
 
   /**
    * What was bought with {@code p} once every event sent so far is applied, without the marker
-   * Product it waits for. Each test topic has one partition, handled in order, so a marker Order
-   * and Product applied means every earlier event is.
+   * Product it waits for. Each test topic has one partition, handled in order, so a marker Order,
+   * Product and Stock applied means every earlier event is.
    */
   private List<String> skusOnceApplied(String p) {
     var marker = newProduct();

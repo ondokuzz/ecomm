@@ -1,11 +1,13 @@
 package com.ecomm.recommendations;
 
+import static com.ecomm.recommendations.Events.inStock;
 import static com.ecomm.recommendations.Events.order;
 import static com.ecomm.recommendations.Events.product;
+import static com.ecomm.recommendations.RecommendationsClient.Item.boughtTogether;
 import static com.ecomm.recommendations.RecommendationsClient.newSku;
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.ecomm.recommendations.RecommendationsClient.Item;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -46,13 +48,14 @@ class AlsoBoughtApiTest {
     var case_ = newSku();
     product(phone, phone + "-V").publish();
     product(case_, case_ + "-V").publish();
+    inStock(phone + "-V", case_ + "-V");
 
     order(phone + "-V", case_ + "-V").at(2, "PAID").publish();
 
     var withPhone = recommendations.awaitAlsoBought(phone, a -> !a.items().isEmpty());
     assertThat(withPhone.sku()).isEqualTo(phone);
-    assertThat(withPhone.items()).containsExactly(new Item(case_, 1));
-    assertThat(recommendations.alsoBought(case_).items()).containsExactly(new Item(phone, 1));
+    assertThat(withPhone.items()).containsExactly(boughtTogether(case_, 1));
+    assertThat(recommendations.alsoBought(case_).items()).containsExactly(boughtTogether(phone, 1));
   }
 
   /**
@@ -66,6 +69,7 @@ class AlsoBoughtApiTest {
     var skus = List.of(p, base + "-A", base + "-B", base + "-C", base + "-D", base + "-E");
     for (var sku : skus) {
       product(sku, sku + "-1", sku + "-2").publish();
+      inStock(sku + "-1");
     }
     var now = Instant.now();
     order(p + "-1", base + "-A-1", base + "-A-2", base + "-B-1")
@@ -86,13 +90,39 @@ class AlsoBoughtApiTest {
 
     assertThat(alsoBought.items())
         .containsExactly(
-            new Item(base + "-A", 2),
-            new Item(base + "-C", 1),
-            new Item(base + "-D", 1),
-            new Item(base + "-E", 1));
+            boughtTogether(base + "-A", 2),
+            boughtTogether(base + "-C", 1),
+            boughtTogether(base + "-D", 1),
+            boughtTogether(base + "-E", 1));
     assertThat(recommendations.alsoBought(p, 12).skus())
         .containsExactly(base + "-A", base + "-C", base + "-D", base + "-E", base + "-B");
     assertThat(recommendations.alsoBought(p, 1).skus()).containsExactly(base + "-A");
+  }
+
+  /** Only Orders placed within {@code ecomm.recommendations.lookback}, 180 days, count. */
+  @Test
+  void ordersPlacedBeforeTheLookbackDoNotCount() {
+    var p = newSku();
+    var recent = newSku();
+    var old = newSku();
+    for (var sku : List.of(p, recent, old)) {
+      product(sku, sku + "-V").publish();
+      inStock(sku + "-V");
+    }
+    var now = Instant.now();
+    order(p + "-V", old + "-V").at(2, "PAID").placedAt(now.minus(Duration.ofDays(181))).publish();
+    order(p + "-V", old + "-V")
+        .at(2, "DELIVERED")
+        .placedAt(now.minus(Duration.ofDays(200)))
+        .publish();
+    order(p + "-V", recent + "-V")
+        .at(2, "PAID")
+        .placedAt(now.minus(Duration.ofDays(179)))
+        .publish();
+
+    var alsoBought = recommendations.awaitAlsoBought(p, a -> !a.items().isEmpty());
+
+    assertThat(alsoBought.items()).containsExactly(boughtTogether(recent, 1));
   }
 
   @ParameterizedTest

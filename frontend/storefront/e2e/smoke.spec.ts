@@ -23,6 +23,8 @@ import { stackSecret } from './secrets'
  *   Product, whose rating then shows on its card and its page. A Customer who never bought a
  *   Product is told they can't review it.
  * - Buy two new Products together, and see each under "Customers also bought" on the other's page.
+ * - A new Product nothing was bought with shows its Category's best seller under "Popular in
+ *   <Category>", labelled so (Sprint 6).
  * - Every checkout gives a Shipping address and chooses a Shipping option first (Sprint 5); the
  *   first shows a malformed postcode named, then corrected, Express's cost in the total, and the
  *   Order with its Shipping.
@@ -520,16 +522,22 @@ test('after a Customer buys two Products together, each one’s page shows the o
 
     for (const [product, other] of [pair, [...pair].reverse()]) {
       // Recommendations learns of the Order from its event, a moment after it is paid.
+      // The rest of the row is filled with audio's best sellers, which other tests' Orders decide.
       await expect
-        .poll(async () => (await alsoBoughtOf(request, product.sku)).map((item) => item.sku), { timeout: 15_000 })
+        .poll(
+          async () =>
+            (await alsoBoughtOf(request, product.sku))
+              .filter((item) => item.reason === 'BOUGHT_TOGETHER')
+              .map((item) => item.sku),
+          { timeout: 15_000 },
+        )
         .toEqual([other.sku])
       await page.goto(`/products/${encodeURIComponent(product.sku)}`)
       const row = page.getByRole('region', { name: 'Customers also bought' })
-      await expect(row.getByRole('link')).toHaveCount(1)
-      await expect(row.getByRole('link', { name: new RegExp(escape(other.name)) })).toHaveAttribute(
-        'href',
-        `/products/${encodeURIComponent(other.sku)}`,
-      )
+      const first = row.getByRole('link').first()
+      await expect(first).toHaveAttribute('href', `/products/${encodeURIComponent(other.sku)}`)
+      await expect(first).toContainText(other.name)
+      await expect(first).not.toContainText('Popular in')
     }
   } finally {
     for (const { sku } of pair) {
@@ -538,6 +546,72 @@ test('after a Customer buys two Products together, each one’s page shows the o
       const stock = await request.delete(`/api/inventory/stock/${encodeURIComponent(sku)}`, { headers: staff })
       expect([204, 404]).toContain(stock.status())
     }
+  }
+})
+
+test('a Product nothing was bought with shows its Category’s best seller under Popular in its Category', async ({
+  page,
+  request,
+}) => {
+  // A Category of the test's own, so other tests' Orders don't decide its best sellers.
+  const run = `${Date.now().toString(36)}${test.info().workerIndex}`.toUpperCase()
+  const category = { slug: `e2e-gadgets-${run.toLowerCase()}`, name: `E2E Gadgets ${run}` }
+  const [seller, lonely] = ['Seller', 'Lonely'].map((kind) => ({
+    sku: `E2E-${kind.toUpperCase()}-${run}`,
+    name: `E2E ${kind} ${run}`,
+  }))
+  const staff = {
+    Authorization: `Bearer ${await tokenFor(request, { email: 'staff@ecomm.local', password: 'staff' })}`,
+  }
+  try {
+    const created = await request.post('/api/catalog/categories', {
+      headers: staff,
+      data: {
+        ...category,
+        attributes: [{ name: 'brand', type: 'TEXT', values: [], required: true, variantAxis: false }],
+      },
+    })
+    expect(created.status()).toBe(201)
+    for (const { sku, name } of [seller, lonely]) {
+      const product = await request.post('/api/catalog/products', {
+        headers: staff,
+        data: {
+          sku,
+          name,
+          category: category.slug,
+          attributes: { brand: 'E2E' },
+          variants: [{ id: sku, axisValues: {}, price: { amountMinor: 1999, currency: 'EUR' } }],
+        },
+      })
+      expect(product.status()).toBe(201)
+      const stocked = await request.put(`/api/inventory/stock/${encodeURIComponent(sku)}`, {
+        headers: staff,
+        data: { onHand: 5, reason: 'stocktake' },
+      })
+      expect(stocked.ok()).toBeTruthy()
+    }
+    await checkOutThroughApi(request, await tokenFor(request, signedUp()), seller.sku)
+
+    // Recommendations learns of the Order from its event, a moment after it is paid.
+    await expect
+      .poll(async () => await alsoBoughtOf(request, lonely.sku), { timeout: 15_000 })
+      .toEqual([{ sku: seller.sku, orders: 1, reason: 'POPULAR_IN_CATEGORY', category: category.name }])
+    await page.goto(`/products/${encodeURIComponent(lonely.sku)}`)
+    const row = page.getByRole('region', { name: `Popular in ${category.name}` })
+    await expect(row.getByRole('heading', { name: `Popular in ${category.name}` })).toBeVisible()
+    await expect(row.getByRole('link')).toHaveCount(1)
+    const card = row.getByRole('link', { name: new RegExp(escape(seller.name)) })
+    await expect(card).toHaveAttribute('href', `/products/${encodeURIComponent(seller.sku)}`)
+    await expect(card).toContainText(`Popular in ${category.name}`)
+  } finally {
+    for (const { sku } of [seller, lonely]) {
+      const product = await request.delete(`/api/catalog/products/${encodeURIComponent(sku)}`, { headers: staff })
+      expect([204, 404]).toContain(product.status())
+      const stock = await request.delete(`/api/inventory/stock/${encodeURIComponent(sku)}`, { headers: staff })
+      expect([204, 404]).toContain(stock.status())
+    }
+    const removed = await request.delete(`/api/catalog/categories/${category.slug}`, { headers: staff })
+    expect([204, 404]).toContain(removed.status())
   }
 })
 

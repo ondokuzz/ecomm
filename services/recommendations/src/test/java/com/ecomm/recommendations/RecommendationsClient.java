@@ -17,7 +17,17 @@ final class RecommendationsClient {
     }
   }
 
-  record Item(String sku, long orders) {}
+  /** A Recommendation; {@code category} is only there when it is popular in it. */
+  record Item(String sku, long orders, String reason, String category) {
+
+    static Item boughtTogether(String sku, long orders) {
+      return new Item(sku, orders, "BOUGHT_TOGETHER", null);
+    }
+
+    static Item popularIn(String category, String sku, long orders) {
+      return new Item(sku, orders, "POPULAR_IN_CATEGORY", category);
+    }
+  }
 
   private final RestTestClient http;
 

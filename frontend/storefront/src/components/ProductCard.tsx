@@ -7,8 +7,19 @@ import { SummaryStars } from './StarRating'
 import { Badge } from './ui/Badge'
 import { Card } from './ui/Card'
 
-/** A Product as a card in a grid, leading to its page, with its Rating summary once known. */
-export function ProductCard({ product, summary }: { product: ProductCardInfo; summary: RatingSummary | undefined }) {
+/**
+ * A Product as a card in a grid, leading to its page, with its Rating summary once known, and a
+ * `label` saying why it is shown, such as "Popular in Audio", if it is given one.
+ */
+export function ProductCard({
+  product,
+  summary,
+  label,
+}: {
+  product: ProductCardInfo
+  summary: RatingSummary | undefined
+  label?: string
+}) {
   const formatMoney = useFormatMoney()
   return (
     <li>
@@ -18,6 +29,11 @@ export function ProductCard({ product, summary }: { product: ProductCardInfo; su
             <ProductImage product={{ name: product.name, images: product.image ? [product.image] : [] }} />
             {product.inStock === false && <Badge className="product-card-stock">Out of stock</Badge>}
           </div>
+          {label && (
+            <Badge tone="info" className="product-card-label">
+              {label}
+            </Badge>
+          )}
           <span className="brand-name">{product.attributes.brand}</span>
           <span className="product-name">{product.name}</span>
           <SummaryStars summary={summary} />

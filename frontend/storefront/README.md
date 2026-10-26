@@ -137,11 +137,14 @@ eligibility, and the listing's summaries.
 
 Under its reviews, a Product page shows what Customers also bought with it, from
 [Recommendations](../../services/recommendations/README.md)' `GET /products/{sku}/also-bought`: up to
-four Products, most bought together first, each a card as the listing's are, built from Catalog's
-Product (shared with its own page's query) and the Rating summaries asked for in one request
-([`src/components/AlsoBought.tsx`](./src/components/AlsoBought.tsx)). The row shows nothing while
-it loads, when nothing was bought with the Product, or when Recommendations can't be asked; a
-Product Catalog doesn't have, or can't be asked about, is left out of it.
+four Products, most bought together first, then, when too few were, the Product's Category's best
+sellers, each a card as the listing's are, built from Catalog's Product (shared with its own page's
+query) and the Rating summaries asked for in one request
+([`src/components/AlsoBought.tsx`](./src/components/AlsoBought.tsx)). A best seller's card is
+labelled "Popular in <Category>", and when none was bought together the row is headed "Popular in
+<Category>" instead ([`src/domain/recommendations.ts`](./src/domain/recommendations.ts)). The row
+shows nothing while it loads, when there are no Recommendations, or when Recommendations can't be
+asked; a Product Catalog doesn't have, or can't be asked about, is left out of it.
 
 ## Orders
 
@@ -474,7 +477,7 @@ Sign in as `demo@ecomm.local` / `demo`, or register a new Customer.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: failed responses as messages and support references, Money formatting by Catalog's Minor units, Cart pricing, checkout problems, the session countdown and the price breakdown with each Discount and the Shipping cost, address violations mapped to their fields, Shipping options and addresses in words, whether a session can be paid, Coupon rejections, test cards and payment failures, an Order's Payment statuses and transactions and why a cancelled Order was cancelled, quantities, Stock levels and Cart lines' availability, toasts, the search's URL and its Facets as chips and filters, rating stars and summaries, the review and report forms' validation and a review's status for its author, Product specs by their Category's definitions, Warranty terms in words, Customer initials, Orders and their timeline from the Order Status history, Shipment statuses in words, Tracking events oldest first and when the Order page refreshes them, the Orders list's paging, Order Status colours, RMA kinds offered or disabled with why, the request form's checks, Returns & Warranty's refusals by field, the RMA timeline and when its page refreshes, Refunds named by their RMA, the Notification preferences form's mobile number, seed Product images, the Keycloak theme's and the Admin Console's copies of the tokens
+npm test          # Vitest: failed responses as messages and support references, Money formatting by Catalog's Minor units, Cart pricing, checkout problems, the session countdown and the price breakdown with each Discount and the Shipping cost, address violations mapped to their fields, Shipping options and addresses in words, whether a session can be paid, Coupon rejections, test cards and payment failures, an Order's Payment statuses and transactions and why a cancelled Order was cancelled, quantities, Stock levels and Cart lines' availability, toasts, the search's URL and its Facets as chips and filters, rating stars and summaries, the review and report forms' validation and a review's status for its author, Product specs by their Category's definitions, Warranty terms in words, Customer initials, Orders and their timeline from the Order Status history, Shipment statuses in words, Tracking events oldest first and when the Order page refreshes them, the Orders list's paging, Order Status colours, RMA kinds offered or disabled with why, the request form's checks, Returns & Warranty's refusals by field, the RMA timeline and when its page refreshes, Refunds named by their RMA, the Notification preferences form's mobile number, the Recommendation label and the row's heading, seed Product images, the Keycloak theme's and the Admin Console's copies of the tokens
 npm run test:e2e  # Playwright smoke, search, product-page and error-states tests against the running compose stack (`make up`)
 ```
 
@@ -505,8 +508,9 @@ at their recorded times; once Reviews has the paid Order's event it posts a revi
 Rating summary on the Product's page and its card. The other opens a Product it never bought and is told it
 can't review it, and Reviews refuses a post with `notPurchased`. Of Sprint 4's, one creates two
 Products of its own as Staff through Catalog's and Inventory's APIs, buys them together, waits for
-Recommendations to have the Order, and sees each one's page show the other, alone, under "Customers
-also bought"; it deletes both Products and their Stock afterwards. Of Sprint 5's, one pays an
+Recommendations to have the Order, and sees each one's page show the other first under "Customers
+also bought", unlabelled, any after it being Audio's best sellers; it deletes both Products and their
+Stock afterwards. Of Sprint 5's, one pays an
 Order, waits for the fulfillment Saga to create its Shipment and sees it "Being prepared", then
 picks and packs it as Staff through the gateway (as the Admin Console does, with a new Serial
 number or IMEI for any serial-tracked line), waits for the Saga to ship it, and sees the Carrier
@@ -526,7 +530,10 @@ session holds its use, and is told "That code has been used up." when applying i
 deleting the second Customer and the Coupon after. Another has a second Customer of its own check
 out a phone through the gateway and review it, then reports that review from the Product page,
 seeing a missing reason refused, and sees it still listed after a reload and the report, with its
-note, in Staff's view of it; the review is deleted by its author after. The error-states test
+note, in Staff's view of it; the review is deleted by its author after. Another creates a Category
+and two Products of its own as Staff, stocks both, checks one out through the gateway, and sees the
+other's page headed "Popular in <Category>" with the bought one's card labelled so; it deletes the
+Products, their Stock and the Category after. The error-states test
 ([`e2e/error-states.spec.ts`](./e2e/error-states.spec.ts)) opens unknown route, Product and Order
 addresses and sees the Not Found page, answers the Product list with a 500 and sees the panel's
 reference and "Try again" recover, fails the Product page's Stock lookup and sees it say so with its

@@ -9,6 +9,8 @@ reviews-ratings.orders
 reviews-ratings.products
 recommendations.orders
 recommendations.products
+recommendations.categories
+recommendations.stock
 fulfillment-shipping.products
 returns-warranty.shipments
 returns-warranty.products

@@ -1,11 +1,17 @@
 # Exercises the Recommendations endpoint against the compose stack (`make up`). It needs no token.
-# A Product has something bought with it once an Order with it and another Product is paid: check
-# out a Google Pixel 9 and a Sony WH-1000XM5 together as demo@ecomm.local on the Storefront first.
+# A Product has something bought with it once an Order with it and another Product is paid, within
+# the last 180 days: check out a Google Pixel 9 and a Sony WH-1000XM5 together as demo@ecomm.local on
+# the Storefront first.
 
 @recommendations = http://localhost:8098
 
-### What Customers also bought with a Product, most bought together first: 4 unless `limit` says (1 to 12)
+### What Customers also bought with a Product, most bought together first, then filled up with its
+### Category's best sellers, each with its `reason`: 4 unless `limit` says (1 to 12)
 GET {{recommendations}}/products/PHN-PIXEL-9/also-bought
+
+### A Product nothing was bought with: only its Category's best sellers, here the Sony WH-1000XM5 as
+### POPULAR_IN_CATEGORY in Audio. A Product out of Stock is never one.
+GET {{recommendations}}/products/AUD-JBL-FLIP-6/also-bought
 
 ### Up to 12 of them
 GET {{recommendations}}/products/PHN-PIXEL-9/also-bought?limit=12
@@ -13,5 +19,5 @@ GET {{recommendations}}/products/PHN-PIXEL-9/also-bought?limit=12
 ### A limit outside 1 to 12: 400
 GET {{recommendations}}/products/PHN-PIXEL-9/also-bought?limit=13
 
-### A SKU nothing was bought with, or that Recommendations has never heard of: no items
+### A SKU Recommendations has never heard of: no items
 GET {{recommendations}}/products/NO-SUCH-SKU/also-bought

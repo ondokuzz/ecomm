@@ -7,7 +7,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
  * What every test's application runs against: a Postgres container shared by every test class, the
- * shared Kafka and schema registry from {@link EventBackbone} with the two topics Recommendations
+ * shared Kafka and schema registry from {@link EventBackbone} with the four topics Recommendations
  * consumes and its consumer groups' dead-letter and redrive topics, and {@link FakeKeycloak}. Each
  * topic has one partition, so its events are applied in the order they were sent.
  */

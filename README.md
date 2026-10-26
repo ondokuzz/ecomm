@@ -43,7 +43,8 @@ The first build takes several minutes. Then open the Storefront on http://localh
    word, such as "scam", awaits moderation and isn't shown until Staff publish it, and you can
    report another Customer's review as spam, offensive, off-topic or for another reason;
 6. see, under a Product's page, what Customers also bought with it: the Products most often in the
-   same paid Orders, from [Recommendations](./services/recommendations/README.md), and its Warranty
+   same paid Orders and in Stock, filled up with its Category's best sellers, labelled "Popular in
+   <Category>", from [Recommendations](./services/recommendations/README.md), and its Warranty
    terms, such as "24 months, manufacturer's warranty (Samsung)";
 7. once an Order is delivered, request an RMA for it through the API: a return within the 14-day
    Return Period, or a warranty claim within the Warranty Window, naming the IMEI or serial number
@@ -341,7 +342,8 @@ d=.secrets/ecomm; printf '{"dev": {"checkoutClientSecret": "%s", "orchestrationC
 | `make search-rebuild` | Rebuild Search's projection from the topics ([Search & Discovery](./services/search-discovery/README.md#rebuilding)) |
 | `make dlt-redrive GROUP=<group>` | Redrive a consumer group's dead events once their cause is fixed: copy what reached `<group>.dlt` since the last redrive to `<group>.redrive`, which the group's listeners also consume ([service template](./platform/service-template/README.md#consuming)) |
 | `make reviews-rebuild` | Rebuild Reviews' projection of Orders and Products from the topics, keeping the reviews ([Reviews & Ratings](./services/reviews-ratings/README.md#rebuilding)) |
-| `make recommendations-rebuild` | Rebuild Recommendations' projection of Orders and Products from the topics ([Recommendations](./services/recommendations/README.md#rebuilding)) |
+| `make recommendations-rebuild` | Rebuild Recommendations' projection of Orders, Products, Categories and Stock from the topics ([Recommendations](./services/recommendations/README.md#rebuilding)) |
+| `make recommendations-report` | Print the share of the Catalog's Products with at least one Recommendation and with four, in all and by reason ([Recommendations](./services/recommendations/README.md#measuring-it)) |
 | `make fulfillment-rebuild` | Rebuild Fulfillment & Shipping's Product projection from `catalog.product`, keeping the Shipments ([Fulfillment & Shipping](./services/fulfillment-shipping/README.md#shipments)) |
 | `make returns-rebuild` | Rebuild Returns & Warranty's projections of Shipments, Products and Orders from the topics, keeping the RMAs ([Returns & Warranty](./services/returns-warranty/README.md#rebuilding)) |
 | `make notifications-rebuild` | Rebuild Notifications' projection of Product names from `catalog.product`, keeping the Notification ledger and sending nothing again ([Notifications](./services/notifications/README.md#the-events-it-consumes)) |

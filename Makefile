@@ -12,7 +12,7 @@ RETURNS_GROUPS := $(filter returns-warranty.%,$(GROUPS))
 NOTIFICATIONS_PRODUCT_GROUPS := notifications.products
 DEAD_LETTER_TOPICS := $(foreach group,$(GROUPS),$(group).dlt $(group).redrive)
 
-.PHONY: secrets up down status memory realm-sync seed-reset search-rebuild reviews-rebuild recommendations-rebuild fulfillment-rebuild returns-rebuild notifications-rebuild dlt-redrive upgrade-from upgrade-to upgrade-clean
+.PHONY: secrets up down status memory realm-sync seed-reset search-rebuild reviews-rebuild recommendations-rebuild recommendations-report fulfillment-rebuild returns-rebuild notifications-rebuild dlt-redrive upgrade-from upgrade-to upgrade-clean
 
 ## Write each of the stack's secrets that is missing to .secrets/<project>/, never overwriting one
 ## (infra/docker/secrets.sh). `make up` runs it first.
@@ -92,14 +92,19 @@ reviews-rebuild:
 	$(COMPOSE) exec -T mongo mongosh --quiet reviews --eval 'db.orders.drop(); db.products.drop()'
 	$(COMPOSE) up -d --wait reviews-ratings
 
-## Rebuild Recommendations' projection of Orders and Products from the topics
+## Rebuild Recommendations' projection of Orders, Products, Categories and Stock from the topics
 ## (services/recommendations/README.md). As for Search, the redrive topics aren't replayed.
 recommendations-rebuild:
 	$(COMPOSE) stop recommendations
 	infra/docker/replay-groups.sh $(RECOMMENDATIONS_GROUPS)
 	$(COMPOSE) exec -T postgres psql -U ecomm -d recommendations -v ON_ERROR_STOP=1 \
-	  -c 'TRUNCATE orders, order_variants, products, variants'
+	  -c 'TRUNCATE orders, order_variants, products, variants, categories, stock'
 	$(COMPOSE) up -d --wait recommendations
+
+## Say, of every Product in the Catalog, the share with at least one Recommendation and with four,
+## in all and by reason (infra/docker/recommendations-report.py).
+recommendations-report:
+	@python3 -B infra/docker/recommendations-report.py
 
 ## Rebuild Fulfillment & Shipping's Product projection from catalog.product: stop the service, reset
 ## its group to the earliest offset, empty the projection, and start it again. Shipments keep the

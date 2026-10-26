@@ -15,16 +15,23 @@ import java.util.UUID;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Test-only: the events Recommendations consumes, as Order Management and Catalog publish them.
- * Each is checked against its topic's schema in {@code platform/event-schemas} before it is sent,
- * so a test can't rely on an event no producer could publish.
+ * Test-only: the events Recommendations consumes, as Order Management, Catalog and Inventory
+ * publish them. Each is checked against its topic's schema in {@code platform/event-schemas} before
+ * it is sent, so a test can't rely on an event no producer could publish.
  */
 final class Events {
 
   static final String ORDERS = "order-management.order";
   static final String PRODUCTS = "catalog.product";
-  static final List<String> TOPICS = List.of(ORDERS, PRODUCTS);
-  static final List<String> GROUPS = List.of("recommendations.orders", "recommendations.products");
+  static final String CATEGORIES = "catalog.category";
+  static final String STOCK = "inventory.stock";
+  static final List<String> TOPICS = List.of(ORDERS, PRODUCTS, CATEGORIES, STOCK);
+  static final List<String> GROUPS =
+      List.of(
+          "recommendations.orders",
+          "recommendations.products",
+          "recommendations.categories",
+          "recommendations.stock");
 
   private static final JsonMapper JSON = new JsonMapper();
   private static final JsonSchemaFactory SCHEMAS =
@@ -37,9 +44,29 @@ final class Events {
     return new OrderEvent(UUID.randomUUID().toString(), List.of(variantIds));
   }
 
-  /** A Product with the given Variants. */
+  /**
+   * A Product with the given Variants, in a Category of its own no event names, so it has no
+   * Category's best sellers until {@link ProductEvent#in} says otherwise.
+   */
   static ProductEvent product(String sku, String... variantIds) {
     return new ProductEvent(sku, List.of(variantIds));
+  }
+
+  /** A Category, with its name. */
+  static CategoryEvent category(String slug, String name) {
+    return new CategoryEvent(slug, name);
+  }
+
+  /** Puts each Variant in Stock, with 5 to sell. */
+  static void inStock(String... variantIds) {
+    for (var variantId : variantIds) {
+      stock(variantId, 5).publish();
+    }
+  }
+
+  /** A Variant's Stock: stocked, with {@code available} to sell. */
+  static StockEvent stock(String variantId, int available) {
+    return new StockEvent(variantId, available);
   }
 
   static final class OrderEvent {
@@ -94,10 +121,17 @@ final class Events {
     private final List<String> variantIds;
     private long version = 1;
     private boolean removed;
+    private String category;
 
     private ProductEvent(String sku, List<String> variantIds) {
       this.sku = sku;
       this.variantIds = variantIds;
+      this.category = "own-" + sku.toLowerCase();
+    }
+
+    ProductEvent in(String category) {
+      this.category = category;
+      return this;
     }
 
     ProductEvent version(long version) {
@@ -113,7 +147,7 @@ final class Events {
     void publish() {
       var product = new LinkedHashMap<String, Object>();
       product.put("name", sku);
-      product.put("category", "phones");
+      product.put("category", category);
       product.put("attributes", Map.of());
       product.put("images", List.of());
       product.put(
@@ -134,6 +168,67 @@ final class Events {
       product.put("removed", removed);
       var change = removed ? "REMOVED" : version == 1 ? "CREATED" : "UPDATED";
       send(PRODUCTS, sku, envelope("sku", sku, version, change, "product", product));
+    }
+  }
+
+  static final class CategoryEvent {
+    private final String slug;
+    private final String name;
+    private long version = 1;
+    private boolean removed;
+
+    private CategoryEvent(String slug, String name) {
+      this.slug = slug;
+      this.name = name;
+    }
+
+    CategoryEvent version(long version) {
+      this.version = version;
+      return this;
+    }
+
+    CategoryEvent removed() {
+      this.removed = true;
+      return this;
+    }
+
+    void publish() {
+      var category = new LinkedHashMap<String, Object>();
+      category.put("name", name);
+      category.put("attributes", List.of());
+      category.put("removed", removed);
+      var change = removed ? "REMOVED" : version == 1 ? "CREATED" : "UPDATED";
+      send(CATEGORIES, slug, envelope("slug", slug, version, change, "category", category));
+    }
+  }
+
+  static final class StockEvent {
+    private final String variantId;
+    private final int available;
+    private long version = 1;
+    private boolean stocked = true;
+
+    private StockEvent(String variantId, int available) {
+      this.variantId = variantId;
+      this.available = available;
+    }
+
+    StockEvent version(long version) {
+      this.version = version;
+      return this;
+    }
+
+    /** No longer stocked at all, as once Inventory removes the Variant. */
+    StockEvent unstocked() {
+      this.stocked = false;
+      return this;
+    }
+
+    void publish() {
+      var stock =
+          Map.<String, Object>of("onHand", available, "available", available, "stocked", stocked);
+      var change = stocked ? "ADJUSTED" : "REMOVED";
+      send(STOCK, variantId, envelope("variantId", variantId, version, change, "stock", stock));
     }
   }
 
