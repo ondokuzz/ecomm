@@ -155,11 +155,17 @@ UPGRADE := COMPOSE_PROJECT_NAME=ecomm-upgrade
 UPGRADE_DIR := .scratch/upgrade-from
 
 ## Start the stack as it was at FROM (a commit, tag or branch), e.g. `make upgrade-from FROM=f979745`.
+## A tree with secrets as files (Sprint 5 on) writes its own, as its `make up` would, and they are
+## copied here, so `make upgrade-to` keeps the ones its volumes were made with.
 upgrade-from:
 	@test -n "$(FROM)" || { echo "Set FROM to the commit to upgrade from, e.g. make upgrade-from FROM=f979745"; exit 1; }
 	$(COMPOSE) down
 	git worktree add --force --detach $(UPGRADE_DIR) $(FROM)
 	if [ -f .env ]; then cp .env $(UPGRADE_DIR)/.env; fi
+	if [ -f $(UPGRADE_DIR)/infra/docker/secrets.sh ]; then \
+	  (cd $(UPGRADE_DIR) && $(UPGRADE) infra/docker/secrets.sh) && \
+	  mkdir -p .secrets && chmod 700 .secrets && cp -Rp $(UPGRADE_DIR)/.secrets/ecomm-upgrade .secrets/; \
+	fi
 	cd $(UPGRADE_DIR) && $(UPGRADE) IMAGE_TAG=upgrade-from $(COMPOSE) up -d --build --wait
 
 ## Bring the upgrade-from stack up to this tree, keeping its data, check it is healthy and warm it. Its

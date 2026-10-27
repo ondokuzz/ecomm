@@ -6,9 +6,11 @@ alone: its data migrated, its projections complete, nothing reset. This is how t
 ## Steps
 
 1. `make upgrade-from FROM=<commit>`, with `<commit>` the previous sprint's definition-of-done
-   commit (`git log --oneline --grep "definition of done"`). It stops the default stack, checks the
-   commit out under `.scratch/upgrade-from`, and starts it as the Compose project `ecomm-upgrade`
-   with images tagged `upgrade-from`, so the default stack's data and images stay untouched. The
+   commit (`git log --oneline --grep "definition of done"`; Sprint 5's is `05d3ab8`, the last
+   before Sprint 6's first ticket). It stops the default stack, checks the commit out under
+   `.scratch/upgrade-from`, and starts it as the Compose project `ecomm-upgrade` with images tagged
+   `upgrade-from`, so the default stack's data and images stay untouched. A commit with secrets as
+   files (Sprint 5 on) writes its own first, and they are copied to `.secrets/ecomm-upgrade/`. The
    first build takes about ten minutes.
 2. Put data on it that the upgrade has to carry, through the gateway as the demo Customer. Use only
    endpoints that existed at that commit:
@@ -18,10 +20,15 @@ alone: its data migrated, its projections complete, nothing reset. This is how t
    T=$(curl -s -d grant_type=password -d client_id=dev-cli -d username=demo@ecomm.local -d password=demo \
      http://localhost:8180/realms/ecomm/protocol/openid-connect/token | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
    H="Authorization: Bearer $T"; J='Content-Type: application/json'
-   checkout() {  # empty the Cart, add one Variant, start a Checkout Session; prints its ID
+   checkout() {  # empty the Cart, add one Variant, start a Checkout Session to Berlin; prints its ID
      curl -s -X DELETE -H "$H" $G/cart/cart -o /dev/null
      curl -s -X PUT -H "$H" -H "$J" -d '{"quantity":1}' $G/cart/cart/items/$1 -o /dev/null
-     curl -s -X POST -H "$H" $G/checkout-pricing/checkout/sessions | python3 -c 'import sys,json;print(json.load(sys.stdin)["id"])'
+     s=$(curl -s -X POST -H "$H" $G/checkout-pricing/checkout/sessions | python3 -c 'import sys,json;print(json.load(sys.stdin)["id"])')
+     # From Sprint 5 on, paying needs a Shipping address and option; leave these out before it.
+     curl -s -X PUT -H "$H" -H "$J" -o /dev/null $G/checkout-pricing/checkout/sessions/$s/shipping-address \
+       -d '{"recipientName":"Erika Mustermann","line1":"Hauptstraße 5","postcode":"10115","city":"Berlin","country":"DE"}'
+     curl -s -X PUT -H "$H" -H "$J" -d '{"optionId":"STANDARD"}' $G/checkout-pricing/checkout/sessions/$s/shipping-option -o /dev/null
+     echo $s
    }
    pay() { curl -s -X POST -H "$H" -H "$J" -d "{\"paymentMethod\":\"$2\"}" $G/checkout-pricing/checkout/sessions/$1/pay; echo; }
 
