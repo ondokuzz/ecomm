@@ -1,8 +1,8 @@
 # Ecomm Platform
 
-A from-scratch e-commerce platform, architected as fifteen bounded contexts across five parallel team tracks, planned over nine two-week sprints for a small (4-5 person) engineering team. Sprint 5 has added fulfillment and returns, and it all runs locally: search the Catalog with Facets, pick a Variant, keep a Cart, check out with a Checkout Session that reserves its Stock, gets the running Campaigns by itself and a Coupon on top, and pay through a mock payment that can decline or wait for the bank, which the checkout Saga on Temporal either completes or undoes whole, after giving a Shipping address and choosing a Shipping option. Staff pick and pack the Order from a fulfillment queue, and the fulfillment Saga captures its Payment, hands it to the carrier and follows it to delivery. Then follow the Order's Status history, its Payment and its Shipment's Tracking events, review what you bought, see what others bought with it, and, through the API, ask to return it or claim its warranty. Staff manage the Catalog, with Warranty terms and Serial tracking, Coupons and Campaigns, look up Orders with their Payments and each Variant's Stock movements, and work the fulfillment and RMA approval queues, in an Admin Console. Grafana shows the services, the event consumers and both Sagas.
+A from-scratch e-commerce platform, architected as fifteen bounded contexts across five parallel team tracks, planned over nine two-week sprints for a small (4-5 person) engineering team. Sprint 6 has completed returns and added Notifications, and it all runs locally: search the Catalog with Facets, pick a Variant, keep a Cart, check out with a Checkout Session that reserves its Stock, gets the running Campaigns by itself and a Coupon on top, and pay through a mock payment that can decline or wait for the bank, which the checkout Saga on Temporal either completes or undoes whole, after giving a Shipping address and choosing a Shipping option. Staff pick and pack the Order from a fulfillment queue, and the fulfillment Saga captures its Payment, hands it to the carrier and follows it to delivery. Then follow the Order's Status history, its Payment and its Shipment's Tracking events, review what you bought, see what others bought with it, and ask to return it or claim its warranty, then follow the RMA to its Refund or replacement, told each step by email. Staff manage the Catalog, with Warranty terms and Serial tracking, Coupons and Campaigns, look up Orders with their Payments and each Variant's Stock movements, work the fulfillment queue and each RMA from approval to inspection, moderate Reviews, and see what the platform told each Customer, in an Admin Console. Grafana shows the services, the event consumers and the three Sagas.
 
-## Run Sprint 5
+## Run Sprint 6
 
 You need Docker with about 8 GB of memory, `make`, and Node 24 for the smoke tests.
 
@@ -46,13 +46,18 @@ The first build takes several minutes. Then open the Storefront on http://localh
    same paid Orders and in Stock, filled up with its Category's best sellers, labelled "Popular in
    <Category>", from [Recommendations](./services/recommendations/README.md), and its Warranty
    terms, such as "24 months, manufacturer's warranty (Samsung)";
-7. once an Order is delivered, request an RMA for it through the API: a return within the 14-day
-   Return Period, or a warranty claim within the Warranty Window, naming the IMEI or serial number
-   of a serial-tracked unit ([Returns & Warranty](./services/returns-warranty/README.md) and its
-   [`.http` file](./services/returns-warranty/http/returns-warranty.http)). Once Staff approve it,
-   the returns Saga in [Orchestration](./services/orchestration/README.md#the-returns-saga) awaits
-   its units, then refunds, replaces or closes it as its Inspection says. The Storefront's form
-   comes in Sprint 6.
+7. once an Order is delivered, ask on its page to return a unit within the 14-day Return Period, or
+   claim its warranty within the Warranty Window, choosing the IMEI or serial number of each
+   serial-tracked unit shipped ([Returns & Warranty](./services/returns-warranty/README.md)).
+   **My returns** lists each RMA with its status and Refund amount. Once Staff approve it, its page
+   says where to send the unit and by when, its Send-back deadline, and the returns Saga in
+   [Orchestration](./services/orchestration/README.md#the-returns-saga) awaits the units, then
+   refunds, replaces or closes the RMA as its Inspection says. An RMA whose units never arrive
+   expires at its deadline;
+8. read every email the stack sends in Mailpit, on http://localhost:8025: the Order confirmed,
+   shipped with its tracking number, and delivered, each RMA step, a replacement shipped and a
+   Refund. Under **Notification preferences**, turn on text messages to a mobile number; the mock
+   SMS provider records them ([Notifications](./services/notifications/README.md)).
 
 The payment gateway is mocked, and each test card stands for a Payment method:
 
@@ -99,11 +104,15 @@ signed in as `staff@ecomm.local` / `staff`; the demo Customer is refused there. 
    it **Shipped** with a tracking number, then **Delivered** once the carrier's signed webhooks say
    so. Paid with `tok_capture_decline`, the Shipment goes on hold with "Capture declined:
    authorization_expired", and the Order stays **Paid**;
-5. under **RMAs**, approve or reject each requested RMA with a note, each decision kept in its
-   history; an Order's page lists its Shipment and its RMAs;
+5. under **RMAs**, approve or reject each requested RMA with a note, then receive its units by Serial
+   number and inspect them, each step kept in its history; the RMA page follows the returns Saga's
+   Refund or replacement, whose Shipment is packed from the fulfillment queue like any other. An
+   Order's page lists its Shipment, its RMAs and the Notifications sent about it;
 6. under **Reviews**, work the Review moderation queue of held and reported reviews, oldest first:
    publish a held one, dismiss a published one's reports, or remove either with a reason its author
-   sees ([Reviews & Ratings](./services/reviews-ratings/README.md#moderation)).
+   sees ([Reviews & Ratings](./services/reviews-ratings/README.md#moderation));
+7. under **Message templates**, preview each Message type's email or text message with sample
+   content.
 
 Every failed request on a Storefront page shows a support reference: the request's
 [Correlation ID](./GLOSSARY.md). The services log JSON lines carrying it, and the events a request
@@ -239,7 +248,12 @@ each card the bank confirms, seeing "Confirming your payment…" and then the pa
 approved by the gateway's webhook, or the decline's reason, after which the same session is paid
 with the approving card. Then Sprint 5's: a Product page shows its Warranty terms, and once Staff
 pack a paid Order its page shows the Shipment's Tracking events, then Delivered, and the Payment
-captured; an Order without a Shipment shows none:
+captured; an Order without a Shipment shows none. Then Sprint 6's: a Customer returns a delivered
+phone through the form, choosing its IMEI, sees it Requested with its Refund amount and, once Staff
+have approved, received and accepted it, Refunded, with the Payment's Refund and the Order Returned,
+and each email once in Mailpit; turns on text messages in Notification preferences; is refused a
+Coupon whose last use another Checkout Session holds; reports another Customer's review; and sees
+"Popular in <Category>" on a Product nobody bought with another:
 
 ```sh
 cd frontend/storefront
@@ -255,7 +269,7 @@ manage Coupons and Campaigns, and a Campaign they create applies to a Customer's
 whose Order Staff then find; Staff give a Product Warranty terms and Serial tracking and the
 Storefront shows the warranty; Staff pick and pack a Shipment from the fulfillment queue, refused an
 invalid IMEI, and see it dispatched, and a Shipment whose capture is refused goes on hold with the
-reason; Staff approve a return and reject a warranty claim from the RMA queue; and Staff receive a returned phone, refused a wrong IMEI, inspect it, and see the returns Saga refund it. Run it with `npm run test:e2e` in `frontend/admin-console`, after the
+reason; Staff approve a return and reject a warranty claim from the RMA queue, each step emailed once; Staff receive a returned phone, refused a wrong IMEI, inspect it, and see the returns Saga refund it; a Coupon limited to one use shows exhausted once redeemed; Staff publish a held Review and remove a reported one; and Staff preview the Order confirmation on the Message templates page. Run it with `npm run test:e2e` in `frontend/admin-console`, after the
 Storefront's rather than beside it, since both check out. Both suites make their own Customers
 through Keycloak's admin API and delete them again; the Orders they place, and the Stock those
 take, stay. The tests pick from the seeded Products only, so an `E2E-` Product a failed test left
@@ -264,7 +278,8 @@ behind doesn't throw them.
 Each suite runs its spec files side by side, one Playwright worker each. Where Docker's memory is short of what
 the stack uses, or the host swaps Docker's VM out, requests stall for tens of seconds and tests time
 out; `npx playwright test --workers=1` loads the stack less, and is how both suites passed on a
-16 GB laptop on 2026-10-17 ([Sprint 5's note](./docs/roadmap.md#sprint-5-weeks-910--fulfillment--returns-foundations)).
+16 GB laptop on 2026-10-27 ([Sprint 6's note](./docs/roadmap.md#sprint-6-weeks-1112--returns-completion)).
+The first checkout after `make up` can still take longer than a test waits.
 
 ### Secrets
 
@@ -353,38 +368,42 @@ Storefront's suite stops before its first test once any seeded Product's default
 out, and names them. To wipe
 everything, Keycloak's users included, run `docker compose down -v`.
 
-### A stack from Sprint 4
+### A stack from Sprint 5
 
-`make up` on a stack from Sprint 4 brings it into Sprint 5 with nothing done by hand; building this
-tree's images takes about 20 minutes. It adds Fulfillment & Shipping and Returns & Warranty, and
-creates their databases in Postgres (`fulfillment_shipping`, `returns_warranty`). The topics init
-adds `fulfillment-shipping.shipment` and `returns-warranty.rma`, and the new groups' dead-letter and
-redrive topics ([The event backbone](#the-event-backbone)). Then:
+`make up` on a stack from Sprint 5 brings it into Sprint 6 with nothing done by hand. It adds
+Notifications and Mailpit, creates the `notifications` database in Postgres, and the topics init adds
+the new consumer groups' dead-letter and redrive topics ([The event backbone](#the-event-backbone)).
+`make secrets` writes the new `notifications-client-secret`, and realm sync adds the `notifications`
+client. Then:
 
-- **Secrets become files.** `make secrets` writes the infrastructure passwords with the dev values
-  the stack's volumes were made with (`ecomm`, `password` and `admin`), so Postgres, Couchbase and
-  Keycloak keep them, and new client and webhook secrets ([Secrets](#secrets)).
-- **The realm takes the new client secrets.** The `keycloak-realm` step sets the `checkout` and
-  `orchestration` clients' secrets from their files, so Sprint 4's `checkout-dev-secret` and
-  `orchestration-dev-secret` stop working, and the services' tokens keep working with the new ones.
-- **Seeded Products gain Warranty terms and Serial tracking**, and publish `catalog.product` as
-  `UPDATED`; a Product Staff edited keeps their edits ([Catalog](./services/catalog/README.md)).
-- **Paid Orders stay Paid.** Orders paid before the upgrade have no Shipping address: they start no
-  fulfillment Saga, have no Shipment, and stay `PAID` with their authorized Payment, never captured
-  ([Orchestration](./services/orchestration/README.md)).
-- **Checkouts carry on.** A Checkout Session started before the upgrade can still be paid while it
-  lasts, once it has a Shipping address and option (paying it first is a 409
-  `shippingIncomplete`); its Order is fulfilled like any other.
+- **Approved RMAs get their returns Saga.** Returns & Warranty's migration gives each approved RMA
+  its Send-back deadline, 14 days from its approval, and its projections fill in each RMA's Refund
+  amount and Warehouse ([Returns & Warranty](./services/returns-warranty/README.md#upgrading-from-sprint-5)).
+  Orchestration reads the RMAs' topic from the start once, so each approved RMA starts its returns
+  Saga, which awaits its units and refunds, replaces or closes it like any other.
+- **Reviews are published.** A review from before moderation reads as published and stays counted
+  ([Reviews & Ratings](./services/reviews-ratings/README.md#moderation)).
+- **Coupons are unlimited.** Existing Coupons have no Usage limits, and count only redemptions made
+  after the upgrade.
+- **Checkouts carry on.** A Checkout Session holding a Coupon across the upgrade can still be paid
+  while it lasts, and its Coupon is redeemed then.
+- **Carts are watched from now.** Cart indexes every existing Cart for abandonment as changed at the
+  upgrade, so none is abandoned for its age before it.
+- **Nothing is said about the past.** Notifications reads its topics from the upgrade on, so no
+  Customer is emailed about an Order, Shipment, RMA or Refund from before it.
 
-The upgrade from Sprint 4's definition-of-done commit was checked on 2026-10-17 and 18
-([Sprint 5's note](./docs/roadmap.md#sprint-5-weeks-910--fulfillment--returns-foundations)). Run the Playwright suites against an upgraded stack with `COMPOSE_PROJECT_NAME=ecomm-upgrade`;
+The upgrade from Sprint 5's last commit, `05d3ab8`, was checked on 2026-10-28
+([Sprint 6's note](./docs/roadmap.md#sprint-6-weeks-1112--returns-completion)). Run the Playwright suites against an upgraded stack with `COMPOSE_PROJECT_NAME=ecomm-upgrade`;
 where host requests reach containers from a public address, its Keycloak's `master` realm first
 needs `sslRequired` set to `NONE` (`kcadm.sh update realms/master -s sslRequired=NONE`, run in the
-Keycloak container), or the suites' admin tokens are refused with "HTTPS required". A
-stack from Sprint 3 or earlier should need only `make up` too, since each sprint's migrations and
-backfills run in turn, but only the upgrade from Sprint 4 was checked. A stack from Sprint 1 also
-needs `make seed-reset` once for the multi-Variant Products, and the realm's `admin-console`
-client, or the Admin Console's sign-in fails with "Invalid parameter: redirect_uri"
+Keycloak container), or the suites' admin tokens, and `make upgrade-to`'s warm-up, are refused with
+"HTTPS required". A stack from Sprint 4 or earlier should need only `make up` too, since each
+sprint's migrations and backfills run in turn: the upgrade from Sprint 4 was checked in Sprint 5
+([Sprint 5's note](./docs/roadmap.md#sprint-5-weeks-910--fulfillment--returns-foundations)), and
+there `make secrets` writes the infrastructure passwords with the dev values its volumes were made
+with ([Secrets](#secrets)). A stack from Sprint 1 also needs `make seed-reset` once for the
+multi-Variant Products, and the realm's `admin-console` client, or the Admin Console's sign-in fails
+with "Invalid parameter: redirect_uri"
 ([Identity & Access README](./services/identity-access/README.md#the-admin-console-client)).
 
 ### Memory
