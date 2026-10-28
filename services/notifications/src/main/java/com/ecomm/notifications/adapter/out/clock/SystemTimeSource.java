@@ -2,18 +2,20 @@ package com.ecomm.notifications.adapter.out.clock;
 
 import com.ecomm.notifications.application.port.out.TimeSource;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import org.springframework.stereotype.Component;
 
-/** The system clock, to the microsecond Postgres keeps, so that what is read back is what was. */
+/**
+ * Ticks in microseconds, the precision Postgres stores, so what is read back is what was answered.
+ */
 @Component
 class SystemTimeSource implements TimeSource {
 
-  private final Clock clock = Clock.systemUTC();
+  private final Clock clock = Clock.tick(Clock.systemUTC(), Duration.ofNanos(1_000));
 
   @Override
   public Instant now() {
-    return clock.instant().truncatedTo(ChronoUnit.MICROS);
+    return clock.instant();
   }
 }

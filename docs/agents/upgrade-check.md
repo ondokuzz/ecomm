@@ -43,14 +43,22 @@ alone: its data migrated, its projections complete, nothing reset. This is how t
    Add whatever the coming upgrade migrates or backfills that this doesn't cover. Upgrade within 15
    minutes, while the Reservation is still active.
 3. `make upgrade-to` brings the same project up to this tree, keeping its data, runs
-   `make status` against it and warms its checkout path. First it writes the project's secrets to `.secrets/ecomm-upgrade/`
-   (the root README's "Secrets"): from a stack made before Sprint 5, the dev passwords its volumes
-   were made with, and new client and webhook secrets.
+   `make status` against it and warms its checkout path. First it writes the secrets the project
+   lacks to `.secrets/ecomm-upgrade/` (the root README's "Secrets"), never overwriting one: from a
+   stack made before Sprint 5, the dev passwords its volumes were made with and new client and
+   webhook secrets; from one made since, only the secrets this tree added, keeping those step 1
+   copied. Never delete those files while the project's volumes exist: they would come back as the
+   dev passwords. Where host requests reach containers from a public address, the warm-up's admin
+   token is refused with "HTTPS required" until the project's Keycloak `master` realm has
+   `sslRequired` set to `NONE` (step 4); the stack is up by then.
 4. Check, against what the upgrade promises, that the data came through: each migrated aggregate
    read back through its API, each projection complete (Search lists every Product; Reviews counts
    the Orders placed before), each ledger balanced. Run both Playwright suites against it too, one
    after the other, with `COMPOSE_PROJECT_NAME=ecomm-upgrade` set: their first step runs
-   `make status`, which otherwise checks the default project and finds it stopped.
+   `make status`, which otherwise checks the default project and finds it stopped. Where host requests
+   reach containers from a public address, set the project's Keycloak `master` realm to
+   `sslRequired=NONE` first (the root README's "A stack from Sprint 5"), or the suites' admin tokens
+   are refused.
 5. `make upgrade-clean` removes the project, its volumes and secrets, the worktree and the `upgrade-from`
    images. `make up` then brings the default stack back.
 

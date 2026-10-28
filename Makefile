@@ -156,9 +156,13 @@ UPGRADE_DIR := .scratch/upgrade-from
 
 ## Start the stack as it was at FROM (a commit, tag or branch), e.g. `make upgrade-from FROM=f979745`.
 ## A tree with secrets as files (Sprint 5 on) writes its own, as its `make up` would, and they are
-## copied here, so `make upgrade-to` keeps the ones its volumes were made with.
+## copied here, so `make upgrade-to` keeps the ones its volumes were made with. An earlier check's
+## volumes would keep passwords these don't match, so they must be gone first.
 upgrade-from:
 	@test -n "$(FROM)" || { echo "Set FROM to the commit to upgrade from, e.g. make upgrade-from FROM=f979745"; exit 1; }
+	@if docker volume ls -q --filter name=^ecomm-upgrade_ | grep -q .; then \
+	  echo "An earlier upgrade check's volumes are still there; run make upgrade-clean first"; exit 1; fi
+	rm -rf .secrets/ecomm-upgrade
 	$(COMPOSE) down
 	git worktree add --force --detach $(UPGRADE_DIR) $(FROM)
 	if [ -f .env ]; then cp .env $(UPGRADE_DIR)/.env; fi
