@@ -342,6 +342,12 @@ Compose brings it up in three steps:
 
 All three run on every `make up`, and do nothing to a schema or namespace that is already current.
 
+`make seed-reset` terminates every running workflow, since it drops the Orders, Payments, Shipments
+and RMAs they act on (`infra/docker/temporal-terminate.sh`). It does so once the topics are gone, so
+no event starts another, and while the services they call are stopped. Left running, a fulfillment
+Saga awaiting packing would read its missing Shipment every hour for good. Terminated, not
+cancelled, so no compensation runs.
+
 ## Outbound identity
 
 The Saga's steps call other contexts with Orchestration's own token, from the confidential

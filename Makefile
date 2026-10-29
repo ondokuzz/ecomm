@@ -51,9 +51,12 @@ memory:
 ## every topic, dead-letter and redrive topics included, is emptied and Search's, Reviews',
 ## Recommendations', Returns & Warranty's and Notifications' databases dropped, or their consumers
 ## would take the new events for stale ones. Kafka deletes topics in the background, and one can't be
-## created again until it has gone.
+## created again until it has gone. Every running Saga is then terminated, or it would act on data
+## that no longer exists for as long as it ran: once the topics are gone, so no event starts another,
+## and before the services it calls come back (infra/docker/temporal-terminate.sh). Orchestration
+## keeps running, so the first checkout after the reset finds it warm.
 seed-reset:
-	$(COMPOSE) up -d --wait couchbase postgres redis kafka mongo
+	$(COMPOSE) up -d --wait couchbase postgres redis kafka mongo temporal
 	$(COMPOSE) stop storefront checkout-pricing catalog inventory cart payment order-management promotions search-discovery reviews-ratings recommendations fulfillment-shipping returns-warranty notifications
 	$(COMPOSE) exec -T couchbase sh -c \
 	  'couchbase-cli bucket-delete -c localhost:8091 -u admin -p "$$(cat /run/secrets/couchbase-password)" --bucket catalog'
@@ -70,6 +73,7 @@ seed-reset:
 	for db in search reviews; do \
 	  $(COMPOSE) exec -T mongo mongosh --quiet $$db --eval 'db.dropDatabase()' || exit 1; \
 	done
+	$(COMPOSE) run --rm --no-deps -T --entrypoint sh temporal-namespace -s < infra/docker/temporal-terminate.sh
 	$(COMPOSE) run --rm --no-deps kafka-topics
 	$(COMPOSE) up -d --wait
 
