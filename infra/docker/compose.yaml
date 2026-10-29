@@ -570,6 +570,10 @@ services:
     environment:
       <<: *spring-jvm
       JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=45 -XX:TieredStopAtLevel=1 -Xss512k
+    # Its workers' first call to Temporal gets one try of 10 seconds; under load a Temporal that
+    # reported healthy missed it, and Orchestration exited 1 (2026-10-23, #104). Started again, it
+    # comes up once Temporal answers.
+    restart: on-failure
     secrets:
       # Orchestration's own client in the ecomm realm (Identity & Access ADR 0002), whose secret
       # realm sync sets from the same file.
