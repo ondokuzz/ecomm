@@ -348,7 +348,7 @@ d=.secrets/ecomm; printf '{"dev": {"checkoutClientSecret": "%s", "orchestrationC
 
 | Command | |
 |---|---|
-| `make up` | Write the secrets the stack lacks, build and start the stack, wait until it is healthy, and warm the checkout path ([`warm-up.py`](./infra/docker/warm-up.py)) |
+| `make up` | Write the secrets the stack lacks, build and start the stack, wait until it is healthy and no running workflow has a workflow task pending, and warm the checkout path and the pages around it ([`warm-up.py`](./infra/docker/warm-up.py)) |
 | `make secrets` | Write each secret the stack lacks to `.secrets/<project>/`, never overwriting one ([Secrets](#secrets)) |
 | `make down` | Stop the stack, keeping its data |
 | `make status` | Say whether every service is running and healthy, naming any that isn't with its exit code and whether it was killed for its memory cap. Both Playwright suites run it first |

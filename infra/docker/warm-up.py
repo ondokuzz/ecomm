@@ -1,17 +1,24 @@
-"""Warms the stack's checkout path, so the first checkout after `make up` answers as fast as later
-ones. A freshly started service answers its first calls slowly, while it opens its connections and
-fetches its tokens: on a cold stack the first Checkout Session took 23 seconds to start, against 0.2
-warm, and timed out the Storefront suite's first test, which waits 15 (docs/roadmap.md). `make up`
-and `make upgrade-to` run it once every service is healthy.
+"""Warms the stack's checkout path and the pages around it, so the first checkout after `make up`
+answers as fast as later ones. A freshly started service answers its first calls slowly, while it
+opens its connections and fetches its tokens: on a cold stack the first Checkout Session took 23
+seconds to start, against 0.2 warm, and timed out the Storefront suite's first test, which waits 15
+(docs/roadmap.md). `make up` and `make upgrade-to` run it once every service is healthy.
+
+First it waits until no running workflow has a workflow task pending (temporal-settle.sh): the
+Sagas' timers that came due while the stack was down fire as it starts, each replayed on a cold
+worker, and a first checkout's Saga waited behind them (#107).
 
 As a throwaway Customer, it puts a Variant in a Cart in a quantity no Stock covers and starts a
 Checkout Session: Cart, Catalog, Promotions, Inventory and Checkout all answer, and Inventory
-refuses to hold it (409 `outOfStock`), so no Stock is held. Then it deletes the Cart and the
-Customer. Payment and the checkout Saga stay cold: warming them would place an Order.
+refuses to hold it (409 `outOfStock`), so no Stock is held. It reads what the Order and Product
+pages read for an Order and a Product that don't exist, and its Orders, none. Then it deletes the
+Cart and the Customer. Payment's Pay and the checkout Saga stay cold: warming them would place an
+Order.
 """
 
 import json
 import os
+import subprocess
 import sys
 import time
 import urllib.error
@@ -22,6 +29,8 @@ import uuid
 STOREFRONT = os.environ.get("STOREFRONT_URL", "http://localhost:8080")
 KEYCLOAK = f"http://localhost:{os.environ.get('KEYCLOAK_PORT', '8180')}"
 PROJECT = os.environ.get("COMPOSE_PROJECT_NAME", "ecomm")
+HERE = os.path.dirname(__file__)
+NO_ORDER = "00000000-0000-0000-0000-000000000000"
 ATTEMPTS = 3
 TIMEOUT_SECONDS = 90
 
@@ -60,7 +69,7 @@ def timed(label, *args, **kwargs):
 
 
 def secret(name):
-    with open(os.path.join(os.path.dirname(__file__), "../../.secrets", PROJECT, name)) as f:
+    with open(os.path.join(HERE, "../../.secrets", PROJECT, name)) as f:
         return f.read().strip()
 
 
@@ -69,8 +78,24 @@ def token(realm, form):
     return call("POST", url, form=form)[1]["access_token"]
 
 
+def settle_orchestration():
+    """Runs temporal-settle.sh in the admin-tools image, from the repo root, in this project."""
+    start = time.monotonic()
+    with open(os.path.join(HERE, "temporal-settle.sh")) as script:
+        settled = subprocess.run(
+            ["docker", "compose", "--progress", "quiet", "run", "--rm", "--no-deps", "-T"]
+            + ["--entrypoint", "sh", "temporal-namespace", "-s"],
+            stdin=script,
+            cwd=os.path.join(HERE, "../.."),
+        )
+    if settled.returncode != 0:
+        raise SystemExit("warm-up: workflow tasks were still pending")
+    print(f"  the workflow tasks pending: {time.monotonic() - start:.1f}s")
+
+
 print("Warming the checkout path:")
 began = time.monotonic()
+settle_orchestration()
 admin = token(
     "master",
     {
@@ -122,6 +147,29 @@ try:
         )
     finally:
         call("DELETE", f"{STOREFRONT}/api/cart/cart", customer, expect=(204,))
+    timed(
+        "a Product not found",
+        "GET",
+        f"{STOREFRONT}/api/catalog/products/NO-SUCH-SKU",
+        expect=(404,),
+    )
+    timed("its Currencies", "GET", f"{STOREFRONT}/api/catalog/currencies")
+    timed("My orders", "GET", f"{STOREFRONT}/api/order-management/orders?page=0&size=10", customer)
+    timed(
+        "an Order not found",
+        "GET",
+        f"{STOREFRONT}/api/order-management/orders/{NO_ORDER}",
+        customer,
+        expect=(404,),
+    )
+    timed("its Payments", "GET", f"{STOREFRONT}/api/payment/payments?orderId={NO_ORDER}", customer)
+    timed(
+        "its Shipment",
+        "GET",
+        f"{STOREFRONT}/api/fulfillment-shipping/shipments?orderId={NO_ORDER}",
+        customer,
+        expect=(404,),
+    )
 finally:
     call("DELETE", location, admin, expect=(204,))
 print(f"Warm in {time.monotonic() - began:.0f}s.")

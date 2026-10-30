@@ -43,11 +43,11 @@ alone: its data migrated, its projections complete, nothing reset. This is how t
    Add whatever the coming upgrade migrates or backfills that this doesn't cover. Upgrade within 15
    minutes, while the Reservation is still active.
 3. `make upgrade-to` brings the same project up to this tree, keeping its data, runs
-   `make status` against it and warms its checkout path. First it writes the secrets the project
-   lacks to `.secrets/ecomm-upgrade/` (the root README's "Secrets"), never overwriting one: from a
-   stack made before Sprint 5, the dev passwords its volumes were made with and new client and
-   webhook secrets; from one made since, only the secrets this tree added, keeping those step 1
-   copied. Never delete those files while the project's volumes exist: they would come back as the
+   `make status` against it and warms its checkout path, once no running workflow has a workflow
+   task pending. First it writes the secrets the project lacks to `.secrets/ecomm-upgrade/` (the
+   root README's "Secrets"), never overwriting one: from a stack made before Sprint 5, the dev
+   passwords its volumes were made with and new client and webhook secrets; from one made since,
+   only the secrets this tree added, keeping those step 1 copied. Never delete those files while the project's volumes exist: they would come back as the
    dev passwords. Where host requests reach containers from a public address, the warm-up's admin
    token is refused with "HTTPS required" until the project's Keycloak `master` realm has
    `sslRequired` set to `NONE` (step 4); the stack is up by then.

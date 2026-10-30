@@ -19,8 +19,9 @@ DEAD_LETTER_TOPICS := $(foreach group,$(GROUPS),$(group).dlt $(group).redrive)
 secrets:
 	@infra/docker/secrets.sh
 
-## Build and start the default stack, wait until every service is healthy, then warm the checkout
-## path, so the first checkout answers as fast as later ones (infra/docker/warm-up.py).
+## Build and start the default stack, wait until every service is healthy and no running workflow
+## has a workflow task pending, then warm the checkout path and the pages around it, so the first
+## checkout answers as fast as later ones (infra/docker/warm-up.py).
 up: secrets
 	$(COMPOSE) up -d --build --wait
 	@python3 -B infra/docker/warm-up.py
