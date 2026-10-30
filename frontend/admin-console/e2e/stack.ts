@@ -96,20 +96,33 @@ export async function shipmentOf(request: APIRequestContext, orderId: string): P
 }
 
 /** A seeded phone, IMEI-tracked, whose first Variant has Stock left; earlier runs may have sold some out. */
-export async function aPhoneInStock(request: APIRequestContext): Promise<{ variantId: string }> {
+export function aPhoneInStock(request: APIRequestContext): Promise<{ variantId: string }> {
+  return aSeededInStock(request, 'phones', 1)
+}
+
+/**
+ * A Variant of a seeded Product in `category` with at least `units` available; earlier runs may
+ * have sold some out. A test's own Products start with `E2E-`, and one a test failed to delete is
+ * passed over.
+ */
+export async function aSeededInStock(
+  request: APIRequestContext,
+  category: string,
+  units: number,
+): Promise<{ variantId: string }> {
   const response = await request.get('/api/catalog/products')
   expect(response.ok()).toBeTruthy()
-  const phones = ((await response.json()) as { category: string; variants: { id: string }[] }[]).filter(
-    (product) => product.category === 'phones',
+  const products = ((await response.json()) as { sku: string; category: string; variants: { id: string }[] }[]).filter(
+    (product) => product.category === category && !product.sku.startsWith('E2E-'),
   )
-  for (const { variants } of phones) {
+  for (const { variants } of products) {
     for (const { id } of variants) {
       const stock = await request.get(`/api/inventory/stock/${encodeURIComponent(id)}`)
       expect(stock.ok()).toBeTruthy()
-      if (((await stock.json()) as { quantity: number }).quantity > 0) return { variantId: id }
+      if (((await stock.json()) as { quantity: number }).quantity >= units) return { variantId: id }
     }
   }
-  throw new Error('No seeded phone has Stock left; run `make seed-reset`')
+  throw new Error(`No seeded Product in ${category} has ${units} in Stock; run \`make seed-reset\``)
 }
 
 /** A random IMEI with a valid Luhn check digit, so no earlier run has shipped it. */

@@ -5,6 +5,7 @@ import { stackSecret } from './secrets'
 import {
   type Customer,
   aPhoneInStock,
+  aSeededInStock,
   bearer,
   buy,
   createCustomer,
@@ -27,7 +28,11 @@ import {
  * Order page lists both. In the second a Customer of the test's own buys a phone and returns it;
  * Staff receive it, a wrong IMEI refused, inspect it, and see the returns Saga's Refund. The
  * Customer is emailed the request, the approval with the return address and the receipt, and the
- * RMA page lists those Notifications.
+ * RMA page lists those Notifications. In the third a Customer of its own claims the warranty on a
+ * laptop; Staff approve and receive it, inspect it as a confirmed fault, and pack the replacement
+ * Shipment the returns Saga puts in the fulfillment queue, the claimed unit's Serial number
+ * refused, and the RMA is exchanged. In the fourth Staff inspect a returned phone as refused, a note required, and the
+ * returns Saga closes it with nothing refunded.
  *
  * The Order and its Shipment are made as the checkout and fulfillment Sagas would, straight at
  * Order Management and Fulfillment & Shipping, since the gateway routes neither placing an Order
@@ -164,11 +169,18 @@ test('Staff approve a return and reject a warranty claim from the RMA queue', as
   await expect(page).toHaveURL(new RegExp(`/rmas/${claimed.id}$`))
 })
 
-let customer: Customer | undefined
+const customers: Customer[] = []
 
 test.afterAll(async ({ request }) => {
-  if (customer) await deleteCustomer(request, customer)
+  for (const customer of customers) await deleteCustomer(request, customer)
 })
+
+/** A new Customer of the test's own, `e2e-<prefix>-…`, deleted after the file's tests. */
+async function aCustomer(request: APIRequestContext, prefix: string): Promise<Customer> {
+  const customer = await createCustomer(request, prefix)
+  customers.push(customer)
+  return customer
+}
 
 test('Staff receive a returned phone, refused a wrong IMEI, inspect it, and see the returns Saga refund it', async ({
   page,
@@ -176,7 +188,7 @@ test('Staff receive a returned phone, refused a wrong IMEI, inspect it, and see 
 }) => {
   // Checkout, the fulfillment Saga and the mock carrier's delivery, then the returns Saga's Refund.
   test.setTimeout(300_000)
-  customer = await createCustomer(request, 'rmas')
+  const customer = await aCustomer(request, 'rmas')
   const phone = await aPhoneInStock(request)
   const orderId = await buy(request, customer, phone.variantId, 'tok_approve')
   const imei = newImei()
@@ -282,21 +294,176 @@ test('Staff receive a returned phone, refused a wrong IMEI, inspect it, and see 
   await expect(refund).toContainText(euros(rma.refundAmount!.amountMinor))
 })
 
+test('Staff exchange a laptop under warranty: inspected as a confirmed fault, its replacement packed from the fulfillment queue', async ({
+  page,
+  request,
+}) => {
+  // Checkout, the fulfillment Saga and the mock carrier's delivery, then the returns Saga's replacement.
+  test.setTimeout(300_000)
+  const customer = await aCustomer(request, 'rmas-exchange')
+  // One unit to sell and one to replace it with: without Stock the returns Saga refunds instead.
+  const laptop = await aSeededInStock(request, 'laptops', 2)
+  const orderId = await buy(request, customer, laptop.variantId, 'tok_approve')
+  const serial = newSerial()
+  await shipAndDeliver(request, orderId, laptop.variantId, serial)
+  const claimed = await requestRma(request, await tokenOf(request, password(customer)), {
+    orderId,
+    variantId: laptop.variantId,
+    quantity: 1,
+    serialNumbers: [serial],
+    kind: 'WARRANTY_CLAIM',
+    reason: 'The screen flickers',
+  })
+
+  // Approved, received, then inspected as a confirmed fault.
+  await page.goto(`/rmas/${claimed.id}`)
+  await signInOnKeycloak(page)
+  await expect(page.getByRole('heading', { name: `Warranty claim ${claimed.reference}` })).toBeVisible()
+  await page.getByRole('button', { name: 'Approve' }).click()
+  const receive = page.getByRole('form', { name: 'Receive' })
+  await receive.getByLabel('Serial number', { exact: true }).fill(serial)
+  await receive.getByRole('button', { name: 'Receive' }).click()
+  const inspect = page.getByRole('form', { name: 'Inspect' })
+  await inspect.getByLabel('Fault confirmed').check()
+  await inspect.getByLabel('Note').fill('The display cable is loose')
+  await inspect.getByRole('button', { name: 'Record the Inspection' }).click()
+  await expect(page.getByRole('region', { name: 'About this RMA' })).toContainText('The display cable is loose')
+
+  // The returns Saga reserves the replacement and puts its Shipment in the queue, awaiting pick.
+  const resolution = page.getByRole('region', { name: 'Resolution' })
+  await expect(resolution).toContainText('Awaiting pick', { timeout: 60_000 })
+  const lastPage = await lastReplacementsPage(request)
+  await page.goto(`/fulfillment?kind=REPLACEMENT${lastPage > 1 ? `&page=${lastPage}` : ''}`)
+  await expect(page.getByLabel('Kind')).toHaveValue('REPLACEMENT')
+  const row = page
+    .getByRole('table', { name: 'Shipments' })
+    .getByRole('row')
+    .filter({ hasText: `Replacement · ${claimed.reference}` })
+  await row.getByRole('link', { name: `#${orderId.slice(0, 8).toUpperCase()}` }).click()
+  await expect(page.getByRole('heading', { name: `Replacement for ${claimed.reference}` })).toBeVisible()
+  await expect(page.getByRole('table', { name: 'Lines' })).toContainText(laptop.variantId)
+  await page.getByRole('button', { name: 'Mark picked' }).click()
+
+  // The claimed unit's own Serial number has shipped already, so it is refused.
+  const serialInput = page.getByRole('form', { name: 'Pack' }).getByLabel('Serial number', { exact: true })
+  await serialInput.fill(serial)
+  await page.getByRole('button', { name: 'Pack', exact: true }).click()
+  await expect(page.getByText('Already shipped on another Shipment.')).toBeVisible()
+  await expect(serialInput).toHaveAttribute('aria-invalid', 'true')
+
+  // A new one packs it, and the returns Saga dispatches it, with no Payment to capture.
+  const replacementSerial = newSerial()
+  await serialInput.fill(replacementSerial)
+  await page.getByRole('button', { name: 'Pack', exact: true }).click()
+  await expect(page.getByRole('table', { name: 'Lines' })).toContainText(replacementSerial)
+  await expect(page.locator('.page-heading')).toContainText(/Shipped|Delivered/, { timeout: 60_000 })
+
+  // The RMA is exchanged, and shows its replacement.
+  await page.getByRole('region', { name: 'About this Shipment' }).getByRole('link', { name: claimed.reference }).click()
+  await expect(page).toHaveURL(new RegExp(`/rmas/${claimed.id}$`))
+  await expect(page.locator('.page-heading')).toContainText('Exchanged', { timeout: 60_000 })
+  await expect(resolution).toContainText(/Shipped|Delivered/)
+  await expect(resolution).toContainText('WH-BER')
+  await resolution.getByRole('link', { name: 'Open the replacement' }).click()
+  await expect(page.getByRole('heading', { name: `Replacement for ${claimed.reference}` })).toBeVisible()
+})
+
+test('Staff inspect a returned phone as refused, with a note, and the returns Saga closes it with no Refund', async ({
+  page,
+  request,
+}) => {
+  // Checkout, the fulfillment Saga and the mock carrier's delivery, then the returns Saga.
+  test.setTimeout(300_000)
+  const customer = await aCustomer(request, 'rmas-refused')
+  const phone = await aPhoneInStock(request)
+  const orderId = await buy(request, customer, phone.variantId, 'tok_approve')
+  const imei = newImei()
+  await shipAndDeliver(request, orderId, phone.variantId, imei)
+  const returned = await requestRma(request, await tokenOf(request, password(customer)), {
+    orderId,
+    variantId: phone.variantId,
+    quantity: 1,
+    serialNumbers: [imei],
+    kind: 'RETURN',
+    reason: 'Changed my mind',
+  })
+  // Approved and received through the API: the console's own steps are the tests' above.
+  await step(request, returned.id, 'approve', {})
+  await step(request, returned.id, 'receive', { serialNumbers: [imei] })
+
+  await page.goto(`/rmas/${returned.id}`)
+  await signInOnKeycloak(page)
+  await expect(page.getByRole('heading', { name: `Return ${returned.reference}` })).toBeVisible()
+  const history = page.getByRole('table', { name: 'RMA history' }).getByRole('row')
+  await expect(history).toHaveCount(4)
+
+  // Refused without a note, it is held back, and nothing is sent.
+  const inspect = page.getByRole('form', { name: 'Inspect' })
+  await inspect.getByLabel('Refused').check()
+  await inspect.getByRole('button', { name: 'Record the Inspection' }).click()
+  await expect(inspect.getByText('Say why: a refusing outcome needs a note.')).toBeVisible()
+  await expect(inspect.getByLabel('Note')).toHaveAttribute('aria-invalid', 'true')
+  await expect(history).toHaveCount(4)
+
+  // With one, the returns Saga closes it, and gives nothing back.
+  await inspect.getByLabel('Note').fill('Screen cracked; not as sent')
+  await inspect.getByRole('button', { name: 'Record the Inspection' }).click()
+  await expect(page.locator('.page-heading')).toContainText('Closed', { timeout: 90_000 })
+  const resolution = page.getByRole('region', { name: 'Resolution' })
+  await expect(resolution).toContainText('Closed: nothing was given back.')
+  await expect(resolution).toContainText('Screen cracked; not as sent')
+  await expect(history.nth(1)).toContainText('Closed')
+
+  // The Order lists it closed, and no Refund.
+  await page
+    .getByRole('region', { name: 'About this RMA' })
+    .getByRole('link', { name: `#${orderId.slice(0, 8).toUpperCase()}` })
+    .click()
+  await expect(
+    page.getByRole('table', { name: 'RMAs' }).getByRole('row').filter({ hasText: returned.reference }),
+  ).toContainText('Closed')
+  await expect(page.getByRole('region', { name: 'Refunds' })).toContainText('Nothing was refunded.')
+})
+
+/** Approves or receives an RMA as Staff, through the gateway. */
+async function step(request: APIRequestContext, rmaId: string, name: 'approve' | 'receive', data: object) {
+  const response = await request.post(`/api/returns-warranty/rmas/${rmaId}/${name}`, {
+    headers: { ...bearer(await staffToken(request)), 'Idempotency-Key': crypto.randomUUID() },
+    data,
+  })
+  expect(response.ok()).toBeTruthy()
+}
+
+/** The last page of the fulfillment queue's replacements awaiting pick, from every Warehouse, counting from 1. */
+async function lastReplacementsPage(request: APIRequestContext): Promise<number> {
+  const query = new URLSearchParams({ status: 'AWAITING_PICK', kind: 'REPLACEMENT', size: '20' })
+  const response = await request.get(`/api/fulfillment-shipping/shipments?${query}`, {
+    headers: bearer(await staffToken(request)),
+  })
+  expect(response.ok()).toBeTruthy()
+  return Math.max(1, Math.ceil(((await response.json()) as ListPage<unknown>).total / 20))
+}
+
+/** A laptop's Serial number no earlier run has shipped. */
+function newSerial(): string {
+  return `E2E-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`.toUpperCase()
+}
+
 /** An amount in euros as the console shows it in the browser's locale, en-US: `€799.00`. */
 function euros(amountMinor: number): string {
   return (amountMinor / 100).toLocaleString('en-US', { style: 'currency', currency: 'EUR' })
 }
 
 /**
- * Picks and packs the Order's Shipment as Staff, with `imei`, and waits while the fulfillment Saga
- * captures the Payment and dispatches it, and the mock carrier delivers it.
+ * Picks and packs the Order's Shipment as Staff, with `serial`, an IMEI for a phone, and waits while
+ * the fulfillment Saga captures the Payment and dispatches it, and the mock carrier delivers it.
  */
-async function shipAndDeliver(request: APIRequestContext, orderId: string, variantId: string, imei: string) {
+async function shipAndDeliver(request: APIRequestContext, orderId: string, variantId: string, serial: string) {
   const shipment = await shipmentOf(request, orderId)
   const headers = bearer(await staffToken(request))
   const path = `/api/fulfillment-shipping/shipments/${shipment.id}`
   expect((await request.post(`${path}/pick`, { headers })).ok()).toBeTruthy()
-  const packed = await request.post(`${path}/pack`, { headers, data: { serialNumbers: { [variantId]: [imei] } } })
+  const packed = await request.post(`${path}/pack`, { headers, data: { serialNumbers: { [variantId]: [serial] } } })
   expect(packed.ok()).toBeTruthy()
   await expect
     .poll(async () => (await shipmentOf(request, orderId)).status, { timeout: 150_000, intervals: [2_000] })
