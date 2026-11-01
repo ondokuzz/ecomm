@@ -47,10 +47,11 @@ alone: its data migrated, its projections complete, nothing reset. This is how t
    task pending. First it writes the secrets the project lacks to `.secrets/ecomm-upgrade/` (the
    root README's "Secrets"), never overwriting one: from a stack made before Sprint 5, the dev
    passwords its volumes were made with and new client and webhook secrets; from one made since,
-   only the secrets this tree added, keeping those step 1 copied. Never delete those files while the project's volumes exist: they would come back as the
-   dev passwords. Where host requests reach containers from a public address, the warm-up's admin
-   token is refused with "HTTPS required" until the project's Keycloak `master` realm has
-   `sslRequired` set to `NONE` (step 4); the stack is up by then.
+   only the secrets this tree added, keeping those step 1 copied. Never delete those files while
+   the project's volumes exist: they would come back as the dev passwords. Where host requests
+   reach containers from a public address, the warm-up's admin token is refused with "HTTPS
+   required" until the project's Keycloak `master` realm has `sslRequired` set to `NONE` (step 4);
+   the stack is up by then.
 4. Check, against what the upgrade promises, that the data came through: each migrated aggregate
    read back through its API, each projection complete (Search lists every Product; Reviews counts
    the Orders placed before), each ledger balanced. Run both Playwright suites against it too, one
