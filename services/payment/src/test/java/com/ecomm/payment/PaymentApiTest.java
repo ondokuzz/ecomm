@@ -213,11 +213,16 @@ abstract class PaymentApiTest {
 
   /** A Refund's body for {@code customer-42}. */
   static String refundBody(long amountMinor, String currency, String reference) {
+    return refundBody("customer-42", amountMinor, currency, reference);
+  }
+
+  /** A Refund's body for {@code customerId}. */
+  static String refundBody(String customerId, long amountMinor, String currency, String reference) {
     return """
-        {"customerId": "customer-42", "amount": {"amountMinor": %d, "currency": "%s"},
+        {"customerId": "%s", "amount": {"amountMinor": %d, "currency": "%s"},
          "reference": "%s"}
         """
-        .formatted(amountMinor, currency, reference);
+        .formatted(customerId, amountMinor, currency, reference);
   }
 
   /** Every Payment for the Order, as Staff read them. */

@@ -153,7 +153,7 @@ What a market's tax rules add to an Order's lines, worked out by Checkout's `Tax
 _Avoid_: VAT (one kind of it)
 
 **Order reference**:
-The short handle the Storefront shows an Order by, such as `#3F2A9C1B`: the first eight characters of its ID, upper-cased. Order IDs are random UUIDs, so it tells a Customer's Orders apart; the full ID stays on the Order page. Staff find the Order a Customer quotes by it, as a prefix of the ID (Order Management's `idPrefix`); it isn't stored anywhere.
+The short handle the Storefront shows an Order by, such as `#3F2A9C1B`: the first eight characters of its ID, upper-cased. Order IDs are random UUIDs, so it tells a Customer's Orders apart; the full ID stays on the Order page. Staff find the Order a Customer quotes by it, as a prefix of the ID (Order Management's `idPrefix`); it isn't stored anywhere. Payment's transaction history works it out the same way for each line's Order.
 
 **Order Line**:
 One Variant, its quantity, and its unit price captured when the Checkout Session started. The captured price stays with the Order even if the Variant's Price changes later.
@@ -174,6 +174,10 @@ _Avoid_: Charge, Transaction
 **Payment transaction**:
 One interaction with the payment gateway on a Payment, recorded for good: an `AUTHORIZATION`, a `VOID`, a `CAPTURE` or a `REFUND`. It records its amount, its outcome (`APPROVED`, `DECLINED` or `PENDING`), the gateway's reference and decline reason, the gateway's event ID when a webhook recorded it, when it happened, for a `REFUND` what it was for (its reference, such as an RMA reference), and whether it was backfilled: reconstructed from a Payment recorded before Sprint 4, timed when it was reconstructed. Payment owns them, and never changes or deletes one. A Payment's status is worked out from its transactions, which are what it is reconciled against the gateway by.
 _Avoid_: Charge, Transaction (on its own), Payment event
+
+**Payment transaction history**:
+A Customer's Payment transactions across all their Payments, newest first, each with its Payment's status and its Order reference, which they read in one call, narrowed by when each happened if they like: what answers "why was I charged twice?" without a read per Order. Only that Customer reads it; Staff read Payments by Order.
+_Avoid_: Payment event history (a Payment event is what Payment publishes)
 
 **Authorization**:
 Asking the payment gateway to approve an Order's amount on the Customer's Payment method, which the checkout Saga does when the Customer pays: the bank holds the amount on the card, and nothing is charged. It records an `AUTHORIZATION` Payment transaction. Approved, it leaves the Payment `AUTHORIZED`; declined, `DECLINED` with the gateway's reason; or `PENDING` while the Customer's bank confirms it, until a Gateway webhook settles it, which the Saga awaits for up to 10 minutes before it voids the Payment. Authorizing first and capturing later is how the platform charges only for what ships. The Order isn't committed yet: if its Stock can't be held, or a later checkout step fails, the Saga voids the authorization, which leaves nothing on the Customer's statement, where an early charge would need a Refund (a real money movement, whose fees the networks usually keep, taking days to reach the Customer). The money moves only at Capture, once the Shipment is packed, as card network rules and consumer law in many markets expect. A declined card is still found at checkout, while the Customer can pay the session again with another. The cost is that an authorization can lapse before its Capture (`authorization_expired`), which holds the Shipment; fulfillment takes hours or days, well inside an authorization's usual week.

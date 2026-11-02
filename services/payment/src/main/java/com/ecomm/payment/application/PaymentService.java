@@ -6,9 +6,12 @@ import com.ecomm.payment.application.port.in.AuthorizePaymentUseCase;
 import com.ecomm.payment.application.port.in.BrowsePaymentsUseCase;
 import com.ecomm.payment.application.port.in.CapturePaymentUseCase;
 import com.ecomm.payment.application.port.in.FindPaymentUseCase;
+import com.ecomm.payment.application.port.in.Page;
 import com.ecomm.payment.application.port.in.PublishBackfillUseCase;
+import com.ecomm.payment.application.port.in.ReadTransactionHistoryUseCase;
 import com.ecomm.payment.application.port.in.RefundPaymentUseCase;
 import com.ecomm.payment.application.port.in.SettleAuthorizationUseCase;
+import com.ecomm.payment.application.port.in.TransactionHistoryFilter;
 import com.ecomm.payment.application.port.in.VoidPaymentUseCase;
 import com.ecomm.payment.application.port.out.PaymentEvent;
 import com.ecomm.payment.application.port.out.PaymentEvent.Change;
@@ -24,6 +27,7 @@ import com.ecomm.payment.domain.Payment;
 import com.ecomm.payment.domain.PaymentNotCapturableException;
 import com.ecomm.payment.domain.PaymentNotVoidableException;
 import com.ecomm.payment.domain.PaymentStatus;
+import com.ecomm.payment.domain.TransactionHistoryLine;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -35,6 +39,7 @@ public class PaymentService
         RefundPaymentUseCase,
         FindPaymentUseCase,
         BrowsePaymentsUseCase,
+        ReadTransactionHistoryUseCase,
         PublishBackfillUseCase,
         SettleAuthorizationUseCase {
 
@@ -238,6 +243,16 @@ public class PaymentService
   @Override
   public List<Payment> paymentsForOrder(String orderId) {
     return payments.findByOrder(orderId);
+  }
+
+  @Override
+  public Page<TransactionHistoryLine> transactionHistory(
+      TransactionHistoryFilter filter, int page, int size) {
+    return new Page<>(
+        payments.findTransactionHistory(filter, (long) page * size, size),
+        page,
+        size,
+        payments.countTransactionHistory(filter));
   }
 
   @Override

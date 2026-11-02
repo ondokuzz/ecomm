@@ -6,8 +6,11 @@ import com.ecomm.payment.application.port.in.AuthorizePaymentUseCase;
 import com.ecomm.payment.application.port.in.CapturePaymentUseCase;
 import com.ecomm.payment.application.port.in.CapturePaymentUseCase.CaptureOutcome;
 import com.ecomm.payment.application.port.in.FindPaymentUseCase;
+import com.ecomm.payment.application.port.in.Page;
+import com.ecomm.payment.application.port.in.ReadTransactionHistoryUseCase;
 import com.ecomm.payment.application.port.in.RefundPaymentUseCase;
 import com.ecomm.payment.application.port.in.RefundPaymentUseCase.RefundOutcome;
+import com.ecomm.payment.application.port.in.TransactionHistoryFilter;
 import com.ecomm.payment.application.port.in.VoidPaymentUseCase;
 import com.ecomm.payment.domain.InvalidPaymentException;
 import com.ecomm.payment.domain.PaymentGatewayUnavailableException;
@@ -16,6 +19,8 @@ import com.ecomm.payment.domain.PaymentNotRefundableException;
 import com.ecomm.payment.domain.PaymentNotVoidableException;
 import com.ecomm.payment.domain.RefundExceedsCapturedException;
 import java.net.URI;
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -39,8 +44,9 @@ import org.springframework.web.bind.annotation.RestController;
  * The checkout Saga authorizes, voids and reads a Customer's Payments, the fulfillment Saga
  * captures them, and the returns Saga refunds them, with Orchestration's own {@code ORCHESTRATION}
  * token, naming the Customer in the body, or as {@code customerId} when it reads one. The Customer
- * reads them back with a {@code CUSTOMER} token, whose {@code sub} must own the Payment; Staff read
- * them under {@code /staff/payments}.
+ * reads them back with a {@code CUSTOMER} token, whose {@code sub} must own the Payment, and reads
+ * their Payment transaction history across all their Payments; Staff read them under {@code
+ * /staff/payments}.
  */
 @RestController
 @RequestMapping("/payments")
@@ -48,23 +54,29 @@ class PaymentController {
 
   private static final Logger log = LoggerFactory.getLogger(PaymentController.class);
 
+  /** The most lines a page of the Payment transaction history holds. */
+  static final int MAX_PAGE_SIZE = 100;
+
   private final AuthorizePaymentUseCase authorize;
   private final VoidPaymentUseCase voidPayment;
   private final CapturePaymentUseCase capture;
   private final RefundPaymentUseCase refund;
   private final FindPaymentUseCase find;
+  private final ReadTransactionHistoryUseCase history;
 
   PaymentController(
       AuthorizePaymentUseCase authorize,
       VoidPaymentUseCase voidPayment,
       CapturePaymentUseCase capture,
       RefundPaymentUseCase refund,
-      FindPaymentUseCase find) {
+      FindPaymentUseCase find,
+      ReadTransactionHistoryUseCase history) {
     this.authorize = authorize;
     this.voidPayment = voidPayment;
     this.capture = capture;
     this.refund = refund;
     this.find = find;
+    this.history = history;
   }
 
   /**
@@ -189,6 +201,45 @@ class PaymentController {
   }
 
   /**
+   * A page of the Customer's Payment transaction history: every Payment transaction on any of their
+   * Payments, newest first, with how many there are in all. {@code from} (inclusive) and {@code to}
+   * (exclusive) are ISO 8601 instants that narrow it by when each happened; {@code page} counts
+   * from 0, and {@code size} is 1 to {@value #MAX_PAGE_SIZE}. A {@code customerId} parameter is
+   * ignored.
+   */
+  @GetMapping("/transactions")
+  @PreAuthorize("hasRole('CUSTOMER')")
+  Page<TransactionHistoryLineResponse> transactionHistory(
+      CurrentCustomer customer,
+      @RequestParam(required = false) String from,
+      @RequestParam(required = false) String to,
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "20") int size) {
+    if (page < 0) {
+      throw new InvalidHistoryRequestException("page counts from 0");
+    }
+    if (size < 1 || size > MAX_PAGE_SIZE) {
+      throw new InvalidHistoryRequestException("size is 1 to " + MAX_PAGE_SIZE);
+    }
+    var filter =
+        new TransactionHistoryFilter(customer.id(), instant("from", from), instant("to", to));
+    return history.transactionHistory(filter, page, size).map(TransactionHistoryLineResponse::of);
+  }
+
+  /** The instant a bound names, or null for none. */
+  private static Instant instant(String name, String value) {
+    if (value == null) {
+      return null;
+    }
+    try {
+      return Instant.parse(value);
+    } catch (DateTimeParseException e) {
+      throw new InvalidHistoryRequestException(
+          name + " must be an ISO 8601 instant, such as 2026-10-05T00:00:00Z");
+    }
+  }
+
+  /**
    * 404 for an unknown ID, one that isn't a UUID, or another Customer's Payment, so the answer
    * never reveals that someone else's Payment exists. A {@code customerId} parameter is ignored.
    */
@@ -285,8 +336,8 @@ class PaymentController {
         HttpStatus.BAD_GATEWAY, "The payment gateway failed to answer; nothing was recorded.");
   }
 
-  @ExceptionHandler(InvalidPaymentException.class)
-  ProblemDetail invalid(InvalidPaymentException e) {
+  @ExceptionHandler({InvalidPaymentException.class, InvalidHistoryRequestException.class})
+  ProblemDetail invalid(RuntimeException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
   }
 }

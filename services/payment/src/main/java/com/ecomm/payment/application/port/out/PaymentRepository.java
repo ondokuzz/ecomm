@@ -1,7 +1,9 @@
 package com.ecomm.payment.application.port.out;
 
+import com.ecomm.payment.application.port.in.TransactionHistoryFilter;
 import com.ecomm.payment.domain.GatewaySettlement;
 import com.ecomm.payment.domain.Payment;
+import com.ecomm.payment.domain.TransactionHistoryLine;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -37,6 +39,16 @@ public interface PaymentRepository {
 
   /** Every Payment for the Order, newest authorization first. */
   List<Payment> findByOrder(String orderId);
+
+  /**
+   * Up to {@code limit} of the Payment transactions the filter matches, newest first, after
+   * skipping {@code offset} of them.
+   */
+  List<TransactionHistoryLine> findTransactionHistory(
+      TransactionHistoryFilter filter, long offset, int limit);
+
+  /** How many Payment transactions the filter matches. */
+  long countTransactionHistory(TransactionHistoryFilter filter);
 
   /**
    * Up to {@code limit} of the Payments that existed before Payment events and are still to be

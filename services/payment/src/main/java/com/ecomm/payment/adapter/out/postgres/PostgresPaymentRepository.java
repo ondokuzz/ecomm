@@ -1,10 +1,13 @@
 package com.ecomm.payment.adapter.out.postgres;
 
 import com.ecomm.commons.money.Money;
+import com.ecomm.payment.application.port.in.TransactionHistoryFilter;
 import com.ecomm.payment.application.port.out.PaymentRepository;
 import com.ecomm.payment.domain.GatewaySettlement;
 import com.ecomm.payment.domain.Payment;
+import com.ecomm.payment.domain.PaymentStatus;
 import com.ecomm.payment.domain.PaymentTransaction;
+import com.ecomm.payment.domain.TransactionHistoryLine;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -12,6 +15,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -28,6 +32,11 @@ class PostgresPaymentRepository implements PaymentRepository {
 
   private static final String PAYMENT_COLUMNS =
       "p.id, p.customer_id, p.order_id, p.amount_minor, p.currency";
+
+  private static final String TRANSACTION_COLUMNS =
+      """
+      t.kind, t.amount_minor, t.currency, t.outcome, t.gateway_reference, t.decline_reason,
+      t.gateway_event_id, t.at, t.backfilled, t.refund_for""";
 
   private final JdbcClient jdbc;
 
@@ -144,6 +153,67 @@ class PostgresPaymentRepository implements PaymentRepository {
   }
 
   @Override
+  public List<TransactionHistoryLine> findTransactionHistory(
+      TransactionHistoryFilter filter, long offset, int limit) {
+    var where = HistoryQuery.of(filter);
+    return where
+        .bind(
+            jdbc.sql(
+                "SELECT p.id, p.status, p.order_id, "
+                    + TRANSACTION_COLUMNS
+                    + where.sql()
+                    + " ORDER BY t.at DESC, t.payment_id, t.position DESC"
+                    + " LIMIT :limit OFFSET :offset"))
+        .param("limit", limit)
+        .param("offset", offset)
+        .query(
+            (rs, row) ->
+                new TransactionHistoryLine(
+                    rs.getObject("id", UUID.class),
+                    PaymentStatus.valueOf(rs.getString("status")),
+                    rs.getString("order_id"),
+                    transaction(rs)))
+        .list();
+  }
+
+  @Override
+  public long countTransactionHistory(TransactionHistoryFilter filter) {
+    var where = HistoryQuery.of(filter);
+    return where.bind(jdbc.sql("SELECT count(*)" + where.sql())).query(Long.class).single();
+  }
+
+  /**
+   * The {@code FROM} and {@code WHERE} clauses a history filter stands for, which the page and its
+   * count share, and their parameters.
+   */
+  private record HistoryQuery(String sql, Map<String, Object> params) {
+
+    static HistoryQuery of(TransactionHistoryFilter filter) {
+      var sql =
+          new StringBuilder(
+              """
+               FROM payment p
+              JOIN payment_transaction t ON t.payment_id = p.id
+              WHERE p.customer_id = :customerId""");
+      var params = new HashMap<String, Object>();
+      params.put("customerId", filter.customerId());
+      if (filter.from() != null) {
+        sql.append(" AND t.at >= :from");
+        params.put("from", Timestamp.from(filter.from()));
+      }
+      if (filter.to() != null) {
+        sql.append(" AND t.at < :to");
+        params.put("to", Timestamp.from(filter.to()));
+      }
+      return new HistoryQuery(sql.toString(), params);
+    }
+
+    JdbcClient.StatementSpec bind(JdbcClient.StatementSpec statement) {
+      return statement.params(params);
+    }
+  }
+
+  @Override
   public List<Payment> lockAwaitingBackfillEvent(int limit) {
     return withTransactions(
         jdbc.sql(
@@ -195,6 +265,20 @@ class PostgresPaymentRepository implements PaymentRepository {
         .update();
   }
 
+  /** The Payment transaction a row's {@link #TRANSACTION_COLUMNS} hold. */
+  private static PaymentTransaction transaction(ResultSet rs) throws SQLException {
+    return new PaymentTransaction(
+        PaymentTransaction.Kind.valueOf(rs.getString("kind")),
+        Money.of(rs.getLong("amount_minor"), rs.getString("currency")),
+        PaymentTransaction.Outcome.valueOf(rs.getString("outcome")),
+        rs.getString("gateway_reference"),
+        rs.getString("decline_reason"),
+        rs.getString("gateway_event_id"),
+        rs.getTimestamp("at").toInstant(),
+        rs.getBoolean("backfilled"),
+        rs.getString("refund_for"));
+  }
+
   /** A Payment's own columns, before its transactions are read. */
   private record Header(UUID id, String customerId, String orderId, Money amount) {}
 
@@ -213,29 +297,19 @@ class PostgresPaymentRepository implements PaymentRepository {
     }
     var byPayment = new HashMap<UUID, List<PaymentTransaction>>();
     jdbc.sql(
-            """
-            SELECT payment_id, kind, amount_minor, currency, outcome, gateway_reference,
-                   decline_reason, gateway_event_id, at, backfilled, refund_for
-            FROM payment_transaction
-            WHERE payment_id IN (:ids)
-            ORDER BY payment_id, position
-            """)
+            "SELECT t.payment_id, "
+                + TRANSACTION_COLUMNS
+                + """
+                 FROM payment_transaction t
+                WHERE t.payment_id IN (:ids)
+                ORDER BY t.payment_id, t.position
+                """)
         .param("ids", headers.stream().map(Header::id).toList())
         .query(
             rs -> {
               byPayment
                   .computeIfAbsent(rs.getObject("payment_id", UUID.class), id -> new ArrayList<>())
-                  .add(
-                      new PaymentTransaction(
-                          PaymentTransaction.Kind.valueOf(rs.getString("kind")),
-                          Money.of(rs.getLong("amount_minor"), rs.getString("currency")),
-                          PaymentTransaction.Outcome.valueOf(rs.getString("outcome")),
-                          rs.getString("gateway_reference"),
-                          rs.getString("decline_reason"),
-                          rs.getString("gateway_event_id"),
-                          rs.getTimestamp("at").toInstant(),
-                          rs.getBoolean("backfilled"),
-                          rs.getString("refund_for")));
+                  .add(transaction(rs));
             });
     return headers.stream()
         .map(

@@ -70,6 +70,18 @@ Authorization: Bearer {{customerToken}}
 GET {{gateway}}/payments?orderId=order-1
 Authorization: Bearer {{customerToken}}
 
+### The Customer's Payment transaction history, across all their Payments, newest first, through the gateway
+GET {{gateway}}/payments/transactions?size=10
+Authorization: Bearer {{customerToken}}
+
+### Narrowed to what happened from a moment on (inclusive) and before another (exclusive)
+GET {{gateway}}/payments/transactions?from=2026-01-01T00:00:00Z&to=2100-01-01T00:00:00Z
+Authorization: Bearer {{customerToken}}
+
+### A bound that isn't an instant: 400
+GET {{gateway}}/payments/transactions?from=yesterday
+Authorization: Bearer {{customerToken}}
+
 ### The Saga voids it: 200, VOIDED, with a VOID transaction
 POST {{payment}}/payments/{{paymentId}}/void
 Authorization: Bearer {{orchestrationToken}}
@@ -193,6 +205,10 @@ Authorization: Bearer {{staffToken}}
 ### A Customer can't: 403
 GET {{gateway}}/staff/payments?orderId=order-1
 Authorization: Bearer {{customerToken}}
+
+### Staff can't read a Customer's Payment transaction history: 403
+GET {{gateway}}/payments/transactions
+Authorization: Bearer {{staffToken}}
 
 ### Staff read Payments only under /staff/payments: 403
 GET {{payment}}/payments/{{paymentId}}

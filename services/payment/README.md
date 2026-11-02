@@ -126,8 +126,9 @@ which finds nothing for another Customer's Payment. Checkout's own token (`CHECK
 commands once Checkout moved onto the Saga (#60). That Customer reads it back with their own token
 (`CUSTOMER`),
 whose `sub` must match: another Customer's Payment is a 404, the same as an unknown one, so its
-existence never leaks. Staff read every Payment for an Order with a `STAFF` token. Any other token
-gets 403, and no token gets 401.
+existence never leaks. The Customer also reads their Payment transaction history, across all their
+Payments, with their own token; nobody else can. Staff read every Payment for an Order with a
+`STAFF` token. Any other token gets 403, and no token gets 401.
 
 | Endpoint | Called by | |
 |---|---|---|
@@ -140,6 +141,7 @@ gets 403, and no token gets 401.
 | `GET /payments/{id}/for-customer?customerId=` | Orchestration | The named Customer's Payment, as the Saga awaits its settlement; 404 as above. A path of its own, so it never shadows the Customer's read above |
 | `GET /payments/by-order?orderId=&customerId=` | Orchestration | The named Customer's Payments for an Order, newest first, as the fulfillment Saga finds the one to capture; empty for anyone else's. A path of its own, so it never shadows the Customer's read below |
 | `GET /payments?orderId=` | Customer | The Customer's Payments for one of their Orders, newest first; an empty list for anyone else's Order. A `customerId` parameter is ignored |
+| `GET /payments/transactions?from=&to=&page=&size=` | Customer | The Customer's Payment transaction history; see [below](#payment-transaction-history). A `customerId` parameter is ignored |
 | `GET /staff/payments?orderId=` | Staff | Every Payment for an Order, newest first |
 
 The API gateway routes the reads and the webhook, as `/api/payment/…`, and hides the four commands
@@ -226,7 +228,36 @@ A missing or blank `customerId` or one past 255 characters, a missing or blank `
 characters, or an amount that isn't a positive integer with a known currency is a 400, as is a read
 of an Order's Payments without `orderId`. Every error is a problem detail.
 
+### Payment transaction history
+
+`GET /payments/transactions` answers every Payment transaction on any of the Customer's Payments,
+newest first, in one call, so a question such as "why was I charged twice?" needs no read per Order.
+`from` (inclusive) and `to` (exclusive), both optional ISO 8601 instants, narrow it by when each
+happened. It is paged as Order Management's lists are: `page` counts from 0, `size` is 1 to 100 and
+20 by default, and `total` is how many there are in all.
+
+```json
+{"items": [
+   {"kind": "CAPTURE", "amount": {"amountMinor": 79900, "currency": "EUR"}, "outcome": "APPROVED",
+    "declineReason": null, "at": "2026-10-09T08:00:00.123456Z", "reference": null,
+    "paymentId": "…", "paymentStatus": "CAPTURED",
+    "orderId": "3f2a9c1b-…", "orderReference": "#3F2A9C1B"}],
+ "page": 0, "size": 20, "total": 1}
+```
+
+Each line is the Payment transaction as the Order page shows it, with its Payment's ID and status
+now, its Order's ID and its Order reference, worked out from the Order ID as the Storefront does.
+Only the token's Customer's Payment transactions are in it; Staff and Orchestration get 403, and
+keep their per-Order reads. A negative `page`, a `size` outside 1 to 100, or a `from` or `to` that
+isn't an instant is a 400. The Customer's Payments are found by `payment_by_customer_idx`, and
+their transactions by `payment_transaction_by_payment_and_time_idx`, so a page is one query, and
+its `total` another, however many Orders the Customer has.
+
 [`http/payment.http`](./http/payment.http) exercises every endpoint against the compose stack.
+
+### Changes in Sprint 7
+
+- `GET /payments/transactions`, the Customer's Payment transaction history.
 
 ### Changes in Sprint 6
 
