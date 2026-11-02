@@ -760,9 +760,11 @@ services:
   # Each consumer group's lag as the broker sees it: a partition's end offset less the group's
   # committed offset. Unlike the consumers' own metrics, it shows a group stopped, or stuck retrying
   # an event, since neither commits. The redrive tool's own groups (<group>.dlt-redrive) are left
-  # out. Prometheus scrapes it; nothing else calls it, so it publishes no host port.
+  # out. Prometheus scrapes it; nothing else calls it, so it publishes no host port. Not in the
+  # default stack; `docker compose up -d prometheus grafana kafka-exporter` starts the three.
   kafka-exporter:
     image: danielqsj/kafka-exporter:v1.9.0
+    profiles: [dashboards]
     command: ["--kafka.server=kafka:19092", "--group.exclude=\\.dlt-redrive$"]
     mem_limit: 32m
     depends_on:
@@ -774,9 +776,12 @@ services:
       retries: 10
 
   # Scrapes every Spring service's metrics, and the Kafka exporter's (prometheus/prometheus.yml),
-  # and keeps 2 days of them, on http://localhost:9090.
+  # and keeps 2 days of them, on http://localhost:9090. Not in the default stack, which has no
+  # memory to spare for it; `docker compose up -d prometheus grafana kafka-exporter` starts the
+  # three.
   prometheus:
     image: prom/prometheus:v3.15.0
+    profiles: [dashboards]
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
@@ -798,9 +803,11 @@ services:
   # The Services, Event consumers and Sagas dashboards on http://localhost:3000, open to
   # anyone for viewing; sign in as admin, with the password in
   # .secrets/<project>/grafana-admin-password, to explore. Its data source and dashboards are
-  # provisioned from grafana/, and it keeps nothing else between restarts.
+  # provisioned from grafana/, and it keeps nothing else between restarts. Not in the default stack;
+  # `docker compose up -d prometheus grafana kafka-exporter` starts the three.
   grafana:
     image: grafana/grafana:13.2.3
+    profiles: [dashboards]
     environment:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer

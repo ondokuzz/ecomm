@@ -1,6 +1,6 @@
 # Ecomm Platform
 
-A from-scratch e-commerce platform, architected as fifteen bounded contexts across five parallel team tracks, planned over nine two-week sprints for a small (4-5 person) engineering team. Sprint 6 has completed returns and added Notifications, and it all runs locally: search the Catalog with Facets, pick a Variant, keep a Cart, check out with a Checkout Session that reserves its Stock, gets the running Campaigns by itself and a Coupon on top, and pay through a mock payment that can decline or wait for the bank, which the checkout Saga on Temporal either completes or undoes whole, after giving a Shipping address and choosing a Shipping option. Staff pick and pack the Order from a fulfillment queue, and the fulfillment Saga captures its Payment, hands it to the carrier and follows it to delivery. Then follow the Order's Status history, its Payment and its Shipment's Tracking events, review what you bought, see what others bought with it, and ask to return it or claim its warranty, then follow the RMA to its Refund or replacement, told each step by email. Staff manage the Catalog, with Warranty terms and Serial tracking, Coupons and Campaigns, look up Orders with their Payments and each Variant's Stock movements, work the fulfillment queue and each RMA from approval to inspection, moderate Reviews, and see what the platform told each Customer, in an Admin Console. Grafana shows the services, the event consumers and the three Sagas.
+A from-scratch e-commerce platform, architected as fifteen bounded contexts across five parallel team tracks, planned over nine two-week sprints for a small (4-5 person) engineering team. Sprint 6 has completed returns and added Notifications, and it all runs locally: search the Catalog with Facets, pick a Variant, keep a Cart, check out with a Checkout Session that reserves its Stock, gets the running Campaigns by itself and a Coupon on top, and pay through a mock payment that can decline or wait for the bank, which the checkout Saga on Temporal either completes or undoes whole, after giving a Shipping address and choosing a Shipping option. Staff pick and pack the Order from a fulfillment queue, and the fulfillment Saga captures its Payment, hands it to the carrier and follows it to delivery. Then follow the Order's Status history, its Payment and its Shipment's Tracking events, review what you bought, see what others bought with it, and ask to return it or claim its warranty, then follow the RMA to its Refund or replacement, told each step by email. Staff manage the Catalog, with Warranty terms and Serial tracking, Coupons and Campaigns, look up Orders with their Payments and each Variant's Stock movements, work the fulfillment queue and each RMA from approval to inspection, moderate Reviews, and see what the platform told each Customer, in an Admin Console. Grafana, started on demand, shows the services, the event consumers and the three Sagas.
 
 ## Run Sprint 6
 
@@ -154,8 +154,8 @@ Orchestration, which serves nothing but its health:
 | 9092 | Kafka |
 | 7233 | Temporal, for workers and clients run from the host ([Orchestration](./services/orchestration/README.md#temporal)) |
 | 8233 | Temporal's web UI: every workflow, its history and its retries |
-| 3000 | Grafana: the Services, Event consumers and Sagas dashboards, open for viewing ([below](#metrics-and-dashboards)) |
-| 9090 | Prometheus: every service's metrics, and Kafka's consumer lag, for 2 days |
+| 3000 | Grafana, once started: the Services, Event consumers and Sagas dashboards, open for viewing ([below](#metrics-and-dashboards)) |
+| 9090 | Prometheus, once started: every service's metrics, and Kafka's consumer lag, for 2 days |
 | 27017 | Mongo |
 | 5050 | pgAdmin, once started (below) |
 
@@ -172,6 +172,15 @@ is written from the stack's Postgres password as it starts ([Secrets](#secrets))
 between restarts, so saved queries and layout are lost when the container is recreated.
 
 ### Metrics and dashboards
+
+`docker compose up -d prometheus grafana kafka-exporter` starts Prometheus, Grafana and the Kafka
+exporter on the running stack. They aren't part of `make up`, as the default stack has no memory to
+spare for them ([Memory](#memory)): until they are started, no metrics are kept, and none of the
+dashboards below is there. Each service serves its metrics all the same, so the dashboards fill from
+when Prometheus starts, with nothing from before.
+`docker compose stop grafana prometheus kafka-exporter` stops them again, and `make down` stops them
+with the rest. Prometheus keeps its 2 days in its volume across restarts. On a stack from Sprint 6
+or earlier, which ran them by default, they keep running after `make up` until stopped.
 
 Every Spring service, the gateway included, serves its metrics on `/actuator/prometheus`
 ([service template](./platform/service-template/README.md#metrics)). Prometheus scrapes them every
@@ -306,8 +315,9 @@ volumes were made before Sprint 5, the infrastructure passwords are written with
 they were made with (`ecomm`, `password` and `admin`), since Postgres, Couchbase and Keycloak keep
 the password they started with; the client and webhook secrets are new on every stack. So never
 delete an infrastructure password's file while the stack's volumes exist: `make secrets` would write
-the old dev value back, which a stack made since doesn't have. `docker compose down -v` removes the
-volumes but not `.secrets/`, and a fresh stack starts with the passwords that are there.
+the old dev value back, which a stack made since doesn't have.
+`docker compose --profile '*' down -v` removes the volumes but not `.secrets/`, and a fresh stack
+starts with the passwords that are there.
 
 The demo Customer's and the Staff user's passwords and the public `dev-cli` client stay in the
 realm file: they are demo data for trying the stack and for the tests, not secrets.
@@ -366,7 +376,7 @@ d=.secrets/ecomm; printf '{"dev": {"checkoutClientSecret": "%s", "orchestrationC
 Every checkout takes Stock, so after many smoke-test runs `make seed-reset` refills it. The
 Storefront's suite stops before its first test once any seeded Product's default Variant is sold
 out, and names them. To wipe
-everything, Keycloak's users included, run `docker compose down -v`.
+everything, Keycloak's users included, run `docker compose --profile '*' down -v`.
 
 ### A stack from Sprint 5
 
@@ -415,10 +425,12 @@ about 50 MB off each; the images themselves keep the JVM's defaults (`x-spring-j
 [`infra/docker/compose.yaml`](./infra/docker/compose.yaml)). Keycloak is capped at 768 MB with 40%
 for the heap, and each nginx at 64 MB. Kafka is capped at 640 MB with a 256 MB heap, and Mongo at
 512 MB with a 256 MB cache, Apicurio and pgAdmin at 384 MB each, the Temporal server at 384 MB, its
-UI at 64 MB, Prometheus and Grafana at 256 MB each, Mailpit at 64 MB, the Kafka exporter at 32 MB,
-and the init steps at 256 MB or less. Couchbase, Postgres and Redis are uncapped. After both suites
-the default stack uses about 5.65 GB (`docker stats`), and fits in about 8 GB of Docker memory, with
-its swap nearly full ([Sprint 6's reading](./docs/roadmap.md#sprint-6-weeks-1112--returns-completion)).
+UI at 64 MB, Mailpit at 64 MB, the init steps at 256 MB or less, and, once started, Prometheus and
+Grafana at 256 MB each and the Kafka exporter at 32 MB. Couchbase, Postgres and Redis are uncapped.
+After both suites the default stack uses about 5.73 GB (`docker stats`), and fits in about 8 GB of
+Docker memory, with about half its swap in use
+([Sprint 7's reading](./docs/roadmap.md#sprint-7-weeks-1314--ai-assistant)). The dashboards are
+left out of it to make room: they took about 460 MB, and with them the swap filled.
 `make memory` reports it, and [`docs/agents/memory-reading.md`](./docs/agents/memory-reading.md)
 says how a reading is taken.
 That leaves little over: with 8 GB given to Docker on a 16 GB host that also runs a browser and an

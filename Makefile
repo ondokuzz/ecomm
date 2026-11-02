@@ -1,6 +1,8 @@
 # The local stack, run from the repo root. Host ports can be overridden as in
 # infra/docker/compose.yaml, e.g. `POSTGRES_PORT=5433 make up`.
 COMPOSE := docker compose
+# Every profile's services too (pgAdmin, the dashboards), so stopping the stack stops those started.
+COMPOSE_ALL := $(COMPOSE) --profile '*'
 KAFKA := $(COMPOSE) exec -T kafka /opt/kafka/bin
 TOPICS := $(basename $(notdir $(wildcard platform/event-schemas/schemas/*.json)))
 GROUPS := $(shell grep -v '^\#' infra/docker/consumer-groups)
@@ -26,9 +28,9 @@ up: secrets
 	$(COMPOSE) up -d --build --wait
 	@python3 -B infra/docker/warm-up.py
 
-## Stop the stack, keeping its data.
+## Stop the stack, keeping its data: pgAdmin and the dashboards too, if they were started.
 down:
-	$(COMPOSE) down
+	$(COMPOSE_ALL) down
 
 ## Say whether every service is running and healthy; name any that isn't, with its exit code and
 ## whether it was killed for its memory cap.
@@ -168,7 +170,7 @@ upgrade-from:
 	@if docker volume ls -q --filter name=^ecomm-upgrade_ | grep -q .; then \
 	  echo "An earlier upgrade check's volumes are still there; run make upgrade-clean first"; exit 1; fi
 	rm -rf .secrets/ecomm-upgrade
-	$(COMPOSE) down
+	$(COMPOSE_ALL) down
 	git worktree add --force --detach $(UPGRADE_DIR) $(FROM)
 	if [ -f .env ]; then cp .env $(UPGRADE_DIR)/.env; fi
 	if [ -f $(UPGRADE_DIR)/infra/docker/secrets.sh ]; then \
@@ -187,7 +189,7 @@ upgrade-to:
 
 ## Remove the upgrade stack, its data, its secrets, its worktree and its images.
 upgrade-clean:
-	$(UPGRADE) $(COMPOSE) down -v --remove-orphans
+	$(UPGRADE) $(COMPOSE_ALL) down -v --remove-orphans
 	rm -rf .secrets/ecomm-upgrade
 	if [ -d $(UPGRADE_DIR) ]; then git worktree remove --force $(UPGRADE_DIR); fi
 	docker image ls --format '{{.Repository}}:{{.Tag}}' | grep ':upgrade-from$$' | xargs -r docker image rm

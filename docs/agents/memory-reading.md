@@ -6,8 +6,8 @@ pass takes the sprint's. Readings compare only when taken the same way.
 
 ## Steps
 
-1. **Idle.** Start the stack with `make up`, wait 15 minutes with nothing running against it, then
-   run `make memory`. This is the reading to compare across a change.
+1. **Idle.** Start the stack with `make up`, wait 1 minute after its warm-up ends with nothing
+   running against it, then run `make memory`. This is the reading to compare across a change.
 2. **Under load.** Run both Playwright suites one after the other, each with `--workers=1`
    (`npx playwright test --workers=1` in `frontend/storefront`, then `frontend/admin-console`), then
    run `make memory` at once.
