@@ -85,6 +85,15 @@ public class OrderService
   }
 
   @Override
+  public Page<Order> ordersByReference(String customerId, String reference, int page, int size) {
+    return new Page<>(
+        orders.findByReference(customerId, reference, (long) page * size, size),
+        page,
+        size,
+        orders.countByReference(customerId, reference));
+  }
+
+  @Override
   public Optional<Order> anyOrder(UUID id) {
     return orders.find(id);
   }

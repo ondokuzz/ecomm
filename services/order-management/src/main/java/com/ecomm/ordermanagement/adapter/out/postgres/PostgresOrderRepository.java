@@ -259,6 +259,42 @@ class PostgresOrderRepository implements OrderRepository {
         .single();
   }
 
+  // An Order reference is the ID's first eight characters, so these match on left(id::text, 8),
+  // as the index customer_order_by_reference is written, for it to serve them.
+
+  @Override
+  @Transactional(readOnly = true)
+  public List<Order> findByReference(String customerId, String reference, long offset, int limit) {
+    return attach(
+        jdbc.sql(
+                "SELECT "
+                    + ORDER_COLUMNS
+                    + """
+                     FROM customer_order
+                    WHERE left(id::text, 8) = :reference AND customer_id = :customerId
+                    ORDER BY placed_at DESC, id LIMIT :limit OFFSET :offset
+                    """)
+            .param("reference", reference)
+            .param("customerId", customerId)
+            .param("limit", limit)
+            .param("offset", offset)
+            .query(ORDER)
+            .list());
+  }
+
+  @Override
+  public long countByReference(String customerId, String reference) {
+    return jdbc.sql(
+            """
+            SELECT count(*) FROM customer_order
+            WHERE left(id::text, 8) = :reference AND customer_id = :customerId
+            """)
+        .param("reference", reference)
+        .param("customerId", customerId)
+        .query(Long.class)
+        .single();
+  }
+
   @Override
   @Transactional(readOnly = true)
   public List<Order> findMatching(OrderFilter filter, long offset, int limit) {

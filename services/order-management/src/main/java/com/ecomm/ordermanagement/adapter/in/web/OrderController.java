@@ -12,9 +12,11 @@ import com.ecomm.ordermanagement.domain.IllegalStatusTransitionException;
 import com.ecomm.ordermanagement.domain.InvalidOrderException;
 import com.ecomm.ordermanagement.domain.Order;
 import java.net.URI;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -43,6 +45,8 @@ import org.springframework.web.bind.annotation.RestController;
 class OrderController {
 
   private static final Logger log = LoggerFactory.getLogger(OrderController.class);
+
+  private static final Pattern REFERENCE = Pattern.compile("#?([0-9a-fA-F]{8})");
 
   private final PlaceOrderUseCase place;
   private final FindOrdersUseCase find;
@@ -78,16 +82,34 @@ class OrderController {
 
   /**
    * A page of the Customer's Orders, newest first, with how many they have in all: {@code page}
-   * counts from 0, and {@code size} is 1 to {@value PageRequests#MAX_PAGE_SIZE}.
+   * counts from 0, and {@code size} is 1 to {@value PageRequests#MAX_PAGE_SIZE}. {@code reference}
+   * narrows it to the Orders with that Order reference, as the Customer's emails write it ({@code
+   * #EA2CA751}), in either case, with or without its {@code #}; anything else is a 400 {@code
+   * invalidReference}. An Order reference needn't be unique, so it answers a page too.
    */
   @GetMapping
   @PreAuthorize("hasRole('CUSTOMER')")
   Page<OrderResponse> orders(
       CurrentCustomer customer,
+      @RequestParam(required = false) String reference,
       @RequestParam(defaultValue = "0") int page,
       @RequestParam(defaultValue = "20") int size) {
     PageRequests.check(page, size);
-    return find.orders(customer.id(), page, size).map(OrderResponse::of);
+    var orders =
+        reference == null
+            ? find.orders(customer.id(), page, size)
+            : find.ordersByReference(customer.id(), reference(reference), page, size);
+    return orders.map(OrderResponse::of);
+  }
+
+  /** The ID's first eight characters an Order reference stands for, in lower case. */
+  private static String reference(String value) {
+    var matcher = REFERENCE.matcher(value);
+    if (!matcher.matches()) {
+      throw new InvalidReferenceException(
+          "reference must be an Order reference: 8 hex digits, such as #EA2CA751");
+    }
+    return matcher.group(1).toLowerCase(Locale.ROOT);
   }
 
   /**
@@ -142,5 +164,12 @@ class OrderController {
   @ExceptionHandler({InvalidOrderException.class, InvalidPageException.class})
   ProblemDetail invalid(RuntimeException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+  }
+
+  @ExceptionHandler(InvalidReferenceException.class)
+  ProblemDetail invalidReference(InvalidReferenceException e) {
+    var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+    problem.setProperty("reason", "invalidReference");
+    return problem;
   }
 }

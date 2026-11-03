@@ -179,6 +179,12 @@ class PostgresRmaRepository implements RmaRepository {
       where.append(" AND order_id = :orderId");
       params.put("orderId", filter.orderId());
     }
+    if (filter.reference() != null) {
+      // An RMA reference is the ID's first eight characters, written as rma_by_reference_idx is,
+      // so that index serves it.
+      where.append(" AND left(id::text, 8) = :reference");
+      params.put("reference", filter.reference());
+    }
     // A Customer reads their own newest first. Staff chase approved RMAs by their Send-back
     // deadline, and every other list oldest first.
     var order =

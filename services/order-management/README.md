@@ -33,6 +33,7 @@ nothing there changes an Order. Any other token gets 403, and no token gets 401.
 | `PATCH /orders/{id}/status` | Orchestration | Moves the Order: `{"customerId", "status": "PAID"}`; 200 with the Order, 409 if illegal |
 | `GET /orders/{id}` | Customer | The Customer's Order; 404 for an unknown ID or another Customer's |
 | `GET /orders?page=0&size=20` | Customer | A page of the Customer's Orders, newest first, with their total |
+| `GET /orders?reference=EA2CA751&page=0&size=20` | Customer | The same, narrowed to the Orders with that Order reference |
 | `GET /staff/orders?status=&customerId=&placedFrom=&placedTo=&idPrefix=&page=0&size=20` | Staff | A page of every Customer's Orders that match, newest first, with their total |
 | `GET /staff/orders/{id}` | Staff | Any Customer's Order; 404 for an unknown ID |
 
@@ -98,6 +99,14 @@ change: `ORCHESTRATION`, for the checkout Saga. A change made before Checkout mo
 
 A page past the last has no items and the same total. **This changed in Sprint 3**: the response
 used to be a bare array of every Order.
+
+`reference` finds the Customer's Order by the Order reference their emails show, such as
+`#EA2CA751`: in either case, with or without its `#` (written `%23` in a URL). Anything but eight
+hex digits is a 400 with `"reason": "invalidReference"`. It answers a page like the list's, empty
+when none of the Customer's Orders has that reference: an Order reference isn't unique across
+Customers, and needn't be within one, so another Customer's Order with the same reference never
+matches. It matches on the first eight characters of the Order's ID, which an index on that prefix
+serves; the reference itself isn't stored.
 
 ### Staff's view
 

@@ -72,7 +72,8 @@ Content-Type: application/json
 {"orderId": "{{orderId}}", "variantId": "{{variantId}}", "quantity": 1, "serialNumbers": ["{{imei}}"],
  "kind": "RETURN", "reason": "Not what I expected"}
 
-> {% client.global.set("returnId", response.body.id); %}
+> {% client.global.set("returnId", response.body.id);
+     client.global.set("returnReference", response.body.reference); %}
 
 ### The same phone again, as a warranty claim: 422 quantityExceeded, since the return holds the only unit
 POST {{returns}}/rmas
@@ -102,6 +103,23 @@ Content-Type: application/json
 
 ### The Customer's own RMAs, newest first, as their Returns page lists them
 GET {{gateway}}/api/returns-warranty/rmas
+Authorization: Bearer {{customerToken}}
+
+### The Customer finds the return by its RMA reference, such as RMA-3F2A9C1B: a page holding it
+GET {{gateway}}/api/returns-warranty/rmas?reference={{returnReference}}
+Authorization: Bearer {{customerToken}}
+
+### Without its RMA-, in lower case: the same page
+< {% client.global.set("lowerReturnReference", client.global.get("returnReference").substring(4).toLowerCase()); %}
+GET {{gateway}}/api/returns-warranty/rmas?reference={{lowerReturnReference}}
+Authorization: Bearer {{customerToken}}
+
+### By its Order: the Order's RMAs, newest first
+GET {{gateway}}/api/returns-warranty/rmas?orderId={{orderId}}
+Authorization: Bearer {{customerToken}}
+
+### Not eight hex digits: 400 invalidReference, naming reference
+GET {{returns}}/rmas?reference=%233F2A9C1B
 Authorization: Bearer {{customerToken}}
 
 ### Staff's RMA approval queue: requested RMAs, oldest first

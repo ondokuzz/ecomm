@@ -11,4 +11,13 @@ public interface FindOrdersUseCase {
 
   /** A page of the Customer's Orders, newest first, {@code size} to a page. */
   Page<Order> orders(String customerId, int page, int size);
+
+  /**
+   * A page of the Customer's Orders whose Order reference is this one, newest first, {@code size}
+   * to a page.
+   *
+   * @param reference the first eight characters of an Order ID in lower case, as the database
+   *     writes a UUID
+   */
+  Page<Order> ordersByReference(String customerId, String reference, int page, int size);
 }

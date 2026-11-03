@@ -22,6 +22,15 @@ public interface OrderRepository {
   long countByCustomer(String customerId);
 
   /**
+   * Up to {@code limit} of the Customer's Orders whose ID starts with {@code reference}, eight
+   * lower-case hex digits, newest first, skipping the first {@code offset}.
+   */
+  List<Order> findByReference(String customerId, String reference, long offset, int limit);
+
+  /** How many of the Customer's Orders have an ID that starts with {@code reference}. */
+  long countByReference(String customerId, String reference);
+
+  /**
    * Up to {@code limit} of the Orders that match, newest first, skipping the first {@code offset}.
    */
   List<Order> findMatching(OrderFilter filter, long offset, int limit);

@@ -249,6 +249,19 @@ Authorization: Bearer {{staffToken}}
 GET {{orders}}/staff/orders?idPrefix={{orderReference}}
 Authorization: Bearer {{staffToken}}
 
+### The Customer finds it by the Order reference in their emails, its # written %23: a page holding the first Order
+GET {{orders}}/orders?reference=%23{{orderReference}}
+Authorization: Bearer {{customerToken}}
+
+### Without its #, in lower case: the same page
+< {% client.global.set("lowerReference", client.global.get("orderReference").toLowerCase()); %}
+GET {{orders}}/orders?reference={{lowerReference}}
+Authorization: Bearer {{customerToken}}
+
+### Not eight hex digits: 400 invalidReference
+GET {{orders}}/orders?reference=RMA-3F2A9C1B
+Authorization: Bearer {{customerToken}}
+
 ### An unknown Status: 400
 GET {{orders}}/staff/orders?status=LOST
 Authorization: Bearer {{staffToken}}

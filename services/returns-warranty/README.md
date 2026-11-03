@@ -23,7 +23,7 @@ an RMA's `APPROVED` event. Its steps can also be taken by hand with Orchestratio
 | `POST /rmas` | a Customer, with an `Idempotency-Key` | Request an RMA: 201, `REQUESTED` |
 | `GET /rmas/eligibility?orderId=` | a Customer | What each line of their delivered Order is still eligible for |
 | `GET /rmas/{id}` | the RMA's Customer, Staff, or Orchestration | Read it; anyone else's is a 404. The returns Saga reads its RMA again while it awaits a step |
-| `GET /rmas?status=&orderId=&page=&size=` | a Customer, or Staff | A page of RMAs: a Customer's own, or for Staff everyone's (the RMA queue) |
+| `GET /rmas?status=&orderId=&reference=&page=&size=` | a Customer, or Staff | A page of RMAs: a Customer's own, or for Staff everyone's (the RMA queue) |
 | `POST /rmas/{id}/approve` | Staff | Approve it, with an optional `note` |
 | `POST /rmas/{id}/reject` | Staff | Reject it, with a required `reason` |
 | `POST /rmas/{id}/receive` | Staff, with an `Idempotency-Key` | Receive its units: `RECEIVED` |
@@ -101,6 +101,13 @@ is refused, not replayed. A listing's `page` counts from 0, and `size` is 1 to 1
 is a 400. A Customer's own are listed newest first, as their Returns page shows them. For Staff,
 `APPROVED` alone is listed by Send-back deadline, soonest first, as they chase the units; any other
 listing is oldest first.
+
+`orderId` narrows a listing to one Order's RMAs, and `reference` to the RMA with that RMA reference,
+such as `RMA-3F2A9C1B`: in either case, with or without its `RMA-`. Anything but eight hex digits
+is a 400 with `"reason": "invalidReference"`, naming `reference`. Either answers a page, empty when
+nothing matches; a Customer's never holds another Customer's RMA. `reference` matches on the first
+eight characters of the RMA's ID, which an index on that prefix serves; the reference itself isn't
+stored.
 
 ### The lifecycle
 
@@ -267,17 +274,18 @@ root README's "Secrets").
 ## Tests
 
 - `RequestRmaApiTest`, `DecideRmaApiTest`, `RmaLifecycleApiTest`, `EligibilityApiTest`,
-  `ReadRmasApiTest`, `RmaEventsApiTest`, `ProjectionApiTest` and `UpgradeApiTest` publish Shipment,
-  Product and Order events as Fulfillment & Shipping, Catalog and Order Management would, each
-  checked against its schema first (a delivered Shipment publishes its Order first, unless a test
-  publishes its own), and use the API over HTTP with `FakeKeycloak` tokens: accepted returns and
-  warranty claims, every refusal, Refund amounts, the recorded window surviving a Catalog change,
-  decisions, receipts, Inspections, resolutions, holds and expiries with every refused step,
-  idempotent repeats, eligibility, reads and listings by owner, Staff and status, events per change,
-  projections by version in either order, replacement Shipments skipped, and the fill-ins of an
-  upgraded stack, whose Sprint 5 rows `UpgradeApiTest` writes with SQL. The clock is a fixed `TestTimeSource`. Postgres, Kafka and the
-  registry run in Testcontainers, each test topic with one partition, so a later event applied
-  means the earlier ones are.
+  `ReadRmasApiTest`, `FindRmaByReferenceApiTest`, `RmaEventsApiTest`, `ProjectionApiTest` and
+  `UpgradeApiTest` publish Shipment, Product and Order events as Fulfillment & Shipping, Catalog and
+  Order Management would, each checked against its schema first (a delivered Shipment publishes its
+  Order first, unless a test publishes its own), and use the API over HTTP with `FakeKeycloak`
+  tokens: accepted returns and warranty claims, every refusal, Refund amounts, the recorded window
+  surviving a Catalog change, decisions, receipts, Inspections, resolutions, holds and expiries with
+  every refused step, idempotent repeats, eligibility, reads and listings by owner, Staff and
+  status, finding by RMA reference and by Order, events per change, projections by version in either
+  order, replacement Shipments skipped, and the fill-ins of an upgraded stack, whose Sprint 5 rows
+  `UpgradeApiTest` writes with SQL. The clock is a fixed `TestTimeSource`. Postgres, Kafka and the
+  registry run in Testcontainers, each test topic with one partition, so a later event applied means
+  the earlier ones are.
 - `V5MigrationTest` migrates a database of its own to V4, writes Sprint 5's rows, migrates it to V5,
   and reads the tables: the migration's subject is the schema.
 - `WindowTest`, `RmaRequestTest`, `RmaLifecycleTest` and `RefundAmountTest` are pure domain tests:

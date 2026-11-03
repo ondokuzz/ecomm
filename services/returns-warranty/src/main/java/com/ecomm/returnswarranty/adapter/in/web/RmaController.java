@@ -32,10 +32,12 @@ import java.net.URI;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -68,6 +70,9 @@ import org.springframework.web.bind.annotation.RestController;
 class RmaController {
 
   private static final Logger log = LoggerFactory.getLogger(RmaController.class);
+
+  private static final Pattern REFERENCE =
+      Pattern.compile("(?:RMA-)?([0-9a-f]{8})", Pattern.CASE_INSENSITIVE);
 
   /** The most RMAs a page can hold. */
   static final int MAX_PAGE_SIZE = 100;
@@ -289,16 +294,19 @@ class RmaController {
 
   /**
    * A page of RMAs: a Customer's own, or for Staff, everyone's (the RMA queue). {@code status}, one
-   * or more, repeated or comma-separated, and {@code orderId} narrow it when given; {@code page}
-   * counts from 0; {@code size} is 1 to {@value #MAX_PAGE_SIZE}. A Customer's are newest first.
-   * Staff's {@code APPROVED} alone is by Send-back deadline, soonest first; any other list of
-   * theirs is oldest first.
+   * or more, repeated or comma-separated, {@code orderId} and {@code reference} narrow it when
+   * given. {@code reference} is an RMA reference, {@code RMA-3F2A9C1B}, in either case, with or
+   * without its {@code RMA-}; anything else is a 400 {@code invalidReference}. {@code page} counts
+   * from 0; {@code size} is 1 to {@value #MAX_PAGE_SIZE}. A Customer's are newest first. Staff's
+   * {@code APPROVED} alone is by Send-back deadline, soonest first; any other list of theirs is
+   * oldest first.
    */
   @GetMapping
   @PreAuthorize("hasAnyRole('CUSTOMER', 'STAFF')")
   Page<RmaResponse> rmas(
       @RequestParam(required = false) List<String> status,
       @RequestParam(required = false) String orderId,
+      @RequestParam(required = false) String reference,
       @RequestParam(defaultValue = "0") int page,
       @RequestParam(defaultValue = "20") int size,
       Authentication caller) {
@@ -308,8 +316,22 @@ class RmaController {
     if (size < 1 || size > MAX_PAGE_SIZE) {
       throw new InvalidRequestException("size", "is 1 to " + MAX_PAGE_SIZE);
     }
-    var filter = new RmaFilter(isStaff(caller) ? null : caller.getName(), status(status), orderId);
+    var filter =
+        new RmaFilter(
+            isStaff(caller) ? null : caller.getName(),
+            status(status),
+            orderId,
+            reference == null ? null : reference(reference));
     return rmas.rmas(filter, page, size).map(RmaResponse::of);
+  }
+
+  /** The ID's first eight characters an RMA reference stands for, in lower case. */
+  private static String reference(String value) {
+    var matcher = REFERENCE.matcher(value);
+    if (!matcher.matches()) {
+      throw new InvalidReferenceException();
+    }
+    return matcher.group(1).toLowerCase(Locale.ROOT);
   }
 
   private static Set<RmaStatus> status(List<String> values) {
@@ -478,6 +500,13 @@ class RmaController {
   ProblemDetail invalid(InvalidRequestException e) {
     var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
     problem.setProperty("errors", List.of(e.violation()));
+    return problem;
+  }
+
+  @ExceptionHandler(InvalidReferenceException.class)
+  ProblemDetail invalidReference(InvalidReferenceException e) {
+    var problem = invalid(e);
+    problem.setProperty("reason", "invalidReference");
     return problem;
   }
 }
