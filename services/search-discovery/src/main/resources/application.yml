@@ -9,5 +9,5 @@ spring:
 
 ecomm:
   security:
-    # Anyone may search the Catalog.
-    public-read-paths: [/search]
+    # Anyone may search the Catalog, or read one Product.
+    public-read-paths: [/search, /products/*]

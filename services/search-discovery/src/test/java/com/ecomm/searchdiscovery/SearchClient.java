@@ -11,7 +11,10 @@ import java.util.UUID;
 import java.util.function.Predicate;
 import org.springframework.test.web.servlet.client.RestTestClient;
 
-/** Test-only: {@code GET /search} as a client sees it, independent of the service's own classes. */
+/**
+ * Test-only: {@code GET /search} and {@code GET /products/{sku}} as a client sees them, independent
+ * of the service's own classes.
+ */
 final class SearchClient {
 
   record Money(long amountMinor, String currency) {}
@@ -39,6 +42,25 @@ final class SearchClient {
       List<AttributeFacet> attributes,
       List<PriceRange> prices,
       long inStock) {}
+
+  record Warranty(int months, String manufacturer) {}
+
+  record Category(String slug, String name) {}
+
+  record Variant(String id, Map<String, String> axisValues, Money price, boolean inStock) {}
+
+  record Product(
+      String sku,
+      String name,
+      Category category,
+      Map<String, String> attributes,
+      Warranty warranty,
+      List<Variant> variants) {
+
+    Variant variant(String id) {
+      return variants.stream().filter(v -> v.id().equals(id)).findFirst().orElseThrow();
+    }
+  }
 
   record Results(List<Summary> items, int page, int size, long total, Facets facets) {
 
@@ -96,6 +118,38 @@ final class SearchClient {
         .expectStatus()
         .isOk()
         .expectBody(Results.class)
+        .returnResult()
+        .getResponseBody();
+  }
+
+  /** The Product, once it satisfies {@code until}, as events take a moment to apply. */
+  Product awaitProduct(String sku, Predicate<Product> until) {
+    return await()
+        .atMost(Duration.ofSeconds(30))
+        .pollInterval(Duration.ofMillis(100))
+        .until(() -> productOrNull(sku), p -> p != null && until.test(p));
+  }
+
+  /** The status {@code GET /products/{sku}} answers. */
+  int productStatus(String sku) {
+    return http.get().uri("/products/{sku}", sku).exchange().returnResult().getStatus().value();
+  }
+
+  private Product productOrNull(String sku) {
+    var result =
+        http.get().uri("/products/{sku}", sku).exchange().expectBody(Product.class).returnResult();
+    return result.getStatus().is2xxSuccessful() ? result.getResponseBody() : null;
+  }
+
+  /** The search's answer as JSON's own keys and values, to tell a field left out from a null. */
+  @SuppressWarnings("unchecked")
+  Map<String, Object> searchJson(String query) {
+    return http.get()
+        .uri("/search?" + query)
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody(Map.class)
         .returnResult()
         .getResponseBody();
   }

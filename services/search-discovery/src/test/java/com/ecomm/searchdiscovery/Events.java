@@ -75,6 +75,7 @@ final class Events {
     private final Map<String, String> attributes = new LinkedHashMap<>();
     private final List<String> images = new ArrayList<>();
     private final List<Variant> variants = new ArrayList<>();
+    private Map<String, Object> warranty;
     private boolean removed;
 
     private ProductEvent(String sku) {
@@ -122,6 +123,12 @@ final class Events {
       return variant(new Variant(sku, amountMinor, currency));
     }
 
+    /** Its Warranty terms; left out, it has none, as in events from before they existed. */
+    ProductEvent warranty(int months, String manufacturer) {
+      this.warranty = Map.of("months", months, "manufacturer", manufacturer);
+      return this;
+    }
+
     ProductEvent removed() {
       this.removed = true;
       return this;
@@ -150,6 +157,9 @@ final class Events {
       product.put("images", images);
       product.put("variants", variants.stream().map(Variant::json).toList());
       product.put("removed", removed);
+      if (warranty != null) {
+        product.put("warranty", warranty);
+      }
       var change = removed ? "REMOVED" : version == 1 ? "CREATED" : "UPDATED";
       return envelope("sku", sku, version, change, "product", product);
     }

@@ -48,6 +48,7 @@ public class ProjectionService implements ProjectionUseCase {
                     event.attributes(),
                     event.images(),
                     event.variants(),
+                    event.warranty(),
                     event.removed(),
                     stored
                         .filter(p -> !p.removed())

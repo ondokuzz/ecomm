@@ -48,7 +48,10 @@ public final class Search {
             .skip((long) request.page() * request.size())
             .limit(request.size())
             .toList();
-    return new SearchResult(page, matches.size(), facets(request, candidates, categories));
+    return new SearchResult(
+        page,
+        matches.size(),
+        request.withFacets() ? facets(request, candidates, categories) : null);
   }
 
   private static Comparator<Candidate> orderOf(SearchRequest request) {

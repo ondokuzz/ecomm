@@ -5,12 +5,21 @@ import com.ecomm.searchdiscovery.domain.Candidate;
 import com.ecomm.searchdiscovery.domain.Facets;
 import com.ecomm.searchdiscovery.domain.SearchRequest;
 import com.ecomm.searchdiscovery.domain.SearchResult;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
-/** A page of Product summaries, how many matched in all, and the facets to narrow them by. */
-record SearchResponse(List<Summary> items, int page, int size, long total, FacetsResponse facets) {
+/**
+ * A page of Product summaries, how many matched in all, and the facets to narrow them by, left out
+ * when the search asked for none.
+ */
+record SearchResponse(
+    List<Summary> items,
+    int page,
+    int size,
+    long total,
+    @JsonInclude(JsonInclude.Include.NON_NULL) FacetsResponse facets) {
 
   record MoneyResponse(long amountMinor, String currency) {
     static MoneyResponse of(Money money) {
@@ -48,7 +57,23 @@ record SearchResponse(List<Summary> items, int page, int size, long total, Facet
       List<Facets.CategoryCount> categories,
       List<AttributeResponse> attributes,
       List<PriceResponse> prices,
-      long inStock) {}
+      long inStock) {
+
+    static FacetsResponse of(Facets facets) {
+      return new FacetsResponse(
+          facets.categories(),
+          facets.attributes().stream()
+              .map(
+                  a ->
+                      new AttributeResponse(
+                          a.name(), a.type().name(), a.values(), a.min(), a.max()))
+              .toList(),
+          facets.prices().stream()
+              .map(p -> new PriceResponse(p.currency().getCurrencyCode(), p.min(), p.max()))
+              .toList(),
+          facets.inStock());
+    }
+  }
 
   record AttributeResponse(
       String name, String type, List<Facets.ValueCount> values, BigDecimal min, BigDecimal max) {}
@@ -56,23 +81,11 @@ record SearchResponse(List<Summary> items, int page, int size, long total, Facet
   record PriceResponse(String currency, long min, long max) {}
 
   static SearchResponse of(SearchRequest request, SearchResult result) {
-    var facets = result.facets();
     return new SearchResponse(
         result.items().stream().map(Summary::of).toList(),
         request.page(),
         request.size(),
         result.total(),
-        new FacetsResponse(
-            facets.categories(),
-            facets.attributes().stream()
-                .map(
-                    a ->
-                        new AttributeResponse(
-                            a.name(), a.type().name(), a.values(), a.min(), a.max()))
-                .toList(),
-            facets.prices().stream()
-                .map(p -> new PriceResponse(p.currency().getCurrencyCode(), p.min(), p.max()))
-                .toList(),
-            facets.inStock()));
+        result.facets() == null ? null : FacetsResponse.of(result.facets()));
   }
 }

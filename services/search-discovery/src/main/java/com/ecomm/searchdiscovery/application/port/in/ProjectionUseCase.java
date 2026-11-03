@@ -2,6 +2,7 @@ package com.ecomm.searchdiscovery.application.port.in;
 
 import com.ecomm.searchdiscovery.domain.AttributeDefinition;
 import com.ecomm.searchdiscovery.domain.SearchableVariant;
+import com.ecomm.searchdiscovery.domain.WarrantyTerms;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -15,6 +16,7 @@ public interface ProjectionUseCase {
 
   /**
    * A {@code catalog.product} event: the Product's whole state, published at {@code occurredAt}.
+   * {@code warranty} is null when it has none.
    */
   record ProductPublished(
       String sku,
@@ -26,6 +28,7 @@ public interface ProjectionUseCase {
       Map<String, String> attributes,
       List<String> images,
       List<SearchableVariant> variants,
+      WarrantyTerms warranty,
       boolean removed) {}
 
   /** A {@code catalog.category} event. */

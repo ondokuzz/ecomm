@@ -123,4 +123,18 @@ class FacetsApiTest {
     assertThat(search.search("category=" + phones + "&inStock=true").facets().inStock())
         .isEqualTo(2);
   }
+
+  @Test
+  void aSearchWithoutFacetsLeavesThemOutAndAnswersTheSameProducts() {
+    var query = "category=" + phones + "&attr.storage=128 GB&sort=price-asc";
+
+    var without = search.searchJson(query + "&facets=false");
+
+    assertThat(without).doesNotContainKey("facets");
+    assertThat(without).containsEntry("total", 2);
+    assertThat(search.search(query + "&facets=false").skus())
+        .containsExactly(phones + "-1", phones + "-3");
+    assertThat(search.searchJson(query + "&facets=true")).containsKey("facets");
+    assertThat(search.searchJson(query)).containsKey("facets");
+  }
 }

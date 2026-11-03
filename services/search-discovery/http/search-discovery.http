@@ -1,6 +1,6 @@
 # Exercises Search against the compose stack (`make up`), over the seed's Products. Search needs no
-# token. Run the requests top to bottom in the IntelliJ HTTP client; the Staff token request stores
-# a token for the Price change at the end, made through Catalog.
+# token, for a search or one Product. Run the requests top to bottom in the IntelliJ HTTP client;
+# the Staff token request stores a token for the Price change at the end, made through Catalog.
 
 @search = http://localhost:8089
 @catalog = http://localhost:8081
@@ -33,6 +33,15 @@ GET {{search}}/search?currency=EUR&price=50000..90000&inStock=true
 ### The second page of five
 GET {{search}}/search?sort=price-asc&page=1&size=5
 
+### Without the facets, which aren't counted
+GET {{search}}/search?q=pixel&facets=false
+
+### One Product: its Warranty terms, and each Variant's Price and whether it is in Stock
+GET {{search}}/products/PHN-PIXEL-9
+
+### 404: a SKU Search doesn't hold
+GET {{search}}/products/NO-SUCH-SKU
+
 ### 400: a price needs its currency
 GET {{search}}/search?price=50000..90000
 
@@ -59,3 +68,6 @@ Content-Type: application/json
 
 ### Within a second or two, Search shows the new Price
 GET {{search}}/search?q=flip
+
+### And so does the one Product
+GET {{search}}/products/AUD-JBL-FLIP-6

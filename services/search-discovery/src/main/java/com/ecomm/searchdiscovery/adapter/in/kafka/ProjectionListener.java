@@ -8,6 +8,7 @@ import com.ecomm.searchdiscovery.application.port.in.ProjectionUseCase.StockPubl
 import com.ecomm.searchdiscovery.domain.AttributeDefinition;
 import com.ecomm.searchdiscovery.domain.AttributeType;
 import com.ecomm.searchdiscovery.domain.SearchableVariant;
+import com.ecomm.searchdiscovery.domain.WarrantyTerms;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.Instant;
 import java.util.List;
@@ -42,6 +43,7 @@ class ProjectionListener {
         Map<String, String> attributes,
         List<String> images,
         @JsonProperty(required = true) List<Variant> variants,
+        Warranty warranty,
         boolean removed) {}
 
     record Variant(
@@ -53,6 +55,15 @@ class ProjectionListener {
     record Price(
         @JsonProperty(required = true) long amountMinor,
         @JsonProperty(required = true) String currency) {}
+
+    /** Left out when the Product has none, and in events from before Warranty terms existed. */
+    record Warranty(
+        @JsonProperty(required = true) int months,
+        @JsonProperty(required = true) String manufacturer) {
+      WarrantyTerms terms() {
+        return new WarrantyTerms(months, manufacturer);
+      }
+    }
   }
 
   record CategoryEvent(
@@ -102,6 +113,7 @@ class ProjectionListener {
                                 Money.of(v.price().amountMinor(), v.price().currency()),
                                 orEmpty(v.images())))
                     .toList(),
+                product.warranty() == null ? null : product.warranty().terms(),
                 product.removed()));
     logOutcome(applied, "Product", event.sku(), event.version());
   }

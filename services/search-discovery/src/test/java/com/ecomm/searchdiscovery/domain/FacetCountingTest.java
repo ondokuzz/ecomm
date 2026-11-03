@@ -226,7 +226,7 @@ class FacetCountingTest {
 
     SearchRequest build() {
       return new SearchRequest(
-          null, category, values, ranges, price, inStockOnly, SortOrder.NEWEST, 0, 24);
+          null, category, values, ranges, price, inStockOnly, SortOrder.NEWEST, 0, 24, true);
     }
   }
 
@@ -263,6 +263,7 @@ class FacetCountingTest {
             attributes,
             List.of(),
             new ArrayList<>(List.of(variants)),
+            null,
             false,
             Instant.parse("2026-10-01T00:00:00Z")),
         inStock,

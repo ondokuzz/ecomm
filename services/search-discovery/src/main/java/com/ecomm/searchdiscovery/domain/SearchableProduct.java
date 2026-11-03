@@ -12,7 +12,8 @@ import java.util.Set;
 /**
  * A Product as Search holds it: Catalog's last published snapshot of it, at {@code version}. A
  * removed Product is kept, marked {@code removed}, so a stale event can't bring it back, but it is
- * never found. {@code listedAt} is when it last became searchable, which "newest" sorts by.
+ * never found. {@code warranty} is null when it has none, as when Catalog's event predates Warranty
+ * terms. {@code listedAt} is when it last became searchable, which "newest" sorts by.
  */
 public record SearchableProduct(
     String sku,
@@ -23,6 +24,7 @@ public record SearchableProduct(
     Map<String, String> attributes,
     List<String> images,
     List<SearchableVariant> variants,
+    WarrantyTerms warranty,
     boolean removed,
     Instant listedAt) {
 

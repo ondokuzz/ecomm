@@ -11,8 +11,9 @@ is in [ADR 0001](./docs/adr/0001-search-on-mongodb.md).
 | Endpoint | Who | |
 |---|---|---|
 | `GET /search` | anyone | A page of Product summaries matching a search, with how many matched and the facets |
+| `GET /products/{sku}` | anyone | [One Product](#one-product), with each Variant's Price and whether it is in Stock |
 
-[`http/search-discovery.http`](./http/search-discovery.http) exercises it against the compose
+[`http/search-discovery.http`](./http/search-discovery.http) exercises them against the compose
 stack.
 
 ### Asking
@@ -29,6 +30,7 @@ Every parameter is optional, and a Product must match all of them:
 | `inStock=true` | Any Variant in Stock |
 | `sort` | `relevance` (the default: best text match first, and newest first without `q`), `newest`, `price-asc` or `price-desc`, by the "from" Price |
 | `page`, `size` | The page, from 0, and how many Products it holds, 1 to 100; 24 by default |
+| `facets=false` | Nothing: it leaves `facets` out of the answer and skips counting them, for a caller that shows none, such as the Support Assistant |
 
 Each filter is checked against the Product's Variants on its own: a phone with a €699 Variant out of
 Stock and a €799 one in Stock matches `price=..70000&inStock=true`.
@@ -76,6 +78,32 @@ choosing it as well would add. Every other filter applies.
 - **`prices`**: the lowest and highest Variant Price in each Currency.
 - **`inStock`**: how many Products have a Variant in Stock.
 
+## One Product
+
+`GET /products/{sku}` answers one Product from the projection, which already joins Catalog's
+Products and Categories with Inventory's Stock, so one read answers what would otherwise take
+Catalog, then Inventory per Variant:
+
+```json
+{"sku": "PHN-PIXEL-9", "name": "Google Pixel 9", "category": {"slug": "phones", "name": "Phones"},
+ "attributes": {"brand": "Google", "screen": "6.3 in"},
+ "warranty": {"months": 24, "manufacturer": "Google"},
+ "variants": [{"id": "PHN-PIXEL-9", "axisValues": {"color": "Obsidian", "storage": "128 GB"},
+               "price": {"amountMinor": 79900, "currency": "EUR"}, "inStock": true},
+              {"id": "PHN-PIXEL-9-OBSIDIAN-256",
+               "axisValues": {"color": "Obsidian", "storage": "256 GB"},
+               "price": {"amountMinor": 89900, "currency": "EUR"}, "inStock": false},
+              {"id": "PHN-PIXEL-9-PORCELAIN-128",
+               "axisValues": {"color": "Porcelain", "storage": "128 GB"},
+               "price": {"amountMinor": 79900, "currency": "EUR"}, "inStock": true}]}
+```
+
+`category` is its Category's slug and name, the slug again while the Category's event hasn't
+arrived, as the facets list it; `warranty` is its [Warranty terms](../../GLOSSARY.md), `null` when
+it has none. Each Variant says whether it is in Stock, as a search does, but not how many.
+A SKU the projection doesn't hold, or holds removed, is a 404 problem detail. The answer may lag
+Catalog and Inventory by an event, as every search does.
+
 ## The projection
 
 Search consumes three topics, each in its own consumer group, and keeps the newest version of every
@@ -93,6 +121,8 @@ if it can't be read, and `make dlt-redrive GROUP=<group>` applies it once the ca
 - A Product is searchable as soon as its event is applied. A removed one, or a removed Category, is
   kept marked `removed`, with its version, so a stale event can't bring it back, but it is never found
   or listed. A SKU created again carries on from its last version, and is found again.
+- A Product keeps its Warranty terms from Catalog's event; one applied before Search projected them
+  has none until its next event, or `make search-rebuild`, which replays every Product's latest.
 - A Variant is in Stock when Inventory stocks it and has some available. One with no Stock event yet
   counts as out of Stock.
 - "Newest" orders by when a Product was listed: the time of the event that made it searchable, kept
@@ -109,10 +139,12 @@ with no replica set, and so has no multi-document transactions to offer.
 
 `products` holds each Product as Catalog published it: its attributes and each Variant's axis values
 as `{"name", "value"}` pairs, which keeps Staff's own attribute names safe from Mongo's dots and `$`,
-plus `attributeValues`, every value flattened for the text index, `removed` and `listedAt`. On startup
-the service creates `text`, the text index searches run on: the name weighted 10, `attributeValues` 5
-and the description 1. A search looks up its candidates with one aggregation: the text match, then
-each Product's Stock, joined from `stock` by Variant ID.
+its Warranty terms as `warranty`, `null` with none, plus `attributeValues`, every value flattened
+for the text index, `removed` and `listedAt`. On startup the service creates `text`, the text index
+searches run on: the name weighted 10, `attributeValues` 5 and the description 1. A search looks up
+its candidates with one aggregation: the text match, then each Product's Stock, joined from `stock`
+by Variant ID. One Product is read the same way, matched by its SKU, with its Category joined from
+`categories` by slug as well.
 
 ### Rebuilding
 
@@ -158,10 +190,11 @@ kafka-topics`) and start the service with `./gradlew :services:search-discovery:
 
 ## Tests
 
-- `SearchApiTest`, `ProjectionApiTest` and `FacetsApiTest` publish events to the three topics as
-  Catalog and Inventory would, each checked against its schema first, and search over HTTP: text,
-  Category, attribute, numeric, price and in-stock filters, each sort, paging, 400s, removals, Price
-  changes, stale and duplicate events, Stock, and disjunctive facets. Mongo, Kafka and the registry
-  run in Testcontainers.
+- `SearchApiTest`, `ProjectionApiTest`, `FacetsApiTest` and `ProductApiTest` publish events to the
+  three topics as Catalog and Inventory would, each checked against its schema first, and search or
+  read one Product over HTTP: text, Category, attribute, numeric, price and in-stock filters, each
+  sort, paging, 400s, removals, Price changes, stale and duplicate events, Stock, disjunctive facets
+  and searches without them, and one Product's Variants, Stock, Warranty terms and 404s. Mongo,
+  Kafka and the registry run in Testcontainers.
 - `FacetCountingTest` is a pure domain test of the facet counting in `Search`.
 - `ArchitectureTest` runs the shared `HexagonalRules`.

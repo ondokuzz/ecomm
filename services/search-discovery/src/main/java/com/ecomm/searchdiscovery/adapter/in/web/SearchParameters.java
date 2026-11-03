@@ -26,7 +26,8 @@ import org.springframework.util.MultiValueMap;
  *   <li>{@code price=<min>..<max>} with {@code currency}: a Variant's Price in range, in the
  *       Currency's Minor unit; {@code currency} alone keeps Products priced in it;
  *   <li>{@code inStock=true}; {@code sort}: {@code relevance}, {@code newest}, {@code price-asc} or
- *       {@code price-desc}; {@code page} from 0 and {@code size}.
+ *       {@code price-desc}; {@code page} from 0 and {@code size};
+ *   <li>{@code facets=false}: leave the facets out.
  * </ul>
  */
 final class SearchParameters {
@@ -64,7 +65,8 @@ final class SearchParameters {
         Boolean.parseBoolean(single(params, "inStock")),
         sort(single(params, "sort")),
         integer(params, "page", 0),
-        integer(params, "size", DEFAULT_PAGE_SIZE));
+        integer(params, "size", DEFAULT_PAGE_SIZE),
+        !"false".equals(single(params, "facets")));
   }
 
   private static PriceRange price(String currency, String price) {

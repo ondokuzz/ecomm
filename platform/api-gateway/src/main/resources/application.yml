@@ -44,7 +44,7 @@ ecomm:
         internal: [/discounts/**, /redemptions/**]
       search-discovery:
         uri: http://localhost:8089
-        public-reads: [/search]
+        public-reads: [/search, /products/*]
       reviews-ratings:
         uri: http://localhost:8097
         public-reads: [/products/*/reviews, /products/*/rating-summary, /rating-summaries]

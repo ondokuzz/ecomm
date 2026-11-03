@@ -18,7 +18,8 @@ import java.util.stream.Collectors;
  *   <li>{@code inStockOnly}: whether any of its Variants must be in Stock.
  * </ul>
  *
- * {@code page} counts from 0 and holds {@code size} Products.
+ * {@code page} counts from 0 and holds {@code size} Products. Without {@code withFacets}, the
+ * facets aren't counted.
  */
 public record SearchRequest(
     String text,
@@ -29,7 +30,8 @@ public record SearchRequest(
     boolean inStockOnly,
     SortOrder sort,
     int page,
-    int size) {
+    int size,
+    boolean withFacets) {
 
   /** The most Products a page can hold. */
   public static final int MAX_PAGE_SIZE = 100;

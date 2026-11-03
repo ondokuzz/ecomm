@@ -3,8 +3,11 @@ package com.ecomm.searchdiscovery.adapter.out.mongo;
 import com.ecomm.commons.money.Money;
 import com.ecomm.searchdiscovery.application.port.out.ProductStore;
 import com.ecomm.searchdiscovery.domain.Candidate;
+import com.ecomm.searchdiscovery.domain.ListedProduct;
 import com.ecomm.searchdiscovery.domain.SearchableProduct;
 import com.ecomm.searchdiscovery.domain.SearchableVariant;
+import com.ecomm.searchdiscovery.domain.VariantStock;
+import com.ecomm.searchdiscovery.domain.WarrantyTerms;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.model.IndexOptions;
 import com.mongodb.client.model.Indexes;
@@ -13,6 +16,8 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.bson.Document;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.stereotype.Component;
@@ -46,6 +51,38 @@ class MongoProductStore implements ProductStore {
         .map(MongoProductStore::product);
   }
 
+  /**
+   * One aggregation, as for {@link #candidates}: the Product, its Category joined by slug, and its
+   * Variants' Stock.
+   */
+  @Override
+  public Optional<ListedProduct> listed(String sku) {
+    var pipeline =
+        List.of(
+            new Document("$match", new Document("_id", sku).append("removed", false)),
+            new Document(
+                "$lookup",
+                new Document("from", MongoCategoryStore.COLLECTION)
+                    .append("localField", "category")
+                    .append("foreignField", "_id")
+                    .append("as", "categoryOf")),
+            stockLookup());
+    return Optional.ofNullable(products.aggregate(pipeline).first())
+        .map(
+            document ->
+                new ListedProduct(
+                    product(document),
+                    document.getList("categoryOf", Document.class).stream()
+                        .filter(c -> !c.getBoolean("removed"))
+                        .map(c -> c.getString("name"))
+                        .findFirst()
+                        .orElse(null),
+                    stockOf(document)
+                        .filter(VariantStock::inStock)
+                        .map(VariantStock::variantId)
+                        .collect(Collectors.toSet())));
+  }
+
   @Override
   public void save(SearchableProduct product) {
     products.replaceOne(
@@ -61,13 +98,7 @@ class MongoProductStore implements ProductStore {
     }
     var pipeline = new ArrayList<Document>();
     pipeline.add(new Document("$match", match));
-    pipeline.add(
-        new Document(
-            "$lookup",
-            new Document("from", MongoStockStore.COLLECTION)
-                .append("localField", "variants.variantId")
-                .append("foreignField", "_id")
-                .append("as", "stock")));
+    pipeline.add(stockLookup());
     if (text != null) {
       pipeline.add(
           new Document(
@@ -78,12 +109,24 @@ class MongoProductStore implements ProductStore {
       candidates.add(
           new Candidate(
               product(document),
-              document.getList("stock", Document.class).stream()
-                  .map(MongoStockStore::stock)
-                  .anyMatch(s -> s.inStock()),
+              stockOf(document).anyMatch(VariantStock::inStock),
               document.get("relevance", 0.0)));
     }
     return candidates;
+  }
+
+  /** Joins each of a Product's Variants' Stock from {@code stock}, as {@code stock}. */
+  private static Document stockLookup() {
+    return new Document(
+        "$lookup",
+        new Document("from", MongoStockStore.COLLECTION)
+            .append("localField", "variants.variantId")
+            .append("foreignField", "_id")
+            .append("as", "stock"));
+  }
+
+  private static Stream<VariantStock> stockOf(Document document) {
+    return document.getList("stock", Document.class).stream().map(MongoStockStore::stock);
   }
 
   private static Document document(SearchableProduct product) {
@@ -108,6 +151,12 @@ class MongoProductStore implements ProductStore {
                                     .append("currency", v.price().currency().getCurrencyCode()))
                             .append("images", v.images()))
                 .toList())
+        .append(
+            "warranty",
+            product.warranty() == null
+                ? null
+                : new Document("months", product.warranty().months())
+                    .append("manufacturer", product.warranty().manufacturer()))
         .append("removed", product.removed())
         .append("listedAt", Date.from(product.listedAt()));
   }
@@ -132,7 +181,15 @@ class MongoProductStore implements ProductStore {
                       v.getList("images", String.class));
                 })
             .toList(),
+        warranty(document.get("warranty", Document.class)),
         document.getBoolean("removed"),
         document.getDate("listedAt").toInstant());
+  }
+
+  /** Null when it has none, as for a Product stored before Warranty terms were projected. */
+  private static WarrantyTerms warranty(Document warranty) {
+    return warranty == null
+        ? null
+        : new WarrantyTerms(warranty.getInteger("months"), warranty.getString("manufacturer"));
   }
 }

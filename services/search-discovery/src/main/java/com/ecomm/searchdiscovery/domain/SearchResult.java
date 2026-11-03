@@ -2,5 +2,8 @@ package com.ecomm.searchdiscovery.domain;
 
 import java.util.List;
 
-/** One page of the Products a search matched, how many it matched in all, and its facets. */
+/**
+ * One page of the Products a search matched, how many it matched in all, and its facets, null when
+ * the search left them out.
+ */
 public record SearchResult(List<Candidate> items, long total, Facets facets) {}
