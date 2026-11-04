@@ -1,5 +1,6 @@
 package com.ecomm.supportassistant;
 
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
@@ -21,9 +22,10 @@ import org.springframework.test.web.servlet.client.RestTestClient;
 import org.testcontainers.containers.GenericContainer;
 
 /**
- * Base for HTTP-seam tests. One WireMock server stands in for Order Management, and one Redis
- * container holds the Conversations. The API key is empty, so the mock provider answers. Each test
- * starts with no stubs and no Conversations.
+ * Base for HTTP-seam tests. A WireMock server stands in for each context the tools read (Order
+ * Management, Fulfillment & Shipping and Payment), and one Redis container holds the Conversations.
+ * The API key is empty, so the mock provider answers. Each test starts with no stubs and no
+ * Conversations.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureRestTestClient
@@ -33,10 +35,17 @@ abstract class SupportAssistantApiTest {
 
   static final WireMockServer ORDER_MANAGEMENT = new WireMockServer(wireMockConfig().dynamicPort());
 
+  static final WireMockServer FULFILLMENT_SHIPPING =
+      new WireMockServer(wireMockConfig().dynamicPort());
+
+  static final WireMockServer PAYMENT = new WireMockServer(wireMockConfig().dynamicPort());
+
   static final GenericContainer<?> REDIS = new GenericContainer<>("redis:7").withExposedPorts(6379);
 
   static {
     ORDER_MANAGEMENT.start();
+    FULFILLMENT_SHIPPING.start();
+    PAYMENT.start();
     REDIS.start();
   }
 
@@ -44,22 +53,32 @@ abstract class SupportAssistantApiTest {
   static void infrastructure(DynamicPropertyRegistry registry) {
     FakeKeycloak.registerWith(registry);
     registry.add("ecomm.support-assistant.order-management-url", ORDER_MANAGEMENT::baseUrl);
-    registry.add("ecomm.support-assistant.read-timeout", () -> "1s");
+    registry.add("ecomm.support-assistant.fulfillment-shipping-url", FULFILLMENT_SHIPPING::baseUrl);
+    registry.add("ecomm.support-assistant.payment-url", PAYMENT::baseUrl);
+    // Long enough for a cold WireMock's first answer; the timeout test delays its by 3 seconds.
+    registry.add("ecomm.support-assistant.read-timeout", () -> "2s");
     registry.add("spring.data.redis.host", REDIS::getHost);
     registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
   }
 
   @Autowired RestTestClient http;
 
+  private String customerToken;
+
   @BeforeEach
   void resetInfrastructure() throws Exception {
+    // Minted once, so a request a test verifies carries the very token it sent, whatever second
+    // it was sent in.
+    customerToken = FakeKeycloak.token(CUSTOMER_ID, "CUSTOMER");
     ORDER_MANAGEMENT.resetAll();
+    FULFILLMENT_SHIPPING.resetAll();
+    PAYMENT.resetAll();
     REDIS.execInContainer("redis-cli", "FLUSHALL");
   }
 
   /** The token of {@code customer-42}, the Customer every test asks as. */
-  static String customerToken() {
-    return FakeKeycloak.token(CUSTOMER_ID, "CUSTOMER");
+  String customerToken() {
+    return customerToken;
   }
 
   RestTestClient.ResponseSpec start(String token) {
@@ -165,6 +184,17 @@ abstract class SupportAssistantApiTest {
     ORDER_MANAGEMENT.stubFor(get(urlPathEqualTo("/orders")).willReturn(response));
   }
 
+  /** Order Management answers the Customer's Orders with the Order reference so. */
+  static void stubOrdersByReference(String reference, String... orders) {
+    ORDER_MANAGEMENT.stubFor(
+        get(urlPathEqualTo("/orders"))
+            .withQueryParam("reference", equalTo(reference))
+            .willReturn(
+                okJson(
+                    "{\"items\": [%s], \"page\": 0, \"size\": 5, \"total\": %d}"
+                        .formatted(String.join(",", orders), orders.length))));
+  }
+
   /** Order Management answers the Order {@code id} so. */
   static void stubOrder(String id, ResponseDefinitionBuilder response) {
     ORDER_MANAGEMENT.stubFor(get(urlPathEqualTo("/orders/" + id)).willReturn(response));
@@ -175,5 +205,125 @@ abstract class SupportAssistantApiTest {
     var paid = order(ORDER_ID, "PAID", "PLACED", "PAID");
     stubOrders(paid);
     stubOrder(ORDER_ID, okJson(paid));
+  }
+
+  // --- Fulfillment & Shipping ---
+
+  /**
+   * The Order's Shipment in {@code status}, as Fulfillment & Shipping answers it: booked with the
+   * Carrier when {@code trackingNumber} isn't null, with a Tracking event for each of {@code
+   * tracking}, a day apart from 4 November 2026.
+   */
+  static String shipment(String orderId, String status, String trackingNumber, String... tracking) {
+    var events = new StringBuilder();
+    for (var i = 0; i < tracking.length; i++) {
+      events
+          .append(i == 0 ? "" : ",")
+          .append(
+              """
+              {"eventId": "evt-%d", "status": "%s", "occurredAt": "2026-11-0%dT09:00:00Z"}
+              """
+                  .formatted(i, tracking[i], 4 + i));
+    }
+    var booked = trackingNumber != null;
+    return """
+        {"id": "5a1e0000-0000-4000-8000-000000000001", "kind": "ORDER", "rmaId": null,
+         "orderId": "%s", "customerId": "%s", "warehouseId": "WH-BER", "status": "%s",
+         "lines": [{"variantId": "PHN-PIXEL-9-128-OBS", "productName": "Pixel 9", "quantity": 1,
+                    "serialTracking": "IMEI", "serialNumbers": []}],
+         "carrier": %s, "trackingNumber": %s, "trackingEvents": [%s],
+         "deliveredAt": %s, "holdReason": null, "statusHistory": [],
+         "createdAt": "2026-11-03T10:16:00Z"}
+        """
+        .formatted(
+            orderId,
+            CUSTOMER_ID,
+            status,
+            booked ? "\"Mock Carrier\"" : "null",
+            booked ? "\"" + trackingNumber + "\"" : "null",
+            events,
+            status.equals("DELIVERED") ? "\"2026-11-06T09:00:00Z\"" : "null");
+  }
+
+  /** Fulfillment & Shipping answers the Order's Shipment so. */
+  static void stubShipment(String orderId, ResponseDefinitionBuilder response) {
+    FULFILLMENT_SHIPPING.stubFor(
+        get(urlPathEqualTo("/shipments"))
+            .withQueryParam("orderId", equalTo(orderId))
+            .willReturn(response));
+  }
+
+  // --- Payment ---
+
+  /**
+   * A Payment transaction of 803.99 EUR, or {@code amountMinor}, as Payment answers it, on {@code
+   * day} of November 2026.
+   */
+  static String transaction(String kind, String outcome, int day) {
+    return transaction(kind, 80399, outcome, null, day, null);
+  }
+
+  static String transaction(
+      String kind,
+      long amountMinor,
+      String outcome,
+      String declineReason,
+      int day,
+      String reference) {
+    return """
+        {"kind": "%s", "amount": {"amountMinor": %d, "currency": "EUR"}, "outcome": "%s",
+         "gatewayReference": "mock-1", "declineReason": %s, "gatewayEventId": null,
+         "at": "2026-11-0%dT10:15:00Z", "backfilled": false, "reference": %s}
+        """
+        .formatted(kind, amountMinor, outcome, json(declineReason), day, json(reference));
+  }
+
+  /** One of the Order's Payments, with its Payment transactions oldest first. */
+  static String payment(String id, String orderId, String status, String... transactions) {
+    return """
+        {"id": "%s", "orderId": "%s", "amount": {"amountMinor": 80399, "currency": "EUR"},
+         "status": "%s", "declineReason": null, "gatewayReference": "mock-1",
+         "transactions": [%s]}
+        """
+        .formatted(id, orderId, status, String.join(",", transactions));
+  }
+
+  /** Payment answers the Customer's Payments for the Order, newest first, so. */
+  static void stubPayments(String orderId, String... payments) {
+    PAYMENT.stubFor(
+        get(urlPathEqualTo("/payments"))
+            .withQueryParam("orderId", equalTo(orderId))
+            .willReturn(okJson("[" + String.join(",", payments) + "]")));
+  }
+
+  /** A line of the Payment transaction history: the transaction, on a Payment of the Order. */
+  static String historyLine(String transaction, String orderId, String paymentStatus) {
+    var line = transaction.strip();
+    return line.substring(0, line.length() - 1)
+        + """
+        , "paymentId": "pay-%s", "paymentStatus": "%s", "orderId": "%s",
+          "orderReference": "#%s"}
+        """
+            .formatted(
+                orderId.substring(0, 8),
+                paymentStatus,
+                orderId,
+                orderId.substring(0, 8).toUpperCase(java.util.Locale.ROOT));
+  }
+
+  /** Payment answers the Customer's Payment transaction history, newest first, as these lines. */
+  static void stubHistory(String... lines) {
+    stubHistory(
+        okJson(
+            "{\"items\": [%s], \"page\": 0, \"size\": 20, \"total\": %d}"
+                .formatted(String.join(",", lines), lines.length)));
+  }
+
+  static void stubHistory(ResponseDefinitionBuilder response) {
+    PAYMENT.stubFor(get(urlPathEqualTo("/payments/transactions")).willReturn(response));
+  }
+
+  private static String json(String text) {
+    return text == null ? "null" : jsonString(text);
   }
 }

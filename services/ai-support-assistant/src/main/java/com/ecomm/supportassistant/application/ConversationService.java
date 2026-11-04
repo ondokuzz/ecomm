@@ -3,7 +3,9 @@ package com.ecomm.supportassistant.application;
 import com.ecomm.supportassistant.application.port.in.ConversationNotFoundException;
 import com.ecomm.supportassistant.application.port.in.ConversationsUseCase;
 import com.ecomm.supportassistant.application.port.out.ConversationRepository;
+import com.ecomm.supportassistant.application.port.out.FulfillmentShippingPort;
 import com.ecomm.supportassistant.application.port.out.OrderManagementPort;
+import com.ecomm.supportassistant.application.port.out.PaymentPort;
 import com.ecomm.supportassistant.application.port.out.SupportModel;
 import com.ecomm.supportassistant.application.port.out.TimeSource;
 import com.ecomm.supportassistant.domain.Conversation;
@@ -44,11 +46,13 @@ public class ConversationService implements ConversationsUseCase {
       ConversationRepository conversations,
       SupportModel model,
       OrderManagementPort orderManagement,
+      FulfillmentShippingPort fulfillmentShipping,
+      PaymentPort payment,
       TimeSource time,
       Duration lapsesAfter) {
     this.conversations = conversations;
     this.model = model;
-    this.tools = new SupportTools(orderManagement);
+    this.tools = new SupportTools(orderManagement, fulfillmentShipping, payment);
     this.time = time;
     this.lapsesAfter = lapsesAfter;
   }

@@ -22,12 +22,35 @@ Authorization: Bearer {{customerToken}}
 
 > {% client.global.set("conversationId", response.body.id); %}
 
-### Ask where their Order is: the reply names the latest Order, and references it
+### Ask where their Order is: the reply names the latest Order and its Shipment, and references it
 POST {{assistant}}/conversations/{{conversationId}}/messages
 Authorization: Bearer {{customerToken}}
 Content-Type: application/json
 
 {"text": "Where is my order?"}
+
+> {% client.global.set("orderReference", response.body.references.length ? response.body.references[0].reference : "#00000000"); %}
+
+### Ask about it by its Order reference: found among the Customer's Orders, or not found among them
+POST {{assistant}}/conversations/{{conversationId}}/messages
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"text": "Where is my order {{orderReference}}?"}
+
+### Ask about a charge: the Payment transaction history, an Authorization explained as a hold
+POST {{assistant}}/conversations/{{conversationId}}/messages
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"text": "Why was I charged twice?"}
+
+### Ask about a Refund: its amount and what it was for, or that there is none
+POST {{assistant}}/conversations/{{conversationId}}/messages
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"text": "Has my refund gone through?"}
 
 ### Ask something else: answered without a lookup
 POST {{assistant}}/conversations/{{conversationId}}/messages

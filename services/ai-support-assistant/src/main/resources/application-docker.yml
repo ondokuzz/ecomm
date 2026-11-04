@@ -8,6 +8,8 @@ spring:
 ecomm:
   support-assistant:
     order-management-url: http://order-management:8080
+    fulfillment-shipping-url: http://fulfillment-shipping:8080
+    payment-url: http://payment:8080
   security:
     jwt:
       jwk-set-uri: http://keycloak:8080/realms/ecomm/protocol/openid-connect/certs

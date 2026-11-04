@@ -143,7 +143,12 @@ class GroundingApiTest extends SupportAssistantApiTest {
             });
     assertThat(model.requests().getFirst().tools())
         .extracting(SupportModel.ToolDefinition::name)
-        .containsExactly("find_orders", "get_order");
+        .containsExactly(
+            "find_orders",
+            "get_order",
+            "get_shipment",
+            "get_payments",
+            "get_payment_transaction_history");
   }
 
   @Test

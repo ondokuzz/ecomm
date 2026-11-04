@@ -16,9 +16,9 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Asked where their Order is, the mock provider finds the Customer's latest Order and looks it up
- * with its Order Status history, from Order Management with the Customer's own token, and the reply
- * names it with a link. A lookup that finds nothing or fails is said so, and the turn still
- * answers.
+ * with its Order Status history, from Order Management with the Customer's own token, and then its
+ * Shipment, and the reply names it with a link. A lookup that finds nothing or fails is said so,
+ * and the turn still answers.
  */
 class LatestOrderApiTest extends SupportAssistantApiTest {
 
@@ -36,7 +36,7 @@ class LatestOrderApiTest extends SupportAssistantApiTest {
         .jsonPath("$.text")
         .isEqualTo(
             "Your latest Order, #7F1C2A3B, is paid. It was placed on 3 November 2026 and paid"
-                + " on 3 November 2026.")
+                + " on 3 November 2026. It has no Shipment yet, so it isn't packed yet.")
         .jsonPath("$.references.length()")
         .isEqualTo(1)
         .jsonPath("$.references[0].kind")

@@ -45,6 +45,8 @@ import { stackSecret } from './secrets'
  *   the review stays up, and Staff see the report in the moderation queue (Sprint 6).
  * - A Customer who paid an Order asks Help where it is, and the Support Assistant, on the mock
  *   provider, answers with its Order Status and a link that opens its page (Sprint 7).
+ * - A Customer asks Help about their Order by its Order reference, and is told where it is; asked
+ *   why they were charged, the assistant explains its Authorization as a hold (Sprint 7).
  */
 
 // The first checkout compares Stock before and after, so nothing else may check out meanwhile:
@@ -1266,6 +1268,50 @@ test.describe('Sprint 7', () => {
     )
     await conversation.getByRole('link', { name: `Order ${reference}` }).click()
     await expect(page.getByRole('heading', { name: `Order ${reference}` })).toBeVisible()
+  })
+
+  test('a Customer asks Help about an Order by its Order reference, and why they were charged', async ({
+    page,
+    request,
+  }) => {
+    const customer = signedUp()
+    const token = await tokenFor(request, customer)
+    const { variantId } = await aProductInStock(request)
+    await checkOutThroughApi(request, token, variantId)
+    const orders = await request.get('/api/order-management/orders?page=0&size=1', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    const [order] = ((await orders.json()) as ListPage<Order>).items
+    const reference = `#${orderReference(order!)}`
+
+    await page.goto('/')
+    await page.getByRole('button', { name: 'Log in' }).first().click()
+    await signInOnKeycloak(page, customer)
+    await expectSignedIn(page, customer.email)
+    await page.getByRole('button', { name: 'Help' }).click()
+    const help = page.getByRole('dialog', { name: 'Help' })
+    const conversation = help.getByRole('list', { name: 'Conversation' })
+    const box = help.getByRole('textbox', { name: 'Your question' })
+
+    // Typed in lower case, without the #: the mock provider finds it by its Order reference, and
+    // says where it is, from its Shipment, which the fulfillment Saga may not have made yet.
+    await box.fill(`Where is my order ${reference.slice(1).toLowerCase()}?`)
+    await help.getByRole('button', { name: 'Send' }).click()
+    await expect(conversation).toContainText(
+      new RegExp(
+        `Your Order ${reference} is (paid|packed|shipped|delivered)\\..* (It has no Shipment yet|It hasn't shipped yet|It shipped with|It was delivered)`,
+      ),
+    )
+
+    // Paid, not yet packed by Staff: an Authorization, which is a hold, and no Capture.
+    await expect(box).toBeEnabled()
+    await box.fill('Why was I charged twice?')
+    await help.getByRole('button', { name: 'Send' }).click()
+    await expect(conversation).toContainText(
+      `Nothing has been charged yet. On Order ${reference}, the Authorization of`,
+    )
+    await expect(conversation).toContainText('is a hold on your card, not a charge')
+    await expect(conversation.getByRole('link', { name: `Order ${reference}` })).toHaveCount(2)
   })
 })
 

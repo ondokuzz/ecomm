@@ -557,7 +557,9 @@ and two Products of its own as Staff, stocks both, checks one out through the ga
 other's page headed "Popular in <Category>" with the bought one's card labelled so; it deletes the
 Products, their Stock and the Category after. Sprint 7's checks out through the gateway, signs in,
 asks Help "Where is my order?", sees the mock provider name that Order by its reference with its
-Order Status, and opens its page from the reply's link. The help test
+Order Status, and opens its page from the reply's link. Another asks about its Order by its Order
+reference, typed in lower case without the `#`, and is told where it is, then asks why they were
+charged and sees its Authorization explained as a hold, nothing charged yet. The help test
 ([`e2e/help.spec.ts`](./e2e/help.spec.ts)) opens Help signed out and is asked to sign in; signed in
 as a Customer made for each test, whose Conversation and Customer it deletes after, it sees focus move into the panel and back to Help on Escape and on close,
 follows a Conversation across pages and a reload, starts a new one, has a lapsed one replaced, and

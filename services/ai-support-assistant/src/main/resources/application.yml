@@ -20,6 +20,8 @@ ecomm:
     conversation-lapses-after: 24h
     # Every context on its compose host port.
     order-management-url: http://localhost:8085
+    fulfillment-shipping-url: http://localhost:8099
+    payment-url: http://localhost:8084
     # A context that doesn't answer in time is an error tool result, not a failed turn.
     connect-timeout: 2s
     read-timeout: 10s

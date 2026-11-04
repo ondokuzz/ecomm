@@ -33,8 +33,8 @@ class TurnLogApiTest extends SupportAssistantApiTest {
             l ->
                 assertThat(l)
                     .contains("[test-correlation-1]")
-                    .contains("tools [find_orders found, get_order found]")
-                    .contains("3 provider calls")
+                    .contains("tools [find_orders found, get_order found, get_shipment not_found]")
+                    .contains("4 provider calls")
                     .containsPattern("in \\d+ ms"));
     assertThat(output.getOut()).doesNotContain("Erika").doesNotContain("is paid");
   }

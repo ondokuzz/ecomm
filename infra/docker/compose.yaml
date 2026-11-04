@@ -434,6 +434,8 @@ services:
       redis: { condition: service_healthy }
       keycloak: { condition: service_healthy }
       order-management: { condition: service_healthy }
+      fulfillment-shipping: { condition: service_healthy }
+      payment: { condition: service_healthy }
 
   # Catches every email the stack sends, for reading in its UI on http://localhost:8025 and through
   # its API (the Playwright suites do). Services reach its SMTP port on mailpit:1025, the host on
