@@ -417,6 +417,24 @@ services:
       keycloak-realm: { condition: service_completed_successfully }
       mailpit: { condition: service_healthy }
 
+  # The Support Assistant: answers a Customer's questions about their Orders from Order
+  # Management's reads, made with the Customer's own token (its ADR 0002). Conversations live in the
+  # shared Redis under its own key prefix. With the secret anthropic-api-key empty, as `make secrets`
+  # writes it, the mock provider answers.
+  ai-support-assistant:
+    <<: *spring-service
+    build:
+      context: ../..
+      dockerfile: services/ai-support-assistant/Dockerfile
+    image: ${IMAGE_PREFIX:-ecomm}/ai-support-assistant:${IMAGE_TAG:-latest}
+    ports: ["${AI_SUPPORT_ASSISTANT_PORT:-8102}:8080"]
+    secrets:
+      - { source: anthropic-api-key, target: ecomm.support-assistant.anthropic-api-key }
+    depends_on:
+      redis: { condition: service_healthy }
+      keycloak: { condition: service_healthy }
+      order-management: { condition: service_healthy }
+
   # Catches every email the stack sends, for reading in its UI on http://localhost:8025 and through
   # its API (the Playwright suites do). Services reach its SMTP port on mailpit:1025, the host on
   # localhost:1025. Messages live in memory, up to its 500 most recent.
@@ -610,6 +628,7 @@ services:
       fulfillment-shipping: { condition: service_healthy }
       returns-warranty: { condition: service_healthy }
       notifications: { condition: service_healthy }
+      ai-support-assistant: { condition: service_healthy }
 
   storefront:
     build:
@@ -856,6 +875,9 @@ secrets:
     file: ../../.secrets/${COMPOSE_PROJECT_NAME}/payment-webhook-secret
   carrier-webhook-secret:
     file: ../../.secrets/${COMPOSE_PROJECT_NAME}/carrier-webhook-secret
+  # Written empty, and filled by hand with a key; empty means the mock provider.
+  anthropic-api-key:
+    file: ../../.secrets/${COMPOSE_PROJECT_NAME}/anthropic-api-key
 
 volumes:
   postgres-data:

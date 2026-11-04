@@ -23,3 +23,7 @@ Each concern is a clearly marked seam — a `PaymentGatewayPort`, a `TaxCalculat
 ## Revised 2026-10-22
 
 SMS and push `NotificationProvider`s as built (#92), in Notifications; there is no conflict with the decision above. Both are mocks: each sends nothing, but records what it would have sent, in a table of its own that Staff read (`/mock-providers/sms` and `/push`), and in the log. A real SMS gateway, or a push service with device registration, replaces its mock as an adapter of its own. Each Message type names the channels it goes on, with a template for each; an SMS template must fit 160 characters with its sample content, and a message with unusually long content is cut to fit when it is sent.
+
+## Revised 2026-11-03
+
+`SupportModel` as built (#114), in the AI Support Assistant; there is no conflict with the decision above. Given the system prompt, the tools it may ask for and the Conversation so far, its lookups included, it answers either the reply or the lookups it needs first, with the tokens it used. Its one adapter so far is a mock provider, chosen when the API key is empty: deterministic, it picks its tools by keywords in the Customer's message and writes its reply from a template over what they found, naming each record. Claude, through the Anthropic Java SDK, joins as a second adapter in #118; the turn around the port, its tools and the references taken from their results stay in the assistant.

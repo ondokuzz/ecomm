@@ -1,0 +1,56 @@
+# Exercises the Support Assistant against the compose stack (`make up`), as the demo Customer,
+# directly and through the gateway. Run the token request first; it stores the token for the ones
+# after it. With the anthropic-api-key secret empty, as `make secrets` (which `make up` runs) writes it, the mock provider
+# answers. Asked where their Order is, it names the demo Customer's latest Order, or says they have
+# none: check one out in the Storefront first to see it.
+
+@assistant = http://localhost:8102
+@gateway = http://localhost:8000
+@keycloak = http://localhost:8180/realms/ecomm/protocol/openid-connect/token
+
+### The demo Customer's token
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=dev-cli&username=demo@ecomm.local&password=demo
+
+> {% client.global.set("customerToken", response.body.access_token); %}
+
+### Start a Conversation: 201, empty
+POST {{assistant}}/conversations
+Authorization: Bearer {{customerToken}}
+
+> {% client.global.set("conversationId", response.body.id); %}
+
+### Ask where their Order is: the reply names the latest Order, and references it
+POST {{assistant}}/conversations/{{conversationId}}/messages
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"text": "Where is my order?"}
+
+### Ask something else: answered without a lookup
+POST {{assistant}}/conversations/{{conversationId}}/messages
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"text": "Hello!"}
+
+### An empty message: 400 invalidMessage
+POST {{assistant}}/conversations/{{conversationId}}/messages
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"text": ""}
+
+### The transcript, through the gateway
+GET {{gateway}}/api/support-assistant/conversations/{{conversationId}}
+Authorization: Bearer {{customerToken}}
+
+### End it: 204
+DELETE {{assistant}}/conversations/{{conversationId}}
+Authorization: Bearer {{customerToken}}
+
+### Ended, it is gone: 404
+GET {{assistant}}/conversations/{{conversationId}}
+Authorization: Bearer {{customerToken}}

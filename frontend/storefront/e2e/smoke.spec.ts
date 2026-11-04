@@ -1,7 +1,7 @@
 import { type APIRequestContext, type Page, expect, test } from '@playwright/test'
 import { type Product, type Variant, defaultVariant } from '../src/domain/catalog'
 import { type Currencies, type Currency, type Money, currenciesOf, formatMoney } from '../src/domain/money'
-import { type Order, ordersPageSize } from '../src/domain/order'
+import { type Order, orderReference, ordersPageSize } from '../src/domain/order'
 import type { Page as ListPage } from '../src/domain/paging'
 import type { AlsoBought } from '../src/domain/recommendations'
 import type { Eligibility, RatingSummary, Review } from '../src/domain/reviews'
@@ -10,7 +10,7 @@ import type { Shipment } from '../src/domain/shipment'
 import { stackSecret } from './secrets'
 
 /**
- * The smoke test: the definitions of done of Sprints 1 to 6, end to end, each test as a Customer of
+ * The smoke test: the definitions of done of Sprints 1 to 7, end to end, each test as a Customer of
  * its own, made in Keycloak for the test and deleted afterwards with their reviews. The Orders stay,
  * as Orders are never deleted.
  *
@@ -43,6 +43,8 @@ import { stackSecret } from './secrets'
  *   applied (Sprint 6).
  * - A Customer reports another Customer's review from the Product page, with a reason and a note;
  *   the review stays up, and Staff see the report in the moderation queue (Sprint 6).
+ * - A Customer who paid an Order asks Help where it is, and the Support Assistant, on the mock
+ *   provider, answers with its Order Status and a link that opens its page (Sprint 7).
  */
 
 // The first checkout compares Stock before and after, so nothing else may check out meanwhile:
@@ -1232,6 +1234,38 @@ test.describe('Sprint 6', () => {
     await expect(page.getByRole('list', { name: 'Payments' })).toContainText(`Refunded ${refund} of`)
     await expect(page.getByRole('list', { name: 'Payment activity' })).toContainText(`Refunded for ${reference}`)
     await expect(page.locator('.status-returned')).toHaveText('Returned', { timeout: 30_000 })
+  })
+})
+
+test.describe('Sprint 7', () => {
+  test('a Customer who paid an Order asks Help where it is, and opens it from the reply', async ({ page, request }) => {
+    const customer = signedUp()
+    const token = await tokenFor(request, customer)
+    const { variantId } = await aProductInStock(request)
+    await checkOutThroughApi(request, token, variantId)
+    const orders = await request.get('/api/order-management/orders?page=0&size=1', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    const [order] = ((await orders.json()) as ListPage<Order>).items
+    const reference = `#${orderReference(order!)}`
+
+    await page.goto('/')
+    await page.getByRole('button', { name: 'Log in' }).first().click()
+    await signInOnKeycloak(page, customer)
+    await expectSignedIn(page, customer.email)
+    await page.getByRole('button', { name: 'Help' }).click()
+    const help = page.getByRole('dialog', { name: 'Help' })
+    await help.getByRole('textbox', { name: 'Your question' }).fill('Where is my order?')
+    await help.getByRole('button', { name: 'Send' }).click()
+
+    // The mock provider names the latest Order and its Order Status; the fulfillment Saga may have
+    // moved it on from Paid by then.
+    const conversation = help.getByRole('list', { name: 'Conversation' })
+    await expect(conversation).toContainText(
+      new RegExp(`Your latest Order, ${reference}, is (paid|packed|shipped|delivered)`),
+    )
+    await conversation.getByRole('link', { name: `Order ${reference}` }).click()
+    await expect(page.getByRole('heading', { name: `Order ${reference}` })).toBeVisible()
   })
 })
 

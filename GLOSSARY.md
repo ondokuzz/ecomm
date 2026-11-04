@@ -316,8 +316,12 @@ Which Notification channels besides email a Customer's messages go on, kept per 
 _Avoid_: Settings, Subscriptions, Consent (marketing's, out of scope)
 
 **Support Assistant**:
-The AI-driven conversational agent that answers a Customer's questions about their own Order, Payment, or RMA, grounded in that Customer's real data.
+The conversational agent behind the Storefront's Help that answers a signed-in Customer's questions about their own Orders, from the contexts' reads made when asked. It reads with the Customer's own access token, so it sees only what the Customer could read themselves, and never acts: it can't cancel, refund, return or change anything, and points to the Storefront page where the Customer can. Each reply names the records it is about, and the Storefront links each one, taken from what its lookups returned, never from the model's words. Its model is behind a port: a scripted mock provider when no API key is given, as in the local stack and CI.
 _Avoid_: Chatbot, Bot
+
+**Conversation**:
+A Customer's exchange with the Support Assistant: their messages, the assistant's replies, and each turn's lookups in between, which are kept so a follow-up is answered from what was looked up before. It is the Customer's alone, holds at most 20 of their messages of 1 to 2,000 characters each, and lapses 24 hours after its last message; signing out of the Storefront ends it. A turn is one Customer message and everything the assistant does to reply to it.
+_Avoid_: Chat, Session (a Checkout Session's), Thread
 
 **Correlation ID**:
 The ID that names one request as it passes from service to service, carried in the `X-Correlation-Id` header. It is taken from the caller when well-formed (at most 64 characters of `[A-Za-z0-9-]`) and generated otherwise. Every log line written while serving the request carries it, and so does every problem detail, where a Customer sees it as the support reference for an error. An Integration event a request causes carries it in the same header, so the consumers' log lines carry it too. It is never used to decide anything.

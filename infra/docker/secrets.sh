@@ -79,6 +79,10 @@ write notifications-client-secret "$(random)"
 write payment-webhook-secret "$(random)"
 write carrier-webhook-secret "$(random)"
 
+# The Support Assistant's Anthropic API key can't be generated: it is written empty, which runs the
+# mock provider, and a key written into it by hand is kept, as every secret is.
+write anthropic-api-key ""
+
 # On macOS, a file written before secrets were owner-only there is made so, its content unchanged.
 if [ "$umask_files" = 077 ]; then
   for file in "$dir"/*; do

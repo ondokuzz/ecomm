@@ -2,6 +2,7 @@ import { createContext, useContext } from 'react'
 import { hasAuthParams, useAuth } from 'react-oidc-context'
 import { useLocation } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
+import { endConversation } from '../api/help'
 
 /** Where to go back to once Keycloak redirects here, carried through the sign-in as its `state`. */
 export interface SigninState {
@@ -27,10 +28,12 @@ export function useSignin() {
   }
 }
 
+/** Signing out ends the Customer's Help Conversation first, so the next person here can't read it. */
 export function useSignout() {
   const auth = useAuth()
   const queryClient = useQueryClient()
   return async () => {
+    await endConversation(auth.user?.access_token)
     queryClient.clear()
     await auth.signoutRedirect()
   }

@@ -10,6 +10,8 @@ found=0
 checked=0
 for file in "$dir"/*; do
   [ -f "$file" ] || continue
+  # An empty secret, such as anthropic-api-key before a key is written, has no value to leak.
+  [ -s "$file" ] || continue
   checked=$((checked + 1))
   if printf '%s' "$config" | grep -qF -- "$(cat "$file")"; then
     echo "Compose's resolved configuration holds the value of $file" >&2

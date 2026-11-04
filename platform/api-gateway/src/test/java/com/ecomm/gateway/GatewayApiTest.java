@@ -51,7 +51,8 @@ abstract class GatewayApiTest {
             "recommendations",
             "fulfillment-shipping",
             "returns-warranty",
-            "notifications")) {
+            "notifications",
+            "support-assistant")) {
       registry.add("ecomm.gateway.services." + service + ".uri", DOWNSTREAM::baseUrl);
     }
   }

@@ -149,6 +149,7 @@ Orchestration, which serves nothing but its health:
 | 8099 | Fulfillment & Shipping |
 | 8100 | Returns & Warranty |
 | 8101 | Notifications |
+| 8102 | AI Support Assistant |
 | 8025 | Mailpit: every email the stack sends, and its API (`/api/v1/messages`); its SMTP port is 1025 |
 | 8088 | Apicurio schema registry: the event schemas, under `/apis/registry/v3` |
 | 9092 | Kafka |
@@ -309,8 +310,10 @@ properties, through its config tree ([ADR 0011](./docs/adr/0011-secrets-as-gener
 | `checkout-client-secret`, `orchestration-client-secret`, `notifications-client-secret` | The confidential Keycloak clients and the services that use them; realm sync sets each client's secret from its file on every start ([Identity & Access](./services/identity-access/README.md#client-secrets)) |
 | `payment-webhook-secret` | Payment, and its mock gateway, which signs its webhooks with it |
 | `carrier-webhook-secret` | Fulfillment & Shipping, and its mock carrier, which signs its Carrier webhooks with it |
+| `anthropic-api-key` | The AI Support Assistant's Anthropic API key: written empty, which runs its mock provider ([its README](./services/ai-support-assistant/README.md#provider)) |
 
-A new secret is 32 random bytes, URL-safe. An existing file is never overwritten. On a stack whose
+A new secret is 32 random bytes, URL-safe, except `anthropic-api-key`, which can't be generated
+and is written empty. An existing file is never overwritten. On a stack whose
 volumes were made before Sprint 5, the infrastructure passwords are written with the dev values
 they were made with (`ecomm`, `password` and `admin`), since Postgres, Couchbase and Keycloak keep
 the password they started with; the client and webhook secrets are new on every stack. So never
@@ -427,9 +430,10 @@ for the heap, and each nginx at 64 MB. Kafka is capped at 640 MB with a 256 MB h
 512 MB with a 256 MB cache, Apicurio and pgAdmin at 384 MB each, the Temporal server at 384 MB, its
 UI at 64 MB, Mailpit at 64 MB, the init steps at 256 MB or less, and, once started, Prometheus and
 Grafana at 256 MB each and the Kafka exporter at 32 MB. Couchbase, Postgres and Redis are uncapped.
-After both suites the default stack uses about 5.73 GB (`docker stats`), and fits in about 8 GB of
-Docker memory, with about half its swap in use
-([Sprint 7's reading](./docs/roadmap.md#sprint-7-weeks-1314--ai-assistant)). The dashboards are
+After both suites the default stack uses about 5.76 GB (`docker stats`), and fits in about 8 GB of
+Docker memory, with most of its swap in use
+([Sprint 7's reading](./docs/roadmap.md#sprint-7-weeks-1314--ai-assistant), with the Support
+Assistant). The dashboards are
 left out of it to make room: they took about 460 MB, and with them the swap filled.
 `make memory` reports it, and [`docs/agents/memory-reading.md`](./docs/agents/memory-reading.md)
 says how a reading is taken.

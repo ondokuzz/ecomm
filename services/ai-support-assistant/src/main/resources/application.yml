@@ -1,0 +1,30 @@
+spring:
+  application:
+    name: ai-support-assistant
+  config:
+    # Secrets are files, one per property and named after it: the ones Compose mounts in
+    # /run/secrets (docs/adr/0011-secrets-as-generated-files.md). There are none outside a container.
+    import: optional:configtree:${ecomm.secrets-dir:/run/secrets/}
+  data:
+    redis:
+      host: localhost
+      # REDIS_PORT matches the compose override, for when something else holds 6379.
+      port: ${REDIS_PORT:6379}
+
+ecomm:
+  support-assistant:
+    # The secret anthropic-api-key, from a file. Empty, as `make secrets` writes it, the mock
+    # provider answers.
+    anthropic-api-key: ""
+    # A Conversation lapses this long after its last message.
+    conversation-lapses-after: 24h
+    # Every context on its compose host port.
+    order-management-url: http://localhost:8085
+    # A context that doesn't answer in time is an error tool result, not a failed turn.
+    connect-timeout: 2s
+    read-timeout: 10s
+
+# Plain-text logs name the Correlation ID too, as the JSON ones under the docker profile do.
+logging:
+  pattern:
+    correlation: "[%X{correlationId:-}] "

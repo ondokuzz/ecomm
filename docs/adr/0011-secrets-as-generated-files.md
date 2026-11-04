@@ -25,3 +25,7 @@ This is the shape a secrets manager takes on in Sprint 8: in AWS, a secret is mo
 - Every Postgres service still shares the `ecomm` login, and so `postgres-password`, until Sprint 9 gives each its own.
 - Rotation is by hand. Automated rotation is out of scope until the secrets manager.
 - Running a service outside Docker, against the compose stack, takes its secrets from `.secrets/` as environment variables, as each service's README shows.
+
+## Revised 2026-11-03
+
+`anthropic-api-key`, the AI Support Assistant's Anthropic API key, is the first secret that can't be generated (#114). `make secrets` writes it empty when it is missing and, like every secret, never overwrites it, so a key written into `.secrets/<project>/anthropic-api-key` by hand stays. Empty means the mock provider, which the service says at start-up; the key is never logged. `compose-secrets-check.sh` skips an empty secret, since it has no value to leak.

@@ -2576,6 +2576,136 @@ main {
   opacity: 0.8;
 }
 
+/* Help: the Support Assistant's panel, beside the page, or over it on narrow screens */
+
+.help-panel {
+  position: fixed;
+  inset: auto;
+  top: calc(var(--header-height) + 4px + var(--space-2));
+  right: max(var(--gutter), calc((100vw - var(--content-width)) / 2 + var(--gutter)));
+  bottom: var(--space-4);
+  z-index: 20;
+  width: min(25rem, calc(100vw - 2 * var(--gutter)));
+  margin: 0;
+  padding: 0;
+  color: var(--color-fg);
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+.help-panel[open] {
+  display: flex;
+  animation: drop var(--duration) var(--ease);
+}
+.help-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 0;
+  padding: var(--space-4);
+}
+.help-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.help-header h2 {
+  margin: 0 auto 0 0;
+  font-size: var(--text-xl);
+}
+.help-signed-out {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+.help-signed-out p {
+  margin: 0;
+}
+.help-transcript {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.help-message {
+  max-width: 85%;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  white-space: pre-wrap;
+}
+.help-message p {
+  margin: 0;
+}
+.help-customer {
+  align-self: flex-end;
+  color: var(--color-on-primary);
+  background: var(--color-primary);
+}
+.help-assistant {
+  align-self: flex-start;
+  background: var(--color-surface-2);
+}
+.help-working {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-muted);
+}
+.help-end {
+  height: 0;
+}
+.help-references {
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.help-references a {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-weight: 600;
+  color: var(--color-primary-text);
+}
+.help-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.help-input {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  resize: none;
+}
+.help-form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+@media (max-width: 40rem) {
+  .help-panel {
+    inset: 0;
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    max-height: none;
+    border: none;
+    border-radius: 0;
+  }
+}
+
 /* Confirm dialog */
 
 .dialog {

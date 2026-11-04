@@ -148,7 +148,7 @@ flowchart LR
   fulfillmentIn["Fulfillment & Shipping"]
   returnsIn["Returns & Warranty"]
   orchestration["Orchestration<br/><i>fulfillment and returns Sagas</i>"]
-  later["Notifications, Support Assistant<br/><i>not built yet</i>"]
+  later["Notifications<br/><i>not built yet</i>"]
 
   catalog --> tProduct & tCategory
   inventory --> tStock
@@ -325,5 +325,7 @@ sequenceDiagram
 
 ## Not built yet
 
-Notifications and the AI Support Assistant are planned in [`docs/roadmap.md`](./roadmap.md).
+Notifications is planned in [`docs/roadmap.md`](./roadmap.md). The AI Support Assistant consumes
+no topic: it reads Order Management with the Customer's own token when asked, through the gateway's
+`/api/support-assistant/` ([its README](../services/ai-support-assistant/README.md)).
 Prometheus and Grafana scrape every service and are left out of the diagrams.

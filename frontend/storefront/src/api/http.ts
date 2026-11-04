@@ -46,6 +46,7 @@ export type Service =
   | 'recommendations'
   | 'fulfillment-shipping'
   | 'returns-warranty'
+  | 'support-assistant'
 
 interface RequestOptions {
   method?: string

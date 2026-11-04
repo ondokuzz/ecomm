@@ -77,7 +77,11 @@ class EdgeAuthenticationApiTest extends GatewayApiTest {
     "POST, /api/returns-warranty/rmas/r-1/approve",
     "POST, /api/returns-warranty/rmas/r-1/receive",
     "POST, /api/returns-warranty/rmas/r-1/inspect",
-    "GET, /api/returns-warranty/rmas/eligibility"
+    "GET, /api/returns-warranty/rmas/eligibility",
+    "POST, /api/support-assistant/conversations",
+    "POST, /api/support-assistant/conversations/c-1/messages",
+    "GET, /api/support-assistant/conversations/c-1",
+    "DELETE, /api/support-assistant/conversations/c-1"
   })
   void everythingElseIsUnauthorizedWithoutAToken(String method, String path) {
     http.method(HttpMethod.valueOf(method))

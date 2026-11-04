@@ -9,8 +9,9 @@ Checked, for each Spring service in Compose (built from a Dockerfile beside a bu
 - its Postgres database, if it has one, is created by postgres-databases.sh and dropped by
   `make seed-reset`, and the service is stopped by it;
 - each of its @KafkaListener groups is in consumer-groups, named after it;
-and for each service the gateway routes: it is a Compose service, the gateway's Compose entry
-waits for it, and application-docker.yml gives its URI on the Compose network.
+and for each service the gateway routes: application-docker.yml gives its URI on the Compose
+network, whose host is a Compose service (the route's name, or another, as support-assistant's is
+ai-support-assistant), and the gateway's Compose entry waits for it.
 """
 
 import json
@@ -87,16 +88,25 @@ def gateway_services(path):
     return re.findall(r"^      ([a-z-]+):$", block, re.M)
 
 
+def gateway_hosts(path):
+    """Each route's Compose service: the host of its URI on the Compose network."""
+    text = read(path)
+    block = text[text.index("\n    services:\n"):]
+    return dict(re.findall(r"^      ([a-z-]+):\n        uri: http://([a-z-]+):8080$", block, re.M))
+
+
 routed = gateway_services("platform/api-gateway/src/main/resources/application.yml")
-in_docker = set(gateway_services("platform/api-gateway/src/main/resources/application-docker.yml"))
+in_docker = gateway_hosts("platform/api-gateway/src/main/resources/application-docker.yml")
 gateway_waits = set(compose.get("api-gateway", {}).get("depends_on", {}))
 for name in routed:
-    if name not in compose:
-        problems.append(f"gateway: routes {name}, which isn't a Compose service")
-    if name not in gateway_waits:
-        problems.append(f"gateway: routes {name} but its Compose entry doesn't wait for it")
-    if name not in in_docker:
+    host = in_docker.get(name)
+    if host is None:
         problems.append(f"gateway: routes {name} but application-docker.yml gives no URI for it")
+        continue
+    if host not in compose:
+        problems.append(f"gateway: routes {name} to {host}, which isn't a Compose service")
+    if host not in gateway_waits:
+        problems.append(f"gateway: routes {name} but its Compose entry doesn't wait for {host}")
 
 if problems:
     print("The stack's lists of services disagree:", *problems, sep="\n  ", file=sys.stderr)
