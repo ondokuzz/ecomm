@@ -417,8 +417,8 @@ services:
       keycloak-realm: { condition: service_completed_successfully }
       mailpit: { condition: service_healthy }
 
-  # The Support Assistant: answers a Customer's questions about their Orders from Order
-  # Management's reads, made with the Customer's own token (its ADR 0002). Conversations live in the
+  # The Support Assistant: answers a Customer's questions about their Orders and RMAs from the
+  # contexts' reads, made with the Customer's own token (its ADR 0002). Conversations live in the
   # shared Redis under its own key prefix. With the secret anthropic-api-key empty, as `make secrets`
   # writes it, the mock provider answers.
   ai-support-assistant:
@@ -436,6 +436,7 @@ services:
       order-management: { condition: service_healthy }
       fulfillment-shipping: { condition: service_healthy }
       payment: { condition: service_healthy }
+      returns-warranty: { condition: service_healthy }
 
   # Catches every email the stack sends, for reading in its UI on http://localhost:8025 and through
   # its API (the Playwright suites do). Services reach its SMTP port on mailpit:1025, the host on

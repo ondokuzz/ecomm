@@ -43,6 +43,15 @@ class HttpClientsConfiguration {
     return client(builder, url, connectTimeout, readTimeout);
   }
 
+  @Bean
+  RestClient returnsWarrantyRestClient(
+      RestClient.Builder builder,
+      @Value("${ecomm.support-assistant.returns-warranty-url}") String url,
+      @Value("${ecomm.support-assistant.connect-timeout}") Duration connectTimeout,
+      @Value("${ecomm.support-assistant.read-timeout}") Duration readTimeout) {
+    return client(builder, url, connectTimeout, readTimeout);
+  }
+
   private static RestClient client(
       RestClient.Builder builder, String url, Duration connectTimeout, Duration readTimeout) {
     var requests =

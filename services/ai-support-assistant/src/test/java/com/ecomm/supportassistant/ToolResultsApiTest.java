@@ -3,9 +3,11 @@ package com.ecomm.supportassistant;
 import static com.github.tomakehurst.wiremock.client.WireMock.anyRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.anyUrl;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.notFound;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
+import static com.github.tomakehurst.wiremock.client.WireMock.serviceUnavailable;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -251,6 +253,205 @@ class ToolResultsApiTest extends SupportAssistantApiTest {
             .withQueryParam("from", equalTo("2026-11-01T00:00:00Z"))
             .withQueryParam("to", equalTo("2026-11-08T00:00:00Z"))
             .withHeader("Authorization", equalTo("Bearer " + customerToken())));
+  }
+
+  @Test
+  void findRmasByReferenceAnswersTheMatchingRmasSummaries() {
+    stubRmasWhere("reference", "3F2A9C1B", rma(RMA_ID, "RETURN", "REQUESTED", "APPROVED"));
+
+    var result = resultOf("find_rmas", Map.of("reference", "rma-3f2a9c1b"));
+
+    assertThat(result.content())
+        .isEqualTo(
+            Map.of(
+                "rmas",
+                List.of(
+                    withNulls(
+                        "rmaId", RMA_ID,
+                        "reference", "RMA-3F2A9C1B",
+                        "orderId", ORDER_ID,
+                        "orderReference", "#7F1C2A3B",
+                        "productName", "Pixel 9",
+                        "quantity", 1,
+                        "kind", "RETURN",
+                        "status", "APPROVED",
+                        "requestedAt", "2026-11-07T10:00:00Z",
+                        "sendBackBy", "2026-11-21T23:59:59Z"))));
+    assertThat(result.records())
+        .extracting(r -> r.kind() + " " + r.id() + " " + r.reference() + " " + r.label())
+        .containsExactly(
+            "RMA " + RMA_ID + " RMA-3F2A9C1B RMA-3F2A9C1B",
+            "ORDER " + ORDER_ID + " #7F1C2A3B Order #7F1C2A3B");
+    RETURNS_WARRANTY.verify(
+        getRequestedFor(urlPathEqualTo("/rmas"))
+            .withQueryParam("reference", equalTo("3F2A9C1B"))
+            .withHeader("Authorization", equalTo("Bearer " + customerToken()))
+            .withHeader("X-Correlation-Id", equalTo("test-correlation-1")));
+  }
+
+  @Test
+  void findRmasOfAnOrderAsksForThatOrders() {
+    stubRmasWhere("orderId", ORDER_ID);
+
+    var result = resultOf("find_rmas", Map.of("orderId", ORDER_ID));
+
+    assertThat(result.content()).isEqualTo(Map.of("rmas", List.of()));
+    RETURNS_WARRANTY.verify(
+        getRequestedFor(urlPathEqualTo("/rmas")).withQueryParam("orderId", equalTo(ORDER_ID)));
+  }
+
+  @Test
+  void findRmasWithAReferenceThatIsntOneIsAnErrorResultAndAsksNothing() {
+    var result = resultOf("find_rmas", Map.of("reference", "#7F1C2A3B"));
+
+    assertThat(result.outcome()).isEqualTo(ToolResult.Outcome.ERROR);
+    assertThat(result.content()).containsEntry("error", "invalidInput");
+    RETURNS_WARRANTY.verify(0, anyRequestedFor(anyUrl()));
+  }
+
+  @Test
+  void getRmaAnswersItsHistoryAndWhileApprovedItsReturnAddress() {
+    stubRma(
+        RMA_ID, okJson(rma(RMA_ID, "RETURN", "REQUESTED", "APPROVED:Please include the charger")));
+    stubReturnAddress();
+
+    var result = resultOf("get_rma", Map.of("rmaId", RMA_ID));
+
+    assertThat(result.content())
+        .containsEntry("reference", "RMA-3F2A9C1B")
+        .containsEntry("orderReference", "#7F1C2A3B")
+        .containsEntry("status", "APPROVED")
+        .containsEntry("reason", "Too big for my hand")
+        .containsEntry("windowEndsAt", "2026-12-06T09:00:00Z")
+        .containsEntry("refundAmount", eur("799.00"))
+        .containsEntry("sendBackBy", "2026-11-21T23:59:59Z")
+        .containsEntry(
+            "returnAddress",
+            Map.of(
+                "name", "Ecomm Returns Berlin",
+                "street", "Lagerweg 3",
+                "postcode", "12099",
+                "city", "Berlin",
+                "country", "DE"))
+        .containsEntry("inspection", null)
+        .containsEntry(
+            "history",
+            List.of(
+                withNulls("status", "REQUESTED", "at", "2026-11-07T10:00:00Z", "note", null),
+                withNulls(
+                    "status",
+                    "APPROVED",
+                    "at",
+                    "2026-11-08T10:00:00Z",
+                    "note",
+                    "Please include the charger")));
+    assertThat(result.records()).extracting(r -> r.id()).containsExactly(RMA_ID, ORDER_ID);
+    FULFILLMENT_SHIPPING.verify(
+        getRequestedFor(urlPathEqualTo("/warehouses/WH-BER"))
+            .withHeader("Authorization", equalTo("Bearer " + customerToken())));
+  }
+
+  @Test
+  void getRmaPastItsSendBackLooksUpNoReturnAddress() {
+    stubRma(
+        RMA_ID,
+        okJson(
+            rma(RMA_ID, "RETURN", "REQUESTED", "APPROVED", "RECEIVED", "INSPECTED", "REFUNDED")));
+
+    var result = resultOf("get_rma", Map.of("rmaId", RMA_ID));
+
+    assertThat(result.content())
+        .containsEntry("status", "REFUNDED")
+        .containsEntry("returnAddress", null)
+        .containsEntry("inspection", withNulls("outcome", "ACCEPTED", "note", null))
+        .containsEntry("refundReference", "RMA-3F2A9C1B");
+    FULFILLMENT_SHIPPING.verify(0, anyRequestedFor(anyUrl()));
+  }
+
+  @Test
+  void getRmaWhoseReturnAddressCantBeReadAnswersTheRmaWithoutIt() {
+    stubRma(RMA_ID, okJson(rma(RMA_ID, "RETURN", "REQUESTED", "APPROVED")));
+
+    var result = resultOf("get_rma", Map.of("rmaId", RMA_ID));
+
+    assertThat(result.outcome()).isEqualTo(ToolResult.Outcome.FOUND);
+    assertThat(result.content()).containsEntry("returnAddress", null);
+  }
+
+  @Test
+  void getRmaWhoseReturnAddressFailedSaysItCantBeLookedUpNow() {
+    stubRma(RMA_ID, okJson(rma(RMA_ID, "RETURN", "REQUESTED", "APPROVED")));
+    FULFILLMENT_SHIPPING.stubFor(
+        get(urlPathEqualTo("/warehouses/WH-BER")).willReturn(serviceUnavailable()));
+
+    var result = resultOf("get_rma", Map.of("rmaId", RMA_ID));
+
+    assertThat(result.outcome()).isEqualTo(ToolResult.Outcome.FOUND);
+    assertThat(result.content().get("returnAddress"))
+        .isEqualTo(
+            Map.of(
+                "error",
+                "unavailable",
+                "message",
+                "It can't be looked up just now: Fulfillment & Shipping answered 503"));
+  }
+
+  @Test
+  void getRmaOfAnotherCustomersIsNotFound() {
+    stubRma(OTHER_RMA_ID, notFound());
+
+    var result = resultOf("get_rma", Map.of("rmaId", OTHER_RMA_ID));
+
+    assertThat(result.outcome()).isEqualTo(ToolResult.Outcome.NOT_FOUND);
+    assertThat(result.records()).isEmpty();
+  }
+
+  @Test
+  void checkReturnEligibilityAnswersEachLinesReturnPeriodAndWarrantyWindowEnds() {
+    stubEligibility(
+        ORDER_ID,
+        eligibleLine("Pixel 9", "2026-12-06T09:00:00Z", "2028-11-06T09:00:00Z", 1),
+        eligibleLine("USB-C Cable", "2026-12-06T09:00:00Z", null, 0));
+
+    var result = resultOf("check_return_eligibility", Map.of("orderId", ORDER_ID));
+
+    assertThat(result.content())
+        .isEqualTo(
+            Map.of(
+                "orderId",
+                ORDER_ID,
+                "orderReference",
+                "#7F1C2A3B",
+                "lines",
+                List.of(
+                    withNulls(
+                        "variantId", "PHN-PIXEL-9-128-OBS",
+                        "productName", "Pixel 9",
+                        "returnPeriodEndsAt", "2026-12-06T09:00:00Z",
+                        "warrantyWindowEndsAt", "2028-11-06T09:00:00Z",
+                        "unitsFree", 1),
+                    withNulls(
+                        "variantId", "PHN-PIXEL-9-128-OBS",
+                        "productName", "USB-C Cable",
+                        "returnPeriodEndsAt", "2026-12-06T09:00:00Z",
+                        "warrantyWindowEndsAt", null,
+                        "unitsFree", 0))));
+    assertThat(result.records()).extracting(r -> r.id()).containsExactly(ORDER_ID);
+    RETURNS_WARRANTY.verify(
+        getRequestedFor(urlPathEqualTo("/rmas/eligibility"))
+            .withQueryParam("orderId", equalTo(ORDER_ID))
+            .withHeader("Authorization", equalTo("Bearer " + customerToken()))
+            .withHeader("X-Correlation-Id", equalTo("test-correlation-1")));
+  }
+
+  @Test
+  void checkReturnEligibilityOfAnOrderNotDeliveredIsNotFound() {
+    stubEligibility(ORDER_ID, notFound());
+
+    var result = resultOf("check_return_eligibility", Map.of("orderId", ORDER_ID));
+
+    assertThat(result.outcome()).isEqualTo(ToolResult.Outcome.NOT_FOUND);
+    assertThat(result.records()).isEmpty();
   }
 
   @Test

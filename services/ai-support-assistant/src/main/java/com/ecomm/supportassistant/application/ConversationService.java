@@ -6,6 +6,7 @@ import com.ecomm.supportassistant.application.port.out.ConversationRepository;
 import com.ecomm.supportassistant.application.port.out.FulfillmentShippingPort;
 import com.ecomm.supportassistant.application.port.out.OrderManagementPort;
 import com.ecomm.supportassistant.application.port.out.PaymentPort;
+import com.ecomm.supportassistant.application.port.out.ReturnsWarrantyPort;
 import com.ecomm.supportassistant.application.port.out.SupportModel;
 import com.ecomm.supportassistant.application.port.out.TimeSource;
 import com.ecomm.supportassistant.domain.Conversation;
@@ -48,11 +49,12 @@ public class ConversationService implements ConversationsUseCase {
       OrderManagementPort orderManagement,
       FulfillmentShippingPort fulfillmentShipping,
       PaymentPort payment,
+      ReturnsWarrantyPort returnsWarranty,
       TimeSource time,
       Duration lapsesAfter) {
     this.conversations = conversations;
     this.model = model;
-    this.tools = new SupportTools(orderManagement, fulfillmentShipping, payment);
+    this.tools = new SupportTools(orderManagement, fulfillmentShipping, payment, returnsWarranty);
     this.time = time;
     this.lapsesAfter = lapsesAfter;
   }

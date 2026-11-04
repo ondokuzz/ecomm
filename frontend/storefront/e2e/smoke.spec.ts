@@ -38,7 +38,8 @@ import { stackSecret } from './secrets'
  * - A Customer returns a delivered phone from its Order's page, choosing its IMEI, and sees the RMA
  *   `Requested` with its Refund amount; once Staff approve, receive and accept it through the
  *   gateway, the RMA page shows where to send it, then `Refunded`, and the Order its Refund and
- *   `Returned` (Sprint 6).
+ *   `Returned` (Sprint 6). Approved, asked about by its RMA reference, Help says where to send it
+ *   and by when, and links the RMA's page (Sprint 7).
  * - A Coupon whose one use another Customer's Checkout Session holds is refused as used up when
  *   applied (Sprint 6).
  * - A Customer reports another Customer's review from the Product page, with a reason and a note;
@@ -1214,6 +1215,24 @@ test.describe('Sprint 6', () => {
     await expect(sendBack).toContainText(`Write ${reference} on the parcel.`)
     // Shipped from Berlin, it goes back to the Berlin Warehouse.
     await expect(sendBack.locator('address')).toContainText('Ecomm Returns Berlin')
+
+    // Asked by its RMA reference, in lower case, Help says the same, and links the RMA's page
+    // (Sprint 7).
+    await page.goto('/')
+    await page.getByRole('button', { name: 'Help' }).click()
+    const help = page.getByRole('dialog', { name: 'Help' })
+    const conversation = help.getByRole('list', { name: 'Conversation' })
+    await help.getByRole('textbox', { name: 'Your question' }).fill(`What's happening with ${reference.toLowerCase()}?`)
+    await help.getByRole('button', { name: 'Send' }).click()
+    await expect(conversation).toContainText(
+      new RegExp(
+        `Your RMA ${reference}, a return of 1 .+ on Order #[0-9A-F]{8}, is approved\\. Please send it back by \\d{1,2} \\w+ \\d{4}, with ${reference} on the parcel, to Ecomm Returns Berlin, `,
+      ),
+    )
+    await conversation.getByRole('link', { name: reference }).click()
+    await expect(page).toHaveURL(new RegExp(`/returns/${rmaId}$`))
+    await help.getByRole('button', { name: 'Close help' }).click()
+    await expect(sendBack).toContainText(`Write ${reference} on the parcel.`)
 
     // Staff receive and accept it; the returns Saga refunds it, and the page follows by itself.
     const step = (path: string, data: object) =>

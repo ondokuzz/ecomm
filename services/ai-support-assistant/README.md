@@ -1,8 +1,9 @@
 # AI Support Assistant
 
 The **Support Assistant** behind the Storefront's Help: a signed-in Customer asks about their own
-Orders, Shipments and Payments in their own words, and it answers from Order Management's, Fulfillment
-& Shipping's and Payment's reads, made when asked with the Customer's own token ([ADR 0002](./docs/adr/0002-reads-with-the-customers-own-token.md)). It never
+Orders, Shipments, Payments and RMAs in their own words, and it answers from Order Management's,
+Fulfillment & Shipping's, Payment's and Returns & Warranty's reads, made when asked with the
+Customer's own token ([ADR 0002](./docs/adr/0002-reads-with-the-customers-own-token.md)). It never
 acts. Each **Conversation** is kept in the shared Redis under the service's own key prefix; the
 service has no database, publishes no events and consumes no topics. Its model is behind the
 `SupportModel` port ([ADR 0005](../../docs/adr/0005-localization-compliance-abstracted.md)), so far
@@ -38,7 +39,9 @@ A Conversation, and each message in it:
 Sending a message answers the reply alone, as the last message above. Its **references** are the
 records the turn's lookups returned that the reply's text names by their reference (in either case,
 with or without the `#`), each once: so a link always points to a real record of the Customer's,
-never to one the model's text made up. The Storefront links an `ORDER` to its Order page.
+never to one the model's text made up. The Storefront links an `ORDER` to its Order page, and an
+`RMA` (`{"kind": "RMA", "id": "3f2a9c1b-…", "reference": "RMA-3F2A9C1B", "label": "RMA-3F2A9C1B"}`)
+to its RMA page.
 
 - **A message** is 1 to 2,000 characters, not only whitespace; anything else, a body without `text`
   included, is a 400 with `"reason": "invalidMessage"`.
@@ -66,10 +69,13 @@ The tools, each a read the Customer could make themselves:
 | `get_shipment` | Fulfillment & Shipping's `GET /shipments?orderId=` | The Order's Shipment: the Order's ID and Order reference, status, Carrier and tracking number (null until booked), its Tracking events (each status and when), oldest first, and when it was delivered |
 | `get_payments` | Payment's `GET /payments?orderId=` | The Order's ID and Order reference, and its Payments, newest first: each one's ID, status, amount and decline reason, and its Payment transactions, oldest first (kind, amount, outcome, decline reason, when, and what a Refund was for) |
 | `get_payment_transaction_history` | Payment's `GET /payments/transactions?page=0&size=20`, with `from` and `to` if given | The Customer's Payment transaction history, newest first, at most 20: each transaction as above, with its Payment's ID and status, its Order's ID and its Order reference; and the `total` |
+| `find_rmas` | Returns & Warranty's `GET /rmas?page=0&size=10`, with a `reference` and an `orderId` if given | The Customer's RMAs, all, those with the RMA reference, or those of the Order, newest first, at most 10: each one's ID, RMA reference, Order ID and Order reference, Product name, quantity, kind, status, when it was requested and its Send-back deadline (null until approved) |
+| `get_rma` | Returns & Warranty's `GET /rmas/{rmaId}`, and while it is `APPROVED` Fulfillment & Shipping's `GET /warehouses/{warehouseId}` | One RMA: the same, the Customer's reason, when its window ends, its Refund amount, its Return address while approved (an `unavailable` error in its place if it can't be looked up now), its Inspection's outcome and note, its Refund's reference, and its RMA history (each status, when and its note), oldest first |
+| `check_return_eligibility` | Returns & Warranty's `GET /rmas/eligibility?orderId=` | The Order's ID and Order reference, and each delivered line's Variant, Product name, when its Return Period ends, when its Warranty Window ends (null without Warranty terms) and its units not yet in an RMA; not found while it isn't delivered |
 
-A `reference` is an Order reference, eight hex digits with or without the `#`, in either case;
-anything else, or a `from` or `to` that isn't an ISO 8601 instant, is an error result that asks
-nothing. A reference no Order of the Customer's has answers no Orders, as another Customer's Order
+A `reference` is an Order reference, eight hex digits with or without the `#`, or for `find_rmas`
+an RMA reference, with or without its `RMA-`, in either case; anything else, or a `from` or `to`
+that isn't an ISO 8601 instant, is an error result that asks nothing. A reference no Order of the Customer's has answers no Orders, as another Customer's Order
 with it does: the reply says it isn't among theirs. Each answers the context's JSON trimmed to those fields, amounts as `{"amount": "803.99",
 "currency": "EUR"}`. Each call carries the Customer's own token and the request's Correlation ID.
 Neither a miss nor a failure fails the turn: a 404 (another Customer's Order's Shipment, or one
@@ -89,6 +95,23 @@ The mock provider is deterministic. Each time it is asked, it reads the Customer
 and what the turn has looked up so far, and asks for the next lookup or replies from a template over
 the results, naming each Order by its reference. The message's words pick the path:
 
+- **An RMA reference** (`RMA-3F2A9C1B`, in either case) has it call `find_rmas` with it, then
+  `get_rma`, and answer with its status and next step: "Your RMA RMA-3F2A9C1B, a return of 1 Pixel 9
+  on Order #7F1C2A3B, is approved. Please send it back by 21 November 2026, with RMA-3F2A9C1B on the
+  parcel, to Ecomm Returns Berlin, Lagerweg 3, 12099 Berlin, DE." (or "to the Return address on its
+  page" when it can't be read); requested and waiting for Staff; rejected, closed or on hold with
+  its note ("Staff will look at it."); received, inspected with its outcome, refunded with its
+  amount, exchanged, or expired with its Send-back deadline. None found is "I couldn't find an RMA
+  RMA-DEADBEEF among yours. …".
+- **About returns** (`return…`, `rma`, `warrant…`): asking whether (`can`, `could`, `still`,
+  `eligible`, `under warranty`, `how long`, `until`, `want`, `request`, `start`), `check_return_eligibility`
+  for the Order the message names, or else the latest: "On Order #7F1C2A3B, you can return the
+  Pixel 9 until 6 December 2026, and claim under its warranty until 6 November 2028. To request a
+  return or a warranty claim, open Order #7F1C2A3B's page.", a Return Period or Warranty Window
+  that ended, as of the message, said so, and "Order #7F1C2A3B isn't delivered yet, …" for a 404.
+  Otherwise `find_rmas`, of the Order named or all of them: one is explained as above, several
+  listed with their status, and none is "You have no RMAs. To request a return, open the Order's
+  page under My Orders."
 - **An Order reference** (`#7F1C2A3B`, or eight hex digits with a digit among them, not the end of an
   RMA reference) has it call `find_orders` with that reference, and answer about that Order;
   otherwise it answers about the latest. None found is "I couldn't find an Order #DEADBEEF among
@@ -112,7 +135,7 @@ the results, naming each Order by its reference. The message's words pick the pa
 - **About an Order** (`order`, `status`): `get_order`, and its Order Status history: "Your latest
   Order, #7F1C2A3B, is paid. It was placed on 3 November 2026 and paid on 3 November 2026."
 - "You haven't placed any Orders yet.", and "I couldn't look up your Orders just now. Please try
-  again in a moment." (or "your Shipment", "your Payments") for a failed lookup.
+  again in a moment." (or "your Shipment", "your Payments", "your returns") for a failed lookup.
 
 Any other message is answered with what it can help with, looking nothing up.
 
@@ -136,4 +159,5 @@ docker compose up -d --build ai-support-assistant   # from the repo root; listen
 
 [`http/ai-support-assistant.http`](./http/ai-support-assistant.http) starts a Conversation as the
 demo Customer, asks where their Order is, then about it by its Order reference, about a charge and
-about a Refund, reads the transcript and ends it.
+about a Refund, about an RMA by its RMA reference and whether their Order can still be returned,
+reads the transcript and ends it.

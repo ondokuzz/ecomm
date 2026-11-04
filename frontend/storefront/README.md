@@ -251,7 +251,7 @@ in.
 For a Customer it shows the **Conversation**, their messages and the assistant's replies, oldest
 first, through the [AI Support Assistant](../../services/ai-support-assistant/README.md)'s API at
 `/api/support-assistant/` ([`src/api/help.ts`](./src/api/help.ts)). Each reply's references show
-beneath it as links, an Order to its Order page. The text box takes up to 2,000 characters and
+beneath it as links, an Order to its Order page and an RMA to its RMA page. The text box takes up to 2,000 characters and
 counts down what is left; Enter sends, Shift+Enter starts a new line. While a turn runs, "Looking
 that up…" shows and the text box is disabled; each reply is announced through a polite live region,
 and focus comes back to the text box. A failed message shows the error with its support reference,
@@ -542,7 +542,8 @@ fulfillment Saga never creates its Shipment, and sees no Shipment panel. Sprint 
 has it packed with a new IMEI and delivered, returns it from the Order's page choosing that IMEI,
 and sees the RMA Requested with its Refund amount (the Order's total less Shipping) and first on My
 Returns; once Staff approve it through the gateway it sees the Return address and "Write RMA-… on
-the parcel", and once they receive and accept it, the RMA turns Refunded by itself, the Order's
+the parcel", and Help, asked about it by its RMA reference in lower case, says it is approved, where to send it
+and by when, and links the RMA's page; once they receive and accept it, the RMA turns Refunded by itself, the Order's
 Payment shows "Refunded for RMA-…" and is Partly refunded (Shipping isn't refunded), and the Order
 Returned. Another opens Notification preferences from the account menu, sees email on and the rest
 off, has a mobile number without its country code refused beside the field, saves one with text

@@ -12,13 +12,19 @@ import java.util.Locale;
 public record Reference(Kind kind, String id, String reference, String label) {
 
   public enum Kind {
-    ORDER
+    ORDER,
+    RMA
   }
 
   /** An Order, by its Order reference: the first eight hex digits of its ID, in upper case. */
   public static Reference order(String orderId) {
     var reference = orderReference(orderId);
     return new Reference(Kind.ORDER, orderId, reference, "Order " + reference);
+  }
+
+  /** An RMA, by its RMA reference, such as {@code RMA-3F2A9C1B}. */
+  public static Reference rma(String rmaId, String reference) {
+    return new Reference(Kind.RMA, rmaId, reference, reference);
   }
 
   /** The Order reference an Order's emails and pages show, such as {@code #EA2CA751}. */

@@ -16,6 +16,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 
 /**
@@ -25,7 +26,9 @@ import java.util.regex.Pattern;
  * so far and asks for the next lookup, or replies.
  *
  * <p>Asked about an Order, it finds the one the message names by its Order reference, or else the
- * Customer's latest, and looks it up with its Order Status history.
+ * Customer's latest, and looks it up with its Order Status history. Asked about an RMA by its RMA
+ * reference, it looks that one up; asked about returns, whether the Order's units can still be
+ * returned or claimed under warranty, or else the Customer's RMAs.
  */
 public class MockSupportModel implements SupportModel {
 
@@ -43,6 +46,15 @@ public class MockSupportModel implements SupportModel {
   private static final Pattern ABOUT_REFUNDS =
       Pattern.compile("\\brefund\\w*\\b", Pattern.CASE_INSENSITIVE);
 
+  private static final Pattern ABOUT_RETURNS =
+      Pattern.compile("\\b(return\\w*|rmas?|warrant\\w*)\\b", Pattern.CASE_INSENSITIVE);
+
+  /** Asking whether something can still be returned or claimed, rather than where a return is. */
+  private static final Pattern ABOUT_ELIGIBILITY =
+      Pattern.compile(
+          "\\b(can|could|still|eligible|eligibility|under warranty|how long|until|want|request|start)\\b",
+          Pattern.CASE_INSENSITIVE);
+
   private static final Pattern ABOUT_ORDERS =
       Pattern.compile("\\b(orders?|status)\\b", Pattern.CASE_INSENSITIVE);
 
@@ -54,6 +66,11 @@ public class MockSupportModel implements SupportModel {
       Pattern.compile(
           "(?<![0-9A-Za-z-])(?:#([0-9A-Fa-f]{8})|((?=[A-Fa-f]*\\d)[0-9A-Fa-f]{8}))(?![0-9A-Za-z])");
 
+  /** An RMA reference: {@code RMA-} and eight hex digits, in either case. */
+  private static final Pattern RMA_REFERENCE =
+      Pattern.compile(
+          "(?<![0-9A-Za-z])RMA[- ]?([0-9A-Fa-f]{8})(?![0-9A-Za-z])", Pattern.CASE_INSENSITIVE);
+
   private static final DateTimeFormatter DAY =
       DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.ENGLISH).withZone(ZoneOffset.UTC);
 
@@ -62,6 +79,9 @@ public class MockSupportModel implements SupportModel {
   static final String GET_SHIPMENT = "get_shipment";
   static final String GET_PAYMENTS = "get_payments";
   static final String GET_PAYMENT_TRANSACTION_HISTORY = "get_payment_transaction_history";
+  static final String FIND_RMAS = "find_rmas";
+  static final String GET_RMA = "get_rma";
+  static final String CHECK_RETURN_ELIGIBILITY = "check_return_eligibility";
 
   /** An Order Status whose Order has no Shipment to look up: not yet paid, or never to be. */
   private static final List<String> NOT_SHIPPING = List.of("PLACED", "CANCELLED");
@@ -70,8 +90,9 @@ public class MockSupportModel implements SupportModel {
       "I couldn't look up your %s just now. Please try again in a moment.";
 
   static final String WHAT_I_DO =
-      "I can help with your Orders, their Shipments and their Payments. Ask me, for example,"
-          + " \"Where is my Order?\" or \"Why was I charged twice?\"";
+      "I can help with your Orders, their Shipments and their Payments, and your returns and"
+          + " warranty claims. Ask me, for example, \"Where is my Order?\", \"Why was I charged"
+          + " twice?\" or \"Can I still return my Order?\"";
 
   @Override
   public Answer answer(Request request) {
@@ -83,7 +104,7 @@ public class MockSupportModel implements SupportModel {
             .map(Entry.CustomerMessage.class::cast)
             .findFirst()
             .orElseThrow(() -> new IllegalStateException("No Customer message to answer"));
-    return new Turn(message.text(), lookedUp(transcript, message), calls).next();
+    return new Turn(message.text(), message.at(), lookedUp(transcript, message), calls).next();
   }
 
   /** The results the turn's lookups have come to so far, oldest first. */
@@ -97,8 +118,12 @@ public class MockSupportModel implements SupportModel {
     return results;
   }
 
-  /** One turn: the Customer's message and what has been looked up for it. */
-  private record Turn(String message, List<ToolResult> results, int calls) {
+  /**
+   * One turn: the Customer's message, when they sent it, and what has been looked up for it.
+   *
+   * @param at when the message was sent, which a window's end is compared with
+   */
+  private record Turn(String message, Instant at, List<ToolResult> results, int calls) {
 
     Answer next() {
       var failed =
@@ -109,10 +134,20 @@ public class MockSupportModel implements SupportModel {
                 switch (failed.get().tool()) {
                   case GET_SHIPMENT -> "Shipment";
                   case GET_PAYMENTS, GET_PAYMENT_TRANSACTION_HISTORY -> "Payments";
+                  case FIND_RMAS, GET_RMA, CHECK_RETURN_ELIGIBILITY -> "returns";
                   default -> "Orders";
                 }));
       }
+      var rmaReference = rmaReference();
+      if (rmaReference.isPresent()) {
+        return rmaByReference(rmaReference.get());
+      }
       var reference = orderReference();
+      if (ABOUT_RETURNS.matcher(message).find()) {
+        return ABOUT_ELIGIBILITY.matcher(message).find()
+            ? eligibility(reference)
+            : reference.isPresent() ? withOrder(reference, this::rmasOf) : rmasOf(null);
+      }
       var aboutPayments = ABOUT_PAYMENTS.matcher(message).find();
       var aboutShipment = ABOUT_SHIPMENTS.matcher(message).find();
       if (reference.isEmpty()
@@ -130,6 +165,16 @@ public class MockSupportModel implements SupportModel {
         // Newest first, so reversed, two at the same instant read oldest first too.
         return reply(lines.isEmpty() ? "You have no Payments yet." : payments(lines.reversed()));
       }
+      return withOrder(
+          reference, found -> aboutOrder(found, reference.isEmpty(), aboutPayments, aboutShipment));
+    }
+
+    /**
+     * Finds the Order the message names by its Order reference, or else the Customer's latest, and
+     * answers about it; or says it found none, or asks which one when several have the reference.
+     */
+    private Answer withOrder(
+        Optional<String> reference, Function<Map<String, Object>, Answer> about) {
       var found = result(FIND_ORDERS);
       if (found.isEmpty()) {
         return use(
@@ -149,10 +194,16 @@ public class MockSupportModel implements SupportModel {
       if (reference.isPresent() && orders.size() > 1) {
         return reply(whichOne("#" + reference.get(), orders));
       }
+      return about.apply(orders.getFirst());
+    }
+
+    /** The Order's Payments, or its Order Status and, asked where it is, its Shipment. */
+    private Answer aboutOrder(
+        Map<String, Object> found, boolean latest, boolean aboutPayments, boolean aboutShipment) {
       if (aboutPayments) {
         var payments = result(GET_PAYMENTS);
         if (payments.isEmpty()) {
-          return use(GET_PAYMENTS, Map.of("orderId", orders.getFirst().get("orderId")));
+          return use(GET_PAYMENTS, Map.of("orderId", found.get("orderId")));
         }
         var lines = transactionsOf(payments.get().content());
         return reply(
@@ -163,12 +214,12 @@ public class MockSupportModel implements SupportModel {
       }
       var order = result(GET_ORDER);
       if (order.isEmpty()) {
-        return use(GET_ORDER, Map.of("orderId", orders.getFirst().get("orderId")));
+        return use(GET_ORDER, Map.of("orderId", found.get("orderId")));
       }
       if (order.get().outcome() == ToolResult.Outcome.NOT_FOUND) {
         return reply("I couldn't find that Order among yours.");
       }
-      var status = orderStatus(order.get().content(), reference.isEmpty());
+      var status = orderStatus(order.get().content(), latest);
       if (!aboutShipment
           || NOT_SHIPPING.contains(String.valueOf(order.get().content().get("status")))) {
         return reply(status);
@@ -178,6 +229,104 @@ public class MockSupportModel implements SupportModel {
         return use(GET_SHIPMENT, Map.of("orderId", order.get().content().get("orderId")));
       }
       return reply(status + " " + shipment(shipment.get()));
+    }
+
+    /**
+     * What the Order's units can still be claimed for, until when, and where to request it; the
+     * Order the message names, or else the Customer's latest.
+     */
+    private Answer eligibility(Optional<String> reference) {
+      return withOrder(
+          reference,
+          order -> {
+            var eligibility = result(CHECK_RETURN_ELIGIBILITY);
+            if (eligibility.isEmpty()) {
+              return use(CHECK_RETURN_ELIGIBILITY, Map.of("orderId", order.get("orderId")));
+            }
+            if (eligibility.get().outcome() == ToolResult.Outcome.NOT_FOUND) {
+              return reply(
+                  ("Order %s isn't delivered yet, so nothing on it can be returned yet. Once it is,"
+                          + " you can request a return on its page.")
+                      .formatted(order.get("reference")));
+            }
+            return reply(MockSupportModel.eligibility(eligibility.get().content(), reference, at));
+          });
+    }
+
+    /**
+     * The Customer's RMAs, or those of {@code order}: the one explained, or several listed.
+     *
+     * @param order null for all of them
+     */
+    private Answer rmasOf(Map<String, Object> order) {
+      var found = result(FIND_RMAS);
+      if (found.isEmpty()) {
+        return use(FIND_RMAS, order == null ? Map.of() : Map.of("orderId", order.get("orderId")));
+      }
+      var rmas = list(found.get().content().get("rmas"));
+      if (rmas.isEmpty()) {
+        return reply(
+            order == null
+                ? "You have no RMAs. To request a return, open the Order's page under My Orders."
+                : "You have no RMAs on Order %s. To request a return, open its page."
+                    .formatted(order.get("reference")));
+      }
+      if (rmas.size() == 1) {
+        return rma(rmas.getFirst());
+      }
+      var each =
+          rmas.stream()
+              .map(
+                  r ->
+                      "%s, %s%s, %s"
+                          .formatted(
+                              r.get("reference"),
+                              claim(r),
+                              order == null ? " on Order " + r.get("orderReference") : "",
+                              word(r.get("status"))))
+              .toList();
+      return reply(
+          "You have %d RMAs%s: %s; and %s."
+              .formatted(
+                  rmas.size(),
+                  order == null ? "" : " on Order " + order.get("reference"),
+                  String.join("; ", each.subList(0, each.size() - 1)),
+                  each.getLast()));
+    }
+
+    /** The RMA the message names by its RMA reference: its status and next step. */
+    private Answer rmaByReference(String reference) {
+      var found = result(FIND_RMAS);
+      if (found.isEmpty()) {
+        return use(FIND_RMAS, Map.of("reference", reference));
+      }
+      var rmas = list(found.get().content().get("rmas"));
+      if (rmas.isEmpty()) {
+        return reply(
+            "I couldn't find an RMA %s among yours. Please check the reference in your email."
+                .formatted(reference));
+      }
+      return rma(rmas.getFirst());
+    }
+
+    /** One RMA, looked up in full: its status and next step. */
+    private Answer rma(Map<String, Object> summary) {
+      var rma = result(GET_RMA);
+      if (rma.isEmpty()) {
+        return use(GET_RMA, Map.of("rmaId", summary.get("rmaId")));
+      }
+      if (rma.get().outcome() == ToolResult.Outcome.NOT_FOUND) {
+        return reply("I couldn't find that RMA among yours.");
+      }
+      return reply(rmaStatus(rma.get().content()));
+    }
+
+    /** The RMA reference the message names, as {@code RMA-3F2A9C1B}. */
+    private Optional<String> rmaReference() {
+      var matcher = RMA_REFERENCE.matcher(message);
+      return matcher.find()
+          ? Optional.of("RMA-" + matcher.group(1).toUpperCase(Locale.ROOT))
+          : Optional.empty();
     }
 
     /** A reply about charges, or about Refunds if the message asks about them. */
@@ -272,6 +421,132 @@ public class MockSupportModel implements SupportModel {
                     day(events.getLast().get("at")));
       }
     };
+  }
+
+  /**
+   * "Your RMA RMA-3F2A9C1B, a return of 1 Pixel 9 on Order #7F1C2A3B, is approved. Please send it
+   * back by 21 November 2026, …": where it stands, and what happens next.
+   */
+  private static String rmaStatus(Map<String, Object> rma) {
+    var history = list(rma.get("history"));
+    var status = String.valueOf(rma.get("status"));
+    var step =
+        history.reversed().stream()
+            .filter(s -> status.equals(s.get("status")))
+            .findFirst()
+            .orElse(Map.of());
+    var on = step.containsKey("at") ? day(step.get("at")) : day(rma.get("requestedAt"));
+    var note = step.get("note");
+    var inspection = (Map<?, ?>) rma.get("inspection");
+    var reference = rma.get("reference");
+    var next =
+        switch (status) {
+          case "REQUESTED" -> "is requested, and waits for Staff to decide on it.";
+          case "APPROVED" ->
+              "is approved. Please send it back by %s, with %s on the parcel, to %s."
+                  .formatted(day(rma.get("sendBackBy")), reference, returnAddress(rma));
+          case "REJECTED" -> "was rejected on %s%s.".formatted(on, because(note));
+          case "RECEIVED" -> "was received on %s, and is inspected next.".formatted(on);
+          case "EXPIRED" ->
+              "expired on %s: its Send-back deadline, %s, passed before it reached us."
+                  .formatted(on, day(rma.get("sendBackBy")));
+          case "INSPECTED" ->
+              "was inspected on %s (%s), and is resolved next."
+                  .formatted(on, word(inspection == null ? null : inspection.get("outcome")));
+          case "REFUNDED" ->
+              "was refunded on %s: %s. Your bank may take a few days to show it."
+                  .formatted(on, money(rma.get("refundAmount")));
+          case "EXCHANGED" ->
+              "was exchanged on %s: a replacement is on its way, and its page tracks it."
+                  .formatted(on);
+          case "CLOSED" ->
+              "was closed on %s%s."
+                  .formatted(
+                      on,
+                      because(note == null && inspection != null ? inspection.get("note") : note));
+          case "ON_HOLD" ->
+              "is on hold since %s%s. Staff will look at it.".formatted(on, because(note));
+          default -> "is %s.".formatted(word(status));
+        };
+    return "Your RMA %s, %s on Order %s, %s"
+        .formatted(reference, claim(rma), rma.get("orderReference"), next);
+  }
+
+  /** "a return of 1 Pixel 9", or "a warranty claim of …". */
+  private static String claim(Map<String, Object> rma) {
+    return "%s of %s %s"
+        .formatted(
+            "WARRANTY_CLAIM".equals(rma.get("kind")) ? "a warranty claim" : "a return",
+            rma.get("quantity"),
+            rma.get("productName"));
+  }
+
+  /**
+   * "On Order #7F1C2A3B, you can return the Pixel 9 until 6 December 2026, and claim under its
+   * warranty until 6 November 2028. To request a return or a warranty claim, open Order #7F1C2A3B's
+   * page.": each line's windows, open or ended as of {@code now}.
+   */
+  private static String eligibility(
+      Map<String, Object> eligibility, Optional<String> named, Instant now) {
+    var order = eligibility.get("orderReference");
+    var clauses = new ArrayList<String>();
+    var claimable = false;
+    for (var line : list(eligibility.get("lines"))) {
+      var product = line.get("productName");
+      if (((Number) line.get("unitsFree")).intValue() == 0) {
+        clauses.add("every %s is already in an RMA".formatted(product));
+        continue;
+      }
+      var returnEnds = Instant.parse(String.valueOf(line.get("returnPeriodEndsAt")));
+      var warrantyEnds =
+          line.get("warrantyWindowEndsAt") == null
+              ? null
+              : Instant.parse(String.valueOf(line.get("warrantyWindowEndsAt")));
+      var returnable = now.isBefore(returnEnds);
+      var underWarranty = warrantyEnds != null && now.isBefore(warrantyEnds);
+      claimable |= returnable || underWarranty;
+      var warranty =
+          warrantyEnds == null
+              ? ", and it has no warranty"
+              : underWarranty
+                  ? (returnable ? ", and" : ", but you can")
+                      + " claim under its warranty until "
+                      + DAY.format(warrantyEnds)
+                  : (returnable
+                          ? ", and its Warranty Window ended on "
+                          : ", and its Warranty Window on ")
+                      + DAY.format(warrantyEnds);
+      clauses.add(
+          (returnable ? "you can return the %s until %s" : "the %s's Return Period ended on %s")
+                  .formatted(product, DAY.format(returnEnds))
+              + warranty);
+    }
+    var reply =
+        (named.isPresent() ? "On Order %s, " : "On your latest Order, %s, ").formatted(order)
+            + String.join("; ", clauses)
+            + ".";
+    return claimable
+        ? reply + " To request a return or a warranty claim, open Order %s's page.".formatted(order)
+        : reply;
+  }
+
+  /** "Ecomm Returns Berlin, Lagerweg 3, 12099 Berlin, DE", or where to find it. */
+  private static String returnAddress(Map<String, Object> rma) {
+    if (!(rma.get("returnAddress") instanceof Map<?, ?> address) || !address.containsKey("name")) {
+      return "the Return address on its page";
+    }
+    return "%s, %s, %s %s, %s"
+        .formatted(
+            address.get("name"),
+            address.get("street"),
+            address.get("postcode"),
+            address.get("city"),
+            address.get("country"));
+  }
+
+  /** ": the reason", if there is one. */
+  private static String because(Object note) {
+    return note == null ? "" : ": " + note;
   }
 
   /**
@@ -416,11 +691,11 @@ public class MockSupportModel implements SupportModel {
     return kind.equals(transaction.get("kind")) && outcome.equals(transaction.get("outcome"));
   }
 
-  /** An Order Status as a sentence reads it: {@code PAID} as "paid". */
+  /** A status as a sentence reads it: {@code PAID} as "paid", {@code ON_HOLD} as "on hold". */
   private static String word(Object status) {
     return switch (String.valueOf(status)) {
       case "FULFILLED" -> "packed";
-      default -> String.valueOf(status).toLowerCase(Locale.ROOT);
+      default -> String.valueOf(status).replace('_', ' ').toLowerCase(Locale.ROOT);
     };
   }
 

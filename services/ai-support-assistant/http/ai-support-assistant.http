@@ -52,6 +52,27 @@ Content-Type: application/json
 
 {"text": "Has my refund gone through?"}
 
+### Ask about an RMA by its RMA reference: its status and next step, or not found among theirs
+POST {{assistant}}/conversations/{{conversationId}}/messages
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"text": "What's happening with RMA-3F2A9C1B?"}
+
+### Ask whether the latest Order can still be returned: until when, and its page to request one
+POST {{assistant}}/conversations/{{conversationId}}/messages
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"text": "Can I still return my order?"}
+
+### Ask where their returns are: the one explained, several listed, or none
+POST {{assistant}}/conversations/{{conversationId}}/messages
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"text": "Where is my return?"}
+
 ### Ask something else: answered without a lookup
 POST {{assistant}}/conversations/{{conversationId}}/messages
 Authorization: Bearer {{customerToken}}

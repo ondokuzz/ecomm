@@ -148,7 +148,10 @@ class GroundingApiTest extends SupportAssistantApiTest {
             "get_order",
             "get_shipment",
             "get_payments",
-            "get_payment_transaction_history");
+            "get_payment_transaction_history",
+            "find_rmas",
+            "get_rma",
+            "check_return_eligibility");
   }
 
   @Test

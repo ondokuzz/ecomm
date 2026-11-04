@@ -6,6 +6,7 @@ import com.ecomm.supportassistant.application.port.out.ConversationRepository;
 import com.ecomm.supportassistant.application.port.out.FulfillmentShippingPort;
 import com.ecomm.supportassistant.application.port.out.OrderManagementPort;
 import com.ecomm.supportassistant.application.port.out.PaymentPort;
+import com.ecomm.supportassistant.application.port.out.ReturnsWarrantyPort;
 import com.ecomm.supportassistant.application.port.out.SupportModel;
 import com.ecomm.supportassistant.application.port.out.TimeSource;
 import java.time.Duration;
@@ -27,9 +28,17 @@ class UseCaseConfiguration {
       OrderManagementPort orderManagement,
       FulfillmentShippingPort fulfillmentShipping,
       PaymentPort payment,
+      ReturnsWarrantyPort returnsWarranty,
       TimeSource time,
       @Value("${ecomm.support-assistant.conversation-lapses-after}") Duration lapsesAfter) {
     return new ConversationService(
-        conversations, model, orderManagement, fulfillmentShipping, payment, time, lapsesAfter);
+        conversations,
+        model,
+        orderManagement,
+        fulfillmentShipping,
+        payment,
+        returnsWarranty,
+        time,
+        lapsesAfter);
   }
 }

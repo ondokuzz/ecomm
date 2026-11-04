@@ -23,9 +23,9 @@ import org.testcontainers.containers.GenericContainer;
 
 /**
  * Base for HTTP-seam tests. A WireMock server stands in for each context the tools read (Order
- * Management, Fulfillment & Shipping and Payment), and one Redis container holds the Conversations.
- * The API key is empty, so the mock provider answers. Each test starts with no stubs and no
- * Conversations.
+ * Management, Fulfillment & Shipping, Payment and Returns & Warranty), and one Redis container
+ * holds the Conversations. The API key is empty, so the mock provider answers. Each test starts
+ * with no stubs and no Conversations.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureRestTestClient
@@ -40,12 +40,15 @@ abstract class SupportAssistantApiTest {
 
   static final WireMockServer PAYMENT = new WireMockServer(wireMockConfig().dynamicPort());
 
+  static final WireMockServer RETURNS_WARRANTY = new WireMockServer(wireMockConfig().dynamicPort());
+
   static final GenericContainer<?> REDIS = new GenericContainer<>("redis:7").withExposedPorts(6379);
 
   static {
     ORDER_MANAGEMENT.start();
     FULFILLMENT_SHIPPING.start();
     PAYMENT.start();
+    RETURNS_WARRANTY.start();
     REDIS.start();
   }
 
@@ -55,6 +58,7 @@ abstract class SupportAssistantApiTest {
     registry.add("ecomm.support-assistant.order-management-url", ORDER_MANAGEMENT::baseUrl);
     registry.add("ecomm.support-assistant.fulfillment-shipping-url", FULFILLMENT_SHIPPING::baseUrl);
     registry.add("ecomm.support-assistant.payment-url", PAYMENT::baseUrl);
+    registry.add("ecomm.support-assistant.returns-warranty-url", RETURNS_WARRANTY::baseUrl);
     // Long enough for a cold WireMock's first answer; the timeout test delays its by 3 seconds.
     registry.add("ecomm.support-assistant.read-timeout", () -> "2s");
     registry.add("spring.data.redis.host", REDIS::getHost);
@@ -73,6 +77,7 @@ abstract class SupportAssistantApiTest {
     ORDER_MANAGEMENT.resetAll();
     FULFILLMENT_SHIPPING.resetAll();
     PAYMENT.resetAll();
+    RETURNS_WARRANTY.resetAll();
     REDIS.execInContainer("redis-cli", "FLUSHALL");
   }
 
@@ -321,6 +326,142 @@ abstract class SupportAssistantApiTest {
 
   static void stubHistory(ResponseDefinitionBuilder response) {
     PAYMENT.stubFor(get(urlPathEqualTo("/payments/transactions")).willReturn(response));
+  }
+
+  // --- Returns & Warranty ---
+
+  static final String RMA_ID = "3f2a9c1b-0000-4000-8000-000000000011";
+  static final String OTHER_RMA_ID = "a9b8c7d6-0000-4000-8000-000000000012";
+
+  /**
+   * An RMA of {@code kind} for one Pixel 9 on {@link #ORDER_ID}, requested on 7 November 2026, as
+   * Returns & Warranty answers it, in the last status of {@code history}: each step a day later
+   * than the one before, written {@code "STATUS"} or {@code "STATUS:note"}. Once approved it goes
+   * back to {@code WH-BER} by 21 November 2026; inspected, its Inspection is accepted, or refused
+   * with the note of a {@code CLOSED} step; refunded, it names its Refund's reference.
+   */
+  static String rma(String id, String kind, String... history) {
+    var steps = new StringBuilder();
+    var status = "REQUESTED";
+    var approved = false;
+    var inspected = false;
+    String closedNote = null;
+    for (var i = 0; i < history.length; i++) {
+      var step = history[i].split(":", 2);
+      status = step[0];
+      approved |= status.equals("APPROVED");
+      inspected |= status.equals("INSPECTED");
+      if (status.equals("CLOSED") && step.length > 1) {
+        closedNote = step[1];
+      }
+      steps
+          .append(i == 0 ? "" : ",")
+          .append(
+              """
+              {"status": "%s", "by": "staff-1", "at": "2026-11-%02dT10:00:00Z", "note": %s}
+              """
+                  .formatted(status, 7 + i, json(step.length > 1 ? step[1] : null)));
+    }
+    var reference = "RMA-" + id.substring(0, 8).toUpperCase(java.util.Locale.ROOT);
+    var outcome = closedNote == null ? "ACCEPTED" : "REFUSED";
+    return """
+        {"id": "%s", "reference": "%s", "orderId": "%s", "customerId": "%s",
+         "variantId": "PHN-PIXEL-9-128-OBS", "productName": "Pixel 9", "quantity": 1,
+         "serialNumbers": ["356938035643809"], "kind": "%s", "reason": "Too big for my hand",
+         "window": {"kind": "%s", "startsAt": "2026-11-06T09:00:00Z",
+                    "endsAt": "2026-12-06T09:00:00Z"},
+         "refundAmount": {"amountMinor": 79900, "currency": "EUR"},
+         "status": "%s", "requestedAt": "2026-11-07T10:00:00Z",
+         "sendBackBy": %s, "warehouseId": %s, "inspection": %s, "resolution": %s,
+         "history": [%s]}
+        """
+        .formatted(
+            id,
+            reference,
+            ORDER_ID,
+            CUSTOMER_ID,
+            kind,
+            kind.equals("RETURN") ? "RETURN_PERIOD" : "WARRANTY_WINDOW",
+            status,
+            approved ? "\"2026-11-21T23:59:59Z\"" : "null",
+            approved ? "\"WH-BER\"" : "null",
+            inspected
+                ? "{\"outcome\": \"%s\", \"note\": %s}".formatted(outcome, json(closedNote))
+                : "null",
+            status.equals("REFUNDED")
+                ? "{\"paymentTransactionReference\": \"%s\"}".formatted(reference)
+                : "null",
+            steps);
+  }
+
+  /** Returns & Warranty answers the Customer's RMAs, newest first, as a page of these. */
+  static void stubRmas(String... rmas) {
+    stubRmas(rmaPage(rmas));
+  }
+
+  static void stubRmas(ResponseDefinitionBuilder response) {
+    RETURNS_WARRANTY.stubFor(get(urlPathEqualTo("/rmas")).willReturn(response));
+  }
+
+  /** Returns & Warranty answers the Customer's RMAs whose {@code param} is {@code value} so. */
+  static void stubRmasWhere(String param, String value, String... rmas) {
+    RETURNS_WARRANTY.stubFor(
+        get(urlPathEqualTo("/rmas"))
+            .withQueryParam(param, equalTo(value))
+            .willReturn(rmaPage(rmas)));
+  }
+
+  private static ResponseDefinitionBuilder rmaPage(String... rmas) {
+    return okJson(
+        "{\"items\": [%s], \"page\": 0, \"size\": 10, \"total\": %d}"
+            .formatted(String.join(",", rmas), rmas.length));
+  }
+
+  /** Returns & Warranty answers the RMA {@code id} so. */
+  static void stubRma(String id, ResponseDefinitionBuilder response) {
+    RETURNS_WARRANTY.stubFor(get(urlPathEqualTo("/rmas/" + id)).willReturn(response));
+  }
+
+  /**
+   * One delivered line of an Order's eligibility, as Returns & Warranty answers it: its Return
+   * Period ending at {@code returnPeriodEndsAt}, its Warranty Window at {@code
+   * warrantyWindowEndsAt} (none when null), with {@code quantity} units still free to claim.
+   */
+  static String eligibleLine(
+      String productName, String returnPeriodEndsAt, String warrantyWindowEndsAt, int quantity) {
+    return """
+        {"variantId": "PHN-PIXEL-9-128-OBS", "productName": "%s", "returnPeriodEndsAt": "%s",
+         "warrantyWindowEndsAt": %s, "serialNumbers": [], "quantity": %d}
+        """
+        .formatted(productName, returnPeriodEndsAt, json(warrantyWindowEndsAt), quantity);
+  }
+
+  /** Returns & Warranty answers the Order's eligibility with these lines. */
+  static void stubEligibility(String orderId, String... lines) {
+    stubEligibility(
+        orderId,
+        okJson(
+            "{\"orderId\": \"%s\", \"lines\": [%s]}".formatted(orderId, String.join(",", lines))));
+  }
+
+  static void stubEligibility(String orderId, ResponseDefinitionBuilder response) {
+    RETURNS_WARRANTY.stubFor(
+        get(urlPathEqualTo("/rmas/eligibility"))
+            .withQueryParam("orderId", equalTo(orderId))
+            .willReturn(response));
+  }
+
+  /** Fulfillment & Shipping answers {@code WH-BER}'s Return address. */
+  static void stubReturnAddress() {
+    FULFILLMENT_SHIPPING.stubFor(
+        get(urlPathEqualTo("/warehouses/WH-BER"))
+            .willReturn(
+                okJson(
+                    """
+                    {"id": "WH-BER", "name": "Berlin",
+                     "returnAddress": {"name": "Ecomm Returns Berlin", "street": "Lagerweg 3",
+                                       "postcode": "12099", "city": "Berlin", "country": "DE"}}
+                    """)));
   }
 
   private static String json(String text) {

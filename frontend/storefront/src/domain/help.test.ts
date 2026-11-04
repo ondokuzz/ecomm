@@ -11,6 +11,16 @@ describe('referencePath', () => {
     }
     expect(referencePath(order)).toBe('/orders/7f1c2a3b-0000-4000-8000-000000000001')
   })
+
+  it('links an RMA to its RMA page', () => {
+    const rma: Reference = {
+      kind: 'RMA',
+      id: '3f2a9c1b-0000-4000-8000-000000000011',
+      reference: 'RMA-3F2A9C1B',
+      label: 'RMA-3F2A9C1B',
+    }
+    expect(referencePath(rma)).toBe('/returns/3f2a9c1b-0000-4000-8000-000000000011')
+  })
 })
 
 describe('remainingCharacters', () => {

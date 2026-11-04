@@ -2,6 +2,7 @@ package com.ecomm.supportassistant.application;
 
 import com.ecomm.commons.money.Money;
 import com.ecomm.supportassistant.application.port.out.FulfillmentShippingPort;
+import com.ecomm.supportassistant.application.port.out.FulfillmentShippingPort.ReturnAddress;
 import com.ecomm.supportassistant.application.port.out.FulfillmentShippingPort.ShipmentView;
 import com.ecomm.supportassistant.application.port.out.Lookup;
 import com.ecomm.supportassistant.application.port.out.OrderManagementPort;
@@ -11,6 +12,9 @@ import com.ecomm.supportassistant.application.port.out.PaymentPort.History;
 import com.ecomm.supportassistant.application.port.out.PaymentPort.HistoryLine;
 import com.ecomm.supportassistant.application.port.out.PaymentPort.PaymentTransaction;
 import com.ecomm.supportassistant.application.port.out.PaymentPort.PaymentView;
+import com.ecomm.supportassistant.application.port.out.ReturnsWarrantyPort;
+import com.ecomm.supportassistant.application.port.out.ReturnsWarrantyPort.Eligibility;
+import com.ecomm.supportassistant.application.port.out.ReturnsWarrantyPort.RmaView;
 import com.ecomm.supportassistant.application.port.out.SupportModel.ToolDefinition;
 import com.ecomm.supportassistant.domain.Reference;
 import com.ecomm.supportassistant.domain.ToolCall;
@@ -39,6 +43,9 @@ class SupportTools {
   static final String GET_SHIPMENT = "get_shipment";
   static final String GET_PAYMENTS = "get_payments";
   static final String GET_PAYMENT_TRANSACTION_HISTORY = "get_payment_transaction_history";
+  static final String FIND_RMAS = "find_rmas";
+  static final String GET_RMA = "get_rma";
+  static final String CHECK_RETURN_ELIGIBILITY = "check_return_eligibility";
 
   /** How many of the Customer's Orders {@value #FIND_ORDERS} answers. */
   static final int LATEST_ORDERS = 5;
@@ -48,6 +55,15 @@ class SupportTools {
    * #GET_PAYMENT_TRANSACTION_HISTORY} answers.
    */
   static final int HISTORY_LINES = 20;
+
+  /** How many of the Customer's RMAs {@value #FIND_RMAS} answers. */
+  static final int LATEST_RMAS = 10;
+
+  /**
+   * An RMA reference as a Customer types it: eight hex digits, with or without its {@code RMA-}.
+   */
+  private static final Pattern RMA_REFERENCE =
+      Pattern.compile("(?:RMA-)?([0-9A-Fa-f]{8})", Pattern.CASE_INSENSITIVE);
 
   /** An Order reference as a Customer types it: eight hex digits, with or without its {@code #}. */
   private static final Pattern ORDER_REFERENCE = Pattern.compile("#?([0-9A-Fa-f]{8})");
@@ -137,7 +153,61 @@ class SupportTools {
                           "description",
                           "The latest, exclusive, as an ISO 8601 instant")),
                   "additionalProperties",
-                  false)));
+                  false)),
+          new ToolDefinition(
+              FIND_RMAS,
+              "The signed-in Customer's RMAs (returns and warranty claims), newest first, at most "
+                  + LATEST_RMAS
+                  + ": all of them, or with a reference those with that RMA reference, or with an"
+                  + " orderId those of that Order. Each RMA's ID, RMA reference, Order ID and Order"
+                  + " reference, Product name, quantity, kind (RETURN or WARRANTY_CLAIM), status"
+                  + " (REQUESTED, APPROVED, REJECTED, RECEIVED, EXPIRED, INSPECTED, REFUNDED,"
+                  + " EXCHANGED, CLOSED or ON_HOLD), when it was requested and, once approved, its"
+                  + " Send-back deadline. A reference usually finds one RMA; when it finds none,"
+                  + " none of their RMAs has it.",
+              Map.of(
+                  "type",
+                  "object",
+                  "properties",
+                  Map.of(
+                      "reference",
+                      Map.of(
+                          "type",
+                          "string",
+                          "description",
+                          "An RMA reference, such as RMA-3F2A9C1B, with or without the RMA-"),
+                      "orderId",
+                      Map.of("type", "string", "description", "An Order's ID")),
+                  "additionalProperties",
+                  false)),
+          new ToolDefinition(
+              GET_RMA,
+              "One of the signed-in Customer's RMAs by its ID: the same, and the Customer's"
+                  + " reason, when the Return Period or Warranty Window it was checked against"
+                  + " ends, its Refund amount, while it is APPROVED its Return address (where to"
+                  + " send the units, by the Send-back deadline; an error if it can't be looked"
+                  + " up just now), its Inspection (outcome ACCEPTED, REFUSED, FAULT_CONFIRMED or"
+                  + " NO_FAULT_FOUND, and its note), the reference of its Refund once refunded, and"
+                  + " its RMA history (each status it moved to, when, and its note: why it was"
+                  + " rejected, held or closed), oldest first.",
+              Map.of(
+                  "type",
+                  "object",
+                  "properties",
+                  Map.of("rmaId", Map.of("type", "string", "description", "The RMA's ID")),
+                  "required",
+                  List.of("rmaId"),
+                  "additionalProperties",
+                  false)),
+          new ToolDefinition(
+              CHECK_RETURN_ELIGIBILITY,
+              "What each delivered line of one of the signed-in Customer's Orders, by the Order's"
+                  + " ID, is still eligible for: its Order reference, and each line's Variant,"
+                  + " Product name, when its Return Period ends, when its Warranty Window ends (null"
+                  + " when its Product has no Warranty terms) and how many of its units aren't"
+                  + " already in an RMA. Either end may have passed. Not found while the Order isn't"
+                  + " delivered. A return or warranty claim is requested on the Order's page.",
+              orderIdInput()));
 
   private static Map<String, Object> orderIdInput() {
     return Map.of(
@@ -154,14 +224,17 @@ class SupportTools {
   private final OrderManagementPort orderManagement;
   private final FulfillmentShippingPort fulfillmentShipping;
   private final PaymentPort payment;
+  private final ReturnsWarrantyPort returnsWarranty;
 
   SupportTools(
       OrderManagementPort orderManagement,
       FulfillmentShippingPort fulfillmentShipping,
-      PaymentPort payment) {
+      PaymentPort payment,
+      ReturnsWarrantyPort returnsWarranty) {
     this.orderManagement = orderManagement;
     this.fulfillmentShipping = fulfillmentShipping;
     this.payment = payment;
+    this.returnsWarranty = returnsWarranty;
   }
 
   ToolResult run(ToolCall call) {
@@ -240,6 +313,51 @@ class SupportTools {
                     .toList(),
             "No Payment transactions");
       }
+      case FIND_RMAS -> {
+        String reference = null;
+        if (call.input().get("reference") != null) {
+          var matcher =
+              RMA_REFERENCE.matcher(String.valueOf(call.input().get("reference")).strip());
+          if (!matcher.matches()) {
+            yield error(
+                call,
+                "invalidInput",
+                "reference must be an RMA reference: eight hex digits, such as RMA-3F2A9C1B");
+          }
+          reference = matcher.group(1).toUpperCase(Locale.ROOT);
+        }
+        var orderId = call.input().get("orderId") instanceof String id && !id.isBlank() ? id : null;
+        yield result(
+            call,
+            returnsWarranty.rmas(reference, orderId, LATEST_RMAS),
+            rmas -> Map.of("rmas", rmas.stream().map(SupportTools::summary).toList()),
+            rmas -> rmas.stream().flatMap(r -> records(r).stream()).distinct().toList(),
+            "No RMAs");
+      }
+      case GET_RMA -> {
+        if (!(call.input().get("rmaId") instanceof String rmaId) || rmaId.isBlank()) {
+          yield error(call, "invalidInput", "rmaId is required");
+        }
+        yield result(
+            call,
+            returnsWarranty.rma(rmaId),
+            this::detail,
+            SupportTools::records,
+            "No RMA " + rmaId + " among the Customer's RMAs");
+      }
+      case CHECK_RETURN_ELIGIBILITY ->
+          withOrderId(
+              call,
+              orderId ->
+                  result(
+                      call,
+                      returnsWarranty.eligibility(orderId),
+                      lines -> eligibility(orderId, lines),
+                      lines -> List.of(Reference.order(orderId)),
+                      "Order "
+                          + orderId
+                          + " isn't delivered yet, so nothing on it can be returned yet, or it"
+                          + " isn't among the Customer's Orders"));
       default -> error(call, "unknownTool", "There is no tool " + call.tool());
     };
   }
@@ -306,6 +424,111 @@ class SupportTools {
     summary.put("placedAt", order.placedAt().toString());
     summary.put("total", money(order.total()));
     return summary;
+  }
+
+  /** The RMA and its Order, for the reply to link. */
+  private static List<Reference> records(RmaView rma) {
+    return List.of(Reference.rma(rma.id(), rma.reference()), Reference.order(rma.orderId()));
+  }
+
+  private static LinkedHashMap<String, Object> summary(RmaView rma) {
+    var summary = new LinkedHashMap<String, Object>();
+    summary.put("rmaId", rma.id());
+    summary.put("reference", rma.reference());
+    summary.put("orderId", rma.orderId());
+    summary.put("orderReference", Reference.orderReference(rma.orderId()));
+    summary.put("productName", rma.productName());
+    summary.put("quantity", rma.quantity());
+    summary.put("kind", rma.kind());
+    summary.put("status", rma.status());
+    summary.put("requestedAt", rma.requestedAt().toString());
+    summary.put("sendBackBy", text(rma.sendBackBy()));
+    return summary;
+  }
+
+  /**
+   * The RMA in full. While it is approved, its Return address is read too: the Customer needs it
+   * only until the units are sent back. Unread, the RMA is answered without it.
+   */
+  private Map<String, Object> detail(RmaView rma) {
+    var detail = summary(rma);
+    detail.put("reason", rma.reason());
+    detail.put("windowEndsAt", rma.windowEndsAt().toString());
+    detail.put("refundAmount", rma.refundAmount() == null ? null : money(rma.refundAmount()));
+    detail.put("returnAddress", returnAddressWhileApproved(rma));
+    var inspection = rma.inspection();
+    detail.put(
+        "inspection",
+        inspection == null
+            ? null
+            : nullable("outcome", inspection.outcome(), "note", inspection.note()));
+    detail.put("refundReference", rma.refundReference());
+    detail.put(
+        "history",
+        rma.history().stream()
+            .map(s -> nullable("status", s.status(), "at", s.at().toString(), "note", s.note()))
+            .toList());
+    return detail;
+  }
+
+  private static Map<String, Object> eligibility(String orderId, List<Eligibility> lines) {
+    var content = new LinkedHashMap<String, Object>();
+    content.put("orderId", orderId);
+    content.put("orderReference", Reference.orderReference(orderId));
+    content.put(
+        "lines",
+        lines.stream()
+            .map(
+                l ->
+                    nullable(
+                        "variantId",
+                        l.variantId(),
+                        "productName",
+                        l.productName(),
+                        "returnPeriodEndsAt",
+                        l.returnPeriodEndsAt().toString(),
+                        "warrantyWindowEndsAt",
+                        text(l.warrantyWindowEndsAt()),
+                        "unitsFree",
+                        l.unitsFree()))
+            .toList());
+    return content;
+  }
+
+  /**
+   * Where the approved RMA's units go: its Warehouse's Return address, an error saying it can't be
+   * looked up just now, or null when it isn't approved or its Warehouse isn't configured.
+   */
+  private Map<String, Object> returnAddressWhileApproved(RmaView rma) {
+    if (!"APPROVED".equals(rma.status()) || rma.warehouseId() == null) {
+      return null;
+    }
+    return switch (fulfillmentShipping.returnAddress(rma.warehouseId())) {
+      case Lookup.Found<ReturnAddress>(var address) ->
+          Map.of(
+              "name", address.name(),
+              "street", address.street(),
+              "postcode", address.postcode(),
+              "city", address.city(),
+              "country", address.country());
+      case Lookup.NotFound<ReturnAddress>() -> null;
+      case Lookup.Failed<ReturnAddress>(var reason) ->
+          Map.of("error", "unavailable", "message", "It can't be looked up just now: " + reason);
+    };
+  }
+
+  /** A map of these keys and values, which may be null. */
+  private static Map<String, Object> nullable(Object... keysAndValues) {
+    var map = new LinkedHashMap<String, Object>();
+    for (var i = 0; i < keysAndValues.length; i += 2) {
+      map.put((String) keysAndValues[i], keysAndValues[i + 1]);
+    }
+    return map;
+  }
+
+  /** An instant as the model reads it, or null for none. */
+  private static String text(Instant instant) {
+    return instant == null ? null : instant.toString();
   }
 
   private static Map<String, Object> detail(OrderView order) {
