@@ -5,6 +5,8 @@ dependencies {
   implementation("org.springframework.boot:spring-boot-starter-restclient")
   // Conversations.
   implementation("org.springframework.boot:spring-boot-starter-data-redis")
+  // Claude, when the API key is set (ADR 0003).
+  implementation(libs.anthropic.java)
 
   testImplementation(libs.wiremock.standalone)
   testImplementation("org.springframework.boot:spring-boot-testcontainers")

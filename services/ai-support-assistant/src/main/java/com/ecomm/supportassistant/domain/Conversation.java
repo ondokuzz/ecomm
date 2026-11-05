@@ -48,8 +48,8 @@ public record Conversation(
     return with(new Entry.CustomerMessage(text, at), at);
   }
 
-  public Conversation withToolUse(List<ToolCall> calls) {
-    return with(new Entry.ToolUse(calls), lastMessageAt);
+  public Conversation withToolUse(List<ToolCall> calls, String providerContent) {
+    return with(new Entry.ToolUse(calls, providerContent), lastMessageAt);
   }
 
   public Conversation withToolResults(List<ToolResult> results) {

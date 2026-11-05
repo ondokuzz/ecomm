@@ -12,3 +12,7 @@ Every lookup the Support Assistant makes is a read the Customer could make thems
 - A turn reads only while the Customer's token lasts. A turn is short and the Storefront sends a fresh token with each message, so a context's 401 mid-turn is rare; it is an error tool result like any other, and the reply says the lookup couldn't be made.
 - The token is taken from the request's security context, so tools are called on the request's thread.
 - A new tool reads a context's existing Customer read, or a new one guarded the same way: by the token's Customer, never a parameter.
+
+## Revised 2026-11-05
+
+When the model asks for several lookups in one answer (#118), they run at once, each on a virtual thread of its own that is handed the request thread's security context and MDC, so each still reads with the Customer's token and sends the Correlation ID. A single lookup still runs on the request's thread.

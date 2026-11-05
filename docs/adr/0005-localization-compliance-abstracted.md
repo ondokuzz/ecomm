@@ -27,3 +27,7 @@ SMS and push `NotificationProvider`s as built (#92), in Notifications; there is 
 ## Revised 2026-11-03
 
 `SupportModel` as built (#114), in the AI Support Assistant; there is no conflict with the decision above. Given the system prompt, the tools it may ask for and the Conversation so far, its lookups included, it answers either the reply or the lookups it needs first, with the tokens it used. Its one adapter so far is a mock provider, chosen when the API key is empty: deterministic, it picks its tools by keywords in the Customer's message and writes its reply from a template over what they found, naming each record. Claude, through the Anthropic Java SDK, joins as a second adapter in #118; the turn around the port, its tools and the references taken from their results stay in the assistant.
+
+## Revised 2026-11-05
+
+`SupportModel` gains its Claude adapter (#118), through the Anthropic Java SDK; there is no conflict with the decision above. The secret `anthropic-api-key` chooses the adapter at start-up: empty, the mock provider; a key, Claude (the assistant's ADR 0003). The port's answers carry, besides the reply or the lookups and the tokens used, the answer as the provider gave it, which the Conversation keeps and hands back to it on later calls, so Claude reads its own earlier answers, thinking included, unchanged; the mock gives none. A Customer's message reaches Claude prefixed by the adapter with the day it was sent and the Storefront's address, so the system prompt stays the same on every call and is read from the cache.

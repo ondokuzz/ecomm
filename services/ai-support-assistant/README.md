@@ -6,8 +6,9 @@ answers from Order Management's, Fulfillment & Shipping's, Payment's, Returns & 
 Search & Discovery's reads, made when asked with the Customer's own token
 ([ADR 0002](./docs/adr/0002-reads-with-the-customers-own-token.md)). It never acts. Each **Conversation** is kept in the shared Redis under the service's own key prefix; the
 service has no database, publishes no events and consumes no topics. Its model is behind the
-`SupportModel` port ([ADR 0005](../../docs/adr/0005-localization-compliance-abstracted.md)), so far
-answered by a [mock provider](#provider). It stays in Java ([ADR 0001](./docs/adr/0001-stays-in-java.md)),
+`SupportModel` port ([ADR 0005](../../docs/adr/0005-localization-compliance-abstracted.md)),
+answered by Claude when an API key is given, or else by a [mock provider](#provider)
+([ADR 0003](./docs/adr/0003-claude-behind-a-port-with-a-mock-provider.md)). It stays in Java ([ADR 0001](./docs/adr/0001-stays-in-java.md)),
 and is built from [`platform/service-template`](../../platform/service-template/README.md), so its
 layout, security and testing conventions apply here.
 
@@ -58,8 +59,9 @@ Pixel 9 Pro" links that Product, not the Google Pixel 9 as well.
 
 A turn adds the Customer's message, then asks the model, handing it the fixed system prompt, the
 tools it may ask for and the Conversation so far. While it answers with lookups, the turn runs them,
-one at a time on the request's thread, adds the calls and their results to the Conversation, and
-asks again; once it answers with text, that is the reply. The Conversation keeps every lookup and
+at once when it asks for several (each on a thread of its own, with the Customer's token and the
+request's Correlation ID), adds the calls and their results to the Conversation, and asks again,
+with the results together; once it answers with text, that is the reply. The Conversation keeps every lookup and
 its result, not only the messages, so a follow-up ("and is it paid?") reads what was looked up
 before. The system prompt names no Customer and no date, so it is the same on every turn.
 
@@ -95,8 +97,43 @@ can't be looked up now. The reply says so.
 The secret `anthropic-api-key`, mounted as a file, holds the Anthropic API key. `make secrets`
 writes it empty when it is missing and never overwrites it. Empty, the **mock provider** answers,
 and the service says so at start-up (`No Anthropic API key: the Support Assistant answers with the
-mock provider`); the key is never logged. The Claude adapter isn't built yet (#118): with a key, the
-service warns that it still answers with the mock.
+mock provider`); the key is never logged. With a key, **Claude** answers (`An Anthropic API key is
+set: the Support Assistant answers with Claude (claude-opus-5-5)`).
+
+### Claude
+
+To give the stack a key, write it into the secret's file and recreate the service, from the repo
+root:
+
+```sh
+printf '%s' 'sk-ant-…' > .secrets/ecomm/anthropic-api-key   # the Compose project's name, ecomm by default
+docker compose up -d ai-support-assistant
+```
+
+Emptying the file and recreating the service the same way goes back to the mock. **With a key,
+Customers' questions, and the data the tools return about them, go to Anthropic's API**, and each
+message costs tokens; the logs hold neither the words nor the answers, only the tokens.
+
+The adapter calls the Messages API through the Anthropic Java SDK
+([ADR 0003](./docs/adr/0003-claude-behind-a-port-with-a-mock-provider.md)):
+
+- the model `claude-opus-5-5` (`ecomm.support-assistant.anthropic-model`), with its default adaptive
+  thinking and effort `low`, `max_tokens` 4,000, and no streaming;
+- the tools with `strict: true` and `tool_choice` `auto`;
+- a `cache_control` breakpoint after the system prompt, so the tools and the system prompt are read
+  from the cache on every call after the first; the turn's log line shows the cache reads;
+- the server-side refusal fallback (`fallbacks: "default"`).
+
+Each of the Customer's messages reaches Claude prefixed by the service with the day it was sent and
+the Storefront's address (`ecomm.support-assistant.storefront-url`, `http://localhost:8080`):
+`[Sent on Thursday 5 November 2026. The Storefront is at http://localhost:8080.]`. Claude's answers
+go back to it on later calls as it gave them, its thinking included. An answer that ends its turn is
+the reply; one that asks for tools runs them; a refusal that stands is "I'm sorry, I can't help with
+that. …", and an answer cut off at `max_tokens` "I'm sorry, my answer got too long to finish. …";
+any other stop fails the turn. Each call times out after 30 seconds and is retried once
+(`anthropic-timeout`, `anthropic-max-retries`).
+
+### The mock provider
 
 The mock provider is deterministic. Each time it is asked, it reads the Customer's latest message
 and what the turn has looked up so far, and asks for the next lookup or replies from a template over

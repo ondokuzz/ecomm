@@ -13,6 +13,7 @@ import com.ecomm.supportassistant.application.port.out.TimeSource;
 import com.ecomm.supportassistant.domain.Conversation;
 import com.ecomm.supportassistant.domain.Entry;
 import com.ecomm.supportassistant.domain.Reference;
+import com.ecomm.supportassistant.domain.ToolCall;
 import com.ecomm.supportassistant.domain.ToolResult;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -20,6 +21,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -27,9 +30,10 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Runs a Customer's Conversations. A turn adds the Customer's message, then asks the model and runs
- * the lookups it asks for, one answer at a time, until it replies. The reply's references are the
- * records the turn's lookups returned that its text names, so a link always points to a real record
- * of the Customer's, never to one the model made up.
+ * the lookups it asks for, one answer at a time, until it replies. The lookups of one answer run at
+ * once, and their results go back to the model together. The reply's references are the records the
+ * turn's lookups returned that its text names, so a link always points to a real record of the
+ * Customer's, never to one the model made up.
  */
 public class ConversationService implements ConversationsUseCase {
 
@@ -38,10 +42,13 @@ public class ConversationService implements ConversationsUseCase {
   private final ConversationRepository conversations;
   private final SupportModel model;
   private final SupportTools tools;
+  private final Executor lookups;
   private final TimeSource time;
   private final Duration lapsesAfter;
 
   /**
+   * @param lookups runs each of an answer's lookups when it asks for more than one, with the
+   *     request thread's Customer token and Correlation ID
    * @param lapsesAfter how long a Conversation is kept after its last message
    */
   public ConversationService(
@@ -52,6 +59,7 @@ public class ConversationService implements ConversationsUseCase {
       PaymentPort payment,
       ReturnsWarrantyPort returnsWarranty,
       SearchDiscoveryPort searchDiscovery,
+      Executor lookups,
       TimeSource time,
       Duration lapsesAfter) {
     this.conversations = conversations;
@@ -59,6 +67,7 @@ public class ConversationService implements ConversationsUseCase {
     this.tools =
         new SupportTools(
             orderManagement, fulfillmentShipping, payment, returnsWarranty, searchDiscovery);
+    this.lookups = lookups;
     this.time = time;
     this.lapsesAfter = lapsesAfter;
   }
@@ -88,15 +97,16 @@ public class ConversationService implements ConversationsUseCase {
                     SystemPrompt.TEXT, SupportTools.DEFINITIONS, conversation.entries()));
         usage = usage.plus(answer.usage());
         switch (answer) {
-          case SupportModel.ToolUse(var toolCalls, var ignored) -> {
-            var turnResults = toolCalls.stream().map(tools::run).toList();
+          case SupportModel.ToolUse(var toolCalls, var ignored, var providerContent) -> {
+            var turnResults = runAtOnce(toolCalls);
             results.addAll(turnResults);
-            conversation = conversation.withToolUse(toolCalls).withToolResults(turnResults);
+            conversation =
+                conversation.withToolUse(toolCalls, providerContent).withToolResults(turnResults);
           }
-          case SupportModel.Reply(var replyText, var ignored) -> {
+          case SupportModel.Reply(var replyText, var ignored, var providerContent) -> {
             var reply =
                 new Entry.AssistantReply(
-                    replyText, referencesNamedIn(replyText, results), time.now());
+                    replyText, referencesNamedIn(replyText, results), time.now(), providerContent);
             conversations.save(conversation.withReply(reply), lapsesAfter);
             replied = true;
             return reply;
@@ -120,6 +130,18 @@ public class ConversationService implements ConversationsUseCase {
           usage.cacheRead(),
           Duration.ofNanos(System.nanoTime() - started).toMillis());
     }
+  }
+
+  /** Runs the lookups of one answer, at once when there are several: their results, in order. */
+  private List<ToolResult> runAtOnce(List<ToolCall> calls) {
+    if (calls.size() == 1) {
+      return List.of(tools.run(calls.getFirst()));
+    }
+    var running =
+        calls.stream()
+            .map(call -> CompletableFuture.supplyAsync(() -> tools.run(call), lookups))
+            .toList();
+    return running.stream().map(CompletableFuture::join).toList();
   }
 
   /**

@@ -39,9 +39,28 @@ public interface SupportModel {
     Usage usage();
   }
 
-  /** The reply to the Customer: the turn ends. */
-  record Reply(String text, Usage usage) implements Answer {}
+  /**
+   * The reply to the Customer: the turn ends.
+   *
+   * @param providerContent the answer as the provider gave it, its thinking included, which it is
+   *     handed back as is on later calls; null for a provider that needs nothing back
+   */
+  record Reply(String text, Usage usage, String providerContent) implements Answer {
 
-  /** The lookups the model needs before it replies, whose results go back to it. */
-  record ToolUse(List<ToolCall> calls, Usage usage) implements Answer {}
+    public Reply(String text, Usage usage) {
+      this(text, usage, null);
+    }
+  }
+
+  /**
+   * The lookups the model needs before it replies, whose results go back to it.
+   *
+   * @param providerContent as for {@link Reply}
+   */
+  record ToolUse(List<ToolCall> calls, Usage usage, String providerContent) implements Answer {
+
+    public ToolUse(List<ToolCall> calls, Usage usage) {
+      this(calls, usage, null);
+    }
+  }
 }

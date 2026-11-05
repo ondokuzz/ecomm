@@ -29,3 +29,7 @@ This is the shape a secrets manager takes on in Sprint 8: in AWS, a secret is mo
 ## Revised 2026-11-03
 
 `anthropic-api-key`, the AI Support Assistant's Anthropic API key, is the first secret that can't be generated (#114). `make secrets` writes it empty when it is missing and, like every secret, never overwrites it, so a key written into `.secrets/<project>/anthropic-api-key` by hand stays. Empty means the mock provider, which the service says at start-up; the key is never logged. `compose-secrets-check.sh` skips an empty secret, since it has no value to leak.
+
+## Revised 2026-11-05
+
+A key in `anthropic-api-key` now has the AI Support Assistant answer with Claude (#118). As the secret can't be generated, the assistant's README says how to give the stack one: write it into `.secrets/<project>/anthropic-api-key`, then `docker compose up -d ai-support-assistant`, which recreates the service with the new file; emptying the file the same way goes back to the mock provider. The key still lives only in that file, never in the Compose file or the environment, and is never logged.

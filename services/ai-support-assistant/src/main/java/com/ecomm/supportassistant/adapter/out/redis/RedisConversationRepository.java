@@ -58,25 +58,34 @@ class RedisConversationRepository implements ConversationRepository {
       Instant at,
       List<Reference> references,
       List<ToolCall> calls,
-      List<ToolResult> results) {
+      List<ToolResult> results,
+      String providerContent) {
 
     static StoredEntry of(Entry entry) {
       return switch (entry) {
         case Entry.CustomerMessage m ->
-            new StoredEntry("CUSTOMER_MESSAGE", m.text(), m.at(), null, null, null);
+            new StoredEntry("CUSTOMER_MESSAGE", m.text(), m.at(), null, null, null, null);
         case Entry.AssistantReply r ->
-            new StoredEntry("ASSISTANT_REPLY", r.text(), r.at(), r.references(), null, null);
-        case Entry.ToolUse u -> new StoredEntry("TOOL_USE", null, null, null, u.calls(), null);
+            new StoredEntry(
+                "ASSISTANT_REPLY",
+                r.text(),
+                r.at(),
+                r.references(),
+                null,
+                null,
+                r.providerContent());
+        case Entry.ToolUse u ->
+            new StoredEntry("TOOL_USE", null, null, null, u.calls(), null, u.providerContent());
         case Entry.ToolResults r ->
-            new StoredEntry("TOOL_RESULTS", null, null, null, null, r.results());
+            new StoredEntry("TOOL_RESULTS", null, null, null, null, r.results(), null);
       };
     }
 
     Entry toEntry() {
       return switch (type) {
         case "CUSTOMER_MESSAGE" -> new Entry.CustomerMessage(text, at);
-        case "ASSISTANT_REPLY" -> new Entry.AssistantReply(text, references, at);
-        case "TOOL_USE" -> new Entry.ToolUse(calls);
+        case "ASSISTANT_REPLY" -> new Entry.AssistantReply(text, references, at, providerContent);
+        case "TOOL_USE" -> new Entry.ToolUse(calls, providerContent);
         case "TOOL_RESULTS" -> new Entry.ToolResults(results);
         default -> throw new IllegalStateException("Unknown Conversation entry " + type);
       };

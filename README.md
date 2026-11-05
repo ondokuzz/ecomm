@@ -310,7 +310,7 @@ properties, through its config tree ([ADR 0011](./docs/adr/0011-secrets-as-gener
 | `checkout-client-secret`, `orchestration-client-secret`, `notifications-client-secret` | The confidential Keycloak clients and the services that use them; realm sync sets each client's secret from its file on every start ([Identity & Access](./services/identity-access/README.md#client-secrets)) |
 | `payment-webhook-secret` | Payment, and its mock gateway, which signs its webhooks with it |
 | `carrier-webhook-secret` | Fulfillment & Shipping, and its mock carrier, which signs its Carrier webhooks with it |
-| `anthropic-api-key` | The AI Support Assistant's Anthropic API key: written empty, which runs its mock provider ([its README](./services/ai-support-assistant/README.md#provider)) |
+| `anthropic-api-key` | The AI Support Assistant's Anthropic API key: written empty, which runs its mock provider; a key written into it runs Claude ([its README](./services/ai-support-assistant/README.md#claude)) |
 
 A new secret is 32 random bytes, URL-safe, except `anthropic-api-key`, which can't be generated
 and is written empty. An existing file is never overwritten. On a stack whose
