@@ -7,6 +7,7 @@ import com.ecomm.supportassistant.application.port.out.FulfillmentShippingPort;
 import com.ecomm.supportassistant.application.port.out.OrderManagementPort;
 import com.ecomm.supportassistant.application.port.out.PaymentPort;
 import com.ecomm.supportassistant.application.port.out.ReturnsWarrantyPort;
+import com.ecomm.supportassistant.application.port.out.SearchDiscoveryPort;
 import com.ecomm.supportassistant.application.port.out.SupportModel;
 import com.ecomm.supportassistant.application.port.out.TimeSource;
 import com.ecomm.supportassistant.domain.Conversation;
@@ -50,11 +51,14 @@ public class ConversationService implements ConversationsUseCase {
       FulfillmentShippingPort fulfillmentShipping,
       PaymentPort payment,
       ReturnsWarrantyPort returnsWarranty,
+      SearchDiscoveryPort searchDiscovery,
       TimeSource time,
       Duration lapsesAfter) {
     this.conversations = conversations;
     this.model = model;
-    this.tools = new SupportTools(orderManagement, fulfillmentShipping, payment, returnsWarranty);
+    this.tools =
+        new SupportTools(
+            orderManagement, fulfillmentShipping, payment, returnsWarranty, searchDiscovery);
     this.time = time;
     this.lapsesAfter = lapsesAfter;
   }
@@ -118,24 +122,62 @@ public class ConversationService implements ConversationsUseCase {
     }
   }
 
-  /** The records {@code results} returned that {@code text} names, each once, in order. */
+  /**
+   * The records {@code results} returned that {@code text} names, each once, in order. A name only
+   * part of a longer one the text names doesn't count: "Google Pixel 9 Pro" names that Product, not
+   * the Google Pixel 9 as well.
+   */
   private static List<Reference> referencesNamedIn(String text, List<ToolResult> results) {
+    var records = results.stream().flatMap(r -> r.records().stream()).toList();
+    var names = records.stream().flatMap(r -> namesOf(r).stream()).distinct().toList();
     var byId = new LinkedHashMap<String, Reference>();
-    results.stream()
-        .flatMap(r -> r.records().stream())
-        .filter(record -> isNamedIn(text, record))
+    records.stream()
+        .filter(record -> isNamedIn(text, record, names))
         .forEach(record -> byId.putIfAbsent(record.id(), record));
     return List.copyOf(byId.values());
   }
 
-  /** Whether {@code text} names the record by its reference, with or without its {@code #}. */
-  private static boolean isNamedIn(String text, Reference record) {
+  /**
+   * What the record may be named by: its reference, without an Order reference's {@code #}, and a
+   * Product's name.
+   */
+  private static List<String> namesOf(Reference record) {
     var reference = record.reference().replaceFirst("^#", "");
+    return record.kind() == Reference.Kind.PRODUCT
+        ? List.of(reference, record.label())
+        : List.of(reference);
+  }
+
+  /**
+   * Whether {@code text} names the record, in either case, by a whole word or words not within a
+   * longer one of {@code names}.
+   */
+  private static boolean isNamedIn(String text, Reference record, List<String> names) {
+    for (var name : namesOf(record)) {
+      var matcher = whole(name).matcher(text);
+      while (matcher.find()) {
+        var start = matcher.start();
+        var end = matcher.end();
+        var withinLonger =
+            names.stream()
+                .filter(n -> n.length() > name.length())
+                .anyMatch(
+                    n ->
+                        whole(n)
+                            .matcher(text)
+                            .results()
+                            .anyMatch(m -> m.start() <= start && m.end() >= end));
+        if (!withinLonger) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  private static Pattern whole(String name) {
     return Pattern.compile(
-            "(?<![0-9A-Za-z])" + Pattern.quote(reference) + "(?![0-9A-Za-z])",
-            Pattern.CASE_INSENSITIVE)
-        .matcher(text)
-        .find();
+        "(?<![0-9A-Za-z])" + Pattern.quote(name) + "(?![0-9A-Za-z])", Pattern.CASE_INSENSITIVE);
   }
 
   @Override

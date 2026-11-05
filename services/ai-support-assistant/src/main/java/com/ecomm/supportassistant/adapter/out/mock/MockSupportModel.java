@@ -16,8 +16,12 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.TreeMap;
 import java.util.function.Function;
+import java.util.regex.MatchResult;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * The scripted provider the stack runs without an API key (ADR 0005). It is deterministic: it picks
@@ -28,7 +32,9 @@ import java.util.regex.Pattern;
  * <p>Asked about an Order, it finds the one the message names by its Order reference, or else the
  * Customer's latest, and looks it up with its Order Status history. Asked about an RMA by its RMA
  * reference, it looks that one up; asked about returns, whether the Order's units can still be
- * returned or claimed under warranty, or else the Customer's RMAs.
+ * returned or claimed under warranty, or else the Customer's RMAs. Asked about a Product, it
+ * searches the Catalog for the message's words, and answers the Product the message names with its
+ * Variants' Stock and Prices or its Warranty terms, or else lists what it found.
  */
 public class MockSupportModel implements SupportModel {
 
@@ -54,6 +60,109 @@ public class MockSupportModel implements SupportModel {
       Pattern.compile(
           "\\b(can|could|still|eligible|eligibility|under warranty|how long|until|want|request|start)\\b",
           Pattern.CASE_INSENSITIVE);
+
+  /** Asking whether a Product is in Stock, or what it costs. */
+  private static final Pattern ABOUT_STOCK =
+      Pattern.compile(
+          "\\b(stock|stocked|available|availability|prices?|costs?|how much)\\b",
+          Pattern.CASE_INSENSITIVE);
+
+  /** Asking what a Product's Warranty terms are. */
+  private static final Pattern ABOUT_WARRANTY_TERMS =
+      Pattern.compile("\\b(warrant\\w*|guarantee\\w*)\\b", Pattern.CASE_INSENSITIVE);
+
+  /** Asking for Products that fit a need. */
+  private static final Pattern ABOUT_SEARCH =
+      Pattern.compile(
+          "\\b(looking for|recommend\\w*|suggest\\w*|search\\w*|do you (have|sell)|show me|find"
+              + " me|alternatives?)\\b",
+          Pattern.CASE_INSENSITIVE);
+
+  /**
+   * Words saying the question is about the Customer's own things, not the Catalog's: "Is my phone
+   * still under warranty?" is about an Order's Warranty Window.
+   */
+  private static final Pattern ABOUT_MINE =
+      Pattern.compile(
+          "\\b(my|mine|i bought|i ordered|orders?|rmas?|claim\\w*)\\b", Pattern.CASE_INSENSITIVE);
+
+  /** The words of a question about Products that aren't what to search for. */
+  private static final Set<String> NOT_SEARCHED =
+      Set.of(
+          "a",
+          "about",
+          "am",
+          "an",
+          "and",
+          "any",
+          "are",
+          "available",
+          "availability",
+          "be",
+          "best",
+          "buy",
+          "can",
+          "come",
+          "comes",
+          "cost",
+          "costs",
+          "could",
+          "do",
+          "does",
+          "find",
+          "for",
+          "get",
+          "good",
+          "guarantee",
+          "has",
+          "have",
+          "how",
+          "i",
+          "i'm",
+          "im",
+          "in",
+          "is",
+          "it",
+          "its",
+          "it's",
+          "look",
+          "looking",
+          "me",
+          "much",
+          "need",
+          "of",
+          "on",
+          "one",
+          "or",
+          "please",
+          "price",
+          "prices",
+          "recommend",
+          "search",
+          "sell",
+          "show",
+          "some",
+          "still",
+          "stock",
+          "stocked",
+          "suggest",
+          "tell",
+          "that",
+          "the",
+          "there",
+          "this",
+          "to",
+          "want",
+          "warranty",
+          "what",
+          "what's",
+          "whats",
+          "which",
+          "with",
+          "would",
+          "you");
+
+  private static final Pattern WORD = Pattern.compile("[\\p{L}\\p{N}'()-]+");
 
   private static final Pattern ABOUT_ORDERS =
       Pattern.compile("\\b(orders?|status)\\b", Pattern.CASE_INSENSITIVE);
@@ -82,6 +191,8 @@ public class MockSupportModel implements SupportModel {
   static final String FIND_RMAS = "find_rmas";
   static final String GET_RMA = "get_rma";
   static final String CHECK_RETURN_ELIGIBILITY = "check_return_eligibility";
+  static final String SEARCH_PRODUCTS = "search_products";
+  static final String GET_PRODUCT = "get_product";
 
   /** An Order Status whose Order has no Shipment to look up: not yet paid, or never to be. */
   private static final List<String> NOT_SHIPPING = List.of("PLACED", "CANCELLED");
@@ -91,8 +202,13 @@ public class MockSupportModel implements SupportModel {
 
   static final String WHAT_I_DO =
       "I can help with your Orders, their Shipments and their Payments, and your returns and"
-          + " warranty claims. Ask me, for example, \"Where is my Order?\", \"Why was I charged"
-          + " twice?\" or \"Can I still return my Order?\"";
+          + " warranty claims, and our Products. Ask me, for example, \"Where is my Order?\", \"Why"
+          + " was I charged twice?\", \"Can I still return my Order?\" or \"Is the Pixel 9 in"
+          + " stock?\"";
+
+  static final String WHICH_PRODUCT =
+      "Which Product do you mean? Tell me its name, or what you're looking for, and I'll look it"
+          + " up.";
 
   @Override
   public Answer answer(Request request) {
@@ -129,6 +245,9 @@ public class MockSupportModel implements SupportModel {
       var failed =
           results.stream().filter(r -> r.outcome() == ToolResult.Outcome.ERROR).findFirst();
       if (failed.isPresent()) {
+        if (List.of(SEARCH_PRODUCTS, GET_PRODUCT).contains(failed.get().tool())) {
+          return reply("I couldn't look up our Products just now. Please try again in a moment.");
+        }
         return reply(
             UNAVAILABLE.formatted(
                 switch (failed.get().tool()) {
@@ -143,6 +262,9 @@ public class MockSupportModel implements SupportModel {
         return rmaByReference(rmaReference.get());
       }
       var reference = orderReference();
+      if (reference.isEmpty() && aboutProducts()) {
+        return products();
+      }
       if (ABOUT_RETURNS.matcher(message).find()) {
         return ABOUT_ELIGIBILITY.matcher(message).find()
             ? eligibility(reference)
@@ -319,6 +441,85 @@ public class MockSupportModel implements SupportModel {
         return reply("I couldn't find that RMA among yours.");
       }
       return reply(rmaStatus(rma.get().content()));
+    }
+
+    /** Whether the message asks about the Catalog's Products, rather than the Customer's own. */
+    private boolean aboutProducts() {
+      return !ABOUT_MINE.matcher(message).find()
+          && !ABOUT_PAYMENTS.matcher(message).find()
+          && (ABOUT_STOCK.matcher(message).find()
+              || ABOUT_WARRANTY_TERMS.matcher(message).find()
+              || ABOUT_SEARCH.matcher(message).find());
+    }
+
+    /**
+     * Searches the Catalog for the message's words; then the Product it names, looked up, with its
+     * Warranty terms or its Variants' Stock and Prices, or else the Products found.
+     */
+    private Answer products() {
+      var query = searchedWords();
+      if (query.isEmpty()) {
+        return reply(WHICH_PRODUCT);
+      }
+      var found = result(SEARCH_PRODUCTS);
+      if (found.isEmpty()) {
+        return use(SEARCH_PRODUCTS, Map.of("query", query));
+      }
+      var products = list(found.get().content().get("products"));
+      if (products.isEmpty()) {
+        return reply(
+            "I couldn't find a Product for \"%s\". Try other words, or browse the Catalog."
+                .formatted(query));
+      }
+      var aboutWarranty = ABOUT_WARRANTY_TERMS.matcher(message).find();
+      var named = named(products);
+      if (named.isEmpty() || !(aboutWarranty || ABOUT_STOCK.matcher(message).find())) {
+        return reply(MockSupportModel.found(query, products));
+      }
+      var product = result(GET_PRODUCT);
+      if (product.isEmpty()) {
+        return use(GET_PRODUCT, Map.of("sku", named.get().get("sku")));
+      }
+      if (product.get().outcome() == ToolResult.Outcome.NOT_FOUND) {
+        return reply("I couldn't find the %s in the Catalog.".formatted(named.get().get("name")));
+      }
+      var content = product.get().content();
+      return reply(aboutWarranty ? warrantyTerms(content) : stock(content, message));
+    }
+
+    /** The message's words that say which Products, as typed, or empty if none do. */
+    private String searchedWords() {
+      return WORD.matcher(message)
+          .results()
+          .map(MatchResult::group)
+          .filter(w -> !NOT_SEARCHED.contains(w.toLowerCase(Locale.ROOT)))
+          .collect(Collectors.joining(" "));
+    }
+
+    /**
+     * The Product whose name the message names most of, at least half of its words: "the Pixel 9"
+     * names the Google Pixel 9 rather than the Google Pixel 9 Pro.
+     */
+    private Optional<Map<String, Object>> named(List<Map<String, Object>> products) {
+      var said = words(message);
+      Map<String, Object> best = null;
+      var bestSaid = 0;
+      var bestUnsaid = 0;
+      for (var product : products) {
+        var name = words(String.valueOf(product.get("name")));
+        var inMessage = (int) name.stream().filter(said::contains).count();
+        var unsaid = name.size() - inMessage;
+        if (inMessage * 2 >= name.size()
+            && inMessage > 0
+            && (best == null
+                || inMessage > bestSaid
+                || (inMessage == bestSaid && unsaid < bestUnsaid))) {
+          best = product;
+          bestSaid = inMessage;
+          bestUnsaid = unsaid;
+        }
+      }
+      return Optional.ofNullable(best);
     }
 
     /** The RMA reference the message names, as {@code RMA-3F2A9C1B}. */
@@ -542,6 +743,109 @@ public class MockSupportModel implements SupportModel {
             address.get("postcode"),
             address.get("city"),
             address.get("country"));
+  }
+
+  /**
+   * "I found 2 Products for "noise cancelling headphones": the Sony WH-1000XM5 at 379.00 EUR, in
+   * Stock; and the Bose QuietComfort Ultra Headphones from 449.00 EUR, out of Stock."
+   */
+  private static String found(String query, List<Map<String, Object>> products) {
+    var each =
+        products.stream()
+            .map(
+                p ->
+                    "the %s %s %s, %s"
+                        .formatted(
+                            p.get("name"),
+                            Boolean.TRUE.equals(p.get("priceVaries")) ? "from" : "at",
+                            money(p.get("priceFrom")),
+                            inStock(p.get("inStock"))))
+            .toList();
+    return "I found %d Product%s for \"%s\": %s."
+        .formatted(
+            products.size(),
+            products.size() == 1 ? "" : "s",
+            query,
+            each.size() == 1
+                ? each.getFirst()
+                : String.join("; ", each.subList(0, each.size() - 1)) + "; and " + each.getLast());
+  }
+
+  /**
+   * "The Google Pixel 9 is out of Stock in Obsidian, 256 GB at 899.00 EUR.": the Variants whose
+   * axis values the message names most of, or else every one, in Stock first.
+   */
+  private static String stock(Map<String, Object> product, String message) {
+    var said = message.toLowerCase(Locale.ROOT);
+    var variants = list(product.get("variants"));
+    var named =
+        variants.stream()
+            .collect(
+                Collectors.groupingBy(
+                    v ->
+                        axisValues(v).stream()
+                            .filter(
+                                value ->
+                                    Pattern.compile(
+                                            "(?<![0-9a-z])"
+                                                + Pattern.quote(value.toLowerCase(Locale.ROOT))
+                                                + "(?![0-9a-z])")
+                                        .matcher(said)
+                                        .find())
+                            .count(),
+                    TreeMap::new,
+                    Collectors.toList()))
+            .lastEntry()
+            .getValue();
+    var clauses = new ArrayList<String>();
+    for (var inStock : List.of(true, false)) {
+      var each =
+          named.stream()
+              .filter(v -> inStock.equals(v.get("inStock")))
+              .map(
+                  v -> {
+                    var axes = String.join(", ", axisValues(v));
+                    return (axes.isEmpty() ? "at " : axes + " at ") + money(v.get("price"));
+                  })
+              .toList();
+      if (!each.isEmpty()) {
+        var first = each.getFirst().startsWith("at ") ? " " : " in ";
+        clauses.add(inStock(inStock) + first + sentence(each));
+      }
+    }
+    return "The %s is %s.".formatted(product.get("name"), String.join(", and ", clauses));
+  }
+
+  /**
+   * "The Google Pixel 9 comes with Google's 24-month warranty, counted from the day it is
+   * delivered.", or that it has none.
+   */
+  private static String warrantyTerms(Map<String, Object> product) {
+    if (!(product.get("warranty") instanceof Map<?, ?> warranty)) {
+      return "The %s has no warranty.".formatted(product.get("name"));
+    }
+    var whose = warranty.get("manufacturer") == null ? "a" : warranty.get("manufacturer") + "'s";
+    return "The %s comes with %s %s-month warranty, counted from the day it is delivered."
+        .formatted(product.get("name"), whose, warranty.get("months"));
+  }
+
+  /** A Variant's axis values, in its axes' order: "Obsidian", "256 GB". */
+  private static List<String> axisValues(Map<String, Object> variant) {
+    return variant.get("axisValues") instanceof Map<?, ?> values
+        ? values.values().stream().map(String::valueOf).toList()
+        : List.of();
+  }
+
+  private static String inStock(Object inStock) {
+    return Boolean.TRUE.equals(inStock) ? "in Stock" : "out of Stock";
+  }
+
+  /** The words of {@code text}, in lower case. */
+  private static Set<String> words(String text) {
+    return WORD.matcher(text.toLowerCase(Locale.ROOT))
+        .results()
+        .map(MatchResult::group)
+        .collect(Collectors.toSet());
   }
 
   /** ": the reason", if there is one. */

@@ -21,6 +21,16 @@ describe('referencePath', () => {
     }
     expect(referencePath(rma)).toBe('/returns/3f2a9c1b-0000-4000-8000-000000000011')
   })
+
+  it('links a Product to its Product page, by its SKU', () => {
+    const product: Reference = {
+      kind: 'PRODUCT',
+      id: 'PHN-PIXEL-9',
+      reference: 'PHN-PIXEL-9',
+      label: 'Google Pixel 9',
+    }
+    expect(referencePath(product)).toBe('/products/PHN-PIXEL-9')
+  })
 })
 
 describe('remainingCharacters', () => {

@@ -23,9 +23,9 @@ import org.testcontainers.containers.GenericContainer;
 
 /**
  * Base for HTTP-seam tests. A WireMock server stands in for each context the tools read (Order
- * Management, Fulfillment & Shipping, Payment and Returns & Warranty), and one Redis container
- * holds the Conversations. The API key is empty, so the mock provider answers. Each test starts
- * with no stubs and no Conversations.
+ * Management, Fulfillment & Shipping, Payment, Returns & Warranty and Search & Discovery), and one
+ * Redis container holds the Conversations. The API key is empty, so the mock provider answers. Each
+ * test starts with no stubs and no Conversations.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureRestTestClient
@@ -42,6 +42,8 @@ abstract class SupportAssistantApiTest {
 
   static final WireMockServer RETURNS_WARRANTY = new WireMockServer(wireMockConfig().dynamicPort());
 
+  static final WireMockServer SEARCH_DISCOVERY = new WireMockServer(wireMockConfig().dynamicPort());
+
   static final GenericContainer<?> REDIS = new GenericContainer<>("redis:7").withExposedPorts(6379);
 
   static {
@@ -49,6 +51,7 @@ abstract class SupportAssistantApiTest {
     FULFILLMENT_SHIPPING.start();
     PAYMENT.start();
     RETURNS_WARRANTY.start();
+    SEARCH_DISCOVERY.start();
     REDIS.start();
   }
 
@@ -59,6 +62,7 @@ abstract class SupportAssistantApiTest {
     registry.add("ecomm.support-assistant.fulfillment-shipping-url", FULFILLMENT_SHIPPING::baseUrl);
     registry.add("ecomm.support-assistant.payment-url", PAYMENT::baseUrl);
     registry.add("ecomm.support-assistant.returns-warranty-url", RETURNS_WARRANTY::baseUrl);
+    registry.add("ecomm.support-assistant.search-discovery-url", SEARCH_DISCOVERY::baseUrl);
     // Long enough for a cold WireMock's first answer; the timeout test delays its by 3 seconds.
     registry.add("ecomm.support-assistant.read-timeout", () -> "2s");
     registry.add("spring.data.redis.host", REDIS::getHost);
@@ -78,6 +82,7 @@ abstract class SupportAssistantApiTest {
     FULFILLMENT_SHIPPING.resetAll();
     PAYMENT.resetAll();
     RETURNS_WARRANTY.resetAll();
+    SEARCH_DISCOVERY.resetAll();
     REDIS.execInContainer("redis-cli", "FLUSHALL");
   }
 
@@ -462,6 +467,65 @@ abstract class SupportAssistantApiTest {
                      "returnAddress": {"name": "Ecomm Returns Berlin", "street": "Lagerweg 3",
                                        "postcode": "12099", "city": "Berlin", "country": "DE"}}
                     """)));
+  }
+
+  // --- Search & Discovery ---
+
+  /**
+   * The seeded Google Pixel 9, as Search & Discovery answers it: in Obsidian or Porcelain, 128 GB
+   * at 799.00 EUR, and in Obsidian, 256 GB at 899.00 EUR, out of Stock; with Google's 24-month
+   * Warranty terms.
+   */
+  static final String PIXEL_9 =
+      """
+      {"sku": "PHN-PIXEL-9", "name": "Google Pixel 9",
+       "category": {"slug": "phones", "name": "Phones"},
+       "attributes": {"brand": "Google", "screen": "6.3 in"},
+       "warranty": {"months": 24, "manufacturer": "Google"},
+       "variants": [{"id": "PHN-PIXEL-9", "axisValues": {"color": "Obsidian", "storage": "128 GB"},
+                     "price": {"amountMinor": 79900, "currency": "EUR"}, "inStock": true},
+                    {"id": "PHN-PIXEL-9-OBSIDIAN-256",
+                     "axisValues": {"color": "Obsidian", "storage": "256 GB"},
+                     "price": {"amountMinor": 89900, "currency": "EUR"}, "inStock": false},
+                    {"id": "PHN-PIXEL-9-PORCELAIN-128",
+                     "axisValues": {"color": "Porcelain", "storage": "128 GB"},
+                     "price": {"amountMinor": 79900, "currency": "EUR"}, "inStock": true}]}
+      """;
+
+  /** Search & Discovery answers the Product {@code sku} so. */
+  static void stubProduct(String sku, ResponseDefinitionBuilder response) {
+    SEARCH_DISCOVERY.stubFor(get(urlPathEqualTo("/products/" + sku)).willReturn(response));
+  }
+
+  /**
+   * A Product's summary, as a search answers it: its lowest Price, {@code priceVaries} when its
+   * Variants' differ, and whether any Variant is in Stock.
+   */
+  static String productSummary(
+      String sku, String name, long priceFromMinor, boolean priceVaries, boolean inStock) {
+    return """
+        {"sku": "%s", "name": "%s", "image": null,
+         "priceFrom": {"amountMinor": %d, "currency": "EUR"}, "priceVaries": %s,
+         "inStock": %s, "attributes": {"brand": "Google"}}
+        """
+        .formatted(sku, name, priceFromMinor, priceVaries, inStock);
+  }
+
+  /** Search & Discovery answers a search for {@code q}, without Facets, with these summaries. */
+  static void stubSearch(String q, String... products) {
+    stubSearch(
+        q,
+        okJson(
+            "{\"items\": [%s], \"page\": 0, \"size\": 5, \"total\": %d}"
+                .formatted(String.join(",", products), products.length)));
+  }
+
+  static void stubSearch(String q, ResponseDefinitionBuilder response) {
+    SEARCH_DISCOVERY.stubFor(
+        get(urlPathEqualTo("/search"))
+            .withQueryParam("q", equalTo(q))
+            .withQueryParam("facets", equalTo("false"))
+            .willReturn(response));
   }
 
   private static String json(String text) {

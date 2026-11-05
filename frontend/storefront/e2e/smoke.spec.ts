@@ -48,6 +48,8 @@ import { stackSecret } from './secrets'
  *   provider, answers with its Order Status and a link that opens its page (Sprint 7).
  * - A Customer asks Help about their Order by its Order reference, and is told where it is; asked
  *   why they were charged, the assistant explains its Authorization as a hold (Sprint 7).
+ * - A Customer asks Help whether a seeded Product is in Stock in a Variant, is told so with its
+ *   Price, and opens its Product page from the reply (Sprint 7).
  */
 
 // The first checkout compares Stock before and after, so nothing else may check out meanwhile:
@@ -1332,7 +1334,47 @@ test.describe('Sprint 7', () => {
     await expect(conversation).toContainText('is a hold on your card, not a charge')
     await expect(conversation.getByRole('link', { name: `Order ${reference}` })).toHaveCount(2)
   })
+
+  test('a Customer asks Help whether a seeded Product is in Stock in a Variant, and opens its page', async ({
+    page,
+    request,
+  }) => {
+    const customer = signedUp()
+    // A seeded Product, as the ticket asks: Help reads Search & Discovery's projection, which a
+    // Product the test made would reach only once its events were applied. Earlier tests may have
+    // sold it out, and Staff's may have repriced it: the reply is checked
+    // against what Search & Discovery answers now.
+    const read = await request.get('/api/search-discovery/products/PHN-PIXEL-9')
+    expect(read.ok()).toBeTruthy()
+    const pixel = (await read.json()) as ProductRead
+    const variant = pixel.variants.find((v) => v.axisValues.storage === '256 GB')
+    if (!variant) throw new Error('The seeded Pixel 9 has no 256 GB Variant')
+    const price = `${(variant.price.amountMinor / 100).toFixed(2)} ${variant.price.currency}`
+
+    await page.goto('/')
+    await page.getByRole('button', { name: 'Log in' }).first().click()
+    await signInOnKeycloak(page, customer)
+    await expectSignedIn(page, customer.email)
+    await page.getByRole('button', { name: 'Help' }).click()
+    const help = page.getByRole('dialog', { name: 'Help' })
+    await help.getByRole('textbox', { name: 'Your question' }).fill('Is the Pixel 9 in 256 GB in stock?')
+    await help.getByRole('button', { name: 'Send' }).click()
+
+    const conversation = help.getByRole('list', { name: 'Conversation' })
+    await expect(conversation).toContainText(
+      `The ${pixel.name} is ${variant.inStock ? 'in' : 'out of'} Stock in ${Object.values(variant.axisValues).join(', ')} at ${price}.`,
+    )
+    await conversation.getByRole('link', { name: pixel.name }).click()
+    await expect(page.getByRole('heading', { level: 1, name: pixel.name })).toBeVisible()
+    await expect(page).toHaveURL(/\/products\/PHN-PIXEL-9$/)
+  })
 })
+
+/** One Product as Search & Discovery answers it, with each Variant's Price and whether it is in Stock. */
+interface ProductRead {
+  name: string
+  variants: { id: string; axisValues: Record<string, string>; price: Money; inStock: boolean }[]
+}
 
 async function putInCart(request: APIRequestContext, token: string, variantId: string) {
   const put = await request.put(`/api/cart/cart/items/${encodeURIComponent(variantId)}`, {

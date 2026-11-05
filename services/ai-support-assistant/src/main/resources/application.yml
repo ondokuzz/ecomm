@@ -23,6 +23,7 @@ ecomm:
     fulfillment-shipping-url: http://localhost:8099
     payment-url: http://localhost:8084
     returns-warranty-url: http://localhost:8100
+    search-discovery-url: http://localhost:8089
     # A context that doesn't answer in time is an error tool result, not a failed turn.
     connect-timeout: 2s
     read-timeout: 10s

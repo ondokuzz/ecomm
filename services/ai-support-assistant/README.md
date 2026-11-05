@@ -1,10 +1,10 @@
 # AI Support Assistant
 
 The **Support Assistant** behind the Storefront's Help: a signed-in Customer asks about their own
-Orders, Shipments, Payments and RMAs in their own words, and it answers from Order Management's,
-Fulfillment & Shipping's, Payment's and Returns & Warranty's reads, made when asked with the
-Customer's own token ([ADR 0002](./docs/adr/0002-reads-with-the-customers-own-token.md)). It never
-acts. Each **Conversation** is kept in the shared Redis under the service's own key prefix; the
+Orders, Shipments, Payments and RMAs, and about the Catalog's Products, in their own words, and it
+answers from Order Management's, Fulfillment & Shipping's, Payment's, Returns & Warranty's and
+Search & Discovery's reads, made when asked with the Customer's own token
+([ADR 0002](./docs/adr/0002-reads-with-the-customers-own-token.md)). It never acts. Each **Conversation** is kept in the shared Redis under the service's own key prefix; the
 service has no database, publishes no events and consumes no topics. Its model is behind the
 `SupportModel` port ([ADR 0005](../../docs/adr/0005-localization-compliance-abstracted.md)), so far
 answered by a [mock provider](#provider). It stays in Java ([ADR 0001](./docs/adr/0001-stays-in-java.md)),
@@ -38,10 +38,13 @@ A Conversation, and each message in it:
 
 Sending a message answers the reply alone, as the last message above. Its **references** are the
 records the turn's lookups returned that the reply's text names by their reference (in either case,
-with or without the `#`), each once: so a link always points to a real record of the Customer's,
-never to one the model's text made up. The Storefront links an `ORDER` to its Order page, and an
+with or without the `#`), or a Product by its name, each once: so a link always points to a real
+record the lookups returned, never to one the model's text made up. The Storefront links an `ORDER` to its Order page, an
 `RMA` (`{"kind": "RMA", "id": "3f2a9c1b-…", "reference": "RMA-3F2A9C1B", "label": "RMA-3F2A9C1B"}`)
-to its RMA page.
+to its RMA page, and a `PRODUCT` (`{"kind": "PRODUCT", "id": "PHN-PIXEL-9", "reference":
+"PHN-PIXEL-9", "label": "Google Pixel 9"}`) to its Product page. A Product is named by its SKU or
+by its name, in either case, but not by a name only part of a longer one the reply names: "Google
+Pixel 9 Pro" links that Product, not the Google Pixel 9 as well.
 
 - **A message** is 1 to 2,000 characters, not only whitespace; anything else, a body without `text`
   included, is a 400 with `"reason": "invalidMessage"`.
@@ -72,10 +75,14 @@ The tools, each a read the Customer could make themselves:
 | `find_rmas` | Returns & Warranty's `GET /rmas?page=0&size=10`, with a `reference` and an `orderId` if given | The Customer's RMAs, all, those with the RMA reference, or those of the Order, newest first, at most 10: each one's ID, RMA reference, Order ID and Order reference, Product name, quantity, kind, status, when it was requested and its Send-back deadline (null until approved) |
 | `get_rma` | Returns & Warranty's `GET /rmas/{rmaId}`, and while it is `APPROVED` Fulfillment & Shipping's `GET /warehouses/{warehouseId}` | One RMA: the same, the Customer's reason, when its window ends, its Refund amount, its Return address while approved (an `unavailable` error in its place if it can't be looked up now), its Inspection's outcome and note, its Refund's reference, and its RMA history (each status, when and its note), oldest first |
 | `check_return_eligibility` | Returns & Warranty's `GET /rmas/eligibility?orderId=` | The Order's ID and Order reference, and each delivered line's Variant, Product name, when its Return Period ends, when its Warranty Window ends (null without Warranty terms) and its units not yet in an RMA; not found while it isn't delivered |
+| `search_products` | Search & Discovery's `GET /search?q=…&facets=false&page=0&size=5` | The Products matching the `query`, best match first, at most 5: each one's SKU, name, lowest Variant Price (`priceFrom`, with `priceVaries`), whether any Variant is in Stock, and its attributes |
+| `get_product` | Search & Discovery's `GET /products/{sku}` | One Product: its SKU, name, Category's name, attributes, Warranty terms (`months` and `manufacturer`; null without), and each Variant's ID, axis values, Price and whether it is in Stock, not how many; not found for a SKU the Catalog doesn't sell |
 
 A `reference` is an Order reference, eight hex digits with or without the `#`, or for `find_rmas`
-an RMA reference, with or without its `RMA-`, in either case; anything else, or a `from` or `to`
-that isn't an ISO 8601 instant, is an error result that asks nothing. A reference no Order of the Customer's has answers no Orders, as another Customer's Order
+an RMA reference, with or without its `RMA-`, in either case; anything else, a `from` or `to`
+that isn't an ISO 8601 instant, or a blank `query` or `sku`, is an error result that asks nothing.
+Prices are the Catalog's, before any Campaign or Coupon; Search & Discovery's reads are anyone's,
+and carry the Customer's token all the same. A reference no Order of the Customer's has answers no Orders, as another Customer's Order
 with it does: the reply says it isn't among theirs. Each answers the context's JSON trimmed to those fields, amounts as `{"amount": "803.99",
 "currency": "EUR"}`. Each call carries the Customer's own token and the request's Correlation ID.
 Neither a miss nor a failure fails the turn: a 404 (another Customer's Order's Shipment, or one
@@ -93,7 +100,8 @@ service warns that it still answers with the mock.
 
 The mock provider is deterministic. Each time it is asked, it reads the Customer's latest message
 and what the turn has looked up so far, and asks for the next lookup or replies from a template over
-the results, naming each Order by its reference. The message's words pick the path:
+the results, naming each Order by its reference and each Product by its name. The message's
+words pick the path:
 
 - **An RMA reference** (`RMA-3F2A9C1B`, in either case) has it call `find_rmas` with it, then
   `get_rma`, and answer with its status and next step: "Your RMA RMA-3F2A9C1B, a return of 1 Pixel 9
@@ -103,6 +111,22 @@ the results, naming each Order by its reference. The message's words pick the pa
   its note ("Staff will look at it."); received, inspected with its outcome, refunded with its
   amount, exchanged, or expired with its Send-back deadline. None found is "I couldn't find an RMA
   RMA-DEADBEEF among yours. …".
+- **About Products** (`stock`, `available`, `price`, `cost`, `how much`; `warrant…`, `guarantee…`;
+  `looking for`, `recommend…`, `suggest…`, `search…`, `do you have`, `do you sell`, `show me`,
+  `find me`, `alternative`), when the message names no Order reference and has none of `my`,
+  `mine`, `I bought`, `I ordered`, `order`, `RMA`, `claim…` or a Payment's words, so "Is my phone
+  still under warranty?" stays about returns. It calls `search_products` with the message's other
+  words ("Is the Pixel 9 in 256 GB, black, in stock?" searches `Pixel 9 256 GB black`), and takes
+  the Product whose name the message names most of, at least half its words, fewest left out
+  (the Google Pixel 9, not the Google Pixel 9 Pro). Asked about Stock or its Warranty terms, it
+  calls `get_product` for it and answers "The Google Pixel 9 is out of Stock in Obsidian, 256 GB at
+  899.00 EUR." for the Variants whose axis values the message names most of, or each Variant, in
+  Stock first; or "The Google Pixel 9 comes with Google's 24-month warranty, counted from the day
+  it is delivered.", or "The JBL Flip 6 has no warranty." Otherwise, or naming none of them, it
+  lists what it found: "I found 2 Products for "noise cancelling headphones": the Sony WH-1000XM5
+  at 379.00 EUR, in Stock; and the Bose QuietComfort Ultra Headphones from 449.00 EUR, out of
+  Stock." None found is "I couldn't find a Product for "unicorn". …", no words left to search for
+  asks which Product, and a failed lookup is "I couldn't look up our Products just now. …".
 - **About returns** (`return…`, `rma`, `warrant…`): asking whether (`can`, `could`, `still`,
   `eligible`, `under warranty`, `how long`, `until`, `want`, `request`, `start`), `check_return_eligibility`
   for the Order the message names, or else the latest: "On Order #7F1C2A3B, you can return the
@@ -160,4 +184,5 @@ docker compose up -d --build ai-support-assistant   # from the repo root; listen
 [`http/ai-support-assistant.http`](./http/ai-support-assistant.http) starts a Conversation as the
 demo Customer, asks where their Order is, then about it by its Order reference, about a charge and
 about a Refund, about an RMA by its RMA reference and whether their Order can still be returned,
-reads the transcript and ends it.
+about a Product's Stock in a Variant and its Warranty terms, and for Products that fit a need, reads
+the transcript and ends it.

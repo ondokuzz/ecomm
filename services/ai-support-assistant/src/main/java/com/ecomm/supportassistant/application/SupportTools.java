@@ -15,6 +15,9 @@ import com.ecomm.supportassistant.application.port.out.PaymentPort.PaymentView;
 import com.ecomm.supportassistant.application.port.out.ReturnsWarrantyPort;
 import com.ecomm.supportassistant.application.port.out.ReturnsWarrantyPort.Eligibility;
 import com.ecomm.supportassistant.application.port.out.ReturnsWarrantyPort.RmaView;
+import com.ecomm.supportassistant.application.port.out.SearchDiscoveryPort;
+import com.ecomm.supportassistant.application.port.out.SearchDiscoveryPort.ProductSummary;
+import com.ecomm.supportassistant.application.port.out.SearchDiscoveryPort.ProductView;
 import com.ecomm.supportassistant.application.port.out.SupportModel.ToolDefinition;
 import com.ecomm.supportassistant.domain.Reference;
 import com.ecomm.supportassistant.domain.ToolCall;
@@ -46,6 +49,8 @@ class SupportTools {
   static final String FIND_RMAS = "find_rmas";
   static final String GET_RMA = "get_rma";
   static final String CHECK_RETURN_ELIGIBILITY = "check_return_eligibility";
+  static final String SEARCH_PRODUCTS = "search_products";
+  static final String GET_PRODUCT = "get_product";
 
   /** How many of the Customer's Orders {@value #FIND_ORDERS} answers. */
   static final int LATEST_ORDERS = 5;
@@ -58,6 +63,9 @@ class SupportTools {
 
   /** How many of the Customer's RMAs {@value #FIND_RMAS} answers. */
   static final int LATEST_RMAS = 10;
+
+  /** How many Products {@value #SEARCH_PRODUCTS} answers. */
+  static final int SEARCHED_PRODUCTS = 5;
 
   /**
    * An RMA reference as a Customer types it: eight hex digits, with or without its {@code RMA-}.
@@ -207,7 +215,47 @@ class SupportTools {
                   + " when its Product has no Warranty terms) and how many of its units aren't"
                   + " already in an RMA. Either end may have passed. Not found while the Order isn't"
                   + " delivered. A return or warranty claim is requested on the Order's page.",
-              orderIdInput()));
+              orderIdInput()),
+          new ToolDefinition(
+              SEARCH_PRODUCTS,
+              "The Catalog's Products matching a query, best match first, at most "
+                  + SEARCHED_PRODUCTS
+                  + ": each one's SKU, name, lowest Variant Price (priceFrom, with priceVaries"
+                  + " when its Variants' Prices differ), whether any Variant is in Stock, and its"
+                  + " attributes. A Product matches any of the query's words in its name,"
+                  + " description, attributes or Variants' axis values. Prices are the Catalog's,"
+                  + " before any Campaign or Coupon.",
+              Map.of(
+                  "type",
+                  "object",
+                  "properties",
+                  Map.of(
+                      "query",
+                      Map.of(
+                          "type",
+                          "string",
+                          "description",
+                          "Words to search for, such as a Product's name or what it is for:"
+                              + " Pixel 9, noise cancelling headphones")),
+                  "required",
+                  List.of("query"),
+                  "additionalProperties",
+                  false)),
+          new ToolDefinition(
+              GET_PRODUCT,
+              "One of the Catalog's Products by its SKU: its name, Category, attributes, Warranty"
+                  + " terms (how many months, and whose; null when it has none) and each Variant's"
+                  + " ID, axis values (such as color and storage), Price and whether it is in"
+                  + " Stock. Not how many are left. Not found for a SKU the Catalog doesn't sell.",
+              Map.of(
+                  "type",
+                  "object",
+                  "properties",
+                  Map.of("sku", Map.of("type", "string", "description", "The Product's SKU")),
+                  "required",
+                  List.of("sku"),
+                  "additionalProperties",
+                  false)));
 
   private static Map<String, Object> orderIdInput() {
     return Map.of(
@@ -225,16 +273,19 @@ class SupportTools {
   private final FulfillmentShippingPort fulfillmentShipping;
   private final PaymentPort payment;
   private final ReturnsWarrantyPort returnsWarranty;
+  private final SearchDiscoveryPort searchDiscovery;
 
   SupportTools(
       OrderManagementPort orderManagement,
       FulfillmentShippingPort fulfillmentShipping,
       PaymentPort payment,
-      ReturnsWarrantyPort returnsWarranty) {
+      ReturnsWarrantyPort returnsWarranty,
+      SearchDiscoveryPort searchDiscovery) {
     this.orderManagement = orderManagement;
     this.fulfillmentShipping = fulfillmentShipping;
     this.payment = payment;
     this.returnsWarranty = returnsWarranty;
+    this.searchDiscovery = searchDiscovery;
   }
 
   ToolResult run(ToolCall call) {
@@ -358,6 +409,28 @@ class SupportTools {
                           + orderId
                           + " isn't delivered yet, so nothing on it can be returned yet, or it"
                           + " isn't among the Customer's Orders"));
+      case SEARCH_PRODUCTS -> {
+        if (!(call.input().get("query") instanceof String query) || query.isBlank()) {
+          yield error(call, "invalidInput", "query is required");
+        }
+        yield result(
+            call,
+            searchDiscovery.search(query.strip(), SEARCHED_PRODUCTS),
+            products -> Map.of("products", products.stream().map(SupportTools::summary).toList()),
+            products -> products.stream().map(p -> Reference.product(p.sku(), p.name())).toList(),
+            "No Products");
+      }
+      case GET_PRODUCT -> {
+        if (!(call.input().get("sku") instanceof String sku) || sku.isBlank()) {
+          yield error(call, "invalidInput", "sku is required");
+        }
+        yield result(
+            call,
+            searchDiscovery.product(sku.strip()),
+            SupportTools::detail,
+            product -> List.of(Reference.product(product.sku(), product.name())),
+            "No Product " + sku + " in the Catalog");
+      }
       default -> error(call, "unknownTool", "There is no tool " + call.tool());
     };
   }
@@ -515,6 +588,43 @@ class SupportTools {
       case Lookup.Failed<ReturnAddress>(var reason) ->
           Map.of("error", "unavailable", "message", "It can't be looked up just now: " + reason);
     };
+  }
+
+  private static Map<String, Object> summary(ProductSummary product) {
+    var summary = new LinkedHashMap<String, Object>();
+    summary.put("sku", product.sku());
+    summary.put("name", product.name());
+    summary.put("priceFrom", money(product.priceFrom()));
+    summary.put("priceVaries", product.priceVaries());
+    summary.put("inStock", product.inStock());
+    summary.put("attributes", product.attributes());
+    return summary;
+  }
+
+  private static Map<String, Object> detail(ProductView product) {
+    var detail = new LinkedHashMap<String, Object>();
+    detail.put("sku", product.sku());
+    detail.put("name", product.name());
+    detail.put("category", product.category());
+    detail.put("attributes", product.attributes());
+    var warranty = product.warranty();
+    detail.put(
+        "warranty",
+        warranty == null
+            ? null
+            : nullable("months", warranty.months(), "manufacturer", warranty.manufacturer()));
+    detail.put(
+        "variants",
+        product.variants().stream()
+            .map(
+                v ->
+                    Map.<String, Object>of(
+                        "variantId", v.id(),
+                        "axisValues", v.axisValues(),
+                        "price", money(v.price()),
+                        "inStock", v.inStock()))
+            .toList());
+    return detail;
   }
 
   /** A map of these keys and values, which may be null. */

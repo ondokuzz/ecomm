@@ -455,6 +455,163 @@ class ToolResultsApiTest extends SupportAssistantApiTest {
   }
 
   @Test
+  void getProductAnswersEachVariantsAxisValuesPriceAndStockAndItsWarrantyTerms() {
+    stubProduct("PHN-PIXEL-9", okJson(PIXEL_9));
+
+    var result = resultOf("get_product", Map.of("sku", "PHN-PIXEL-9"));
+
+    assertThat(result.content())
+        .isEqualTo(
+            Map.of(
+                "sku",
+                "PHN-PIXEL-9",
+                "name",
+                "Google Pixel 9",
+                "category",
+                "Phones",
+                "attributes",
+                Map.of("brand", "Google", "screen", "6.3 in"),
+                "warranty",
+                Map.of("months", 24, "manufacturer", "Google"),
+                "variants",
+                List.of(
+                    Map.of(
+                        "variantId",
+                        "PHN-PIXEL-9",
+                        "axisValues",
+                        Map.of("color", "Obsidian", "storage", "128 GB"),
+                        "price",
+                        eur("799.00"),
+                        "inStock",
+                        true),
+                    Map.of(
+                        "variantId",
+                        "PHN-PIXEL-9-OBSIDIAN-256",
+                        "axisValues",
+                        Map.of("color", "Obsidian", "storage", "256 GB"),
+                        "price",
+                        eur("899.00"),
+                        "inStock",
+                        false),
+                    Map.of(
+                        "variantId",
+                        "PHN-PIXEL-9-PORCELAIN-128",
+                        "axisValues",
+                        Map.of("color", "Porcelain", "storage", "128 GB"),
+                        "price",
+                        eur("799.00"),
+                        "inStock",
+                        true))));
+    assertThat(result.records())
+        .extracting(r -> r.kind() + " " + r.id() + " " + r.reference() + " " + r.label())
+        .containsExactly("PRODUCT PHN-PIXEL-9 PHN-PIXEL-9 Google Pixel 9");
+    SEARCH_DISCOVERY.verify(
+        getRequestedFor(urlPathEqualTo("/products/PHN-PIXEL-9"))
+            .withHeader("Authorization", equalTo("Bearer " + customerToken()))
+            .withHeader("X-Correlation-Id", equalTo("test-correlation-1")));
+  }
+
+  @Test
+  void getProductWithoutWarrantyTermsAnswersNone() {
+    stubProduct(
+        "AUD-JBL-FLIP-6",
+        okJson(
+            """
+            {"sku": "AUD-JBL-FLIP-6", "name": "JBL Flip 6",
+             "category": {"slug": "audio", "name": "Audio"}, "attributes": {}, "warranty": null,
+             "variants": [{"id": "AUD-JBL-FLIP-6", "axisValues": {},
+                           "price": {"amountMinor": 12900, "currency": "EUR"}, "inStock": true}]}
+            """));
+
+    var result = resultOf("get_product", Map.of("sku", "AUD-JBL-FLIP-6"));
+
+    assertThat(result.content()).containsEntry("warranty", null);
+  }
+
+  @Test
+  void getProductTheProjectionDoesntHoldIsNotFound() {
+    stubProduct("PHN-NOPE", notFound());
+
+    var result = resultOf("get_product", Map.of("sku", "PHN-NOPE"));
+
+    assertThat(result.outcome()).isEqualTo(ToolResult.Outcome.NOT_FOUND);
+    assertThat(result.records()).isEmpty();
+  }
+
+  @Test
+  void getProductWhenSearchIsDownSaysItCantBeLookedUpNow() {
+    stubProduct("PHN-PIXEL-9", serviceUnavailable());
+
+    var result = resultOf("get_product", Map.of("sku", "PHN-PIXEL-9"));
+
+    assertThat(result.outcome()).isEqualTo(ToolResult.Outcome.ERROR);
+    assertThat(result.content()).containsEntry("error", "unavailable");
+  }
+
+  @Test
+  void searchProductsAnswersAtMostFiveSummariesWithoutFacets() {
+    stubSearch(
+        "pixel",
+        productSummary("PHN-PIXEL-9", "Google Pixel 9", 79900, true, true),
+        productSummary("PHN-PIXEL-9-PRO", "Google Pixel 9 Pro", 109900, false, false));
+
+    var result = resultOf("search_products", Map.of("query", " pixel "));
+
+    assertThat(result.content())
+        .isEqualTo(
+            Map.of(
+                "products",
+                List.of(
+                    Map.of(
+                        "sku",
+                        "PHN-PIXEL-9",
+                        "name",
+                        "Google Pixel 9",
+                        "priceFrom",
+                        eur("799.00"),
+                        "priceVaries",
+                        true,
+                        "inStock",
+                        true,
+                        "attributes",
+                        Map.of("brand", "Google")),
+                    Map.of(
+                        "sku",
+                        "PHN-PIXEL-9-PRO",
+                        "name",
+                        "Google Pixel 9 Pro",
+                        "priceFrom",
+                        eur("1099.00"),
+                        "priceVaries",
+                        false,
+                        "inStock",
+                        false,
+                        "attributes",
+                        Map.of("brand", "Google")))));
+    assertThat(result.records())
+        .extracting(r -> r.kind() + " " + r.id() + " " + r.label())
+        .containsExactly(
+            "PRODUCT PHN-PIXEL-9 Google Pixel 9", "PRODUCT PHN-PIXEL-9-PRO Google Pixel 9 Pro");
+    SEARCH_DISCOVERY.verify(
+        getRequestedFor(urlPathEqualTo("/search"))
+            .withQueryParam("q", equalTo("pixel"))
+            .withQueryParam("facets", equalTo("false"))
+            .withQueryParam("page", equalTo("0"))
+            .withQueryParam("size", equalTo("5"))
+            .withHeader("Authorization", equalTo("Bearer " + customerToken()))
+            .withHeader("X-Correlation-Id", equalTo("test-correlation-1")));
+  }
+
+  @Test
+  void searchProductsWithoutAQueryIsAnErrorResultAndAsksNothing() {
+    var result = resultOf("search_products", Map.of("query", " "));
+
+    assertThat(result.outcome()).isEqualTo(ToolResult.Outcome.ERROR);
+    assertThat(result.content()).containsEntry("error", "invalidInput");
+    SEARCH_DISCOVERY.verify(0, anyRequestedFor(anyUrl()));
+  }
+
+  @Test
   void aRangeThatIsntInstantsIsAnErrorResultAndAsksNothing() {
     var result = resultOf("get_payment_transaction_history", Map.of("from", "last week"));
 

@@ -251,7 +251,7 @@ in.
 For a Customer it shows the **Conversation**, their messages and the assistant's replies, oldest
 first, through the [AI Support Assistant](../../services/ai-support-assistant/README.md)'s API at
 `/api/support-assistant/` ([`src/api/help.ts`](./src/api/help.ts)). Each reply's references show
-beneath it as links, an Order to its Order page and an RMA to its RMA page. The text box takes up to 2,000 characters and
+beneath it as links, an Order to its Order page, an RMA to its RMA page and a Product to its Product page. The text box takes up to 2,000 characters and
 counts down what is left; Enter sends, Shift+Enter starts a new line. While a turn runs, "Looking
 that up…" shows and the text box is disabled; each reply is announced through a polite live region,
 and focus comes back to the text box. A failed message shows the error with its support reference,
@@ -560,7 +560,9 @@ Products, their Stock and the Category after. Sprint 7's checks out through the 
 asks Help "Where is my order?", sees the mock provider name that Order by its reference with its
 Order Status, and opens its page from the reply's link. Another asks about its Order by its Order
 reference, typed in lower case without the `#`, and is told where it is, then asks why they were
-charged and sees its Authorization explained as a hold, nothing charged yet. The help test
+charged and sees its Authorization explained as a hold, nothing charged yet. Another asks Help
+whether the seeded Pixel 9 is in stock in 256 GB, is told whether it is, with its Price, as Search &
+Discovery answers them at the time, and opens its Product page from the reply's link. The help test
 ([`e2e/help.spec.ts`](./e2e/help.spec.ts)) opens Help signed out and is asked to sign in; signed in
 as a Customer made for each test, whose Conversation and Customer it deletes after, it sees focus move into the panel and back to Help on Escape and on close,
 follows a Conversation across pages and a reload, starts a new one, has a lapsed one replaced, and

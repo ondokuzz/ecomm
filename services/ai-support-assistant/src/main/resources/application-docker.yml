@@ -11,6 +11,7 @@ ecomm:
     fulfillment-shipping-url: http://fulfillment-shipping:8080
     payment-url: http://payment:8080
     returns-warranty-url: http://returns-warranty:8080
+    search-discovery-url: http://search-discovery:8080
   security:
     jwt:
       jwk-set-uri: http://keycloak:8080/realms/ecomm/protocol/openid-connect/certs

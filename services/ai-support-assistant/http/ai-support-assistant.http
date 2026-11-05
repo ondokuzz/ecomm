@@ -73,6 +73,27 @@ Content-Type: application/json
 
 {"text": "Where is my return?"}
 
+### Ask whether a Product is in Stock in a Variant: its Stock and Price, linked to its page
+POST {{assistant}}/conversations/{{conversationId}}/messages
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"text": "Is the Pixel 9 in 256 GB in stock?"}
+
+### Ask about a Product's Warranty terms
+POST {{assistant}}/conversations/{{conversationId}}/messages
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"text": "Does the Pixel 9 come with a warranty?"}
+
+### Ask for Products that fit a need: a few, each with its Price
+POST {{assistant}}/conversations/{{conversationId}}/messages
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"text": "I'm looking for noise cancelling headphones"}
+
 ### Ask something else: answered without a lookup
 POST {{assistant}}/conversations/{{conversationId}}/messages
 Authorization: Bearer {{customerToken}}

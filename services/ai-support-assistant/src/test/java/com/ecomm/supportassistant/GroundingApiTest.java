@@ -84,6 +84,55 @@ class GroundingApiTest extends SupportAssistantApiTest {
         .isEqualTo(List.of(ORDER_ID, OTHER_ORDER_ID));
   }
 
+  static SupportModel.ToolUse searchProducts(String query) {
+    return new SupportModel.ToolUse(
+        List.of(new ToolCall("call-1", "search_products", Map.of("query", query))),
+        SupportModel.Usage.NONE);
+  }
+
+  @Test
+  void aProductIsNamedByItsNameOrItsSku() {
+    stubSearch(
+        "phones",
+        productSummary("PHN-PIXEL-9", "Google Pixel 9", 79900, true, true),
+        productSummary("PHN-GALAXY-S24", "Samsung Galaxy S24", 89900, false, true),
+        productSummary("PHN-NOTHING-2A", "Nothing Phone (2a)", 34900, false, true));
+    model.script(
+        searchProducts("phones"),
+        reply("The google pixel 9 is from 799.00 EUR, and PHN-GALAXY-S24 is 899.00 EUR."));
+    var id = started();
+
+    send(id, "Which phones do you have?")
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .jsonPath("$.references[*].id")
+        .isEqualTo(List.of("PHN-PIXEL-9", "PHN-GALAXY-S24"))
+        .jsonPath("$.references[0].kind")
+        .isEqualTo("PRODUCT")
+        .jsonPath("$.references[0].reference")
+        .isEqualTo("PHN-PIXEL-9")
+        .jsonPath("$.references[0].label")
+        .isEqualTo("Google Pixel 9");
+  }
+
+  @Test
+  void aProductIsntNamedByTheStartOfAnothersName() {
+    stubSearch(
+        "pixel",
+        productSummary("PHN-PIXEL-9", "Google Pixel 9", 79900, true, true),
+        productSummary("PHN-PIXEL-9-PRO", "Google Pixel 9 Pro", 109900, false, true));
+    model.script(searchProducts("pixel"), reply("The Google Pixel 9 Pro is 1099.00 EUR."));
+    var id = started();
+
+    send(id, "Is the pixel pro in stock?")
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .jsonPath("$.references[*].id")
+        .isEqualTo(List.of("PHN-PIXEL-9-PRO"));
+  }
+
   @Test
   void aReferenceIsntNamedByAPartOfALongerWord() {
     stubOrders(order(ORDER_ID, "PAID", "PAID"));
@@ -151,7 +200,9 @@ class GroundingApiTest extends SupportAssistantApiTest {
             "get_payment_transaction_history",
             "find_rmas",
             "get_rma",
-            "check_return_eligibility");
+            "check_return_eligibility",
+            "search_products",
+            "get_product");
   }
 
   @Test
