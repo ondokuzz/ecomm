@@ -41,18 +41,18 @@ const messages = /\/api\/support-assistant\/conversations\/[^/]+\/messages$/
 
 test('a signed-out visitor is asked to sign in', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Help' }).click()
+  await page.getByRole('button', { name: 'Ecomm Agent' }).click()
 
-  const help = page.getByRole('dialog', { name: 'Help' })
+  const help = page.getByRole('dialog', { name: 'Ecomm Agent' })
   await expect(help).toContainText('Sign in to ask about your Orders.')
   await expect(help.getByRole('button', { name: 'Log in' })).toBeFocused()
 })
 
 test('focus moves into Help when it opens and back to the button when it closes', async ({ page }) => {
   await signIn(page)
-  const toggle = page.getByRole('button', { name: 'Help' })
+  const toggle = page.getByRole('button', { name: 'Ecomm Agent' })
   await toggle.click()
-  const help = page.getByRole('dialog', { name: 'Help' })
+  const help = page.getByRole('dialog', { name: 'Ecomm Agent' })
   await expect(help.getByRole('textbox', { name: 'Your question' })).toBeFocused()
 
   await page.keyboard.press('Escape')
@@ -60,7 +60,7 @@ test('focus moves into Help when it opens and back to the button when it closes'
   await expect(toggle).toBeFocused()
 
   await toggle.click()
-  await help.getByRole('button', { name: 'Close help' }).click()
+  await help.getByRole('button', { name: 'Close Ecomm Agent' }).click()
   await expect(help).toBeHidden()
   await expect(toggle).toBeFocused()
 })
@@ -113,7 +113,7 @@ test('signing out ends the Conversation', async ({ page }) => {
   const id = await page.evaluate(() => sessionStorage.getItem('ecomm.help.conversationId'))
 
   const ended = page.waitForRequest((r) => r.method() === 'DELETE' && r.url().endsWith(`/conversations/${id}`))
-  await page.getByRole('button', { name: 'Close help' }).click()
+  await page.getByRole('button', { name: 'Close Ecomm Agent' }).click()
   await page.getByRole('button', { name: 'Customer menu' }).click()
   await page.getByRole('button', { name: 'Log out' }).click()
 
@@ -161,7 +161,7 @@ test.describe('with the assistant stubbed', () => {
     await expect(list).toContainText('Where is my order?')
     await expect(list).toContainText('Your latest Order, #7F1C2A3B, is paid.')
     await expect(help.locator('[aria-live="polite"]')).toContainText(
-      'Help replied: Your latest Order, #7F1C2A3B, is paid.',
+      'Ecomm Agent replied: Your latest Order, #7F1C2A3B, is paid.',
     )
     await expect(box).toHaveValue('')
     await expect(box).toBeFocused()
@@ -186,6 +186,32 @@ test.describe('with the assistant stubbed', () => {
     await expect(help.getByRole('textbox', { name: 'Your question' })).toHaveValue('Where is my order?')
   })
 
+  test('a long Conversation scrolls within the panel, which stays on the screen', async ({ page }) => {
+    const long = Array.from({ length: 40 }, (_, i) => ({
+      ...reply,
+      role: i % 2 === 0 ? 'CUSTOMER' : 'ASSISTANT',
+      text: `Message ${i + 1}. ${'More words to make it wrap. '.repeat(4)}`,
+      references: [],
+    }))
+    await page.route(conversations, (route) => route.fulfill({ status: 201, json: { id: 'c-1', messages: long } }))
+    await page.route(conversation, (route) => route.fulfill({ status: 200, json: { id: 'c-1', messages: long } }))
+    await signIn(page)
+    const help = await openHelp(page)
+    const transcript = help.getByRole('list', { name: 'Conversation' })
+    await expect(transcript).toContainText('Message 40.')
+
+    const panel = await help.boundingBox()
+    expect(panel!.y + panel!.height).toBeLessThanOrEqual(page.viewportSize()!.height)
+    await expect(help.getByRole('textbox', { name: 'Your question' })).toBeInViewport()
+    // The latest message shows; the first is scrolled out of the transcript, not off the screen.
+    await expect(transcript.getByText('Message 40.')).toBeInViewport()
+    expect(await transcript.evaluate((list) => list.scrollHeight > list.clientHeight)).toBe(true)
+    const first = transcript.getByText(/^Message 1\. /)
+    await expect(first).not.toBeInViewport()
+    await first.scrollIntoViewIfNeeded()
+    await expect(first).toBeInViewport()
+  })
+
   test('the text box keeps to the 2,000-character limit and counts down', async ({ page }) => {
     await signIn(page)
     const help = await openHelp(page)
@@ -208,8 +234,8 @@ async function signIn(page: Page) {
 }
 
 async function openHelp(page: Page) {
-  await page.getByRole('button', { name: 'Help' }).click()
-  const help = page.getByRole('dialog', { name: 'Help' })
+  await page.getByRole('button', { name: 'Ecomm Agent' }).click()
+  const help = page.getByRole('dialog', { name: 'Ecomm Agent' })
   await expect(help.getByRole('textbox', { name: 'Your question' })).toBeEnabled()
   return help
 }

@@ -240,12 +240,14 @@ international form, a plus and the country code first, spaces allowed and droppe
 with SMS on. Notifications refuses the same with a 422 `invalidPhoneNumber`, shown beside the
 number. Saved, a toast says so, and the form starts again from what Notifications kept.
 
-## Help
+## Ecomm Agent
 
-**Help**, in the header of every page, opens the Support Assistant's panel beside the page, or over
-it on screens narrower than 40rem. It is a non-modal dialog headed "Help", so the page stays usable
-beside it: focus moves to its text box when it opens (to "Log in" when signed out) and back to the
-Help button when it closes, by its close button or Escape. Signed out, it asks the visitor to sign
+**Ecomm Agent**, in the header of every page, opens the Support Assistant's panel beside the page,
+down to the bottom of the window, or over the whole screen when it is narrower than 40rem. It is a
+non-modal dialog headed "Ecomm Agent", so the page stays usable beside it: focus moves to its text
+box when it opens (to "Log in" when signed out) and back to the Ecomm Agent button when it closes, by
+its close button or Escape. A Conversation longer than the panel scrolls within it, the text box
+staying in view. Signed out, it asks the visitor to sign
 in.
 
 For a Customer it shows the **Conversation**, their messages and the assistant's replies, oldest
@@ -499,7 +501,7 @@ Sign in as `demo@ecomm.local` / `demo`, or register a new Customer.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: failed responses as messages and support references, Money formatting by Catalog's Minor units, Cart pricing, checkout problems, the session countdown and the price breakdown with each Discount and the Shipping cost, address violations mapped to their fields, Shipping options and addresses in words, whether a session can be paid, Coupon rejections, test cards and payment failures, an Order's Payment statuses and transactions and why a cancelled Order was cancelled, quantities, Stock levels and Cart lines' availability, toasts, the search's URL and its Facets as chips and filters, rating stars and summaries, the review and report forms' validation and a review's status for its author, Product specs by their Category's definitions, Warranty terms in words, Customer initials, Orders and their timeline from the Order Status history, Shipment statuses in words, Tracking events oldest first and when the Order page refreshes them, the Orders list's paging, Order Status colours, RMA kinds offered or disabled with why, the request form's checks, Returns & Warranty's refusals by field, the RMA timeline and when its page refreshes, Refunds named by their RMA, the Notification preferences form's mobile number, the Recommendation label and the row's heading, Help's characters left and its references' links, seed Product images, the Keycloak theme's and the Admin Console's copies of the tokens
+npm test          # Vitest: failed responses as messages and support references, Money formatting by Catalog's Minor units, Cart pricing, checkout problems, the session countdown and the price breakdown with each Discount and the Shipping cost, address violations mapped to their fields, Shipping options and addresses in words, whether a session can be paid, Coupon rejections, test cards and payment failures, an Order's Payment statuses and transactions and why a cancelled Order was cancelled, quantities, Stock levels and Cart lines' availability, toasts, the search's URL and its Facets as chips and filters, rating stars and summaries, the review and report forms' validation and a review's status for its author, Product specs by their Category's definitions, Warranty terms in words, Customer initials, Orders and their timeline from the Order Status history, Shipment statuses in words, Tracking events oldest first and when the Order page refreshes them, the Orders list's paging, Order Status colours, RMA kinds offered or disabled with why, the request form's checks, Returns & Warranty's refusals by field, the RMA timeline and when its page refreshes, Refunds named by their RMA, the Notification preferences form's mobile number, the Recommendation label and the row's heading, Ecomm Agent's characters left and its references' links, seed Product images, the Keycloak theme's and the Admin Console's copies of the tokens
 npm run test:e2e  # Playwright smoke, search, product-page, error-states and help tests against the running compose stack (`make up`)
 ```
 
@@ -542,7 +544,7 @@ fulfillment Saga never creates its Shipment, and sees no Shipment panel. Sprint 
 has it packed with a new IMEI and delivered, returns it from the Order's page choosing that IMEI,
 and sees the RMA Requested with its Refund amount (the Order's total less Shipping) and first on My
 Returns; once Staff approve it through the gateway it sees the Return address and "Write RMA-… on
-the parcel", and Help, asked about it by its RMA reference in lower case, says it is approved, where to send it
+the parcel", and Ecomm Agent, asked about it by its RMA reference in lower case, says it is approved, where to send it
 and by when, and links the RMA's page; once they receive and accept it, the RMA turns Refunded by itself, the Order's
 Payment shows "Refunded for RMA-…" and is Partly refunded (Shipping isn't refunded), and the Order
 Returned. Another opens Notification preferences from the account menu, sees email on and the rest
@@ -557,19 +559,19 @@ note, in Staff's view of it; the review is deleted by its author after. Another 
 and two Products of its own as Staff, stocks both, checks one out through the gateway, and sees the
 other's page headed "Popular in <Category>" with the bought one's card labelled so; it deletes the
 Products, their Stock and the Category after. Sprint 7's checks out through the gateway, signs in,
-asks Help "Where is my order?", sees the mock provider name that Order by its reference with its
+asks Ecomm Agent "Where is my order?", sees the mock provider name that Order by its reference with its
 Order Status, and opens its page from the reply's link. Another asks about its Order by its Order
 reference, typed in lower case without the `#`, and is told where it is, then asks why they were
-charged and sees its Authorization explained as a hold, nothing charged yet. Another asks Help
+charged and sees its Authorization explained as a hold, nothing charged yet. Another asks Ecomm Agent
 whether the seeded Pixel 9 is in stock in 256 GB, is told whether it is, with its Price, as Search &
 Discovery answers them at the time, and opens its Product page from the reply's link. The help test
-([`e2e/help.spec.ts`](./e2e/help.spec.ts)) opens Help signed out and is asked to sign in; signed in
-as a Customer made for each test, whose Conversation and Customer it deletes after, it sees focus move into the panel and back to Help on Escape and on close,
+([`e2e/help.spec.ts`](./e2e/help.spec.ts)) opens Ecomm Agent signed out and is asked to sign in; signed in
+as a Customer made for each test, whose Conversation and Customer it deletes after, it sees focus move into the panel and back to its button on Escape and on close,
 follows a Conversation across pages and a reload, starts a new one, has a lapsed one replaced, and
 sees signing out end it. With the assistant's answers stubbed, it sees "Looking that up…" and the
 text box disabled while a turn runs, then the reply announced, its link opening the Order page, a
-failed message say so with its reference and keep its text, and the text box stop at 2,000
-characters. The error-states test
+failed message say so with its reference and keep its text, a long Conversation scroll within the
+panel while the panel stays on the screen, and the text box stop at 2,000 characters. The error-states test
 ([`e2e/error-states.spec.ts`](./e2e/error-states.spec.ts)) opens unknown route, Product and Order
 addresses and sees the Not Found page, answers the Product list with a 500 and sees the panel's
 reference and "Try again" recover, fails the Product page's Stock lookup and sees it say so with its

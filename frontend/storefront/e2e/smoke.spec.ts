@@ -1221,8 +1221,8 @@ test.describe('Sprint 6', () => {
     // Asked by its RMA reference, in lower case, Help says the same, and links the RMA's page
     // (Sprint 7).
     await page.goto('/')
-    await page.getByRole('button', { name: 'Help' }).click()
-    const help = page.getByRole('dialog', { name: 'Help' })
+    await page.getByRole('button', { name: 'Ecomm Agent' }).click()
+    const help = page.getByRole('dialog', { name: 'Ecomm Agent' })
     const conversation = help.getByRole('list', { name: 'Conversation' })
     await help.getByRole('textbox', { name: 'Your question' }).fill(`What's happening with ${reference.toLowerCase()}?`)
     await help.getByRole('button', { name: 'Send' }).click()
@@ -1233,7 +1233,7 @@ test.describe('Sprint 6', () => {
     )
     await conversation.getByRole('link', { name: reference }).click()
     await expect(page).toHaveURL(new RegExp(`/returns/${rmaId}$`))
-    await help.getByRole('button', { name: 'Close help' }).click()
+    await help.getByRole('button', { name: 'Close Ecomm Agent' }).click()
     await expect(sendBack).toContainText(`Write ${reference} on the parcel.`)
 
     // Staff receive and accept it; the returns Saga refunds it, and the page follows by itself.
@@ -1276,8 +1276,8 @@ test.describe('Sprint 7', () => {
     await page.getByRole('button', { name: 'Log in' }).first().click()
     await signInOnKeycloak(page, customer)
     await expectSignedIn(page, customer.email)
-    await page.getByRole('button', { name: 'Help' }).click()
-    const help = page.getByRole('dialog', { name: 'Help' })
+    await page.getByRole('button', { name: 'Ecomm Agent' }).click()
+    const help = page.getByRole('dialog', { name: 'Ecomm Agent' })
     await help.getByRole('textbox', { name: 'Your question' }).fill('Where is my order?')
     await help.getByRole('button', { name: 'Send' }).click()
 
@@ -1309,8 +1309,8 @@ test.describe('Sprint 7', () => {
     await page.getByRole('button', { name: 'Log in' }).first().click()
     await signInOnKeycloak(page, customer)
     await expectSignedIn(page, customer.email)
-    await page.getByRole('button', { name: 'Help' }).click()
-    const help = page.getByRole('dialog', { name: 'Help' })
+    await page.getByRole('button', { name: 'Ecomm Agent' }).click()
+    const help = page.getByRole('dialog', { name: 'Ecomm Agent' })
     const conversation = help.getByRole('list', { name: 'Conversation' })
     const box = help.getByRole('textbox', { name: 'Your question' })
 
@@ -1355,8 +1355,8 @@ test.describe('Sprint 7', () => {
     await page.getByRole('button', { name: 'Log in' }).first().click()
     await signInOnKeycloak(page, customer)
     await expectSignedIn(page, customer.email)
-    await page.getByRole('button', { name: 'Help' }).click()
-    const help = page.getByRole('dialog', { name: 'Help' })
+    await page.getByRole('button', { name: 'Ecomm Agent' }).click()
+    const help = page.getByRole('dialog', { name: 'Ecomm Agent' })
     await help.getByRole('textbox', { name: 'Your question' }).fill('Is the Pixel 9 in 256 GB in stock?')
     await help.getByRole('button', { name: 'Send' }).click()
 

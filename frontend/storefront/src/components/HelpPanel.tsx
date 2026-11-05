@@ -10,9 +10,10 @@ import { buttonClass } from './ui/buttonClass'
 import { Icon } from './ui/Icon'
 
 /**
- * Help, in the header of every page: a button that opens the Support Assistant's panel beside the
- * page, or over it on narrow screens. The panel is a non-modal dialog, so the page stays usable
- * beside it; focus moves into it when it opens and back to Help when it closes, and Escape closes it.
+ * Ecomm Agent, in the header of every page: a button that opens the Support Assistant's panel beside
+ * the page, or over it on narrow screens. The panel is a non-modal dialog, so the page stays usable
+ * beside it; focus moves into it when it opens and back to its button when it closes, and Escape
+ * closes it.
  */
 export function Help() {
   const [open, setOpen] = useState(false)
@@ -43,7 +44,7 @@ export function Help() {
         onClick={() => (open ? close() : show())}
       >
         <Icon name="help" size={20} />
-        Help
+        Ecomm Agent
       </button>
       <dialog
         ref={dialog}
@@ -71,7 +72,7 @@ function HelpBody({ titleId, onClose }: { titleId: string; onClose: () => void }
   return (
     <div className="help-body">
       <header className="help-header">
-        <h2 id={titleId}>Help</h2>
+        <h2 id={titleId}>Ecomm Agent</h2>
         {signedIn && (
           <Button
             size="sm"
@@ -82,7 +83,7 @@ function HelpBody({ titleId, onClose }: { titleId: string; onClose: () => void }
             New conversation
           </Button>
         )}
-        <Button variant="ghost" icon onClick={onClose} aria-label="Close help">
+        <Button variant="ghost" icon onClick={onClose} aria-label="Close Ecomm Agent">
           <Icon name="close" size={20} />
         </Button>
       </header>
@@ -114,7 +115,7 @@ function HelpConversation({ newConversationError }: { newConversationError: unkn
   const countId = useId()
   const messages = conversation.data?.messages ?? []
 
-  // Focus waits in the text box: when Help opens, and again once a reply has come.
+  // Focus waits in the text box: when the panel opens, and again once a reply has come.
   useEffect(() => {
     if (!send.isPending) box.current?.focus()
   }, [send.isPending, conversation.isSuccess])
@@ -131,7 +132,7 @@ function HelpConversation({ newConversationError }: { newConversationError: unkn
     send.mutate(question, {
       onSuccess: ({ reply }) => {
         setText('')
-        setAnnouncement(`Help replied: ${reply.text}`)
+        setAnnouncement(`Ecomm Agent replied: ${reply.text}`)
       },
     })
   }
@@ -163,7 +164,7 @@ function HelpConversation({ newConversationError }: { newConversationError: unkn
       {conversation.error ? (
         <ErrorMessage
           error={conversation.error}
-          title="We couldn't open Help"
+          title="We couldn't open Ecomm Agent"
           retrying={conversation.isFetching}
           onRetry={() => conversation.refetch()}
         />
@@ -208,7 +209,7 @@ function MessageItem({ message }: { message: HelpMessage }) {
   const customer = message.role === 'CUSTOMER'
   return (
     <li className={`help-message ${customer ? 'help-customer' : 'help-assistant'}`}>
-      <span className="visually-hidden">{customer ? 'You: ' : 'Help: '}</span>
+      <span className="visually-hidden">{customer ? 'You: ' : 'Ecomm Agent: '}</span>
       <p>{message.text}</p>
       {message.references.length > 0 && (
         <ul className="help-references" aria-label="Mentioned">

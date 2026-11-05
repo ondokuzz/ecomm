@@ -2576,14 +2576,19 @@ main {
   opacity: 0.8;
 }
 
-/* Help: the Support Assistant's panel, beside the page, or over it on narrow screens */
+/* Ecomm Agent: the Support Assistant's panel, beside the page, or over it on narrow screens */
 
+/*
+ * The header's backdrop-filter makes it the panel's containing block, not the viewport, so its
+ * height is set from the viewport rather than by `bottom`: without one, a dialog fits its content
+ * and a long Conversation runs off the screen instead of scrolling within the panel.
+ */
 .help-panel {
   position: fixed;
   inset: auto;
   top: calc(var(--header-height) + 4px + var(--space-2));
   right: max(var(--gutter), calc((100vw - var(--content-width)) / 2 + var(--gutter)));
-  bottom: var(--space-4);
+  height: calc(100dvh - var(--header-height) - 4px - var(--space-2) - var(--space-4));
   z-index: 20;
   width: min(25rem, calc(100vw - 2 * var(--gutter)));
   margin: 0;
@@ -2699,7 +2704,7 @@ main {
     inset: 0;
     width: 100%;
     max-width: none;
-    height: 100%;
+    height: 100dvh;
     max-height: none;
     border: none;
     border-radius: 0;
