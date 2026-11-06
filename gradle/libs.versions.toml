@@ -17,6 +17,9 @@ temporal = "1.40.0"
 # The Support Assistant's Claude adapter (its ADR 0003): the Messages API, never an OpenAI-compatible
 # shim.
 anthropic-java = "3.2.0"
+# The Support Assistant's circuit breaker around Claude: the core module alone, without its Spring
+# Boot starter's annotations and aspects.
+resilience4j = "2.3.0"
 
 [libraries]
 spring-boot-bom = { module = "org.springframework.boot:spring-boot-dependencies", version.ref = "spring-boot" }
@@ -28,6 +31,7 @@ archunit-junit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref
 temporal-spring-boot-starter = { module = "io.temporal:temporal-spring-boot-starter", version.ref = "temporal" }
 temporal-testing = { module = "io.temporal:temporal-testing", version.ref = "temporal" }
 anthropic-java = { module = "com.anthropic:anthropic-java", version.ref = "anthropic-java" }
+resilience4j-circuitbreaker = { module = "io.github.resilience4j:resilience4j-circuitbreaker", version.ref = "resilience4j" }
 wiremock-standalone = { module = "org.wiremock:wiremock-standalone", version.ref = "wiremock" }
 
 # Gradle plugins, consumed as dependencies by build-logic

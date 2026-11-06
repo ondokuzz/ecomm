@@ -21,7 +21,7 @@ or lapsed, is a 404. The gateway routes it at `/api/support-assistant/`.
 | Endpoint | |
 |---|---|
 | `POST /conversations` | Starts a Conversation: 201 with it, empty, and its URL in `Location` |
-| `POST /conversations/{id}/messages` | Adds the Customer's message, `{"text": "Where is my Order?"}`, runs one turn, and answers the reply |
+| `POST /conversations/{id}/messages` | Adds the Customer's message, `{"text": "Where is my Order?"}`, runs one turn, and answers the reply. With an `Idempotency-Key`, a repeat answers the first reply without running the turn again |
 | `GET /conversations/{id}` | The transcript: each message, oldest first |
 | `DELETE /conversations/{id}` | Ends it: 204 |
 
@@ -54,6 +54,41 @@ Pixel 9 Pro" links that Product, not the Google Pixel 9 as well.
 - **It lapses** 24 hours after its last message (`ecomm.support-assistant.conversation-lapses-after`),
   when Redis drops it. Ending it deletes it at once; the Storefront ends it when the Customer signs
   out. `make seed-reset` flushes Redis, which ends every Conversation.
+- **An `Idempotency-Key`** on a message, such as a retry after a dropped connection, makes a repeat
+  with the same key, in the same Conversation, answer the first reply with `Idempotent-Replayed:
+  true`: no turn runs, nothing is added, and it isn't counted against the Customer's limits. A turn
+  that failed kept nothing, so its repeat runs afresh. The key is kept with the message in the
+  Conversation, not by the shared idempotency filter, which needs a database. The same key with
+  another message is a 422 `idempotencyKeyReused`, and a key that isn't 1 to 255 printable ASCII
+  characters a 400 `idempotencyKeyInvalid`. While a message's turn runs its key is held in Redis
+  (`support-assistant:in-flight:<Conversation ID>:<key>`, lapsing a minute after the turn's time
+  should it not be released), so a repeat sent meanwhile is a 409 `idempotencyKeyInFlight` rather
+  than a second turn; once the first is answered, a repeat answers its reply.
+
+## Limits and failures
+
+Every limit is configuration under `ecomm.support-assistant` in `application.yml`, with these
+defaults. Each refusal is a problem detail with its `reason`, and a refusal past a limit says in
+`Retry-After` how many seconds to wait.
+
+| Limit | Past it |
+|---|---|
+| A Customer sends at most 20 messages in any hour and 100 in any day, in whichever Conversations (`messages-per-hour`, `messages-per-day`), counted in Redis by the token's Customer | 429 `assistantRateLimited`, with `Retry-After` until the oldest message counted ages out, before the provider is asked anything. The mock provider is limited the same. A message refused as a 400 or 409 isn't counted |
+| The service calls Claude at most 60 times in any minute, retries included, across every Customer and every instance (`provider-calls-per-minute`), counted in Redis | 503 `assistantBusy`, with `Retry-After` |
+| A turn asks the provider at most 6 times, for at most 60 seconds (`provider-calls-per-turn`, `turn-time-limit`). Each call to Claude is given what is left of the 60 seconds when that is less than its own timeout | The reply "I'm sorry, that was too much to look up at once. Could you ask about one thing at a time?", with the lookups it made kept in the Conversation: when the turn reaches its 6th call, when its time is up between calls, or when a call is cut off by it or its retry would come after it |
+
+A **circuit breaker** (Resilience4j) wraps each call to Claude (`breaker.*`), its retry included. A
+429, a 529 overload, any other 5xx, a timeout or a connection failure is retried once, after the
+wait Claude asks for in `retry-after-ms` or `retry-after`, or half a second; if the retry fails too,
+or there is no time left for it, it counts against the breaker; it opens once half of
+the last 20 calls failed, or 5 in a row, and while open answers at once without asking Claude. After
+30 seconds it lets one call through: closed again if that call is answered, open again if it fails.
+A call cut off by the turn's time doesn't count.
+A 400 or 401 is a bug or a bad key: logged with the provider's error type (`The provider refused the
+request as authentication_error (401): …`), never retried, and not counted. Each of these, the
+breaker's refusal included, is a 503 `assistantUnavailable`, and the Conversation is left as it was
+before the message. Neither the ceiling nor the breaker guards the mock provider, which has no key's
+rate limit or budget to protect.
 
 ## A turn
 
@@ -110,7 +145,17 @@ printf '%s' 'sk-ant-…' > .secrets/ecomm/anthropic-api-key   # the Compose proj
 docker compose up -d ai-support-assistant
 ```
 
-Emptying the file and recreating the service the same way goes back to the mock. **With a key,
+Emptying the file and recreating the service the same way goes back to the mock. To run the mock
+for a while without touching the key, such as for the Playwright suites, which expect its replies,
+point `ANTHROPIC_API_KEY_FILE` at an empty file by its absolute path; leaving it unset goes back to
+the key:
+
+```sh
+: > /tmp/no-anthropic-api-key
+ANTHROPIC_API_KEY_FILE=/tmp/no-anthropic-api-key docker compose up -d ai-support-assistant
+docker compose up -d ai-support-assistant   # the key in .secrets again
+```
+ **With a key,
 Customers' questions, and the data the tools return about them, go to Anthropic's API**, and each
 message costs tokens; the logs hold neither the words nor the answers, only the tokens.
 
@@ -130,8 +175,10 @@ the Storefront's address (`ecomm.support-assistant.storefront-url`, `http://loca
 go back to it on later calls as it gave them, its thinking included. An answer that ends its turn is
 the reply; one that asks for tools runs them; a refusal that stands is "I'm sorry, I can't help with
 that. …", and an answer cut off at `max_tokens` "I'm sorry, my answer got too long to finish. …";
-any other stop fails the turn. Each call times out after 30 seconds and is retried once
-(`anthropic-timeout`, `anthropic-max-retries`).
+any other stop is a 503 `assistantUnavailable`, which doesn't count against the
+[circuit breaker](#limits-and-failures). Each call times out after 30 seconds, or sooner when the
+turn has less left, and is retried once (`anthropic-timeout`, `anthropic-max-retries`): by the
+service, not the SDK, whose own retries are off, so each retry counts against the ceiling.
 
 ### The mock provider
 
@@ -200,9 +247,10 @@ words pick the path:
 
 Any other message is answered with what it can help with, looking nothing up.
 
-## Logs
+## Logs and metrics
 
-Each turn logs one line, `replied` or, if it threw, `failed`, with the Correlation ID in the MDC
+Each turn logs one line, with how it ended: `replied`, `bounded` (at its 6 provider calls or 60
+seconds), `unavailable`, `busy` or, for anything else it threw, `failed`; with the Correlation ID in the MDC
 (and so in the ECS JSON under the `docker` profile), and never the Customer's words or the reply:
 
 ```
@@ -211,6 +259,18 @@ Turn in Conversation 5b0e… replied: tools [find_orders found, get_order found,
 
 Each lookup also leaves the outbound call's line (`GET http://order-management:8080/orders/… -> 200
 in 12 ms`), with the query string left out.
+
+On `/actuator/prometheus`, each at 0 from the start, so a dashboard's `increase()` counts the first:
+
+| Metric | |
+|---|---|
+| `support_assistant_tokens_total{kind}` | The tokens the provider's answers took: `input`, `output` and `cache_read`. The mock's are 0 |
+| `support_assistant_turn_duration_seconds{outcome}` | How long each message took to answer, by how its turn ended, as above; a histogram |
+| `support_assistant_limit_refusals_total{limit}` | `messages_per_hour` and `messages_per_day` refusals, and `provider_calls_per_minute` turns refused at the ceiling |
+| `support_assistant_provider_errors_total{kind}` | Failed calls to Claude: `rate_limited`, `overloaded`, `server_error`, `timeout` and `connection`, which count against the breaker, and `bad_request`, `unauthorized` and `other`, which don't |
+| `support_assistant_provider_breaker_state{state}` | 1 for the state the breaker is in, `closed`, `open` or `half_open`, and 0 for the others |
+
+The Services dashboard's Support Assistant row plots them.
 
 ## Run it
 
@@ -222,4 +282,6 @@ docker compose up -d --build ai-support-assistant   # from the repo root; listen
 demo Customer, asks where their Order is, then about it by its Order reference, about a charge and
 about a Refund, about an RMA by its RMA reference and whether their Order can still be returned,
 about a Product's Stock in a Variant and its Warranty terms, and for Products that fit a need, reads
-the transcript and ends it.
+sends a message with an `Idempotency-Key` twice, reads the transcript and ends it. 12 of its
+messages count against the demo Customer's 20 an hour, so a second run within the hour reaches the
+limit: its later messages are 429s.

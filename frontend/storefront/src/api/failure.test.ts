@@ -49,6 +49,18 @@ describe('errorFrom', () => {
     expect(error.correlationId).toBeUndefined()
   })
 
+  it('reads how many seconds Retry-After asks to wait', async () => {
+    const error = await errorFrom(problemResponse(429, { reason: 'assistantRateLimited' }, { 'Retry-After': '3600' }))
+    expect(error.retryAfter).toBe(3600)
+  })
+
+  it('has no wait when Retry-After is missing or not a number of seconds', async () => {
+    expect((await errorFrom(problemResponse(503, {}))).retryAfter).toBeUndefined()
+    expect(
+      (await errorFrom(problemResponse(503, {}, { 'Retry-After': 'Wed, 21 Oct 2026 07:28:00 GMT' }))).retryAfter,
+    ).toBeUndefined()
+  })
+
   it('ignores a Correlation ID in the body that is not a string', async () => {
     const error = await errorFrom(problemResponse(500, { correlationId: 42 }, { 'X-Correlation-Id': 'from-header' }))
     expect(error.correlationId).toBe('from-header')

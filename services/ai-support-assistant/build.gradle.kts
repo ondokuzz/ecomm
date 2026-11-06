@@ -7,6 +7,8 @@ dependencies {
   implementation("org.springframework.boot:spring-boot-starter-data-redis")
   // Claude, when the API key is set (ADR 0003).
   implementation(libs.anthropic.java)
+  // A failing provider is answered fast as unavailable.
+  implementation(libs.resilience4j.circuitbreaker)
 
   testImplementation(libs.wiremock.standalone)
   testImplementation("org.springframework.boot:spring-boot-testcontainers")

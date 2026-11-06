@@ -13,7 +13,10 @@ public sealed interface Entry {
     Instant at();
   }
 
-  record CustomerMessage(String text, Instant at) implements Message {}
+  /**
+   * @param idempotencyKey the key it was sent with, which a repeat is answered by; null for none
+   */
+  record CustomerMessage(String text, Instant at, String idempotencyKey) implements Message {}
 
   /**
    * The assistant's reply, with the records it names that the turn's lookups returned, for the

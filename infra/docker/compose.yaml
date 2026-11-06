@@ -880,8 +880,10 @@ secrets:
   carrier-webhook-secret:
     file: ../../.secrets/${COMPOSE_PROJECT_NAME}/carrier-webhook-secret
   # Written empty, and filled by hand with a key; empty means the mock provider.
+  # ANTHROPIC_API_KEY_FILE, an absolute path, mounts another file in its place, such as an empty one
+  # for a test suite that expects the mock, leaving the key in .secrets as it is.
   anthropic-api-key:
-    file: ../../.secrets/${COMPOSE_PROJECT_NAME}/anthropic-api-key
+    file: ${ANTHROPIC_API_KEY_FILE:-../../.secrets/${COMPOSE_PROJECT_NAME}/anthropic-api-key}
 
 volumes:
   postgres-data:

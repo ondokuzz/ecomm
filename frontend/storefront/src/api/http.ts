@@ -16,12 +16,15 @@ export class ApiError extends Error {
   readonly status: number
   readonly problem: Problem
   readonly correlationId: string | undefined
+  /** How many seconds `Retry-After` asks the caller to wait before trying again, when it does. */
+  readonly retryAfter: number | undefined
 
-  constructor(status: number, problem: Problem, headerCorrelationId?: string) {
+  constructor(status: number, problem: Problem, headerCorrelationId?: string, retryAfter?: number) {
     super(problem.detail ?? problem.title ?? `Request failed with status ${status}`)
     this.status = status
     this.problem = problem
     this.correlationId = typeof problem.correlationId === 'string' ? problem.correlationId : headerCorrelationId
+    this.retryAfter = retryAfter
   }
 }
 
@@ -109,7 +112,18 @@ export async function errorFrom(response: Response): Promise<ApiError> {
     json = undefined
   }
   const problem = typeof json === 'object' && json ? (json as Problem) : {}
-  return new ApiError(response.status, problem, response.headers.get(correlationIdHeader) ?? undefined)
+  return new ApiError(
+    response.status,
+    problem,
+    response.headers.get(correlationIdHeader) ?? undefined,
+    retryAfterOf(response),
+  )
+}
+
+/** `Retry-After` in seconds; the services never send its other form, a date. */
+function retryAfterOf(response: Response): number | undefined {
+  const value = response.headers.get('Retry-After')
+  return value !== null && /^\d+$/.test(value) ? Number(value) : undefined
 }
 
 // Services answer JSON or problem+json; nginx's own error pages (the gateway down) are HTML.

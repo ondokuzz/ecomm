@@ -3,6 +3,7 @@ package com.ecomm.supportassistant.adapter.out.claude;
 import com.anthropic.client.AnthropicClient;
 import com.anthropic.core.JsonValue;
 import com.anthropic.core.ObjectMappers;
+import com.anthropic.core.RequestOptions;
 import com.anthropic.models.beta.messages.BetaCacheControlEphemeral;
 import com.anthropic.models.beta.messages.BetaMessage;
 import com.anthropic.models.beta.messages.BetaOutputConfig;
@@ -37,8 +38,9 @@ import java.util.stream.Collectors;
  * their thinking included.
  *
  * <p>An answer that stops for a tool asks for lookups, one that ends its turn is the reply, and one
- * refused or cut off at {@value #MAX_TOKENS} tokens is a reply saying so. Any other stop is an
- * error.
+ * refused or cut off at {@value #MAX_TOKENS} tokens is a reply saying so. Any other stop leaves the
+ * turn unanswered, as unavailable, though it doesn't count against the circuit breaker: Claude
+ * answered.
  */
 public class ClaudeSupportModel implements SupportModel {
 
@@ -63,15 +65,19 @@ public class ClaudeSupportModel implements SupportModel {
       DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", Locale.ENGLISH).withZone(ZoneOffset.UTC);
 
   private final AnthropicClient client;
+  private final ProviderCalls calls;
   private final String model;
   private final String storefrontUrl;
 
   /**
+   * @param calls guards each call to the Messages API
    * @param model the Claude model, such as {@code claude-opus-5-5}
    * @param storefrontUrl where Customers open the Storefront, which each message names
    */
-  public ClaudeSupportModel(AnthropicClient client, String model, String storefrontUrl) {
+  public ClaudeSupportModel(
+      AnthropicClient client, ProviderCalls calls, String model, String storefrontUrl) {
     this.client = client;
+    this.calls = calls;
     this.model = model;
     this.storefrontUrl = storefrontUrl;
   }
@@ -96,7 +102,15 @@ public class ClaudeSupportModel implements SupportModel {
             .addBeta(SERVER_SIDE_FALLBACK)
             .fallbacksDefault();
     request.tools().forEach(tool -> params.addTool(tool(tool)));
-    return answerOf(client.beta().messages().create(params.build()));
+    var built = params.build();
+    return answerOf(
+        calls.call(
+            timeout ->
+                client
+                    .beta()
+                    .messages()
+                    .create(built, RequestOptions.builder().timeout(timeout).build()),
+            request.timeLeft()));
   }
 
   /** A tool, its input held to its schema. */
@@ -208,7 +222,8 @@ public class ClaudeSupportModel implements SupportModel {
     if (BetaStopReason.MAX_TOKENS.equals(reason)) {
       return new Reply(TOO_LONG, usage);
     }
-    throw new IllegalStateException("Claude stopped for " + reason + ", which a turn can't take");
+    throw new UnavailableException(
+        "Claude stopped for " + reason + ", which a turn can't take", null);
   }
 
   private static String json(Object value) {

@@ -2,6 +2,7 @@ package com.ecomm.supportassistant.application.port.out;
 
 import com.ecomm.supportassistant.domain.Entry;
 import com.ecomm.supportassistant.domain.ToolCall;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
@@ -11,12 +12,53 @@ import java.util.Map;
  */
 public interface SupportModel {
 
+  /**
+   * @throws UnavailableException when the provider fails to answer, or is failing so often that it
+   *     isn't asked for now
+   * @throws BusyException when the service has asked the provider as often as it may for now
+   * @throws OutOfTimeException when the turn's time ran out before the provider answered
+   */
   Answer answer(Request request);
+
+  /** The turn's time ran out while the provider was asked, or waited to be asked again. */
+  class OutOfTimeException extends RuntimeException {
+
+    public OutOfTimeException(Throwable cause) {
+      super("The turn's time ran out before the provider answered", cause);
+    }
+  }
+
+  /** The provider failed to answer, or has been failing, so it wasn't asked. */
+  class UnavailableException extends RuntimeException {
+
+    public UnavailableException(String message, Throwable cause) {
+      super(message, cause);
+    }
+  }
+
+  /**
+   * The service has asked the provider as often as it may: it may again after {@code retryAfter}.
+   */
+  class BusyException extends RuntimeException {
+
+    private final Duration retryAfter;
+
+    public BusyException(Duration retryAfter) {
+      super("The provider has been asked as often as it may; ask again in " + retryAfter);
+      this.retryAfter = retryAfter;
+    }
+
+    public Duration retryAfter() {
+      return retryAfter;
+    }
+  }
 
   /**
    * @param transcript the Conversation so far, oldest first, its lookups included
+   * @param timeLeft what is left of the turn's time, which the provider's answer must come within
    */
-  record Request(String systemPrompt, List<ToolDefinition> tools, List<Entry> transcript) {}
+  record Request(
+      String systemPrompt, List<ToolDefinition> tools, List<Entry> transcript, Duration timeLeft) {}
 
   /**
    * A tool the model may ask for.

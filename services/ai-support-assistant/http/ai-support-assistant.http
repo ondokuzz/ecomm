@@ -2,7 +2,8 @@
 # directly and through the gateway. Run the token request first; it stores the token for the ones
 # after it. With the anthropic-api-key secret empty, as `make secrets` (which `make up` runs) writes it, the mock provider
 # answers. Asked where their Order is, it names the demo Customer's latest Order, or says they have
-# none: check one out in the Storefront first to see it.
+# none: check one out in the Storefront first to see it. 12 of its messages count against the demo
+# Customer's 20 an hour, so a second run within the hour ends in 429 assistantRateLimited.
 
 @assistant = http://localhost:8102
 @gateway = http://localhost:8000
@@ -107,6 +108,22 @@ Authorization: Bearer {{customerToken}}
 Content-Type: application/json
 
 {"text": ""}
+
+### Ask with an Idempotency-Key, unique to this Conversation: the reply, as for any message
+POST {{assistant}}/conversations/{{conversationId}}/messages
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+Idempotency-Key: http-file-{{conversationId}}
+
+{"text": "Where is my order?"}
+
+### The same again: the same reply, with no turn run and nothing added to the transcript
+POST {{assistant}}/conversations/{{conversationId}}/messages
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+Idempotency-Key: http-file-{{conversationId}}
+
+{"text": "Where is my order?"}
 
 ### The transcript, through the gateway
 GET {{gateway}}/api/support-assistant/conversations/{{conversationId}}

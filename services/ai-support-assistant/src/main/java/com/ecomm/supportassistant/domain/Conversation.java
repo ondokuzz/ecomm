@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * A Customer's exchange with the Support Assistant: their messages, the assistant's replies, and
@@ -38,14 +39,38 @@ public record Conversation(
    * #MAX_MESSAGE_LENGTH} characters, not only whitespace; a Conversation holds at most {@value
    * #MAX_CUSTOMER_MESSAGES} of them.
    */
-  public Conversation withCustomerMessage(String text, Instant at) {
+  public Conversation withCustomerMessage(String text, String idempotencyKey, Instant at) {
     if (text == null || text.isBlank() || text.length() > MAX_MESSAGE_LENGTH) {
       throw new InvalidMessageException("A message is 1 to " + MAX_MESSAGE_LENGTH + " characters");
     }
     if (customerMessages() >= MAX_CUSTOMER_MESSAGES) {
       throw new ConversationFullException(id);
     }
-    return with(new Entry.CustomerMessage(text, at), at);
+    return with(new Entry.CustomerMessage(text, at, idempotencyKey), at);
+  }
+
+  /**
+   * The reply to the Customer's message {@code text} sent with {@code idempotencyKey}, once it has
+   * one. A key is 1 to 255 printable ASCII characters, and the message sent with it said the same.
+   */
+  public Optional<Entry.AssistantReply> replyTo(String idempotencyKey, String text) {
+    if (idempotencyKey.isEmpty()
+        || idempotencyKey.length() > 255
+        || !idempotencyKey.chars().allMatch(c -> c >= 0x20 && c <= 0x7e)) {
+      throw new InvalidIdempotencyKeyException();
+    }
+    var asked = false;
+    for (var entry : entries) {
+      if (entry instanceof Entry.CustomerMessage m) {
+        asked = idempotencyKey.equals(m.idempotencyKey());
+        if (asked && !m.text().equals(text)) {
+          throw new IdempotencyKeyReusedException();
+        }
+      } else if (asked && entry instanceof Entry.AssistantReply reply) {
+        return Optional.of(reply);
+      }
+    }
+    return Optional.empty();
   }
 
   public Conversation withToolUse(List<ToolCall> calls, String providerContent) {

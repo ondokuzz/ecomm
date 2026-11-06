@@ -31,6 +31,15 @@ export interface Conversation {
 /** How long a message may be, in characters, as the Support Assistant takes it. */
 export const messageLimit = 2000
 
+/**
+ * When a Customer past their message limits may ask again: `retryAfter` seconds from `now`, rounded
+ * up to the minute, as the panel shows it.
+ */
+export function askAgainAt(retryAfter: number, now: Date): Date {
+  const minute = 60_000
+  return new Date(Math.ceil((now.getTime() + retryAfter * 1000) / minute) * minute)
+}
+
 export function remainingCharacters(text: string): number {
   return messageLimit - text.length
 }

@@ -22,10 +22,28 @@ ecomm:
     # Each call to it, retried once.
     anthropic-timeout: 30s
     anthropic-max-retries: 1
+    # At most this many calls to Claude a minute across every instance; past it, 503 assistantBusy.
+    provider-calls-per-minute: 60
+    # The circuit breaker around Claude: it opens when half of the last `window` calls failed, or
+    # `failures-in-a-row` did, answers 503 assistantUnavailable while open, and lets one call
+    # through after its wait.
+    breaker:
+      window: 20
+      failure-rate: 50
+      failures-in-a-row: 5
+      wait-when-open: 30s
     # Where Customers open the Storefront, which each message Claude reads names.
     storefront-url: http://localhost:8080
     # A Conversation lapses this long after its last message.
     conversation-lapses-after: 24h
+    # Each Customer may send this many messages in any hour, and in any day, whichever
+    # Conversations they are in; past either, 429 assistantRateLimited.
+    messages-per-hour: 20
+    messages-per-day: 100
+    # A turn asks the provider at most this many times, for at most this long; past either, it
+    # ends with a reply saying the question was too much to look up at once.
+    provider-calls-per-turn: 6
+    turn-time-limit: 60s
     # Every context on its compose host port.
     order-management-url: http://localhost:8085
     fulfillment-shipping-url: http://localhost:8099

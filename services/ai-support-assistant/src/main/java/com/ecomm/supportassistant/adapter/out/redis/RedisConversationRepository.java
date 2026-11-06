@@ -59,12 +59,14 @@ class RedisConversationRepository implements ConversationRepository {
       List<Reference> references,
       List<ToolCall> calls,
       List<ToolResult> results,
-      String providerContent) {
+      String providerContent,
+      String idempotencyKey) {
 
     static StoredEntry of(Entry entry) {
       return switch (entry) {
         case Entry.CustomerMessage m ->
-            new StoredEntry("CUSTOMER_MESSAGE", m.text(), m.at(), null, null, null, null);
+            new StoredEntry(
+                "CUSTOMER_MESSAGE", m.text(), m.at(), null, null, null, null, m.idempotencyKey());
         case Entry.AssistantReply r ->
             new StoredEntry(
                 "ASSISTANT_REPLY",
@@ -73,17 +75,19 @@ class RedisConversationRepository implements ConversationRepository {
                 r.references(),
                 null,
                 null,
-                r.providerContent());
+                r.providerContent(),
+                null);
         case Entry.ToolUse u ->
-            new StoredEntry("TOOL_USE", null, null, null, u.calls(), null, u.providerContent());
+            new StoredEntry(
+                "TOOL_USE", null, null, null, u.calls(), null, u.providerContent(), null);
         case Entry.ToolResults r ->
-            new StoredEntry("TOOL_RESULTS", null, null, null, null, r.results(), null);
+            new StoredEntry("TOOL_RESULTS", null, null, null, null, r.results(), null, null);
       };
     }
 
     Entry toEntry() {
       return switch (type) {
-        case "CUSTOMER_MESSAGE" -> new Entry.CustomerMessage(text, at);
+        case "CUSTOMER_MESSAGE" -> new Entry.CustomerMessage(text, at, idempotencyKey);
         case "ASSISTANT_REPLY" -> new Entry.AssistantReply(text, references, at, providerContent);
         case "TOOL_USE" -> new Entry.ToolUse(calls, providerContent);
         case "TOOL_RESULTS" -> new Entry.ToolResults(results);

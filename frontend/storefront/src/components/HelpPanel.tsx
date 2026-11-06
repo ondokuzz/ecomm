@@ -1,10 +1,11 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useId, useRef, useState } from 'react'
 import { useAuth } from 'react-oidc-context'
 import { Link } from 'react-router'
 import { useConversation, useNewConversation, useSendMessage } from '../api/help'
+import { ApiError } from '../api/http'
 import { useAuthPending, useSignin } from '../auth/session'
-import { type HelpMessage, messageLimit, referencePath, remainingCharacters } from '../domain/help'
-import { ErrorMessage } from './Status'
+import { type HelpMessage, askAgainAt, messageLimit, referencePath, remainingCharacters } from '../domain/help'
+import { ErrorMessage, SupportReference } from './Status'
 import { Button } from './ui/Button'
 import { buttonClass } from './ui/buttonClass'
 import { Icon } from './ui/Icon'
@@ -87,7 +88,14 @@ function HelpBody({ titleId, onClose }: { titleId: string; onClose: () => void }
           <Icon name="close" size={20} />
         </Button>
       </header>
-      {pending ? null : signedIn ? <HelpConversation newConversationError={newConversation.error} /> : <SignInToAsk />}
+      {pending ? null : signedIn ? (
+        <HelpConversation
+          newConversationError={newConversation.error}
+          onNewConversation={() => newConversation.mutate()}
+        />
+      ) : (
+        <SignInToAsk />
+      )}
     </div>
   )
 }
@@ -104,7 +112,13 @@ function SignInToAsk() {
   )
 }
 
-function HelpConversation({ newConversationError }: { newConversationError: unknown }) {
+function HelpConversation({
+  newConversationError,
+  onNewConversation,
+}: {
+  newConversationError: unknown
+  onNewConversation: () => void
+}) {
   const conversation = useConversation(true)
   const send = useSendMessage()
   const [text, setText] = useState('')
@@ -114,6 +128,11 @@ function HelpConversation({ newConversationError }: { newConversationError: unkn
   const boxId = useId()
   const countId = useId()
   const messages = conversation.data?.messages ?? []
+  const conversationId = conversation.data?.id
+  const resetSend = send.reset
+
+  // A new Conversation clears why the last message wasn't answered; its text stays in the box.
+  useEffect(() => resetSend(), [conversationId, resetSend])
 
   // Focus waits in the text box: when the panel opens, and again once a reply has come.
   useEffect(() => {
@@ -169,7 +188,15 @@ function HelpConversation({ newConversationError }: { newConversationError: unkn
           onRetry={() => conversation.refetch()}
         />
       ) : null}
-      {send.error ? <ErrorMessage error={send.error} title="Your message wasn't answered" /> : null}
+      {send.error ? (
+        <SendFailure
+          error={send.error}
+          onNewConversation={() => {
+            send.reset()
+            onNewConversation()
+          }}
+        />
+      ) : null}
       {newConversationError ? (
         <ErrorMessage error={newConversationError} title="We couldn't start a new conversation" />
       ) : null}
@@ -202,6 +229,58 @@ function HelpConversation({ newConversationError }: { newConversationError: unkn
         </div>
       </form>
     </>
+  )
+}
+
+const askAgainFormat = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' })
+
+/**
+ * Why the Customer's message wasn't answered, and the way on: past their message limits, the time
+ * they can ask again; the assistant unavailable or busy, to try later, with the support reference; a
+ * full Conversation, a new one. The message stays in the box for each.
+ */
+function SendFailure({ error, onNewConversation }: { error: unknown; onNewConversation: () => void }) {
+  if (!(error instanceof ApiError)) return <ErrorMessage error={error} title="Your message wasn't answered" />
+  const reason = error.problem.reason
+  if (reason === 'assistantRateLimited') {
+    const retryAfter = error.retryAfter
+    const when = retryAfter === undefined ? 'later' : `at ${askAgainFormat.format(askAgainAt(retryAfter, new Date()))}`
+    return <HelpAlert>{`You've sent a lot of messages. You can ask again ${when}.`}</HelpAlert>
+  }
+  if (reason === 'assistantUnavailable' || reason === 'assistantBusy') {
+    return (
+      <HelpAlert reference={error.correlationId}>
+        Ecomm Agent is unavailable just now. Please try again later.
+      </HelpAlert>
+    )
+  }
+  if (reason === 'conversationFull') {
+    return (
+      <HelpAlert
+        action={
+          <Button size="sm" className="alert-action" onClick={onNewConversation}>
+            Start a new conversation
+          </Button>
+        }
+      >
+        This conversation is full. Start a new one to ask more.
+      </HelpAlert>
+    )
+  }
+  return <ErrorMessage error={error} title="Your message wasn't answered" />
+}
+
+function HelpAlert({ children, reference, action }: { children: string; reference?: string; action?: ReactNode }) {
+  return (
+    <div className="alert alert-danger" role="alert">
+      <Icon name="alert" size={18} />
+      <div className="alert-body">
+        <strong>Your message wasn't answered</strong>
+        <span>{children}</span>
+        {reference && <SupportReference reference={reference} />}
+      </div>
+      {action}
+    </div>
   )
 }
 

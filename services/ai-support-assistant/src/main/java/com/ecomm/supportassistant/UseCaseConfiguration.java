@@ -2,14 +2,17 @@ package com.ecomm.supportassistant;
 
 import com.ecomm.supportassistant.application.ConversationService;
 import com.ecomm.supportassistant.application.port.in.ConversationsUseCase;
+import com.ecomm.supportassistant.application.port.out.AssistantMetrics;
 import com.ecomm.supportassistant.application.port.out.ConversationRepository;
 import com.ecomm.supportassistant.application.port.out.FulfillmentShippingPort;
 import com.ecomm.supportassistant.application.port.out.OrderManagementPort;
 import com.ecomm.supportassistant.application.port.out.PaymentPort;
+import com.ecomm.supportassistant.application.port.out.RateLimiter;
 import com.ecomm.supportassistant.application.port.out.ReturnsWarrantyPort;
 import com.ecomm.supportassistant.application.port.out.SearchDiscoveryPort;
 import com.ecomm.supportassistant.application.port.out.SupportModel;
 import com.ecomm.supportassistant.application.port.out.TimeSource;
+import com.ecomm.supportassistant.application.port.out.TurnsInFlight;
 import java.time.Duration;
 import java.util.concurrent.Executor;
 import org.slf4j.MDC;
@@ -35,7 +38,14 @@ class UseCaseConfiguration {
       ReturnsWarrantyPort returnsWarranty,
       SearchDiscoveryPort searchDiscovery,
       TimeSource time,
-      @Value("${ecomm.support-assistant.conversation-lapses-after}") Duration lapsesAfter) {
+      RateLimiter rateLimiter,
+      AssistantMetrics metrics,
+      TurnsInFlight inFlight,
+      @Value("${ecomm.support-assistant.conversation-lapses-after}") Duration lapsesAfter,
+      @Value("${ecomm.support-assistant.messages-per-hour}") int messagesPerHour,
+      @Value("${ecomm.support-assistant.messages-per-day}") int messagesPerDay,
+      @Value("${ecomm.support-assistant.provider-calls-per-turn}") int providerCallsPerTurn,
+      @Value("${ecomm.support-assistant.turn-time-limit}") Duration turnTimeLimit) {
     return new ConversationService(
         conversations,
         model,
@@ -46,7 +56,12 @@ class UseCaseConfiguration {
         searchDiscovery,
         lookups(),
         time,
-        lapsesAfter);
+        lapsesAfter,
+        rateLimiter,
+        new ConversationService.Limits(
+            messagesPerHour, messagesPerDay, providerCallsPerTurn, turnTimeLimit),
+        metrics,
+        inFlight);
   }
 
   /**

@@ -4,8 +4,9 @@ import { stackSecret } from './secrets'
 /**
  * Help, the Support Assistant's panel: opened from every page, it asks a signed-out visitor to sign
  * in; for a Customer it keeps the Conversation across pages and reloads, shows that it is working,
- * links each record a reply names, and ends the Conversation when they sign out. Its waiting and
- * failure states are shown with the assistant's answers stubbed, as the other pages' error states are.
+ * links each record a reply names, and ends the Conversation when they sign out; past the hourly
+ * message limit, it says when they can ask again. Its waiting and failure states are shown with the
+ * assistant's answers stubbed, as the other pages' error states are.
  * Each test signs in as a Customer made for it in Keycloak, and ends its Conversation and deletes the
  * Customer afterwards.
  */
@@ -120,6 +121,35 @@ test('signing out ends the Conversation', async ({ page }) => {
   expect((await (await ended).response())?.status()).toBe(204)
 })
 
+test('past the hourly message limit, the Customer is told when they can ask again', async ({ page, request }) => {
+  if (!customer) throw new Error('No Customer was made for this test')
+  const headers = { Authorization: `Bearer ${await tokenFor(request, customer)}` }
+  const started = await request.post('/api/support-assistant/conversations', { headers })
+  expect(started.status()).toBe(201)
+  const { id } = (await started.json()) as { id: string }
+  try {
+    // A Conversation holds 20 of the Customer's messages: the hour's whole limit.
+    for (let i = 0; i < 20; i++) {
+      const sent = await request.post(`/api/support-assistant/conversations/${id}/messages`, {
+        headers,
+        data: { text: `Hello ${i + 1}` },
+      })
+      expect(sent.status()).toBe(200)
+    }
+    await signIn(page)
+    const help = await openHelp(page)
+
+    await ask(help, 'Where is my order?')
+
+    await expect(help.getByRole('alert')).toContainText(
+      /You've sent a lot of messages\. You can ask again at \d{1,2}:\d{2}/,
+    )
+    await expect(help.getByRole('textbox', { name: 'Your question' })).toHaveValue('Where is my order?')
+  } finally {
+    await request.delete(`/api/support-assistant/conversations/${id}`, { headers })
+  }
+})
+
 test.describe('with the assistant stubbed', () => {
   const reply = {
     role: 'ASSISTANT',
@@ -184,6 +214,80 @@ test.describe('with the assistant stubbed', () => {
     const alert = help.getByRole('alert').filter({ hasText: "Your message wasn't answered" })
     await expect(alert).toContainText('Reference: e2e-help-1')
     await expect(help.getByRole('textbox', { name: 'Your question' })).toHaveValue('Where is my order?')
+  })
+
+  /** The assistant refuses each message with this problem, and `Retry-After` when it is given. */
+  async function refuseMessages(page: Page, status: number, reason: string, retryAfter?: number) {
+    await page.route(messages, (route: Route) =>
+      route.fulfill({
+        status,
+        contentType: 'application/problem+json',
+        headers: retryAfter === undefined ? {} : { 'Retry-After': String(retryAfter) },
+        body: JSON.stringify({ status, reason, correlationId: 'e2e-help-2' }),
+      }),
+    )
+  }
+
+  test.describe('in a known locale and time zone', () => {
+    test.use({ locale: 'en-GB', timezoneId: 'UTC' })
+
+    test('past the limits, it says at what time the Customer can ask again, and keeps the text', async ({ page }) => {
+      await refuseMessages(page, 429, 'assistantRateLimited', 3600)
+      await signIn(page)
+      const help = await openHelp(page)
+      await ask(help, 'Where is my order?')
+      // An hour from now, rounded up to the minute.
+      const at = new Date(Math.ceil((Date.now() + 3_600_000) / 60_000) * 60_000)
+      const later = new Date(at.getTime() + 60_000)
+      const time = (d: Date) => `${d.getUTCHours()}:${String(d.getUTCMinutes()).padStart(2, '0')}`
+
+      const alert = help.getByRole('alert')
+      await expect(alert).toContainText("You've sent a lot of messages.")
+      // The message may have been answered in the next minute.
+      await expect(alert).toContainText(new RegExp(`You can ask again at 0?(${time(at)}|${time(later)})\\.`))
+      await expect(help.getByRole('textbox', { name: 'Your question' })).toHaveValue('Where is my order?')
+    })
+  })
+
+  for (const [status, reason] of [
+    [503, 'assistantUnavailable'],
+    [503, 'assistantBusy'],
+  ] as const) {
+    test(`${reason} says the assistant is unavailable, with the reference, and keeps the text`, async ({ page }) => {
+      await refuseMessages(page, status, reason, reason === 'assistantBusy' ? 30 : undefined)
+      await signIn(page)
+      const help = await openHelp(page)
+      await ask(help, 'Where is my order?')
+
+      const alert = help.getByRole('alert')
+      await expect(alert).toContainText('Ecomm Agent is unavailable just now. Please try again later.')
+      await expect(alert).toContainText('Reference: e2e-help-2')
+      await expect(help.getByRole('textbox', { name: 'Your question' })).toHaveValue('Where is my order?')
+    })
+  }
+
+  test('a full Conversation offers a new one, which the kept text can be sent to', async ({ page }) => {
+    await refuseMessages(page, 409, 'conversationFull')
+    await signIn(page)
+    const help = await openHelp(page)
+    await ask(help, 'Where is my order?')
+
+    const alert = help.getByRole('alert')
+    await expect(alert).toContainText('This conversation is full.')
+    const box = help.getByRole('textbox', { name: 'Your question' })
+    await expect(box).toHaveValue('Where is my order?')
+
+    await page.unroute(messages)
+    await page.route(messages, (route) => route.fulfill({ status: 200, json: reply }))
+    const startedAgain = page.waitForRequest((r) => r.method() === 'POST' && r.url().endsWith('/conversations'))
+    await alert.getByRole('button', { name: 'Start a new conversation' }).click()
+    await startedAgain
+    await expect(help.getByRole('alert')).toBeHidden()
+    await expect(box).toHaveValue('Where is my order?')
+    await help.getByRole('button', { name: 'Send' }).click()
+    await expect(help.getByRole('list', { name: 'Conversation' })).toContainText(
+      'Your latest Order, #7F1C2A3B, is paid.',
+    )
   })
 
   test('a long Conversation scrolls within the panel, which stays on the screen', async ({ page }) => {

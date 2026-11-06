@@ -256,8 +256,18 @@ first, through the [AI Support Assistant](../../services/ai-support-assistant/RE
 beneath it as links, an Order to its Order page, an RMA to its RMA page and a Product to its Product page. The text box takes up to 2,000 characters and
 counts down what is left; Enter sends, Shift+Enter starts a new line. While a turn runs, "Looking
 that up…" shows and the text box is disabled; each reply is announced through a polite live region,
-and focus comes back to the text box. A failed message shows the error with its support reference,
-and the text stays in the box. "New conversation" ends the Conversation and starts another.
+and focus comes back to the text box. A failed message says why, and its text stays in the box:
+
+- past the Customer's 20 messages an hour or 100 a day (429 `assistantRateLimited`), "You've sent a
+  lot of messages. You can ask again at 14:05.", the time `Retry-After` ends, rounded up to the
+  minute, in the browser's locale;
+- the assistant unavailable or busy (503 `assistantUnavailable` or `assistantBusy`), "Ecomm Agent is
+  unavailable just now. Please try again later.", with the support reference;
+- a full Conversation (409 `conversationFull`), a "Start a new conversation" button, which the kept
+  text can then be sent to;
+- anything else, the error with its support reference.
+
+"New conversation" ends the Conversation and starts another.
 
 The Conversation's ID is kept in `sessionStorage`, so the panel reloads the transcript on any page
 and after a reload, for as long as the tab is open. A Conversation that has ended or lapsed answers
@@ -568,9 +578,12 @@ Discovery answers them at the time, and opens its Product page from the reply's 
 ([`e2e/help.spec.ts`](./e2e/help.spec.ts)) opens Ecomm Agent signed out and is asked to sign in; signed in
 as a Customer made for each test, whose Conversation and Customer it deletes after, it sees focus move into the panel and back to its button on Escape and on close,
 follows a Conversation across pages and a reload, starts a new one, has a lapsed one replaced, and
-sees signing out end it. With the assistant's answers stubbed, it sees "Looking that up…" and the
+sees signing out end it. One sends the hourly limit's 20 messages through the API, then asks in the
+panel and is told when it can ask again. With the assistant's answers stubbed, it sees "Looking that up…" and the
 text box disabled while a turn runs, then the reply announced, its link opening the Order page, a
-failed message say so with its reference and keep its text, a long Conversation scroll within the
+failed message say so with its reference and keep its text, the rate limit say at what time it can
+ask again, unavailable and busy say so with the reference, and a full Conversation offer a new one
+that the kept text is then sent to, each keeping the text; a long Conversation scroll within the
 panel while the panel stays on the screen, and the text box stop at 2,000 characters. The error-states test
 ([`e2e/error-states.spec.ts`](./e2e/error-states.spec.ts)) opens unknown route, Product and Order
 addresses and sees the Not Found page, answers the Product list with a 500 and sees the panel's

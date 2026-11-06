@@ -1,15 +1,22 @@
 package com.ecomm.supportassistant.application;
 
+import com.ecomm.supportassistant.application.port.in.AssistantBusyException;
+import com.ecomm.supportassistant.application.port.in.AssistantRateLimitedException;
+import com.ecomm.supportassistant.application.port.in.AssistantUnavailableException;
 import com.ecomm.supportassistant.application.port.in.ConversationNotFoundException;
 import com.ecomm.supportassistant.application.port.in.ConversationsUseCase;
+import com.ecomm.supportassistant.application.port.in.IdempotencyKeyInFlightException;
+import com.ecomm.supportassistant.application.port.out.AssistantMetrics;
 import com.ecomm.supportassistant.application.port.out.ConversationRepository;
 import com.ecomm.supportassistant.application.port.out.FulfillmentShippingPort;
 import com.ecomm.supportassistant.application.port.out.OrderManagementPort;
 import com.ecomm.supportassistant.application.port.out.PaymentPort;
+import com.ecomm.supportassistant.application.port.out.RateLimiter;
 import com.ecomm.supportassistant.application.port.out.ReturnsWarrantyPort;
 import com.ecomm.supportassistant.application.port.out.SearchDiscoveryPort;
 import com.ecomm.supportassistant.application.port.out.SupportModel;
 import com.ecomm.supportassistant.application.port.out.TimeSource;
+import com.ecomm.supportassistant.application.port.out.TurnsInFlight;
 import com.ecomm.supportassistant.domain.Conversation;
 import com.ecomm.supportassistant.domain.Entry;
 import com.ecomm.supportassistant.domain.Reference;
@@ -20,6 +27,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
@@ -39,17 +47,43 @@ public class ConversationService implements ConversationsUseCase {
 
   private static final Logger log = LoggerFactory.getLogger(ConversationService.class);
 
+  /** The reply to a turn that reached its bounds before the provider replied. */
+  static final String TOO_MUCH =
+      "I'm sorry, that was too much to look up at once. Could you ask about one thing at a time?";
+
   private final ConversationRepository conversations;
   private final SupportModel model;
   private final SupportTools tools;
   private final Executor lookups;
   private final TimeSource time;
   private final Duration lapsesAfter;
+  private final RateLimiter rateLimiter;
+  private final List<RateLimiter.Limit> customerLimits;
+  private final Limits limits;
+  private final AssistantMetrics metrics;
+  private final TurnsInFlight inFlight;
+
+  /** How long past the turn's time a claim on its key is kept, should it not be released. */
+  private static final Duration HELD_PAST = Duration.ofMinutes(1);
+
+  /**
+   * How much a Customer, a turn and the service may ask of the assistant.
+   *
+   * @param messagesPerHour how many messages a Customer may send in any hour
+   * @param messagesPerDay how many in any day
+   * @param providerCallsPerTurn how many times a turn may ask the provider
+   * @param turnTimeLimit how long a turn may run before it stops asking
+   */
+  public record Limits(
+      int messagesPerHour, int messagesPerDay, int providerCallsPerTurn, Duration turnTimeLimit) {}
 
   /**
    * @param lookups runs each of an answer's lookups when it asks for more than one, with the
    *     request thread's Customer token and Correlation ID
    * @param lapsesAfter how long a Conversation is kept after its last message
+   * @param rateLimiter counts each Customer's messages against {@code limits}
+   * @param metrics counts the tokens, the turns and the refusals
+   * @param inFlight holds the Idempotency-Key of each message while its turn runs
    */
   public ConversationService(
       ConversationRepository conversations,
@@ -61,7 +95,11 @@ public class ConversationService implements ConversationsUseCase {
       SearchDiscoveryPort searchDiscovery,
       Executor lookups,
       TimeSource time,
-      Duration lapsesAfter) {
+      Duration lapsesAfter,
+      RateLimiter rateLimiter,
+      Limits limits,
+      AssistantMetrics metrics,
+      TurnsInFlight inFlight) {
     this.conversations = conversations;
     this.model = model;
     this.tools =
@@ -70,6 +108,14 @@ public class ConversationService implements ConversationsUseCase {
     this.lookups = lookups;
     this.time = time;
     this.lapsesAfter = lapsesAfter;
+    this.rateLimiter = rateLimiter;
+    this.limits = limits;
+    this.metrics = metrics;
+    this.inFlight = inFlight;
+    this.customerLimits =
+        List.of(
+            new RateLimiter.Limit(limits.messagesPerHour(), Duration.ofHours(1)),
+            new RateLimiter.Limit(limits.messagesPerDay(), Duration.ofDays(1)));
   }
 
   @Override
@@ -80,22 +126,91 @@ public class ConversationService implements ConversationsUseCase {
   }
 
   @Override
-  public Entry.AssistantReply send(String customerId, String conversationId, String text) {
+  public Sent send(String customerId, String conversationId, String text, String idempotencyKey) {
+    if (idempotencyKey == null) {
+      return answer(conversation(customerId, conversationId), text, null);
+    }
+    var replied = replayed(customerId, conversationId, text, idempotencyKey);
+    if (replied.isPresent()) {
+      return replied.get();
+    }
+    // The key is held while its turn runs, so a repeat sent meanwhile runs none of its own.
+    if (!inFlight.claim(conversationId, idempotencyKey, limits.turnTimeLimit().plus(HELD_PAST))) {
+      throw new IdempotencyKeyInFlightException();
+    }
+    try {
+      // The first may have been answered, and its claim released, since the look above.
+      var answered = replayed(customerId, conversationId, text, idempotencyKey);
+      return answered.orElseGet(
+          () -> answer(conversation(customerId, conversationId), text, idempotencyKey));
+    } finally {
+      inFlight.release(conversationId, idempotencyKey);
+    }
+  }
+
+  /** The reply to the message sent with {@code idempotencyKey}, once it has one. */
+  private Optional<Sent> replayed(
+      String customerId, String conversationId, String text, String idempotencyKey) {
+    var replied = conversation(customerId, conversationId).replyTo(idempotencyKey, text);
+    replied.ifPresent(
+        reply ->
+            log.info(
+                "Replayed the reply in Conversation {} for its Idempotency-Key", conversationId));
+    return replied.map(reply -> new Sent(reply, true));
+  }
+
+  /** Adds the Customer's message, counts it against their limits, and runs its turn. */
+  private Sent answer(Conversation conversation, String text, String idempotencyKey) {
+    var customerId = conversation.customerId();
+    conversation = conversation.withCustomerMessage(text, idempotencyKey, time.now());
+    // Only a message the Conversation takes counts, and it counts before the provider is asked.
+    rateLimiter
+        .take("customer:" + customerId, customerLimits, time.now())
+        .ifPresent(
+            refusal -> {
+              metrics.refused(
+                  refusal.limit().equals(customerLimits.getFirst())
+                      ? AssistantMetrics.Limit.MESSAGES_PER_HOUR
+                      : AssistantMetrics.Limit.MESSAGES_PER_DAY);
+              throw new AssistantRateLimitedException(refusal.retryAfter());
+            });
+    return new Sent(turn(conversation), false);
+  }
+
+  /**
+   * Asks the model, and runs the lookups it asks for, until it replies or the turn reaches its
+   * bounds: the reply, saved with the Conversation.
+   */
+  private Entry.AssistantReply turn(Conversation conversation) {
     var started = System.nanoTime();
-    var conversation =
-        conversation(customerId, conversationId).withCustomerMessage(text, time.now());
     var results = new ArrayList<ToolResult>();
     var calls = 0;
     var usage = SupportModel.Usage.NONE;
-    var replied = false;
+    var outcome = AssistantMetrics.Outcome.FAILED;
     try {
       while (true) {
+        var timeLeft = limits.turnTimeLimit().minus(Duration.ofNanos(System.nanoTime() - started));
+        // A model looking things up on and on ends here, with the lookups it had so far.
+        if (calls == limits.providerCallsPerTurn() || !timeLeft.isPositive()) {
+          outcome = AssistantMetrics.Outcome.BOUNDED;
+          return bounded(conversation);
+        }
         calls++;
-        var answer =
-            model.answer(
-                new SupportModel.Request(
-                    SystemPrompt.TEXT, SupportTools.DEFINITIONS, conversation.entries()));
+        SupportModel.Answer answer;
+        try {
+          answer =
+              model.answer(
+                  new SupportModel.Request(
+                      SystemPrompt.TEXT,
+                      SupportTools.DEFINITIONS,
+                      conversation.entries(),
+                      timeLeft));
+        } catch (SupportModel.OutOfTimeException e) {
+          outcome = AssistantMetrics.Outcome.BOUNDED;
+          return bounded(conversation);
+        }
         usage = usage.plus(answer.usage());
+        metrics.tokens(answer.usage());
         switch (answer) {
           case SupportModel.ToolUse(var toolCalls, var ignored, var providerContent) -> {
             var turnResults = runAtOnce(toolCalls);
@@ -108,19 +223,29 @@ public class ConversationService implements ConversationsUseCase {
                 new Entry.AssistantReply(
                     replyText, referencesNamedIn(replyText, results), time.now(), providerContent);
             conversations.save(conversation.withReply(reply), lapsesAfter);
-            replied = true;
+            outcome = AssistantMetrics.Outcome.REPLIED;
             return reply;
           }
         }
       }
+    } catch (SupportModel.UnavailableException e) {
+      // The Conversation is left as it was before the message, which the Customer can send again.
+      outcome = AssistantMetrics.Outcome.UNAVAILABLE;
+      throw new AssistantUnavailableException(e);
+    } catch (SupportModel.BusyException e) {
+      outcome = AssistantMetrics.Outcome.BUSY;
+      metrics.refused(AssistantMetrics.Limit.PROVIDER_CALLS_PER_MINUTE);
+      throw new AssistantBusyException(e.retryAfter());
     } finally {
+      var took = Duration.ofNanos(System.nanoTime() - started);
+      metrics.turn(outcome, took);
       // A turn that failed is logged too. The Correlation ID is in the MDC; the Customer's words
       // and the reply stay out.
       log.info(
           "Turn in Conversation {} {}: tools [{}], {} provider calls, tokens {} in, {} out, {}"
               + " cache read, in {} ms",
-          conversationId,
-          replied ? "replied" : "failed",
+          conversation.id(),
+          outcome.name().toLowerCase(Locale.ROOT),
           results.stream()
               .map(r -> r.tool() + " " + r.outcome().name().toLowerCase(Locale.ROOT))
               .collect(Collectors.joining(", ")),
@@ -128,8 +253,15 @@ public class ConversationService implements ConversationsUseCase {
           usage.input(),
           usage.output(),
           usage.cacheRead(),
-          Duration.ofNanos(System.nanoTime() - started).toMillis());
+          took.toMillis());
     }
+  }
+
+  /** The reply to a turn that reached its bounds, saved after the lookups it made. */
+  private Entry.AssistantReply bounded(Conversation conversation) {
+    var reply = new Entry.AssistantReply(TOO_MUCH, List.of(), time.now(), null);
+    conversations.save(conversation.withReply(reply), lapsesAfter);
+    return reply;
   }
 
   /** Runs the lookups of one answer, at once when there are several: their results, in order. */

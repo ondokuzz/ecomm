@@ -193,7 +193,10 @@ dashboards, under **ecomm**, are files in [`infra/docker/grafana`](./infra/docke
 - **Services:** request rate, 5xx rate and p95 latency per service, request rate per route,
   each Postgres service's outbox events not yet sent to Kafka (Catalog's Couchbase outbox isn't
   measured), Inventory's Stock cache: its hit ratio, and its hits, misses and Redis errors, and
-  Cart's Abandoned Carts, per hour.
+  Cart's Abandoned Carts, per hour; and a Support Assistant row: its tokens per hour by kind,
+  Claude's errors by kind, its turns' p95 duration and rate by how they ended, its circuit
+  breaker's state, and the messages and turns refused by its limits
+  ([its README](./services/ai-support-assistant/README.md#logs-and-metrics)).
 - **Event consumers:** lag per consumer group, and per group, topic and partition; consumption
   rate; retries; dead-lettered and redriven events. Lag comes from a Kafka exporter, which reads
   each group's committed offsets from the broker, so it keeps showing while a group is stopped or
@@ -210,7 +213,7 @@ dashboards, under **ecomm**, are files in [`infra/docker/grafana`](./infra/docke
 
 A panel plotting `rate()` or `increase()` counts a series only from its second sample, so a
 counter has to be on `/actuator/prometheus` at 0 before its first count, or that count is missed.
-Orchestration's checkout counters, Inventory's Stock cache counters and Cart's `cart_abandoned_total` are. Some can't be, since
+Orchestration's checkout counters, Inventory's Stock cache counters, Cart's `cart_abandoned_total` and the Support Assistant's are. Some can't be, since
 what they are tagged with is known only when they count, so their panels miss the first count of
 each new series after a service starts: **Retries** (per group and topic), the **5xx rate** and
 **request rate per route** (per route and status), and Temporal's own **activity failures** and
@@ -310,7 +313,7 @@ properties, through its config tree ([ADR 0011](./docs/adr/0011-secrets-as-gener
 | `checkout-client-secret`, `orchestration-client-secret`, `notifications-client-secret` | The confidential Keycloak clients and the services that use them; realm sync sets each client's secret from its file on every start ([Identity & Access](./services/identity-access/README.md#client-secrets)) |
 | `payment-webhook-secret` | Payment, and its mock gateway, which signs its webhooks with it |
 | `carrier-webhook-secret` | Fulfillment & Shipping, and its mock carrier, which signs its Carrier webhooks with it |
-| `anthropic-api-key` | The AI Support Assistant's Anthropic API key: written empty, which runs its mock provider; a key written into it runs Claude ([its README](./services/ai-support-assistant/README.md#claude)) |
+| `anthropic-api-key` | The AI Support Assistant's Anthropic API key: written empty, which runs its mock provider; a key written into it runs Claude ([its README](./services/ai-support-assistant/README.md#claude)). `ANTHROPIC_API_KEY_FILE`, an absolute path, mounts another file in its place, such as an empty one for the Playwright suites |
 
 A new secret is 32 random bytes, URL-safe, except `anthropic-api-key`, which can't be generated
 and is written empty. An existing file is never overwritten. On a stack whose

@@ -2,11 +2,14 @@ package com.ecomm.supportassistant;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.TestPropertySource;
 
 /**
  * A message is 1 to 2,000 characters, and a Conversation holds at most 20 of the Customer's; past
- * that, the Customer starts a new one.
+ * that, the Customer starts a new one. The Customer may send one more than that an hour here, so
+ * their first in the new one is answered.
  */
+@TestPropertySource(properties = "ecomm.support-assistant.messages-per-hour=21")
 class MessageLimitsApiTest extends SupportAssistantApiTest {
 
   @Test

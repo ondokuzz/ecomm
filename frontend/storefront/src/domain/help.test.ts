@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { type Reference, messageLimit, referencePath, remainingCharacters } from './help'
+import { type Reference, askAgainAt, messageLimit, referencePath, remainingCharacters } from './help'
 
 describe('referencePath', () => {
   it('links an Order to its Order page', () => {
@@ -30,6 +30,16 @@ describe('referencePath', () => {
       label: 'Google Pixel 9',
     }
     expect(referencePath(product)).toBe('/products/PHN-PIXEL-9')
+  })
+})
+
+describe('askAgainAt', () => {
+  it('is the minute the wait ends in, rounded up so the Customer is let through by then', () => {
+    expect(askAgainAt(3600, new Date('2026-11-06T13:04:20Z'))).toEqual(new Date('2026-11-06T14:05:00Z'))
+  })
+
+  it('stays on a wait that ends on the minute', () => {
+    expect(askAgainAt(60, new Date('2026-11-06T13:04:00Z'))).toEqual(new Date('2026-11-06T13:05:00Z'))
   })
 })
 

@@ -13,9 +13,17 @@ public interface ConversationsUseCase {
 
   /**
    * Adds the Customer's message and runs one turn: the model and the lookups it asks for, until it
-   * replies.
+   * replies. A message sent again with the same {@code idempotencyKey} is answered the first one's
+   * reply, with no turn run.
+   *
+   * @param idempotencyKey null for none
    */
-  Entry.AssistantReply send(String customerId, String conversationId, String text);
+  Sent send(String customerId, String conversationId, String text, String idempotencyKey);
+
+  /**
+   * @param replayed whether it is the reply to an earlier message with the same key
+   */
+  record Sent(Entry.AssistantReply reply, boolean replayed) {}
 
   Conversation conversation(String customerId, String conversationId);
 
