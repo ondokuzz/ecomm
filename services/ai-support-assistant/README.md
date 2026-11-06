@@ -148,12 +148,12 @@ docker compose up -d ai-support-assistant
 Emptying the file and recreating the service the same way goes back to the mock. To run the mock
 for a while without touching the key, such as for the Playwright suites, which expect its replies,
 point `ANTHROPIC_API_KEY_FILE` at an empty file by its absolute path; leaving it unset goes back to
-the key:
+the key. Compose doesn't see a secret's file change as a change to the service, so recreate it:
 
 ```sh
 : > /tmp/no-anthropic-api-key
-ANTHROPIC_API_KEY_FILE=/tmp/no-anthropic-api-key docker compose up -d ai-support-assistant
-docker compose up -d ai-support-assistant   # the key in .secrets again
+ANTHROPIC_API_KEY_FILE=/tmp/no-anthropic-api-key docker compose up -d --force-recreate ai-support-assistant
+docker compose up -d --force-recreate ai-support-assistant   # the key in .secrets again
 ```
  **With a key,
 Customers' questions, and the data the tools return about them, go to Anthropic's API**, and each
