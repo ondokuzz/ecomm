@@ -87,6 +87,11 @@ const keycloakUrl = process.env.KEYCLOAK_URL ?? 'http://localhost:8180'
 const orderManagementUrl = process.env.ORDER_MANAGEMENT_URL ?? 'http://localhost:8085'
 /** The seeded Staff user, who picks and packs Shipments through the gateway as the Admin Console does. */
 const staff: Credentials = { email: 'staff@ecomm.local', password: 'staff' }
+/**
+ * How long a test waits for the Order page once it pays. The Storefront confirms a payment for up to
+ * two minutes, and on a loaded stack the checkout Saga's calls to Temporal alone have taken 12 seconds.
+ */
+const paidWithin = { timeout: 30_000 }
 
 let customer: Customer | undefined
 
@@ -202,7 +207,7 @@ test('a Customer checks out a picked Variant and another Product, and on-hand St
   await testCard(page, 'Approve').check()
   await payButton.click()
 
-  await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/)
+  await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/, paidWithin)
   await expect(page.getByText('Thank you! Your order is confirmed.')).toBeVisible()
   // The Order shows where it goes, how, and what that cost, in its total.
   const orderShipping = page.locator('.order-shipping')
@@ -334,7 +339,7 @@ test('a declined card shows why, and the held session can then be paid with one 
   await expect(declined).toBeHidden()
   await page.getByRole('button', { name: /^Pay/ }).click()
 
-  await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/)
+  await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/, paidWithin)
   await expect(page.locator('.status-paid')).toHaveText('Paid')
   const orderId = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!)
   expect((await orderOf(request, token, orderId)).status).toBe('PAID')
@@ -393,7 +398,7 @@ test('WELCOME10 takes 10% off at checkout, and the PAID Order shows the discount
   await testCard(page, 'Approve').check()
   await page.getByRole('button', { name: `Pay ${formatMoney(shipped(discounted), currencies, 'en-US')}` }).click()
 
-  await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/)
+  await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/, paidWithin)
   await expect(page.locator('.status-paid')).toHaveText('Paid')
   await expect(page.getByText('Coupon: WELCOME10')).toBeVisible()
   const orderId = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!)
@@ -441,7 +446,7 @@ test('Audio week comes off an audio Product by itself, WELCOME10 on top, and the
   await testCard(page, 'Approve').check()
   await page.getByRole('button', { name: pay(total) }).click()
 
-  await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/)
+  await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/, paidWithin)
   await expect(page.getByText('Campaign: Audio week')).toBeVisible()
   await expect(page.getByText('Coupon: WELCOME10')).toBeVisible()
   const orderId = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!)
@@ -524,7 +529,7 @@ test('after a Customer buys two Products together, each one’s page shows the o
     await shipTo(page)
     await testCard(page, 'Approve').check()
     await page.getByRole('button', { name: /^Pay/ }).click()
-    await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/)
+    await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/, paidWithin)
     await expect(page.locator('.status-paid')).toHaveText('Paid')
 
     for (const [product, other] of [pair, [...pair].reverse()]) {
@@ -778,7 +783,7 @@ test.describe('Sprint 3', () => {
     await page.getByRole('button', { name: `Pay ${money(total, currencies)}` }).click()
 
     // The Order page draws its timeline from the Status history: Placed, then Paid, each with its time.
-    await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/)
+    await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/, paidWithin)
     await expect(page.locator('.status-paid')).toHaveText('Paid')
     const orderId = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!)
     const token = await tokenFor(request, customer)
@@ -861,7 +866,7 @@ test.describe('Sprint 4', () => {
     const confirmingShown = await watchForStatus(page, 'Confirming your payment…')
     await page.getByRole('button', { name: /^Pay/ }).click()
 
-    await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/)
+    await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/, paidWithin)
     expect(await confirmingShown(), 'Checkout said the payment was being confirmed').toBe(true)
     await expect(page.locator('.status-paid')).toHaveText('Paid')
     const orderId = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!)
@@ -901,7 +906,7 @@ test.describe('Sprint 4', () => {
     await testCard(page, 'Approve').check()
     await page.getByRole('button', { name: /^Pay/ }).click()
 
-    await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/)
+    await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/, paidWithin)
     await expect(page.locator('.status-paid')).toHaveText('Paid')
   })
 })
@@ -924,7 +929,7 @@ test.describe('Sprint 5', () => {
     await shipTo(page)
     await testCard(page, 'Approve').check()
     await page.getByRole('button', { name: /^Pay/ }).click()
-    await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/)
+    await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/, paidWithin)
     await expect(page.locator('.status-paid')).toHaveText('Paid')
     const orderId = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!)
 
@@ -1145,7 +1150,7 @@ test.describe('Sprint 6', () => {
     await shipTo(page)
     await testCard(page, 'Approve').check()
     await page.getByRole('button', { name: /^Pay/ }).click()
-    await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/)
+    await expect(page).toHaveURL(/\/orders\/[^/?]+\?placed$/, paidWithin)
     const orderId = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!)
 
     // Staff pick and pack it with its IMEI; the Saga ships it and the mock carrier delivers it.

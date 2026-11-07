@@ -4,7 +4,7 @@ import type { Coupon } from '../src/domain/coupon'
 import { type Currencies, type Currency, type Money, currenciesOf, formatMoney } from '../src/domain/money'
 import type { Order } from '../src/domain/order'
 import { stackSecret } from './secrets'
-import { aPhoneInStock, buy } from './stack'
+import { aPhoneInStock, buy, paidWithin } from './stack'
 
 /**
  * Staff list, create, edit, switch off and delete Coupons and Campaigns in the Admin Console, and
@@ -291,7 +291,7 @@ test.describe('Campaigns', () => {
         .getByRole('radio', { name: 'Approve', exact: true })
         .check()
       await storefront.getByRole('button', { name: `Pay ${formatMoney(total, currencies, 'en-US')}` }).click()
-      await expect(storefront).toHaveURL(/\/orders\/[^/?]+\?placed$/)
+      await expect(storefront).toHaveURL(/\/orders\/[^/?]+\?placed$/, paidWithin)
       await expect(storefront.getByText(`Campaign: ${name}`)).toBeVisible()
       orderId = decodeURIComponent(new URL(storefront.url()).pathname.split('/').pop()!)
       const order = await request.get(`/api/order-management/orders/${encodeURIComponent(orderId)}`, {

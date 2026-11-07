@@ -307,10 +307,10 @@ behind doesn't throw them.
 Each suite runs its spec files side by side, one Playwright worker each. Where Docker's memory is short of what
 the stack uses, or the host swaps Docker's VM out, requests stall for tens of seconds and tests time
 out; `npx playwright test --workers=1` loads the stack less, and is how both suites passed on a
-16 GB laptop on 2026-11-06 ([Sprint 7's note](./docs/roadmap.md#sprint-7-weeks-1314--ai-assistant)).
-The first checkout after `make up` can still take longer than a test waits, since the warm-up
-leaves Pay and the checkout Saga cold: on 2026-11-06 the Storefront's first answered in 12 seconds
-and its Order page missed the test's 15.
+16 GB laptop on 2026-11-07, the first runs after `make up`
+([Sprint 7's note](./docs/roadmap.md#sprint-7-weeks-1314--ai-assistant)). A test that pays waits 30
+seconds for its Order page, since on a loaded stack a Pay has taken 15, and the Storefront itself
+confirms one for up to two minutes.
 
 ### Secrets
 
@@ -386,7 +386,7 @@ d=.secrets/ecomm; printf '{"dev": {"checkoutClientSecret": "%s", "orchestrationC
 | `make secrets` | Write each secret the stack lacks to `.secrets/<project>/`, never overwriting one ([Secrets](#secrets)) |
 | `make down` | Stop the stack, keeping its data |
 | `make status` | Say whether every service is running and healthy, naming any that isn't with its exit code and whether it was killed for its memory cap. Both Playwright suites run it first |
-| `make seed-reset` | Put the seed Categories, Products, Stock, Coupons and Campaigns back and drop every Cart, Checkout Session, Reservation, Order, Payment, Shipment, RMA, review and Notification, and terminate every running Saga; registered Customers stay. It also empties the event topics, dead-letter and redrive topics included, and Search's, Reviews', Recommendations', Fulfillment & Shipping's, Returns & Warranty's and Notifications' projections, since the reset stores count their events' versions from 1 again |
+| `make seed-reset` | Put the seed Categories, Products, Stock, Coupons and Campaigns back and drop every Cart, Checkout Session, Reservation, Order, Payment, Shipment, RMA, review and Notification, and terminate every running Saga; registered Customers stay. It also empties the event topics, dead-letter and redrive topics included, and Search's, Reviews', Recommendations', Fulfillment & Shipping's, Returns & Warranty's and Notifications' projections, since the reset stores count their events' versions from 1 again. It ends with `make up`'s warm-up |
 | `make upgrade-from FROM=<commit>`, `make upgrade-to`, `make upgrade-clean` | Start the stack as it was at a commit under a project of its own, bring it up to this tree keeping its data, and remove it ([the upgrade check](./docs/agents/upgrade-check.md)) |
 | `make search-rebuild` | Rebuild Search's projection from the topics ([Search & Discovery](./services/search-discovery/README.md#rebuilding)) |
 | `make dlt-redrive GROUP=<group>` | Redrive a consumer group's dead events once their cause is fixed: copy what reached `<group>.dlt` since the last redrive to `<group>.redrive`, which the group's listeners also consume ([service template](./platform/service-template/README.md#consuming)) |

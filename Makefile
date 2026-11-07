@@ -57,7 +57,8 @@ memory:
 ## created again until it has gone. Every running Saga is then terminated, or it would act on data
 ## that no longer exists for as long as it ran: once the topics are gone, so no event starts another,
 ## and before the services it calls come back (infra/docker/temporal-terminate.sh). Orchestration
-## keeps running, so the first checkout after the reset finds it warm.
+## keeps running, and the reset ends with the warm-up `make up` runs, since the services it starts
+## again answer their first calls slowly.
 seed-reset:
 	$(COMPOSE) up -d --wait couchbase postgres redis kafka mongo temporal
 	$(COMPOSE) stop storefront checkout-pricing catalog inventory cart payment order-management promotions search-discovery reviews-ratings recommendations fulfillment-shipping returns-warranty notifications
@@ -79,6 +80,7 @@ seed-reset:
 	$(COMPOSE) run --rm --no-deps -T --entrypoint sh temporal-namespace -s < infra/docker/temporal-terminate.sh
 	$(COMPOSE) run --rm --no-deps kafka-topics
 	$(COMPOSE) up -d --wait
+	@python3 -B infra/docker/warm-up.py
 
 ## Rebuild Search's projection from the topics: drop its collections and read every topic again
 ## from the start (services/search-discovery/README.md). Each rebuild resets its service's groups

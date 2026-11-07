@@ -8,12 +8,15 @@ First it waits until no running workflow has a workflow task pending (temporal-s
 Sagas' timers that came due while the stack was down fire as it starts, each replayed on a cold
 worker, and a first checkout's Saga waited behind them (#107).
 
-As a throwaway Customer, it puts a Variant in a Cart in a quantity no Stock covers and starts a
-Checkout Session: Cart, Catalog, Promotions, Inventory and Checkout all answer, and Inventory
-refuses to hold it (409 `outOfStock`), so no Stock is held. It reads what the Order and Product
-pages read for an Order and a Product that don't exist, and its Orders, none. Then it deletes the
-Cart and the Customer. Payment's Pay and the checkout Saga stay cold: warming them would place an
-Order.
+As a throwaway Customer, it checks out one unit of the Variant with the most Stock to Berlin and
+pays with the declining test card: Cart, Catalog, Promotions, Inventory, Checkout, Fulfillment &
+Shipping's quote, the checkout Saga, Order Management and Payment all answer, and Order Management
+and Payment publish their first events. Left cold, they made the first Pay after `make up` answer
+in 12 seconds, and its Order page miss the Storefront suite's 15 (#120). Nothing is charged and no
+Stock is taken: the Order is cancelled, which sends no Notification, and the Payment is declined.
+The Checkout Session keeps its Reservation of that one unit until it expires, 17 minutes on, as a
+declined session does. It also reads what the Order and Product pages read for an Order and a
+Product that don't exist. Then it deletes the Cart and the Customer, whose cancelled Order stays.
 """
 
 import json
@@ -128,22 +131,43 @@ try:
         {"grant_type": "password", "client_id": "dev-cli", "username": email, "password": password},
     )
     _, products, _ = timed("Catalog's Products", "GET", f"{STOREFRONT}/api/catalog/products")
-    variant = products[0]["variants"][0]["id"]
-    timed("its Stock", "GET", f"{STOREFRONT}/api/inventory/stock/{variant}")
+    # One read takes 50 Variants at most; the seed has 39.
+    variants = ",".join([v["id"] for p in products for v in p["variants"]][:50])
+    _, stock, _ = timed(
+        "their Stock", "GET", f"{STOREFRONT}/api/inventory/stock?variantIds={variants}"
+    )
+    variant = max(stock, key=lambda s: s["quantity"])["variantId"]
+    sessions = f"{STOREFRONT}/api/checkout-pricing/checkout/sessions"
     try:
+        timed("a Cart line", "PUT", f"{STOREFRONT}/api/cart/cart/items/{variant}", customer, {"quantity": 1})
+        _, session, _ = timed("a Checkout Session", "POST", sessions, customer, expect=(201,))
         timed(
-            "a Cart line",
+            "its Shipping options",
             "PUT",
-            f"{STOREFRONT}/api/cart/cart/items/{variant}",
+            f"{sessions}/{session['id']}/shipping-address",
             customer,
-            {"quantity": 1_000_000},
+            {
+                "recipientName": "Warm-up Customer",
+                "line1": "Hauptstraße 5",
+                "postcode": "10115",
+                "city": "Berlin",
+                "country": "DE",
+            },
         )
         timed(
-            "a Checkout Session, refused for want of Stock",
-            "POST",
-            f"{STOREFRONT}/api/checkout-pricing/checkout/sessions",
+            "a Shipping option",
+            "PUT",
+            f"{sessions}/{session['id']}/shipping-option",
             customer,
-            expect=(409,),
+            {"optionId": "STANDARD"},
+        )
+        timed(
+            "Pay, declined: the checkout Saga, an Order and a Payment",
+            "POST",
+            f"{sessions}/{session['id']}/pay",
+            customer,
+            {"paymentMethod": "tok_decline"},
+            expect=(402,),
         )
     finally:
         call("DELETE", f"{STOREFRONT}/api/cart/cart", customer, expect=(204,))

@@ -6,6 +6,12 @@ import { stackSecret } from './secrets'
 
 export const keycloakUrl = process.env.KEYCLOAK_URL ?? 'http://localhost:8180'
 export const staff = { email: 'staff@ecomm.local', password: 'staff' }
+/**
+ * How long a test waits for the Storefront's Order page once it pays. The Storefront confirms a
+ * payment for up to two minutes, and on a loaded stack the checkout Saga's calls to Temporal alone
+ * have taken 12 seconds.
+ */
+export const paidWithin = { timeout: 30_000 }
 const run = `${Date.now().toString(36)}${process.pid.toString(36)}`
 
 export interface Customer {
