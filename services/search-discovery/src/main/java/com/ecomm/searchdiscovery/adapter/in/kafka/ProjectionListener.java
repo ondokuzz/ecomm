@@ -13,17 +13,25 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import org.apache.kafka.common.TopicPartition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.listener.ConsumerSeekAware;
 import org.springframework.stereotype.Component;
 
 /**
  * Projects Catalog's Products and Categories and Inventory's Stock into Search, one consumer group
  * per topic. Rebuilding the projection resets these groups to the earliest offset (README).
+ *
+ * <p>While any Product stored before Sprint 7 is without Warranty terms, the Product topic is read
+ * from the start whenever its partitions are assigned, so a stack upgraded from Sprint 6 fills them
+ * in without a rebuild.
  */
 @Component
-class ProjectionListener {
+class ProjectionListener implements ConsumerSeekAware {
+
+  private static final String PRODUCT_TOPIC = "catalog.product";
 
   private static final Logger log = LoggerFactory.getLogger(ProjectionListener.class);
 
@@ -90,7 +98,7 @@ class ProjectionListener {
     this.projection = projection;
   }
 
-  @KafkaListener(topics = "catalog.product", groupId = "search-discovery.products")
+  @KafkaListener(topics = PRODUCT_TOPIC, groupId = "search-discovery.products")
   void on(ProductEvent event) {
     var product = event.product();
     var applied =
@@ -144,6 +152,17 @@ class ProjectionListener {
                 event.stock().available(),
                 event.stock().stocked()));
     logOutcome(applied, "Stock of", event.variantId(), event.version());
+  }
+
+  @Override
+  public void onPartitionsAssigned(
+      Map<TopicPartition, Long> assignments, ConsumerSeekCallback callback) {
+    var productPartitions =
+        assignments.keySet().stream().filter(p -> p.topic().equals(PRODUCT_TOPIC)).toList();
+    if (!productPartitions.isEmpty() && projection.productsNeedReplay()) {
+      log.info("Replaying {} from the start: Products without Warranty terms", PRODUCT_TOPIC);
+      callback.seekToBeginning(productPartitions);
+    }
   }
 
   private static void logOutcome(boolean applied, String what, String id, long version) {

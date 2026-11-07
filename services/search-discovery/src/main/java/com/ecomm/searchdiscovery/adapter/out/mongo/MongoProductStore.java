@@ -9,6 +9,7 @@ import com.ecomm.searchdiscovery.domain.SearchableVariant;
 import com.ecomm.searchdiscovery.domain.VariantStock;
 import com.ecomm.searchdiscovery.domain.WarrantyTerms;
 import com.mongodb.client.MongoCollection;
+import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.IndexOptions;
 import com.mongodb.client.model.Indexes;
 import com.mongodb.client.model.ReplaceOptions;
@@ -45,10 +46,16 @@ class MongoProductStore implements ProductStore {
                 new Document("name", 10).append("attributeValues", 5).append("description", 1)));
   }
 
+  /** A Product stored before Sprint 7 has no {@code warranty} field; one without terms has null. */
   @Override
-  public Optional<SearchableProduct> find(String sku) {
+  public Optional<Held> held(String sku) {
     return Optional.ofNullable(products.find(new Document("_id", sku)).first())
-        .map(MongoProductStore::product);
+        .map(document -> new Held(product(document), !document.containsKey("warranty")));
+  }
+
+  @Override
+  public boolean anyBeforeWarrantyTerms() {
+    return products.find(Filters.exists("warranty", false)).first() != null;
   }
 
   /**
@@ -186,7 +193,7 @@ class MongoProductStore implements ProductStore {
         document.getDate("listedAt").toInstant());
   }
 
-  /** Null when it has none, as for a Product stored before Warranty terms were projected. */
+  /** Null when it has none, or for a Product stored before Warranty terms were projected. */
   private static WarrantyTerms warranty(Document warranty) {
     return warranty == null
         ? null

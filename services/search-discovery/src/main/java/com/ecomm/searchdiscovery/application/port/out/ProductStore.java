@@ -9,7 +9,25 @@ import java.util.Optional;
 /** Search's copy of every Product Catalog has published, removed ones included. */
 public interface ProductStore {
 
-  Optional<SearchableProduct> find(String sku);
+  /**
+   * The Product held, if any, and whether it was stored before Search projected Warranty terms, and
+   * so has none whatever Catalog says.
+   */
+  record Held(SearchableProduct product, boolean beforeWarrantyTerms) {
+
+    /**
+     * The version an event must be newer than to be applied: the one held, or, for a Product stored
+     * before Warranty terms, the one before it, so the same version is applied again.
+     */
+    public long versionToBeat() {
+      return beforeWarrantyTerms ? product.version() - 1 : product.version();
+    }
+  }
+
+  Optional<Held> held(String sku);
+
+  /** Whether any Product held was stored before Search projected Warranty terms. */
+  boolean anyBeforeWarrantyTerms();
 
   /**
    * The Product with the SKU, with its Category's name and its Variants' Stock, unless it was

@@ -50,4 +50,10 @@ public interface ProjectionUseCase {
   boolean apply(CategoryPublished category);
 
   boolean apply(StockPublished stock);
+
+  /**
+   * Whether any Product held was stored before Search projected Warranty terms, so {@code
+   * catalog.product} is to be read again from the start.
+   */
+  boolean productsNeedReplay();
 }

@@ -28,15 +28,17 @@ public class ProjectionService implements ProjectionUseCase {
 
   /**
    * A Product keeps the time it was listed while it stays listed; one created, or created again
-   * after its removal, is listed when its event was published.
+   * after its removal, is listed when its event was published. One stored before Sprint 7, without
+   * Warranty terms, takes the event at its own version too, as if it were newer.
    */
   @Override
   public boolean apply(ProductPublished event) {
-    var stored = products.find(event.sku());
+    var held = products.held(event.sku());
+    var stored = held.map(ProductStore.Held::product);
     return Versions.applyIfNewer(
         event.version(),
-        stored,
-        SearchableProduct::version,
+        held,
+        ProductStore.Held::versionToBeat,
         () ->
             products.save(
                 new SearchableProduct(
@@ -54,6 +56,11 @@ public class ProjectionService implements ProjectionUseCase {
                         .filter(p -> !p.removed())
                         .map(SearchableProduct::listedAt)
                         .orElse(event.occurredAt()))));
+  }
+
+  @Override
+  public boolean productsNeedReplay() {
+    return products.anyBeforeWarrantyTerms();
   }
 
   @Override

@@ -121,8 +121,12 @@ if it can't be read, and `make dlt-redrive GROUP=<group>` applies it once the ca
 - A Product is searchable as soon as its event is applied. A removed one, or a removed Category, is
   kept marked `removed`, with its version, so a stale event can't bring it back, but it is never found
   or listed. A SKU created again carries on from its last version, and is found again.
-- A Product keeps its Warranty terms from Catalog's event; one applied before Search projected them
-  has none until its next event, or `make search-rebuild`, which replays every Product's latest.
+- A Product keeps its Warranty terms from Catalog's event. One stored before Search projected them,
+  in Sprint 6 or earlier, has no `warranty` field at all, where a Product without terms has `null`:
+  while any has none, `search-discovery.products` reads `catalog.product` from the start each time
+  its partitions are assigned ("Replaying catalog.product from the start: Products without Warranty
+  terms"), and such a Product takes its event at its own version, so a stack upgraded from Sprint 6
+  fills them in on `make up`, with no rebuild.
 - A Variant is in Stock when Inventory stocks it and has some available. One with no Stock event yet
   counts as out of Stock.
 - "Newest" orders by when a Product was listed: the time of the event that made it searchable, kept
