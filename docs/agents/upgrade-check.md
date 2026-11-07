@@ -6,12 +6,12 @@ alone: its data migrated, its projections complete, nothing reset. This is how t
 ## Steps
 
 1. `make upgrade-from FROM=<commit>`, with `<commit>` the previous sprint's definition-of-done
-   commit (`git log --oneline --grep "definition of done"`; Sprint 5's is `05d3ab8`, the last
-   before Sprint 6's first ticket). It stops the default stack, checks the commit out under
-   `.scratch/upgrade-from`, and starts it as the Compose project `ecomm-upgrade` with images tagged
-   `upgrade-from`, so the default stack's data and images stay untouched. A commit with secrets as
-   files (Sprint 5 on) writes its own first, and they are copied to `.secrets/ecomm-upgrade/`. The
-   first build takes about ten minutes.
+   commit (`git log --oneline --grep "definition of done"`; Sprint 6's is `5776c74`, and Sprint
+   5's `05d3ab8`, the last before Sprint 6's first ticket). It stops the default stack, checks the
+   commit out under `.scratch/upgrade-from`, and starts it as the Compose project `ecomm-upgrade`
+   with images tagged `upgrade-from`, so the default stack's data and images stay untouched. A
+   commit with secrets as files (Sprint 5 on) writes its own first, and they are copied to
+   `.secrets/ecomm-upgrade/`. The first build takes about ten minutes.
 2. Put data on it that the upgrade has to carry, through the gateway as the demo Customer. Use only
    endpoints that existed at that commit:
 
@@ -58,7 +58,7 @@ alone: its data migrated, its projections complete, nothing reset. This is how t
    after the other, with `COMPOSE_PROJECT_NAME=ecomm-upgrade` set: their first step runs
    `make status`, which otherwise checks the default project and finds it stopped. Where host requests
    reach containers from a public address, set the project's Keycloak `master` realm to
-   `sslRequired=NONE` first (the root README's "A stack from Sprint 5"), or the suites' admin tokens
+   `sslRequired=NONE` first (the root README's "A stack from Sprint 6"), or the suites' admin tokens
    are refused.
 5. `make upgrade-clean` removes the project, its volumes and secrets, the worktree and the `upgrade-from`
    images. `make up` then brings the default stack back.

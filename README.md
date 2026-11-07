@@ -1,8 +1,8 @@
 # Ecomm Platform
 
-A from-scratch e-commerce platform, architected as fifteen bounded contexts across five parallel team tracks, planned over nine two-week sprints for a small (4-5 person) engineering team. Sprint 6 has completed returns and added Notifications, and it all runs locally: search the Catalog with Facets, pick a Variant, keep a Cart, check out with a Checkout Session that reserves its Stock, gets the running Campaigns by itself and a Coupon on top, and pay through a mock payment that can decline or wait for the bank, which the checkout Saga on Temporal either completes or undoes whole, after giving a Shipping address and choosing a Shipping option. Staff pick and pack the Order from a fulfillment queue, and the fulfillment Saga captures its Payment, hands it to the carrier and follows it to delivery. Then follow the Order's Status history, its Payment and its Shipment's Tracking events, review what you bought, see what others bought with it, and ask to return it or claim its warranty, then follow the RMA to its Refund or replacement, told each step by email. Staff manage the Catalog, with Warranty terms and Serial tracking, Coupons and Campaigns, look up Orders with their Payments and each Variant's Stock movements, work the fulfillment queue and each RMA from approval to inspection, moderate Reviews, and see what the platform told each Customer, in an Admin Console. Grafana, started on demand, shows the services, the event consumers and the three Sagas.
+A from-scratch e-commerce platform, architected as fifteen bounded contexts across five parallel team tracks, planned over nine two-week sprints for a small (4-5 person) engineering team. Sprint 7 has added the Support Assistant, and it all runs locally: search the Catalog with Facets, pick a Variant, keep a Cart, check out with a Checkout Session that reserves its Stock, gets the running Campaigns by itself and a Coupon on top, and pay through a mock payment that can decline or wait for the bank, which the checkout Saga on Temporal either completes or undoes whole, after giving a Shipping address and choosing a Shipping option. Staff pick and pack the Order from a fulfillment queue, and the fulfillment Saga captures its Payment, hands it to the carrier and follows it to delivery. Then follow the Order's Status history, its Payment and its Shipment's Tracking events, review what you bought, see what others bought with it, and ask to return it or claim its warranty, then follow the RMA to its Refund or replacement, told each step by email, and ask the Support Assistant about any of it in your own words. Staff manage the Catalog, with Warranty terms and Serial tracking, Coupons and Campaigns, look up Orders with their Payments and each Variant's Stock movements, work the fulfillment queue and each RMA from approval to inspection, moderate Reviews, and see what the platform told each Customer, in an Admin Console. Grafana, started on demand, shows the services, the event consumers and the three Sagas.
 
-## Run Sprint 6
+## Run Sprint 7
 
 You need Docker with about 8 GB of memory, `make`, and Node 24 for the smoke tests.
 
@@ -57,7 +57,18 @@ The first build takes several minutes. Then open the Storefront on http://localh
 8. read every email the stack sends in Mailpit, on http://localhost:8025: the Order confirmed,
    shipped with its tracking number, and delivered, each RMA step, a replacement shipped and a
    Refund. Under **Notification preferences**, turn on text messages to a mobile number; the mock
-   SMS provider records them ([Notifications](./services/notifications/README.md)).
+   SMS provider records them ([Notifications](./services/notifications/README.md));
+9. open **Ecomm Agent** in the header of any page and ask the
+   [Support Assistant](./services/ai-support-assistant/README.md) about your Orders, Shipments,
+   Payments and RMAs, and the Catalog's Products: "Where is my order #3f2a9c1b?", "Why was I
+   charged?", "Did I get my money back for the Pixel 9?", "What happens next with my return?", "Is
+   the Pixel 9 in stock in 256 GB?". It looks up your own records when asked, names them with a
+   link to each one's page, and never changes anything; it says where in the Storefront you can.
+   The Conversation carries on across pages and lapses a day after its last message. `make up`
+   writes `.secrets/ecomm/anthropic-api-key` empty, so a scripted mock provider answers from the
+   same data; write an Anthropic API key into it and recreate the assistant
+   (`docker compose up -d --force-recreate ai-support-assistant`) for Claude to answer
+   ([its README](./services/ai-support-assistant/README.md#claude)).
 
 The payment gateway is mocked, and each test card stands for a Payment method:
 
@@ -266,7 +277,12 @@ phone through the form, choosing its IMEI, sees it Requested with its Refund amo
 have approved, received and accepted it, Refunded, with the Payment's Refund and the Order Returned,
 and each email once in Mailpit; turns on text messages in Notification preferences; is refused a
 Coupon whose last use another Checkout Session holds; reports another Customer's review; and sees
-"Popular in <Category>" on a Product nobody bought with another:
+"Popular in <Category>" on a Product nobody bought with another. Then Sprint 7's, with the mock
+provider: a Customer asks Ecomm Agent where their Order is and opens it from the reply, asks about
+an Order by its Order reference and why they were charged and sees the Authorization explained as a
+hold, and asks whether the Pixel 9 is in Stock in 256 GB and opens its page; the help test follows
+a Conversation across pages and a reload, sees signing out end it, and is told when it can ask
+again past the hourly limit:
 
 ```sh
 cd frontend/storefront
@@ -291,8 +307,10 @@ behind doesn't throw them.
 Each suite runs its spec files side by side, one Playwright worker each. Where Docker's memory is short of what
 the stack uses, or the host swaps Docker's VM out, requests stall for tens of seconds and tests time
 out; `npx playwright test --workers=1` loads the stack less, and is how both suites passed on a
-16 GB laptop on 2026-10-27 ([Sprint 6's note](./docs/roadmap.md#sprint-6-weeks-1112--returns-completion)).
-The first checkout after `make up` can still take longer than a test waits.
+16 GB laptop on 2026-11-06 ([Sprint 7's note](./docs/roadmap.md#sprint-7-weeks-1314--ai-assistant)).
+The first checkout after `make up` can still take longer than a test waits, since the warm-up
+leaves Pay and the checkout Saga cold: on 2026-11-06 the Storefront's first answered in 12 seconds
+and its Order page missed the test's 15.
 
 ### Secrets
 
@@ -384,40 +402,34 @@ Storefront's suite stops before its first test once any seeded Product's default
 out, and names them. To wipe
 everything, Keycloak's users included, run `docker compose --profile '*' down -v`.
 
-### A stack from Sprint 5
+### A stack from Sprint 6
 
-`make up` on a stack from Sprint 5 brings it into Sprint 6 with nothing done by hand. It adds
-Notifications and Mailpit, creates the `notifications` database in Postgres, and the topics init adds
-the new consumer groups' dead-letter and redrive topics ([The event backbone](#the-event-backbone)).
-`make secrets` writes the new `notifications-client-secret`, and realm sync adds the `notifications`
-client. Then:
+`make up` on a stack from Sprint 6 brings it into Sprint 7 with nothing done by hand. It adds the
+[AI Support Assistant](./services/ai-support-assistant/README.md), which keeps its Conversations in
+the shared Redis and has no database, and the gateway routes it at `/api/support-assistant/`.
+`make secrets` writes the new `anthropic-api-key` empty, so the mock provider answers until a key is
+written into it ([Secrets](#secrets)). Then:
 
-- **Approved RMAs get their returns Saga.** Returns & Warranty's migration gives each approved RMA
-  its Send-back deadline, 14 days from its approval, and its projections fill in each RMA's Refund
-  amount and Warehouse ([Returns & Warranty](./services/returns-warranty/README.md#upgrading-from-sprint-5)).
-  Orchestration reads the RMAs' topic from the start once, so each approved RMA starts its returns
-  Saga, which awaits its units and refunds, replaces or closes it like any other.
-- **Reviews are published.** A review from before moderation reads as published and stays counted
-  ([Reviews & Ratings](./services/reviews-ratings/README.md#moderation)).
-- **Coupons are unlimited.** Existing Coupons have no Usage limits, and count only redemptions made
-  after the upgrade.
-- **Checkouts carry on.** A Checkout Session holding a Coupon across the upgrade can still be paid
-  while it lasts, and its Coupon is redeemed then.
-- **Carts are watched from now.** Cart indexes every existing Cart for abandonment as changed at the
-  upgrade, so none is abandoned for its age before it.
-- **Nothing is said about the past.** Notifications reads its topics from the upgrade on, so no
-  Customer is emailed about an Order, Shipment, RMA or Refund from before it.
+- **The new reads answer the old data.** Payment's, Order Management's and Returns & Warranty's
+  migrations add only indexes: each Customer's Payment transaction history holds every Payment
+  transaction made before, and each Order and RMA is found by its reference.
+- **Products learn their Warranty terms.** Search & Discovery reads `catalog.product` from the start
+  while any Product it kept before has none, which takes one replay, so one Product's details answer them
+  ([Search & Discovery](./services/search-discovery/README.md#the-projection)).
+- **The dashboards keep running.** Prometheus, Grafana and the Kafka exporter, which Sprint 6 ran by
+  default and Sprint 7 puts behind the `dashboards` profile, keep running after `make up` until
+  stopped ([Metrics and dashboards](#metrics-and-dashboards)).
 
-The upgrade from Sprint 5's last commit, `05d3ab8`, was checked on 2026-10-28
-([Sprint 6's note](./docs/roadmap.md#sprint-6-weeks-1112--returns-completion)). Run the Playwright suites against an upgraded stack with `COMPOSE_PROJECT_NAME=ecomm-upgrade`;
+The upgrade from Sprint 6's definition-of-done commit, `5776c74`, was checked on 2026-11-07
+([Sprint 7's note](./docs/roadmap.md#sprint-7-weeks-1314--ai-assistant)). Run the Playwright suites against an upgraded stack with `COMPOSE_PROJECT_NAME=ecomm-upgrade`;
 where host requests reach containers from a public address, its Keycloak's `master` realm first
 needs `sslRequired` set to `NONE` (`kcadm.sh update realms/master -s sslRequired=NONE`, run in the
 Keycloak container), or the suites' admin tokens, and `make upgrade-to`'s warm-up, are refused with
-"HTTPS required". A stack from Sprint 4 or earlier should need only `make up` too, since each
-sprint's migrations and backfills run in turn: the upgrade from Sprint 4 was checked in Sprint 5
-([Sprint 5's note](./docs/roadmap.md#sprint-5-weeks-910--fulfillment--returns-foundations)), and
-there `make secrets` writes the infrastructure passwords with the dev values its volumes were made
-with ([Secrets](#secrets)). A stack from Sprint 1 also needs `make seed-reset` once for the
+"HTTPS required". A stack from Sprint 5 or earlier should need only `make up` too, since each
+sprint's migrations and backfills run in turn: the upgrade from Sprint 5 was checked in Sprint 6
+([Sprint 6's note](./docs/roadmap.md#sprint-6-weeks-1112--returns-completion)), and from a
+stack made before Sprint 5 `make secrets` writes the infrastructure passwords with the dev values
+its volumes were made with ([Secrets](#secrets)). A stack from Sprint 1 also needs `make seed-reset` once for the
 multi-Variant Products, and the realm's `admin-console` client, or the Admin Console's sign-in fails
 with "Invalid parameter: redirect_uri"
 ([Identity & Access README](./services/identity-access/README.md#the-admin-console-client)).
@@ -433,7 +445,7 @@ for the heap, and each nginx at 64 MB. Kafka is capped at 640 MB with a 256 MB h
 512 MB with a 256 MB cache, Apicurio and pgAdmin at 384 MB each, the Temporal server at 384 MB, its
 UI at 64 MB, Mailpit at 64 MB, the init steps at 256 MB or less, and, once started, Prometheus and
 Grafana at 256 MB each and the Kafka exporter at 32 MB. Couchbase, Postgres and Redis are uncapped.
-After both suites the default stack uses about 5.76 GB (`docker stats`), and fits in about 8 GB of
+After both suites the default stack uses about 5.79 GB (`docker stats`), and fits in about 8 GB of
 Docker memory, with most of its swap in use
 ([Sprint 7's reading](./docs/roadmap.md#sprint-7-weeks-1314--ai-assistant), with the Support
 Assistant). The dashboards are
