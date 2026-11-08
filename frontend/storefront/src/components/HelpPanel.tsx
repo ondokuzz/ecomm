@@ -239,7 +239,8 @@ const askAgainFormat = new Intl.DateTimeFormat(undefined, { hour: 'numeric', min
 
 /**
  * Why the Customer's message wasn't answered, and the way on: past their message limits, the time
- * they can ask again; the assistant unavailable or busy, to try later, with the support reference; a
+ * they can ask again; the assistant unavailable or busy, to try later, with the support reference;
+ * another of their messages in the Conversation still being answered, to try again in a moment; a
  * full Conversation, a new one. The message stays in the box for each.
  */
 function SendFailure({ error, onNewConversation }: { error: unknown; onNewConversation: () => void }) {
@@ -256,6 +257,9 @@ function SendFailure({ error, onNewConversation }: { error: unknown; onNewConver
         Ecomm Agent is unavailable just now. Please try again later.
       </HelpAlert>
     )
+  }
+  if (reason === 'conversationBusy') {
+    return <HelpAlert>Ecomm Agent is still answering your other message. Try again in a moment.</HelpAlert>
   }
   if (reason === 'conversationFull') {
     return (

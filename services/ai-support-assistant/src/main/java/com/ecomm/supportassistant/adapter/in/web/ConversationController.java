@@ -4,6 +4,7 @@ import com.ecomm.commons.security.CurrentCustomer;
 import com.ecomm.supportassistant.application.port.in.AssistantBusyException;
 import com.ecomm.supportassistant.application.port.in.AssistantRateLimitedException;
 import com.ecomm.supportassistant.application.port.in.AssistantUnavailableException;
+import com.ecomm.supportassistant.application.port.in.ConversationBusyException;
 import com.ecomm.supportassistant.application.port.in.ConversationNotFoundException;
 import com.ecomm.supportassistant.application.port.in.ConversationsUseCase;
 import com.ecomm.supportassistant.application.port.in.IdempotencyKeyInFlightException;
@@ -63,10 +64,12 @@ class ConversationController {
    * the records it names. A full Conversation is a 409 {@code conversationFull}. A repeat with the
    * same {@code Idempotency-Key} answers the first reply, with {@code Idempotent-Replayed: true};
    * the key with another message is a 422 {@code idempotencyKeyReused}, and a repeat while the
-   * first is still being answered a 409 {@code idempotencyKeyInFlight}. A Customer past their
-   * limits is a 429 {@code assistantRateLimited}; a provider failing or refused by the circuit
-   * breaker a 503 {@code assistantUnavailable}; the service past its provider ceiling a 503 {@code
-   * assistantBusy}. Each refusal past a limit says in {@code Retry-After} when to try again.
+   * first is still being answered a 409 {@code idempotencyKeyInFlight}. A Conversation runs one
+   * turn at a time: any other message sent while one runs is a 409 {@code conversationBusy}, before
+   * the provider is asked or the message counts against the Customer's limits. A Customer past
+   * their limits is a 429 {@code assistantRateLimited}; a provider failing or refused by the
+   * circuit breaker a 503 {@code assistantUnavailable}; the service past its provider ceiling a 503
+   * {@code assistantBusy}. Each refusal past a limit says in {@code Retry-After} when to try again.
    */
   @PostMapping("/{id}/messages")
   ResponseEntity<MessageResponse> send(
@@ -140,6 +143,13 @@ class ConversationController {
   ProblemDetail inFlight(IdempotencyKeyInFlightException e) {
     var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
     problem.setProperty("reason", "idempotencyKeyInFlight");
+    return problem;
+  }
+
+  @ExceptionHandler(ConversationBusyException.class)
+  ProblemDetail conversationBusy(ConversationBusyException e) {
+    var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
+    problem.setProperty("reason", "conversationBusy");
     return problem;
   }
 

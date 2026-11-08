@@ -320,7 +320,7 @@ The conversational agent behind the Storefront's Help that answers a signed-in C
 _Avoid_: Chatbot, Bot
 
 **Conversation**:
-A Customer's exchange with the Support Assistant: their messages, the assistant's replies, and each turn's lookups in between, which are kept so a follow-up is answered from what was looked up before, and the model's answers as its provider gave them. It is the Customer's alone, holds at most 20 of their messages of 1 to 2,000 characters each, and lapses 24 hours after its last message; signing out of the Storefront ends it, for good even while one of its turns runs. A turn is one Customer message and everything the assistant does to reply to it.
+A Customer's exchange with the Support Assistant: their messages, the assistant's replies, and each turn's lookups in between, which are kept so a follow-up is answered from what was looked up before, and the model's answers as its provider gave them. It is the Customer's alone, holds at most 20 of their messages of 1 to 2,000 characters each, and lapses 24 hours after its last message; signing out of the Storefront ends it, for good even while one of its turns runs. A turn is one Customer message and everything the assistant does to reply to it; a Conversation runs one at a time, and a message sent while another's turn runs is refused.
 _Avoid_: Chat, Session (a Checkout Session's), Thread
 
 **Correlation ID**:

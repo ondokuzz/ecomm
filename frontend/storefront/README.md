@@ -263,6 +263,9 @@ and focus comes back to the text box. A failed message says why, and its text st
   minute, in the browser's locale;
 - the assistant unavailable or busy (503 `assistantUnavailable` or `assistantBusy`), "Ecomm Agent is
   unavailable just now. Please try again later.", with the support reference;
+- another of the Customer's messages in the Conversation still being answered, as from a duplicated
+  tab (409 `conversationBusy`), "Ecomm Agent is still answering your other message. Try again in a
+  moment.";
 - a full Conversation (409 `conversationFull`), a "Start a new conversation" button, which the kept
   text can then be sent to;
 - anything else, the error with its support reference.

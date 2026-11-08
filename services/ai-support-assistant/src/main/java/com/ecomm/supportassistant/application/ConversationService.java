@@ -3,6 +3,7 @@ package com.ecomm.supportassistant.application;
 import com.ecomm.supportassistant.application.port.in.AssistantBusyException;
 import com.ecomm.supportassistant.application.port.in.AssistantRateLimitedException;
 import com.ecomm.supportassistant.application.port.in.AssistantUnavailableException;
+import com.ecomm.supportassistant.application.port.in.ConversationBusyException;
 import com.ecomm.supportassistant.application.port.in.ConversationNotFoundException;
 import com.ecomm.supportassistant.application.port.in.ConversationsUseCase;
 import com.ecomm.supportassistant.application.port.in.IdempotencyKeyInFlightException;
@@ -63,7 +64,9 @@ public class ConversationService implements ConversationsUseCase {
   private final AssistantMetrics metrics;
   private final TurnsInFlight inFlight;
 
-  /** How long past the turn's time a claim on its key is kept, should it not be released. */
+  /**
+   * How long past the turn's time a claim on its Conversation is kept, should it not be released.
+   */
   private static final Duration HELD_PAST = Duration.ofMinutes(1);
 
   /**
@@ -83,7 +86,7 @@ public class ConversationService implements ConversationsUseCase {
    * @param lapsesAfter how long a Conversation is kept after its last message
    * @param rateLimiter counts each Customer's messages against {@code limits}
    * @param metrics counts the tokens, the turns and the refusals
-   * @param inFlight holds the Idempotency-Key of each message while its turn runs
+   * @param inFlight holds each Conversation while a turn of its runs
    */
   public ConversationService(
       ConversationRepository conversations,
@@ -127,31 +130,39 @@ public class ConversationService implements ConversationsUseCase {
 
   @Override
   public Sent send(String customerId, String conversationId, String text, String idempotencyKey) {
-    if (idempotencyKey == null) {
-      return answer(conversation(customerId, conversationId), text, null);
-    }
-    var replied = replayed(customerId, conversationId, text, idempotencyKey);
+    // Another Customer's Conversation is a 404 before it is claimed, and an answered key replays
+    // even while another message's turn runs.
+    var replied = replayed(conversation(customerId, conversationId), text, idempotencyKey);
     if (replied.isPresent()) {
       return replied.get();
     }
-    // The key is held while its turn runs, so a repeat sent meanwhile runs none of its own.
-    if (!inFlight.claim(conversationId, idempotencyKey, limits.turnTimeLimit().plus(HELD_PAST))) {
-      throw new IdempotencyKeyInFlightException();
-    }
+    // The Conversation is held while the turn runs, so it runs one turn at a time, and a turn
+    // always starts from the last one's save.
+    var held =
+        switch (inFlight.claim(
+            conversationId, idempotencyKey, limits.turnTimeLimit().plus(HELD_PAST))) {
+          case TurnsInFlight.Claim.Held claim -> claim;
+          case TurnsInFlight.Claim.HeldBySameKey ignored ->
+              throw new IdempotencyKeyInFlightException();
+          case TurnsInFlight.Claim.HeldByAnother ignored -> throw new ConversationBusyException();
+        };
     try {
-      // The first may have been answered, and its claim released, since the look above.
-      var answered = replayed(customerId, conversationId, text, idempotencyKey);
-      return answered.orElseGet(
-          () -> answer(conversation(customerId, conversationId), text, idempotencyKey));
+      var conversation = conversation(customerId, conversationId);
+      // The message may have been answered, and its claim released, since the look above.
+      return replayed(conversation, text, idempotencyKey)
+          .orElseGet(() -> answer(conversation, text, idempotencyKey));
     } finally {
-      inFlight.release(conversationId, idempotencyKey);
+      inFlight.release(held);
     }
   }
 
-  /** The reply to the message sent with {@code idempotencyKey}, once it has one. */
-  private Optional<Sent> replayed(
-      String customerId, String conversationId, String text, String idempotencyKey) {
-    var replied = conversation(customerId, conversationId).replyTo(idempotencyKey, text);
+  /** The reply to the message sent with {@code idempotencyKey}, once it has one; none without. */
+  private Optional<Sent> replayed(Conversation conversation, String text, String idempotencyKey) {
+    if (idempotencyKey == null) {
+      return Optional.empty();
+    }
+    var conversationId = conversation.id();
+    var replied = conversation.replyTo(idempotencyKey, text);
     replied.ifPresent(
         reply ->
             log.info(

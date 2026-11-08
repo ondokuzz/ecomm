@@ -10,8 +10,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
-import org.springframework.http.MediaType;
-import org.springframework.test.web.servlet.client.RestTestClient;
 
 /**
  * A message sent with an {@code Idempotency-Key}, such as a retry after a dropped connection, is
@@ -27,16 +25,6 @@ class IdempotentMessageApiTest extends SupportAssistantApiTest {
   @BeforeEach
   void resetModel() {
     model.reset();
-  }
-
-  private RestTestClient.ResponseSpec sendWithKey(String conversationId, String text, String key) {
-    return http.post()
-        .uri("/conversations/{id}/messages", conversationId)
-        .headers(h -> h.setBearerAuth(customerToken()))
-        .header("Idempotency-Key", key)
-        .contentType(MediaType.APPLICATION_JSON)
-        .body("{\"text\": %s}".formatted(jsonString(text)))
-        .exchange();
   }
 
   @Test

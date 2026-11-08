@@ -7,14 +7,15 @@ import java.util.Deque;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
 /**
- * Stands in for the provider: answers what a test scripts, in order, and keeps every request it was
- * handed. A test can hold the next call open until it lets it answer.
+ * Stands in for the provider: answers what a test scripts, or fails as it scripts, in order, and
+ * keeps every request it was handed. A test can hold the next call open until it lets it answer.
  */
 class ScriptedSupportModel implements SupportModel {
 
-  private final Deque<Answer> script = new ArrayDeque<>();
+  private final Deque<Supplier<Answer>> script = new ArrayDeque<>();
   private final List<Request> requests = new ArrayList<>();
   private Hold hold;
 
@@ -38,7 +39,15 @@ class ScriptedSupportModel implements SupportModel {
   }
 
   synchronized void script(Answer... answers) {
-    script.addAll(List.of(answers));
+    List.of(answers).forEach(answer -> script.add(() -> answer));
+  }
+
+  /** The next provider call, once the ones scripted before it are made, fails so. */
+  synchronized void fail(RuntimeException failure) {
+    script.add(
+        () -> {
+          throw failure;
+        });
   }
 
   synchronized List<Request> requests() {
@@ -80,7 +89,7 @@ class ScriptedSupportModel implements SupportModel {
       if (script.isEmpty()) {
         throw new IllegalStateException("Nothing scripted for this provider call");
       }
-      return script.removeFirst();
+      return script.removeFirst().get();
     }
   }
 }

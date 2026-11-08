@@ -130,6 +130,16 @@ abstract class SupportAssistantApiTest {
     return sendBody(token, conversationId, "{\"text\": %s}".formatted(jsonString(text)));
   }
 
+  RestTestClient.ResponseSpec sendWithKey(String conversationId, String text, String key) {
+    return http.post()
+        .uri("/conversations/{id}/messages", conversationId)
+        .headers(h -> h.setBearerAuth(customerToken()))
+        .header("Idempotency-Key", key)
+        .contentType(MediaType.APPLICATION_JSON)
+        .body("{\"text\": %s}".formatted(jsonString(text)))
+        .exchange();
+  }
+
   RestTestClient.ResponseSpec sendBody(String token, String conversationId, String body) {
     return http.post()
         .uri("/conversations/{id}/messages", conversationId)

@@ -21,7 +21,7 @@ or lapsed, is a 404. The gateway routes it at `/api/support-assistant/`.
 | Endpoint | |
 |---|---|
 | `POST /conversations` | Starts a Conversation: 201 with it, empty, and its URL in `Location` |
-| `POST /conversations/{id}/messages` | Adds the Customer's message, `{"text": "Where is my Order?"}`, runs one turn, and answers the reply. With an `Idempotency-Key`, a repeat answers the first reply without running the turn again |
+| `POST /conversations/{id}/messages` | Adds the Customer's message, `{"text": "Where is my Order?"}`, runs one turn, and answers the reply. With an `Idempotency-Key`, a repeat answers the first reply without running the turn again. While another message's turn runs in the Conversation, a 409 `conversationBusy` |
 | `GET /conversations/{id}` | The transcript: each message, oldest first |
 | `DELETE /conversations/{id}` | Ends it: 204 |
 
@@ -62,10 +62,19 @@ Pixel 9 Pro" links that Product, not the Google Pixel 9 as well.
   that failed kept nothing, so its repeat runs afresh. The key is kept with the message in the
   Conversation, not by the shared idempotency filter, which needs a database. The same key with
   another message is a 422 `idempotencyKeyReused`, and a key that isn't 1 to 255 printable ASCII
-  characters a 400 `idempotencyKeyInvalid`. While a message's turn runs its key is held in Redis
-  (`support-assistant:in-flight:<Conversation ID>:<key>`, lapsing a minute after the turn's time
-  should it not be released), so a repeat sent meanwhile is a 409 `idempotencyKeyInFlight` rather
-  than a second turn; once the first is answered, a repeat answers its reply.
+  characters a 400 `idempotencyKeyInvalid`. A repeat sent while the first's turn still runs is a 409
+  `idempotencyKeyInFlight` rather than a second turn; once the first is answered, a repeat answers
+  its reply, even while another message's turn runs.
+- **One turn at a time** runs in a Conversation. Every message, with a key or without, claims its
+  Conversation in Redis before its turn (`support-assistant:in-flight:<Conversation ID>`, holding a
+  token of the turn's own and the message's `Idempotency-Key`, lapsing a minute after the turn's time
+  should its instance stop mid-turn), and its turn reads the Conversation after the claim, so it
+  starts from the last turn's save. Any other message sent meanwhile is a 409 `conversationBusy`,
+  before the provider is asked, the message is added, or it counts against the Customer's limits;
+  the Storefront's Help says the assistant is still answering the other message, keeping the text in
+  the box. A turn releases its claim however it ends, and only while the claim is still its own, so
+  a turn that outlived its claim can't release the next one's. Another of the Customer's
+  Conversations isn't held.
 
 ## Limits and failures
 

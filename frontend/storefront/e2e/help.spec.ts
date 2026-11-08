@@ -270,6 +270,18 @@ test.describe('with the assistant stubbed', () => {
     })
   }
 
+  test('another message still being answered says to try again in a moment, and keeps the text', async ({ page }) => {
+    await refuseMessages(page, 409, 'conversationBusy')
+    await signIn(page)
+    const help = await openHelp(page)
+    await ask(help, 'Where is my order?')
+
+    await expect(help.getByRole('alert')).toContainText(
+      'Ecomm Agent is still answering your other message. Try again in a moment.',
+    )
+    await expect(help.getByRole('textbox', { name: 'Your question' })).toHaveValue('Where is my order?')
+  })
+
   test('a full Conversation offers a new one, which the kept text can be sent to', async ({ page }) => {
     await refuseMessages(page, 409, 'conversationFull')
     await signIn(page)
