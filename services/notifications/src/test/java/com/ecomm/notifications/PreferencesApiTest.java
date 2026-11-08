@@ -161,14 +161,22 @@ class PreferencesApiTest extends NotificationsApiTest {
     var orderId = UUID.randomUUID().toString();
     shipment(orderId, customer).created().shipped("Mock Carrier", "MC5");
     var client = new NotificationsClient(http);
-    client.awaitForOrder(STAFF, orderId, l -> l.size() == 2);
+    client.awaitForOrder(
+        STAFF,
+        orderId,
+        l ->
+            l.stream()
+                .anyMatch(
+                    n ->
+                        n.channel().equals("SMS")
+                            && n.attempts().stream()
+                                .anyMatch(a -> "directoryUnavailable".equals(a.reason()))));
 
     put(token, Map.of("phoneNumber", "+4915112345678", "sms", false, "push", false))
         .expectStatus()
         .isOk();
-    Keycloak.reset();
-    Keycloak.customer(customer, newAddress("grace"), "Grace", "Hopper");
-
+    // Keycloak stays down until the SMS has failed: an attempt that read SMS on before the PUT
+    // committed then fails on the directory, and the next one reads it off.
     var sms =
         client
             .awaitForOrder(
@@ -181,7 +189,15 @@ class PreferencesApiTest extends NotificationsApiTest {
             .filter(n -> n.channel().equals("SMS"))
             .findFirst()
             .orElseThrow();
-    assertThat(sms.attempts().getLast().reason()).isEqualTo("optedOut");
+    // Leaves the shared Keycloak stub up, as the other tests find it.
+    Keycloak.reset();
+    Keycloak.customer(customer, newAddress("grace"), "Grace", "Hopper");
+
+    var reasons = sms.attempts().stream().map(a -> a.reason()).toList();
+    assertThat(reasons.getLast()).isEqualTo("optedOut");
+    assertThat(reasons.subList(0, reasons.size() - 1))
+        .isNotEmpty()
+        .containsOnly("directoryUnavailable");
     assertThat(mocked("sms", customer)).isEmpty();
   }
 
