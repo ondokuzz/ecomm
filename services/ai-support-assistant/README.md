@@ -53,7 +53,9 @@ Pixel 9 Pro" links that Product, not the Google Pixel 9 as well.
   "conversationFull"`, and the Customer starts a new one.
 - **It lapses** 24 hours after its last message (`ecomm.support-assistant.conversation-lapses-after`),
   when Redis drops it. Ending it deletes it at once; the Storefront ends it when the Customer signs
-  out. `make seed-reset` flushes Redis, which ends every Conversation.
+  out. A turn saves its Conversation only while it is still kept, so one ended, or lapsed, while a
+  turn runs stays gone: the turn's message answers 404, though its lookups ran and it counted against
+  the Customer's limits. `make seed-reset` flushes Redis, which ends every Conversation.
 - **An `Idempotency-Key`** on a message, such as a retry after a dropped connection, makes a repeat
   with the same key, in the same Conversation, answer the first reply with `Idempotent-Replayed:
   true`: no turn runs, nothing is added, and it isn't counted against the Customer's limits. A turn
@@ -250,7 +252,8 @@ Any other message is answered with what it can help with, looking nothing up.
 ## Logs and metrics
 
 Each turn logs one line, with how it ended: `replied`, `bounded` (at its 6 provider calls or 60
-seconds), `unavailable`, `busy` or, for anything else it threw, `failed`; with the Correlation ID in the MDC
+seconds), `unavailable`, `busy`, `gone` (its Conversation ended or lapsed while it ran, so it saved
+nothing) or, for anything else it threw, `failed`; with the Correlation ID in the MDC
 (and so in the ECS JSON under the `docker` profile), and never the Customer's words or the reply:
 
 ```

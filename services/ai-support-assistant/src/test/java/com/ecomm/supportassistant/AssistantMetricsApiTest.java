@@ -3,7 +3,6 @@ package com.ecomm.supportassistant;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.ecomm.supportassistant.application.port.out.SupportModel;
-import java.util.regex.Pattern;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,31 +27,6 @@ class AssistantMetricsApiTest extends SupportAssistantApiTest {
   @BeforeEach
   void resetModel() {
     model.reset();
-  }
-
-  private String scrape() {
-    return http.get()
-        .uri("/actuator/prometheus")
-        .exchange()
-        .expectStatus()
-        .isOk()
-        .expectBody(String.class)
-        .returnResult()
-        .getResponseBody();
-  }
-
-  /** The value of the series {@code name} whose labels include {@code label}. */
-  private static double value(String scrape, String name, String label) {
-    var matcher =
-        Pattern.compile(
-                "(?m)^"
-                    + Pattern.quote(name)
-                    + "\\{[^}]*"
-                    + Pattern.quote(label)
-                    + "[^}]*\\} (\\S+)$")
-            .matcher(scrape);
-    assertThat(matcher.find()).as(name + "{" + label + "} in the scrape").isTrue();
-    return Double.parseDouble(matcher.group(1));
   }
 
   @Test

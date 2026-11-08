@@ -183,6 +183,9 @@ test.describe('with the assistant stubbed', () => {
 
     await expect(help.getByRole('list', { name: 'Conversation' }).getByText('Looking that up…')).toBeVisible()
     await expect(box).toBeDisabled()
+    // Ending the Conversation mid-turn would leave its reply with nowhere to go.
+    const newConversation = help.getByRole('button', { name: 'New conversation' })
+    await expect(newConversation).toBeDisabled()
     await expect.poll(() => answer !== undefined).toBe(true)
     await answer!()
 
@@ -195,6 +198,7 @@ test.describe('with the assistant stubbed', () => {
     )
     await expect(box).toHaveValue('')
     await expect(box).toBeFocused()
+    await expect(newConversation).toBeEnabled()
     await list.getByRole('link', { name: 'Order #7F1C2A3B' }).click()
     await expect(page).toHaveURL(/\/orders\/7f1c2a3b-0000-4000-8000-000000000001$/)
   })

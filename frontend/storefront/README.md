@@ -255,7 +255,7 @@ first, through the [AI Support Assistant](../../services/ai-support-assistant/RE
 `/api/support-assistant/` ([`src/api/help.ts`](./src/api/help.ts)). Each reply's references show
 beneath it as links, an Order to its Order page, an RMA to its RMA page and a Product to its Product page. The text box takes up to 2,000 characters and
 counts down what is left; Enter sends, Shift+Enter starts a new line. While a turn runs, "Looking
-that up…" shows and the text box is disabled; each reply is announced through a polite live region,
+that up…" shows and the text box and "New conversation" are disabled; each reply is announced through a polite live region,
 and focus comes back to the text box. A failed message says why, and its text stays in the box:
 
 - past the Customer's 20 messages an hour or 100 a day (429 `assistantRateLimited`), "You've sent a

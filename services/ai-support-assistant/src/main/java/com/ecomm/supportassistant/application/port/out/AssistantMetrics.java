@@ -15,6 +15,8 @@ public interface AssistantMetrics {
     UNAVAILABLE,
     /** The service had asked the provider as often as it may. */
     BUSY,
+    /** Its Conversation was ended, or lapsed, while it ran, so its reply wasn't saved. */
+    GONE,
     /** Anything else went wrong. */
     FAILED
   }

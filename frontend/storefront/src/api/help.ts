@@ -1,10 +1,11 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from 'react-oidc-context'
 import type { Conversation, HelpMessage } from '../domain/help'
 import { isNotFound } from './failure'
 import { api } from './http'
 
 const helpKey = ['help']
+const sendKey = ['help', 'send']
 
 /**
  * The Conversation's ID is kept for the browser tab, so Help reloads its transcript on any page
@@ -68,6 +69,7 @@ export function useSendMessage() {
   const token = useAuth().user?.access_token
   const queryClient = useQueryClient()
   return useMutation({
+    mutationKey: sendKey,
     mutationFn: async (text: string) => {
       const send = (id: string) =>
         api<HelpMessage>('support-assistant', `/conversations/${encodeURIComponent(id)}/messages`, {
@@ -92,6 +94,11 @@ export function useSendMessage() {
       })
     },
   })
+}
+
+/** Whether a message's turn is running, wherever in Help it was sent from. */
+export function useTurnRunning(): boolean {
+  return useIsMutating({ mutationKey: sendKey }) > 0
 }
 
 /** Ends the Conversation, if there is one, and starts a new one. */

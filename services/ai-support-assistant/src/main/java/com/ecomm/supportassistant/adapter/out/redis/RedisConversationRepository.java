@@ -18,7 +18,7 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * Each Conversation is one JSON string, {@code support-assistant:conversation:<ID>}, in the shared
  * Redis under the service's own prefix. It carries the time to live it is saved with, and Redis
- * drops it when that runs out.
+ * drops it when that runs out. A turn's save writes it only while the key is still there.
  */
 @Component
 class RedisConversationRepository implements ConversationRepository {
@@ -97,10 +97,23 @@ class RedisConversationRepository implements ConversationRepository {
   }
 
   @Override
-  public void save(Conversation conversation, Duration timeToLive) {
+  public void create(Conversation conversation, Duration timeToLive) {
     redis
         .opsForValue()
         .set(key(conversation.id()), json.writeValueAsString(Stored.of(conversation)), timeToLive);
+  }
+
+  // One SET … XX PX, so a Conversation deleted or dropped meanwhile isn't written back.
+  @Override
+  public boolean replace(Conversation conversation, Duration timeToLive) {
+    var replaced =
+        redis
+            .opsForValue()
+            .setIfPresent(
+                key(conversation.id()),
+                json.writeValueAsString(Stored.of(conversation)),
+                timeToLive);
+    return Boolean.TRUE.equals(replaced);
   }
 
   @Override

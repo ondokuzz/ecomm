@@ -5,11 +5,13 @@ import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import com.ecomm.commons.security.FakeKeycloak;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
 import java.util.Arrays;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -136,6 +138,32 @@ abstract class SupportAssistantApiTest {
         .contentType(MediaType.APPLICATION_JSON)
         .body(body)
         .exchange();
+  }
+
+  /** What {@code /actuator/prometheus} answers. */
+  String scrape() {
+    return http.get()
+        .uri("/actuator/prometheus")
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody(String.class)
+        .returnResult()
+        .getResponseBody();
+  }
+
+  /** The value of the series {@code name} whose labels include {@code label}. */
+  static double value(String scrape, String name, String label) {
+    var matcher =
+        Pattern.compile(
+                "(?m)^"
+                    + Pattern.quote(name)
+                    + "\\{[^}]*"
+                    + Pattern.quote(label)
+                    + "[^}]*\\} (\\S+)$")
+            .matcher(scrape);
+    assertThat(matcher.find()).as(name + "{" + label + "} in the scrape").isTrue();
+    return Double.parseDouble(matcher.group(1));
   }
 
   static String jsonString(String text) {

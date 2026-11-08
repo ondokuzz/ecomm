@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react'
 import { useAuth } from 'react-oidc-context'
 import { Link } from 'react-router'
-import { useConversation, useNewConversation, useSendMessage } from '../api/help'
+import { useConversation, useNewConversation, useSendMessage, useTurnRunning } from '../api/help'
 import { ApiError } from '../api/http'
 import { useAuthPending, useSignin } from '../auth/session'
 import { type HelpMessage, askAgainAt, messageLimit, referencePath, remainingCharacters } from '../domain/help'
@@ -69,6 +69,8 @@ function HelpBody({ titleId, onClose }: { titleId: string; onClose: () => void }
   const pending = useAuthPending()
   const signedIn = !pending && auth.user !== null && auth.user !== undefined
   const newConversation = useNewConversation()
+  // Ending the Conversation mid-turn would leave the turn's reply with nowhere to go.
+  const turnRunning = useTurnRunning()
 
   return (
     <div className="help-body">
@@ -79,6 +81,7 @@ function HelpBody({ titleId, onClose }: { titleId: string; onClose: () => void }
             size="sm"
             variant="ghost"
             loading={newConversation.isPending}
+            disabled={turnRunning}
             onClick={() => newConversation.mutate()}
           >
             New conversation

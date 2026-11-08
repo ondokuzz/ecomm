@@ -121,7 +121,7 @@ public class ConversationService implements ConversationsUseCase {
   @Override
   public Conversation start(String customerId) {
     var conversation = Conversation.start(UUID.randomUUID().toString(), customerId, time.now());
-    conversations.save(conversation, lapsesAfter);
+    conversations.create(conversation, lapsesAfter);
     return conversation;
   }
 
@@ -179,7 +179,9 @@ public class ConversationService implements ConversationsUseCase {
 
   /**
    * Asks the model, and runs the lookups it asks for, until it replies or the turn reaches its
-   * bounds: the reply, saved with the Conversation.
+   * bounds: the reply, saved with the Conversation if it is still kept.
+   *
+   * @throws ConversationNotFoundException if the Conversation was ended, or lapsed, meanwhile
    */
   private Entry.AssistantReply turn(Conversation conversation) {
     var started = System.nanoTime();
@@ -222,12 +224,17 @@ public class ConversationService implements ConversationsUseCase {
             var reply =
                 new Entry.AssistantReply(
                     replyText, referencesNamedIn(replyText, results), time.now(), providerContent);
-            conversations.save(conversation.withReply(reply), lapsesAfter);
+            saveIfStillKept(conversation.withReply(reply));
             outcome = AssistantMetrics.Outcome.REPLIED;
             return reply;
           }
         }
       }
+    } catch (ConversationNotFoundException e) {
+      // Ended, or lapsed, while the turn ran: it stays gone, though its lookups ran and its message
+      // counted.
+      outcome = AssistantMetrics.Outcome.GONE;
+      throw e;
     } catch (SupportModel.UnavailableException e) {
       // The Conversation is left as it was before the message, which the Customer can send again.
       outcome = AssistantMetrics.Outcome.UNAVAILABLE;
@@ -260,8 +267,15 @@ public class ConversationService implements ConversationsUseCase {
   /** The reply to a turn that reached its bounds, saved after the lookups it made. */
   private Entry.AssistantReply bounded(Conversation conversation) {
     var reply = new Entry.AssistantReply(TOO_MUCH, List.of(), time.now(), null);
-    conversations.save(conversation.withReply(reply), lapsesAfter);
+    saveIfStillKept(conversation.withReply(reply));
     return reply;
+  }
+
+  /** Saves the Conversation at the end of its turn, if it is still kept. */
+  private void saveIfStillKept(Conversation conversation) {
+    if (!conversations.replace(conversation, lapsesAfter)) {
+      throw new ConversationNotFoundException(conversation.id());
+    }
   }
 
   /** Runs the lookups of one answer, at once when there are several: their results, in order. */
