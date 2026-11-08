@@ -312,6 +312,18 @@ out; `npx playwright test --workers=1` loads the stack less, and is how both sui
 seconds for its Order page, since on a loaded stack a Pay has taken 15, and the Storefront itself
 confirms one for up to two minutes.
 
+`make e2e` runs both suites, the Storefront's and then the Admin Console's, one worker each, against
+a stack of their own: the `ecomm-e2e` Compose project, on fresh volumes and with its own secrets in
+`.secrets/ecomm-e2e/`, both removed after. Each run so starts on the seed, as in CI, and the
+Storefront's sold-out check never fires, however many came before. The two stacks share host ports
+and don't fit in 8 GB together, so it first stops the default stack, keeping its data, and doesn't
+start it again: `make up` does. On 2026-11-08, on 8 GB, it took about 16 to 20 minutes, of which
+about 8 bring the stack up from empty and warm it; `make seed-reset` on the volumes a run left, in
+their place, took 11.6. A failed run writes the e2e stack's logs to `.scratch/e2e/compose.log`
+before removing it, and the Playwright reports and traces stay in each frontend as above
+([`e2e.sh`](./infra/docker/e2e.sh)). The suites still run against the default stack, as above, with
+`npm run test:e2e` in each frontend.
+
 ### Secrets
 
 No secret is in the repo, an image or the Compose file. `make secrets`, which `make up` runs first,
@@ -385,6 +397,7 @@ d=.secrets/ecomm; printf '{"dev": {"checkoutClientSecret": "%s", "orchestrationC
 | `make up` | Write the secrets the stack lacks, build and start the stack, wait until it is healthy and no running workflow has a workflow task pending, and warm the checkout path and the pages around it ([`warm-up.py`](./infra/docker/warm-up.py)) |
 | `make secrets` | Write each secret the stack lacks to `.secrets/<project>/`, never overwriting one ([Secrets](#secrets)) |
 | `make down` | Stop the stack, keeping its data |
+| `make e2e` | Stop the default stack, keeping its data, and run both Playwright suites, one worker each, against the `ecomm-e2e` stack on fresh volumes, removed after ([Smoke tests](#smoke-tests)) |
 | `make status` | Say whether every service is running and healthy, naming any that isn't with its exit code and whether it was killed for its memory cap. Both Playwright suites run it first |
 | `make seed-reset` | Put the seed Categories, Products, Stock, Coupons and Campaigns back and drop every Cart, Checkout Session, Reservation, Order, Payment, Shipment, RMA, review and Notification, and terminate every running Saga; registered Customers stay. It also empties the event topics, dead-letter and redrive topics included, and Search's, Reviews', Recommendations', Fulfillment & Shipping's, Returns & Warranty's and Notifications' projections, since the reset stores count their events' versions from 1 again. It ends with `make up`'s warm-up |
 | `make upgrade-from FROM=<commit>`, `make upgrade-to`, `make upgrade-clean` | Start the stack as it was at a commit under a project of its own, bring it up to this tree keeping its data, and remove it ([the upgrade check](./docs/agents/upgrade-check.md)) |
@@ -397,7 +410,8 @@ d=.secrets/ecomm; printf '{"dev": {"checkoutClientSecret": "%s", "orchestrationC
 | `make returns-rebuild` | Rebuild Returns & Warranty's projections of Shipments, Products and Orders from the topics, keeping the RMAs ([Returns & Warranty](./services/returns-warranty/README.md#rebuilding)) |
 | `make notifications-rebuild` | Rebuild Notifications' projection of Product names from `catalog.product`, keeping the Notification ledger and sending nothing again ([Notifications](./services/notifications/README.md#the-events-it-consumes)) |
 
-Every checkout takes Stock, so after many smoke-test runs `make seed-reset` refills it. The
+Every checkout takes Stock, so after many smoke-test runs against the default stack `make seed-reset`
+refills it, or `make e2e` leaves it alone. The
 Storefront's suite stops before its first test once any seeded Product's default Variant is sold
 out, and names them. To wipe
 everything, Keycloak's users included, run `docker compose --profile '*' down -v`.

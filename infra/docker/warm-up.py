@@ -36,6 +36,8 @@ HERE = os.path.dirname(__file__)
 NO_ORDER = "00000000-0000-0000-0000-000000000000"
 ATTEMPTS = 3
 TIMEOUT_SECONDS = 90
+# How long the Storefront reads a Pay's outcome that is still running.
+CONFIRM_SECONDS = 120
 
 
 def call(method, url, token=None, body=None, form=None, expect=(200,)):
@@ -69,6 +71,27 @@ def timed(label, *args, **kwargs):
     result = call(*args, **kwargs)
     print(f"  {label}: {time.monotonic() - start:.1f}s")
     return result
+
+
+def pay_declined(session_url, customer):
+    """Pays with the declining test card and waits for the decline. Checkout waits 10 seconds for
+    the checkout Saga, then answers 202 while it runs on: on a stack new from empty volumes the first
+    run took longer (#121). Its outcome is then read, as the Storefront reads it, for up to two
+    minutes."""
+    start = time.monotonic()
+    status, outcome, _ = call(
+        "POST", f"{session_url}/pay", customer, {"paymentMethod": "tok_decline"}, expect=(402, 202)
+    )
+    while status != 402:
+        if outcome["status"] == "DECLINED":
+            break
+        if outcome["status"] != "PROCESSING":
+            raise SystemExit(f"warm-up: the Pay ended {outcome['status']}, not DECLINED")
+        if time.monotonic() - start > CONFIRM_SECONDS:
+            raise SystemExit(f"warm-up: the Pay was still processing after {CONFIRM_SECONDS}s")
+        time.sleep(2)
+        status, outcome, _ = call("GET", f"{session_url}/payment", customer)
+    print(f"  Pay, declined: the checkout Saga, an Order and a Payment: {time.monotonic() - start:.1f}s")
 
 
 def secret(name):
@@ -161,14 +184,7 @@ try:
             customer,
             {"optionId": "STANDARD"},
         )
-        timed(
-            "Pay, declined: the checkout Saga, an Order and a Payment",
-            "POST",
-            f"{sessions}/{session['id']}/pay",
-            customer,
-            {"paymentMethod": "tok_decline"},
-            expect=(402,),
-        )
+        pay_declined(f"{sessions}/{session['id']}", customer)
     finally:
         call("DELETE", f"{STOREFRONT}/api/cart/cart", customer, expect=(204,))
     timed(

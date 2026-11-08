@@ -14,7 +14,7 @@ RETURNS_GROUPS := $(filter returns-warranty.%,$(GROUPS))
 NOTIFICATIONS_PRODUCT_GROUPS := notifications.products
 DEAD_LETTER_TOPICS := $(foreach group,$(GROUPS),$(group).dlt $(group).redrive)
 
-.PHONY: secrets up down status memory realm-sync seed-reset search-rebuild reviews-rebuild recommendations-rebuild recommendations-report fulfillment-rebuild returns-rebuild notifications-rebuild dlt-redrive upgrade-from upgrade-to upgrade-clean
+.PHONY: secrets up down status memory realm-sync seed-reset e2e search-rebuild reviews-rebuild recommendations-rebuild recommendations-report fulfillment-rebuild returns-rebuild notifications-rebuild dlt-redrive upgrade-from upgrade-to upgrade-clean
 
 ## Write each of the stack's secrets that is missing to .secrets/<project>/, never overwriting one
 ## (infra/docker/secrets.sh). `make up` runs it first.
@@ -81,6 +81,13 @@ seed-reset:
 	$(COMPOSE) run --rm --no-deps kafka-topics
 	$(COMPOSE) up -d --wait
 	@python3 -B infra/docker/warm-up.py
+
+## Run the Storefront's and then the Admin Console's Playwright suite, one worker each, against the
+## ecomm-e2e stack on fresh volumes, removed after, so each run starts on the seed and the default
+## stack's data is left as it was. The default stack is stopped first, keeping its data, and `make up`
+## brings it back (infra/docker/e2e.sh).
+e2e:
+	@infra/docker/e2e.sh
 
 ## Rebuild Search's projection from the topics: drop its collections and read every topic again
 ## from the start (services/search-discovery/README.md). Each rebuild resets its service's groups
