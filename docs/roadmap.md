@@ -287,7 +287,7 @@ No context is event-sourced: contexts keep append-only histories and ledgers whe
 |---|---|
 | A | Load/performance testing; move to AWS (ECS/EKS + RDS + ElastiCache); Kubernetes manifests |
 | B | SEO pass (SSR, Core Web Vitals); catalog data-quality review |
-| C | Checkout conversion hardening; abandoned-cart recovery |
+| C | Checkout conversion hardening; abandoned-cart recovery, which drops a `cart.cart` `ABANDONED` event whose Cart is now empty or has changed since its `lastChangedAt`, since Cart can publish one for a Cart emptied mid-sweep (#105), and so needs an internal, service-to-service read of a Cart |
 | D | Outbox, relay and Saga chaos testing: duplicate and reordered events, projection rebuilds from topics, retried and compensated Saga steps |
 | E | End-to-end UX polish; accessibility pass; admin completeness review. A fancier Storefront and Admin Console: a richer visual design, and a new logo and brand colour in place of the purple (`--color-primary` and its shades in `index.css`, the logo in `Layout.tsx`, and the Keycloak theme and Admin Console brand generated from them) |
 
