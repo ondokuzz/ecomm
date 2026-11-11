@@ -119,24 +119,28 @@ def settle_orchestration():
     print(f"  the workflow tasks pending: {time.monotonic() - start:.1f}s")
 
 
+def admin_token():
+    """A master-realm admin token, which lasts 60 seconds: one for each call, as the warm-up outlasts it."""
+    return token(
+        "master",
+        {
+            "grant_type": "password",
+            "client_id": "admin-cli",
+            "username": "admin",
+            "password": secret("keycloak-admin-password"),
+        },
+    )
+
+
 print("Warming the checkout path:")
 began = time.monotonic()
 settle_orchestration()
-admin = token(
-    "master",
-    {
-        "grant_type": "password",
-        "client_id": "admin-cli",
-        "username": "admin",
-        "password": secret("keycloak-admin-password"),
-    },
-)
 email, password = f"warm-up-{uuid.uuid4().hex[:12]}@ecomm.local", str(uuid.uuid4())
 users = f"{KEYCLOAK}/admin/realms/ecomm/users"
 _, _, location = call(
     "POST",
     users,
-    admin,
+    admin_token(),
     {
         "username": email,
         "email": email,
@@ -211,6 +215,6 @@ try:
         expect=(404,),
     )
 finally:
-    call("DELETE", location, admin, expect=(204,))
+    call("DELETE", location, admin_token(), expect=(204,))
 print(f"Warm in {time.monotonic() - began:.0f}s.")
 sys.exit(0)
