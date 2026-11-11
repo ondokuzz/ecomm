@@ -524,5 +524,6 @@ Orders the Order and Campaign tests place, the RMA tests' Orders, Shipments and 
 5174, and `STOREFRONT_URL` or `KEYCLOAK_URL` for other hosts. Install Chromium once with
 `npx playwright install chromium`. Each page the tests visit is checked against WCAG 2.2 AA with axe
 once its content shows, failing on a serious or critical violation, all but the email previews'
-sandboxed frames ([`e2e/axe.ts`](./e2e/axe.ts); see the root README's
+sandboxed frames, and against the rules every page keeps, some by keyboard
+([`e2e/axe.ts`](./e2e/axe.ts), [`e2e/page-rules.ts`](./e2e/page-rules.ts); see the root README's
 [Smoke tests](../../README.md#smoke-tests)).

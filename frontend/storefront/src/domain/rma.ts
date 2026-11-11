@@ -1,4 +1,5 @@
 import type { Money } from './money'
+import { formatDay } from './dates'
 
 /** What an RMA claims: a return within the Return Period, or a warranty claim within the Warranty Window. */
 export type RmaKind = 'RETURN' | 'WARRANTY_CLAIM'
@@ -68,11 +69,6 @@ export function kindOptionsOf(
     option('RETURN', line.returnPeriodEndsAt, returnPeriodEnded),
     option('WARRANTY_CLAIM', line.warrantyWindowEndsAt, warrantyEnded),
   ]
-}
-
-/** A date as the Customer reads it, in their own locale and time zone. */
-export function formatDay(at: string): string {
-  return new Date(at).toLocaleDateString(undefined, { dateStyle: 'medium' })
 }
 
 /** What the Customer chose on the request form; the quantity as typed, for a Variant without Serial tracking. */

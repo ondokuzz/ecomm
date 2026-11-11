@@ -66,7 +66,7 @@ test('Staff create a Product with two Variants and their Stock, and Customers ca
   const listed = page.getByRole('row').filter({ hasText: sku })
   await expect(listed).toContainText(name)
   await expect(listed).toContainText(formatMoney({ amountMinor: 79900, currency: 'EUR' }, currencies))
-  await expectAccessible(page)
+  await expectAccessible(page, { keyboard: true })
 
   // Catalog has the Product as typed, its Prices as Money, and Inventory their On-hand counts.
   const product = await productOf(request, sku)
@@ -96,7 +96,7 @@ test('Staff create a Product with two Variants and their Stock, and Customers ca
   await expect(page.getByLabel('Variant 1 ID')).toHaveCount(0)
   await expect(page.getByLabel('Variant 2 price in EUR')).toHaveValue('899.50')
   await expect(page.getByLabel('Variant 2 on hand')).toHaveValue('3')
-  await expectAccessible(page)
+  await expectAccessible(page, { keyboard: true })
 
   // On the Storefront, a Customer picks the second Variant and sees its Price and Stock.
   const storefront = await page.context().newPage()

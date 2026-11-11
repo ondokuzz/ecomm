@@ -8,6 +8,7 @@ import {
   refundedOf,
 } from '../domain/payment'
 import { Badge, type Tone } from './ui/Badge'
+import { formatDateTime } from '../domain/dates'
 
 const paymentStatusTones: Record<PaymentStatus, Tone> = {
   PENDING: 'warning',
@@ -54,7 +55,7 @@ export function OrderPayments({ payments }: { payments: readonly Payment[] }) {
                   <span>{row.label}</span>
                   <span className="muted">{formatMoney(row.amount)}</span>
                   <time className="muted" dateTime={row.at}>
-                    {new Date(row.at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+                    {formatDateTime(row.at)}
                   </time>
                 </li>
               ))}

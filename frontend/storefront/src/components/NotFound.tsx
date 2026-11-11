@@ -16,6 +16,7 @@ export function NotFound({
   return (
     <EmptyState
       title={title}
+      heading="h1"
       illustration={
         <span className="empty-icon">
           <Icon name="search" size={28} />

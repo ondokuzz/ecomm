@@ -99,7 +99,7 @@ test('Staff approve a return and reject a warranty claim from the RMA queue', as
   await expect(row).toContainText(`#${orderReference}`)
   await expect(row).toContainText(speaker.productName)
   await expect(row).toContainText(/just now|minutes? ago/)
-  await expectAccessible(page)
+  await expectAccessible(page, { keyboard: true })
 
   // The return: what it claims and the window it was checked against, approved with a note.
   await row.getByRole('link', { name: returned.reference }).click()
@@ -118,7 +118,7 @@ test('Staff approve a return and reject a warranty claim from the RMA queue', as
   await expect(requested).toHaveCount(2)
   await expect(requested.nth(1)).toContainText('Requested')
   await expect(requested.nth(1)).toContainText('Customer')
-  await expectAccessible(page)
+  await expectAccessible(page, { keyboard: true })
 
   await page.getByLabel('Note').fill('Send it to the Berlin Warehouse')
   await page.getByRole('button', { name: 'Approve' }).click()
@@ -140,10 +140,18 @@ test('Staff approve a return and reject a warranty claim from the RMA queue', as
   await expect(warranty).toContainText('12 months, from JBL')
   await page.getByRole('button', { name: 'Reject' }).click()
   await expect(page.getByText('Say why it is rejected: the Customer is told.')).toBeVisible()
-  await expectAccessible(page)
+  await expectAccessible(page, { keyboard: true })
   await expect(page.getByLabel('Reason')).toHaveAttribute('aria-invalid', 'true')
   await page.getByLabel('Reason').fill('Water damage is not covered')
   await page.getByRole('button', { name: 'Reject' }).click()
+  // Rejecting is final, so it is asked once more; cancelled, nothing changes.
+  const confirmReject = page.getByRole('dialog', { name: `Reject ${claimed.reference}?` })
+  await expect(confirmReject.getByRole('button', { name: 'Cancel' })).toBeFocused()
+  await expectAccessible(page, { keyboard: true })
+  await confirmReject.getByRole('button', { name: 'Cancel' }).click()
+  await expect(confirmReject).toBeHidden()
+  await page.getByRole('button', { name: 'Reject' }).click()
+  await confirmReject.getByRole('button', { name: 'Reject RMA' }).click()
   const rejection = page.getByRole('table', { name: 'RMA history' }).getByRole('row')
   await expect(rejection).toHaveCount(3)
   await expect(rejection.nth(1)).toContainText('Rejected')
@@ -424,6 +432,11 @@ test('Staff inspect a returned phone as refused, with a note, and the returns Sa
   // With one, the returns Saga closes it, and gives nothing back.
   await inspect.getByLabel('Note').fill('Screen cracked; not as sent')
   await inspect.getByRole('button', { name: 'Record the Inspection' }).click()
+  // A refusing outcome gives nothing back, so it is asked once more.
+  await page
+    .getByRole('dialog', { name: `Record ${returned.reference} as refused?` })
+    .getByRole('button', { name: 'Record the Inspection' })
+    .click()
   await expect(page.locator('.page-heading')).toContainText('Closed', { timeout: 90_000 })
   const resolution = page.getByRole('region', { name: 'Resolution' })
   await expect(resolution).toContainText('Closed: nothing was given back.')

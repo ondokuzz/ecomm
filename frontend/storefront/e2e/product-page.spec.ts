@@ -7,7 +7,7 @@ test("a Product page shows the Product's Warranty terms", async ({ page }) => {
   await page.goto('/products/PHN-GALAXY-S24')
   await expect(page.getByRole('heading', { name: 'Samsung Galaxy S24' })).toBeVisible()
   await expect(page.getByText("24 months, manufacturer's warranty (Samsung)")).toBeVisible()
-  await expectAccessible(page)
+  await expectAccessible(page, { keyboard: true })
 
   await page.goto('/products/AUD-JBL-FLIP-6')
   await expect(page.getByText("12 months, manufacturer's warranty (JBL)")).toBeVisible()

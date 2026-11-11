@@ -42,7 +42,7 @@ test('a Customer searches, filters and sorts, and a reload or a shared URL resto
     .values.find((v) => v.value === '128 GB')!.count
   await expect(storage.getByRole('checkbox', { name: /^128 GB/ })).toBeEnabled()
   await expect(storage.locator('label').filter({ hasText: '128 GB' })).toContainText(String(count128))
-  await expectAccessible(page)
+  await expectAccessible(page, { keyboard: true })
 
   await page.getByRole('checkbox', { name: /^In stock only/ }).click()
   await expect(page.getByRole('checkbox', { name: /^In stock only/ })).toBeChecked()

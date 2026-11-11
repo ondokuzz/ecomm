@@ -89,6 +89,11 @@ test('Staff publish a held Review and remove a reported one', async ({ page, req
     await expectAccessible(page)
     await page.getByLabel('Reason').fill('Reviews are of the product, not of the seller.')
     await page.getByRole('button', { name: 'Remove' }).click()
+    // Removing is final, so it is asked once more.
+    const confirm = page.getByRole('dialog', { name: 'Remove this Review?' })
+    await expect(confirm.getByRole('button', { name: 'Cancel' })).toBeFocused()
+    await expectAccessible(page)
+    await confirm.getByRole('button', { name: 'Remove Review' }).click()
     await expect(page.locator('.page-heading')).toContainText('Removed')
     await expect(history.getByRole('row').nth(1)).toContainText('Reviews are of the product, not of the seller.')
     await expect(reports).toContainText('Resolved')

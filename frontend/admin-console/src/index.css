@@ -560,6 +560,8 @@ textarea.input {
 /* The sections within one area, such as Coupons and Campaigns within Promotions. */
 .subnav {
   display: flex;
+  /* On a phone the tabs go onto a second line rather than past the screen. */
+  flex-wrap: wrap;
   gap: var(--space-1);
   margin-bottom: var(--space-3);
   border-bottom: 1px solid var(--color-line);
@@ -584,6 +586,8 @@ textarea.input {
   align-items: center;
   gap: var(--space-2);
   min-width: 0;
+  /* The sections scroll to make room; Sign out stays whole on the screen. */
+  flex-shrink: 0;
 }
 .account-email {
   color: var(--color-muted);
@@ -594,6 +598,21 @@ textarea.input {
 @media (max-width: 640px) {
   .account-email {
     display: none;
+  }
+  /* On a phone the sections take a row of their own under the brand and Sign out, scrolling
+     sideways, rather than squeezing between them to nothing. */
+  .site-header-inner {
+    flex-wrap: wrap;
+    height: auto;
+    gap: var(--space-1) var(--space-3);
+    padding-block: var(--space-2);
+  }
+  .site-nav {
+    order: 1;
+    flex-basis: 100%;
+  }
+  .account {
+    margin-left: auto;
   }
 }
 
@@ -638,6 +657,7 @@ textarea.input {
 }
 .panel-heading {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
@@ -650,6 +670,9 @@ textarea.input {
 /* Tables */
 
 .table-scroll {
+  /* Positioned, so a visually hidden label inside, which is absolute, scrolls with the table
+     instead of widening the page past a phone's screen. */
+  position: relative;
   overflow-x: auto;
   border: 1px solid var(--color-line);
   border-radius: var(--radius-md);
@@ -957,6 +980,10 @@ textarea.input {
 }
 
 /* Message templates: an email's HTML in a sandboxed frame, its text as sent. */
+.template-skeleton {
+  height: 420px;
+  border-radius: 8px;
+}
 .template-preview .template-html,
 .notification-message .template-html {
   display: block;

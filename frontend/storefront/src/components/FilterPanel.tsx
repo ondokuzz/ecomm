@@ -119,6 +119,7 @@ function RangeGroup({
           range={range}
           placeholders={{ min: String(group.min), max: String(group.max) }}
           invalid={{ min: invalid(range.min), max: invalid(range.max) }}
+          invalidMessage={`Enter a number, such as ${group.max}`}
           onChange={setRange}
         />
       </fieldset>
@@ -184,6 +185,7 @@ function PriceGroup({
           range={range}
           placeholders={{ min: decimal(bounds?.min), max: decimal(bounds?.max) }}
           invalid={{ min: invalid(range.min), max: invalid(range.max) }}
+          invalidMessage={`Enter a price in ${currency}, such as ${decimal(bounds?.max) || '20'}`}
           onChange={setRange}
         />
       </fieldset>
@@ -196,37 +198,52 @@ function RangeFields({
   range,
   placeholders,
   invalid = {},
+  invalidMessage,
   onChange,
 }: {
   name: string
   range: Range
   placeholders: { min: string; max: string }
   invalid?: { min?: boolean; max?: boolean }
+  /** What an invalid end's message says, tied to it by `aria-describedby`. */
+  invalidMessage: string
   onChange: (range: Range) => void
 }) {
+  const errorId = useId()
   const set = (end: 'min' | 'max', value: string) => onChange({ ...range, [end]: value === '' ? undefined : value })
+  const showError = Boolean(invalid.min || invalid.max)
+  const describedBy = (end: 'min' | 'max') => (invalid[end] ? errorId : undefined)
   return (
-    <div className="filter-range">
-      <Input
-        inputMode="decimal"
-        aria-label={`Lowest ${name}`}
-        placeholder={placeholders.min}
-        value={range.min ?? ''}
-        aria-invalid={invalid.min || undefined}
-        onChange={(event) => set('min', event.target.value)}
-      />
-      <span aria-hidden="true">–</span>
-      <Input
-        inputMode="decimal"
-        aria-label={`Highest ${name}`}
-        placeholder={placeholders.max}
-        value={range.max ?? ''}
-        aria-invalid={invalid.max || undefined}
-        onChange={(event) => set('max', event.target.value)}
-      />
-      <Button type="submit" size="sm">
-        Apply
-      </Button>
-    </div>
+    <>
+      <div className="filter-range">
+        <Input
+          inputMode="decimal"
+          aria-label={`Lowest ${name}`}
+          placeholder={placeholders.min}
+          value={range.min ?? ''}
+          aria-invalid={invalid.min || undefined}
+          aria-describedby={describedBy('min')}
+          onChange={(event) => set('min', event.target.value)}
+        />
+        <span aria-hidden="true">–</span>
+        <Input
+          inputMode="decimal"
+          aria-label={`Highest ${name}`}
+          placeholder={placeholders.max}
+          value={range.max ?? ''}
+          aria-invalid={invalid.max || undefined}
+          aria-describedby={describedBy('max')}
+          onChange={(event) => set('max', event.target.value)}
+        />
+        <Button type="submit" size="sm">
+          Apply
+        </Button>
+      </div>
+      {showError && (
+        <p id={errorId} className="field-error filter-error">
+          {invalidMessage}
+        </p>
+      )}
+    </>
   )
 }

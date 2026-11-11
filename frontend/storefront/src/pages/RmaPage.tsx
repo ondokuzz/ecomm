@@ -14,6 +14,7 @@ import { Icon } from '../components/ui/Icon'
 import { Skeleton } from '../components/ui/Skeleton'
 import { orderReference } from '../domain/order'
 import { type Rma, rmaKindLabel, returnAddressLines } from '../domain/rma'
+import { formatDateTime } from '../domain/dates'
 
 /**
  * One of the Customer's RMAs, followed: its timeline; once approved, where to send its units, the
@@ -104,11 +105,7 @@ function SendBack({ rma }: { rma: Rma }) {
       </p>
       {rma.sendBackBy && (
         <p>
-          Send it to arrive by{' '}
-          <time dateTime={rma.sendBackBy}>
-            {new Date(rma.sendBackBy).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
-          </time>
-          .{' '}
+          Send it to arrive by <time dateTime={rma.sendBackBy}>{formatDateTime(rma.sendBackBy)}</time>.{' '}
           <span className="muted">
             If it hasn't arrived by then, this {rmaKindLabel(rma.kind).toLowerCase()} expires.
           </span>
@@ -198,7 +195,7 @@ function RmaFacts({ rma }: { rma: Rma }) {
         </div>
         <div>
           <dt>Requested</dt>
-          <dd>{new Date(rma.requestedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</dd>
+          <dd>{formatDateTime(rma.requestedAt)}</dd>
         </div>
         <div>
           <dt>Order</dt>

@@ -51,6 +51,7 @@ export function ProductListPage() {
       {results.error && !data ? (
         <ErrorState
           title="We couldn't load the products"
+          heading="h2"
           error={results.error}
           retrying={results.isFetching}
           onRetry={() => results.refetch()}

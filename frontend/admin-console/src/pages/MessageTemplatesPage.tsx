@@ -30,9 +30,7 @@ export function MessageTemplatesPage() {
       ) : previews.data ? (
         previews.data.map((preview) => <Preview key={`${preview.messageType}-${preview.channel}`} preview={preview} />)
       ) : (
-        <p className="muted" role="status">
-          Loading the Message templates…
-        </p>
+        <PreviewSkeletons />
       )}
     </>
   )
@@ -72,5 +70,22 @@ function Preview({ preview }: { preview: TemplatePreview }) {
           <pre className="template-text">{preview.text}</pre>
         ))}
     </section>
+  )
+}
+
+/** The previews' shape while they load: a heading and an email's frame, a few times over. */
+function PreviewSkeletons() {
+  return (
+    <div aria-busy="true">
+      <span className="visually-hidden" role="status">
+        Loading the Message templates…
+      </span>
+      {[0, 1, 2].map((i) => (
+        <section key={i} className="panel template-preview" aria-hidden="true">
+          <span className="skeleton heading-skeleton" />
+          <span className="skeleton template-skeleton" />
+        </section>
+      ))}
+    </div>
   )
 }

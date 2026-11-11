@@ -20,6 +20,9 @@ const navLinks = [
 export function Layout() {
   return (
     <>
+      <a className="skip-link" href="#main">
+        Skip to content
+      </a>
       <header className="site-header">
         <div className="site-header-inner">
           <Brand />
@@ -38,7 +41,7 @@ export function Layout() {
           </div>
         </div>
       </header>
-      <main>
+      <main id="main">
         <RouteErrorBoundary>
           <Outlet />
         </RouteErrorBoundary>
@@ -52,7 +55,7 @@ function Brand() {
   return (
     <Link to="/" className="brand" aria-label="Ecomm home">
       <span className="brand-mark" aria-hidden="true" />
-      Ecomm
+      <span className="brand-name">Ecomm</span>
     </Link>
   )
 }

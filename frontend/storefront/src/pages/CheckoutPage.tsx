@@ -45,6 +45,7 @@ import {
   testCards,
   whenConfirmingPayment,
 } from '../domain/payment'
+import { formatClock } from '../domain/dates'
 
 /**
  * Starts a Checkout Session for the Cart, or resumes the one that already holds it, and shows its
@@ -262,7 +263,7 @@ function useNow(): number {
  * screen readers don't announce every second; the clock time says the same once.
  */
 function HeldUntilNotice({ expiresAt, left }: { expiresAt: string; left: string }) {
-  const until = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date(expiresAt))
+  const until = formatClock(expiresAt)
   return (
     <p className="alert alert-info held-until">
       <Icon name="lock" size={18} />
@@ -407,6 +408,7 @@ function SessionExpired({ onStartAgain }: { onStartAgain: () => void }) {
       <CheckoutSteps current="Payment" />
       <EmptyState
         title="Your hold expired"
+        heading="h1"
         focusTitle
         action={
           <Button variant="primary" size="lg" onClick={onStartAgain}>

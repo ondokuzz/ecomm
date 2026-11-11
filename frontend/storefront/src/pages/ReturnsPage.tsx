@@ -7,7 +7,8 @@ import { EmptyState, ErrorState } from '../components/Status'
 import { ButtonLink } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { type Page, pageCount, pageIndexFromUrl } from '../domain/paging'
-import { type Rma, formatDay, rmaKindLabel } from '../domain/rma'
+import { formatDay } from '../domain/dates'
+import { type Rma, rmaKindLabel } from '../domain/rma'
 
 /**
  * The Customer's RMAs as cards, newest first, a page at a time, each with its RMA reference, Product,

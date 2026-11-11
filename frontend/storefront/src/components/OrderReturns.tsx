@@ -8,7 +8,6 @@ import {
   type RmaField,
   type RmaForm,
   type RmaRefusals,
-  formatDay,
   kindOptionsOf,
   maxReason,
   rmaRefusalsOf,
@@ -18,6 +17,7 @@ import { ErrorMessage } from './Status'
 import { Button } from './ui/Button'
 import { Card } from './ui/Card'
 import { Input } from './ui/Input'
+import { formatDay } from '../domain/dates'
 
 /**
  * A delivered Order's lines, each with until when it may be returned and until when its warranty

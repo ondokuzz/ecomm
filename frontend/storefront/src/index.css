@@ -239,6 +239,21 @@ code {
   flex-wrap: wrap;
 }
 
+/* Keyboard users skip the header's links: it shows only once Tab reaches it. */
+.skip-link {
+  position: absolute;
+  left: var(--space-3);
+  top: -3rem;
+  z-index: 60;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+}
+.skip-link:focus {
+  top: var(--space-3);
+}
+
 /* Button */
 
 .btn {
@@ -594,8 +609,13 @@ code {
   text-align: center;
   padding: var(--space-7) var(--space-4);
 }
+/* A whole-page empty or error state's title is the page's h1, at the size of the h2 it replaces. */
+.empty h1 {
+  font-size: var(--text-xl);
+  font-weight: 700;
+}
 /* A title that takes focus only to guide screen readers and the keyboard, not as a control. */
-.empty h2[tabindex='-1']:focus {
+.empty :is(h1, h2)[tabindex='-1']:focus {
   outline: none;
 }
 .empty p {
@@ -899,6 +919,31 @@ main {
   font-size: var(--text-lg);
 }
 
+/* On a phone, Help shows its icon alone, its name kept for screen readers, so the Cart and the menu fit. */
+@media (max-width: 30rem) {
+  .site-header-inner {
+    gap: var(--space-3);
+  }
+  .help-toggle-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+/* At 320 px, signed in, the mark alone stands for the brand, its name kept for screen readers. */
+@media (max-width: 24rem) {
+  .brand-name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
 @media (max-width: 720px) {
   :root {
     --header-height: 3.5rem;
@@ -1815,7 +1860,8 @@ main {
 }
 .cart-layout {
   display: grid;
-  grid-template-columns: 1fr;
+  /* Not 1fr, whose least is its widest content's: on a phone that pushed the page past the screen. */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-5);
   align-items: start;
 }
@@ -2045,6 +2091,7 @@ main {
 .steps {
   list-style: none;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
   margin: 0 0 var(--space-5);
@@ -2060,7 +2107,7 @@ main {
 }
 .step + .step::before {
   content: '';
-  width: clamp(1.5rem, 6vw, 4rem);
+  width: clamp(0.75rem, 6vw, 4rem);
   height: 2px;
   border-radius: 1px;
   background: var(--color-line-strong);
@@ -2780,6 +2827,8 @@ main {
 }
 .search-box .input {
   flex: 1;
+  /* An input's default width would push Search off a phone's screen. */
+  min-width: 0;
   padding-left: calc(var(--space-3) * 2 + 18px);
 }
 
@@ -3108,4 +3157,9 @@ main {
 .preferences-form .field-error {
   margin-top: calc(-1 * var(--space-3));
   margin-left: calc(1.25rem + var(--space-3));
+}
+
+/* A filter's message sits under its fields, not pulled up into them as a form's does. */
+.filter-error {
+  margin: var(--space-2) 0 0;
 }

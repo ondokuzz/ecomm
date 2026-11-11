@@ -1,6 +1,7 @@
 import { type Rma, type RmaStatus, rmaTimelineOf } from '../domain/rma'
 import { Icon, type IconName } from './ui/Icon'
 import { cx } from './ui/cx'
+import { formatDateTime } from '../domain/dates'
 
 /** A status that ends an RMA without giving anything back, shown in its own colour and icon. */
 const finalIcons: Partial<Record<RmaStatus, IconName>> = {
@@ -41,7 +42,7 @@ export function RmaTimeline({ rma }: { rma: Rma }) {
               </span>{' '}
               {step.at && (
                 <time className="timeline-time" dateTime={step.at}>
-                  {new Date(step.at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+                  {formatDateTime(step.at)}
                 </time>
               )}
               {step.note && <span className="timeline-note">“{step.note}”</span>}

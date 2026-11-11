@@ -11,6 +11,7 @@ import { Card } from '../components/ui/Card'
 import type { VariantDetail } from '../domain/catalog'
 import { type Order, discountNames, orderItemCountLabel, orderReference } from '../domain/order'
 import { type Page, pageCount, pageIndexFromUrl } from '../domain/paging'
+import { formatDay } from '../domain/dates'
 
 /** How many of an Order's lines its card shows a thumbnail for; the rest are counted. */
 const maxThumbnails = 3
@@ -109,9 +110,7 @@ function OrderCard({ order, variants }: { order: Order; variants: Record<string,
           <div className="order-card-top">
             <div>
               <span className="order-card-reference">Order #{orderReference(order)}</span>
-              <span className="muted order-card-date">
-                {new Date(order.placedAt).toLocaleDateString(undefined, { dateStyle: 'medium' })}
-              </span>
+              <span className="muted order-card-date">{formatDay(order.placedAt)}</span>
             </div>
             <OrderStatusBadge status={order.status} />
           </div>

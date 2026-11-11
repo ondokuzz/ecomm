@@ -9,6 +9,7 @@ import { ErrorMessage, SupportReference } from './Status'
 import { Button } from './ui/Button'
 import { buttonClass } from './ui/buttonClass'
 import { Icon } from './ui/Icon'
+import { formatClock } from '../domain/dates'
 
 /**
  * Ecomm Agent, in the header of every page: a button that opens the Support Assistant's panel beside
@@ -45,7 +46,7 @@ export function Help() {
         onClick={() => (open ? close() : show())}
       >
         <Icon name="help" size={20} />
-        Ecomm Agent
+        <span className="help-toggle-label">Ecomm Agent</span>
       </button>
       <dialog
         ref={dialog}
@@ -74,7 +75,7 @@ function HelpBody({ titleId, onClose }: { titleId: string; onClose: () => void }
 
   return (
     <div className="help-body">
-      <header className="help-header">
+      <div className="help-header">
         <h2 id={titleId}>Ecomm Agent</h2>
         {signedIn && (
           <Button
@@ -90,7 +91,7 @@ function HelpBody({ titleId, onClose }: { titleId: string; onClose: () => void }
         <Button variant="ghost" icon onClick={onClose} aria-label="Close Ecomm Agent">
           <Icon name="close" size={20} />
         </Button>
-      </header>
+      </div>
       {pending ? null : signedIn ? (
         <HelpConversation
           newConversationError={newConversation.error}
@@ -235,8 +236,6 @@ function HelpConversation({
   )
 }
 
-const askAgainFormat = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' })
-
 /**
  * Why the Customer's message wasn't answered, and the way on: past their message limits, the time
  * they can ask again; the assistant unavailable or busy, to try later, with the support reference;
@@ -248,7 +247,7 @@ function SendFailure({ error, onNewConversation }: { error: unknown; onNewConver
   const reason = error.problem.reason
   if (reason === 'assistantRateLimited') {
     const retryAfter = error.retryAfter
-    const when = retryAfter === undefined ? 'later' : `at ${askAgainFormat.format(askAgainAt(retryAfter, new Date()))}`
+    const when = retryAfter === undefined ? 'later' : `at ${formatClock(askAgainAt(retryAfter, new Date()))}`
     return <HelpAlert>{`You've sent a lot of messages. You can ask again ${when}.`}</HelpAlert>
   }
   if (reason === 'assistantUnavailable' || reason === 'assistantBusy') {

@@ -1,7 +1,7 @@
 import { EmptyState } from './Status'
 import { ButtonLink } from './ui/Button'
 
-/** An empty Cart, with an illustration and a way back to the Products. */
+/** An empty Cart, in place of the Cart or Checkout page, with an illustration and a way back to the Products. */
 export function EmptyCart({
   children = 'Find something you like and add it here.',
   focusTitle,
@@ -12,6 +12,7 @@ export function EmptyCart({
   return (
     <EmptyState
       title="Your cart is empty"
+      heading="h1"
       focusTitle={focusTitle}
       illustration={<EmptyCartIllustration />}
       action={

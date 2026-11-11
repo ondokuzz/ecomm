@@ -40,7 +40,7 @@ test('Staff find a Customer’s Order and see its Status history', async ({ page
   await expect(rows).toHaveCount(2)
   await expect(rows.nth(1)).toContainText(customerId)
   await expect(rows.nth(1)).toContainText('Cancelled')
-  await expectAccessible(page)
+  await expectAccessible(page, { keyboard: true })
 
   // By the Customer and a Status: the Order is Cancelled, so it is no longer among the Paid ones.
   // The form is remade from the URL once Clear lands; typing before then would be lost.
@@ -68,7 +68,7 @@ test('Staff find a Customer’s Order and see its Status history', async ({ page
     await expect(row.locator('time')).toHaveAttribute('datetime', entry.at)
   }
   await expect(history.nth(1)).toContainText('(current)')
-  await expectAccessible(page)
+  await expectAccessible(page, { keyboard: true })
   // Read only: nothing on the page changes the Order.
   await expect(page.getByRole('main').getByRole('button')).toHaveCount(0)
 

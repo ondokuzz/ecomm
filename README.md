@@ -314,6 +314,15 @@ left out, their frames as well as the emails in them: the frames are sandboxed w
 axe, which runs inside each frame it checks, waits on them until the test times out. The emails'
 HTML is so not checked, and the frames' titles only by the tests, which find each frame by it.
 
+Each such page also keeps the rules axe's WCAG tags leave out (`e2e/page-rules.ts`, #144): one `h1`,
+one `main`, everything inside a landmark, each invalid control tied to its message by
+`aria-describedby`, no sideways scrolling at 320 px wide or at 640 px (a 1280 px window at 200%
+zoom), and no CSS animation still running once the browser asks for reduced motion. On the pages
+of the flows #144 names (browse, Cart, checkout, an Order, an RMA request, Help, and the Admin
+Console's Order, RMA and Product pages), `expectAccessible(page, { keyboard: true })` also walks
+the page by Tab alone, failing on a control without a visible focus ring and on one Tab never
+reaches, which a keyboard trap leaves out; an open modal dialog is walked alone.
+
 Each suite runs its spec files side by side, one Playwright worker each. Where Docker's memory is short of what
 the stack uses, or the host swaps Docker's VM out, requests stall for tens of seconds and tests time
 out; `npx playwright test --workers=1` loads the stack less, and is how both suites passed on a

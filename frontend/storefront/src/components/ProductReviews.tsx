@@ -41,6 +41,7 @@ import { Input } from './ui/Input'
 import { ConfirmDialog } from './ui/ConfirmDialog'
 import { Skeleton } from './ui/Skeleton'
 import { useToast } from './ui/toasts'
+import { formatDay } from '../domain/dates'
 
 /**
  * A Product's ratings and reviews: the summary with its split by star, what the signed-in Customer
@@ -425,8 +426,6 @@ function ReviewList({ sku, variants }: { sku: string; variants: Variant[] }) {
   )
 }
 
-const dateFormat = new Intl.DateTimeFormat('en', { dateStyle: 'medium' })
-
 function ReviewItem({ review, variants }: { review: Review; variants: Variant[] }) {
   const bought = variantBoughtLabel(variants, review.variantId)
   return (
@@ -439,7 +438,7 @@ function ReviewItem({ review, variants }: { review: Review; variants: Variant[] 
       <footer className="review-meta muted">
         <span>{review.author}</span>
         <span>
-          <time dateTime={review.createdAt}>{dateFormat.format(new Date(review.createdAt))}</time>
+          <time dateTime={review.createdAt}>{formatDay(review.createdAt)}</time>
           {review.editedAt && ' · edited'}
         </span>
         {bought && <span>{bought}</span>}

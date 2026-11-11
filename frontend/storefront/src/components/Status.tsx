@@ -42,24 +42,30 @@ export function LookupError({ failure, title }: { failure: LookupFailure | undef
   return <ErrorMessage error={failure.error} title={title} retrying={failure.retrying} onRetry={failure.retry} />
 }
 
+/** A page's one `h1`, for a panel standing in for the whole page, or an `h2` under the page's own. */
+export type HeadingLevel = 'h1' | 'h2'
+
 /**
  * A request that failed in place of a page's main content: the error panel, with the reason, the
- * support reference and a way to try again.
+ * support reference and a way to try again. Its title is the page's `h1` unless `heading` says
+ * the page already has one.
  */
 export function ErrorState({
   title,
   error,
   retrying,
   onRetry,
+  heading = 'h1',
 }: {
   title: string
   error: unknown
   retrying: boolean
   onRetry: () => void
+  heading?: HeadingLevel
 }) {
   const { message, reference } = failureOf(error)
   return (
-    <ErrorPanel title={title} message={message} reference={reference}>
+    <ErrorPanel title={title} message={message} reference={reference} heading={heading}>
       {/* An expired sign-in is already on its way to Keycloak; trying again would only fail the same way. */}
       {!isUnauthorized(error) && (
         <Button variant="primary" loading={retrying} onClick={onRetry}>
@@ -75,11 +81,13 @@ export function ErrorPanel({
   title,
   message,
   reference,
+  heading: Heading = 'h1',
   children,
 }: {
   title: string
   message: string
   reference?: string
+  heading?: HeadingLevel
   children: ReactNode
 }) {
   return (
@@ -87,7 +95,7 @@ export function ErrorPanel({
       <span className="error-state-icon">
         <Icon name="alert" size={28} />
       </span>
-      <h2>{title}</h2>
+      <Heading>{title}</Heading>
       <p>{message}</p>
       {children}
       {reference && <SupportReference reference={reference} />}
@@ -104,13 +112,17 @@ export function SupportReference({ reference }: { reference: string }) {
   )
 }
 
-/** A friendly stand-in for a list with nothing in it, with a way on. */
+/**
+ * A friendly stand-in for a list with nothing in it, with a way on. Its title is an `h2` under the
+ * page's `h1`, or, as `heading="h1"`, the page's own when it stands in for the whole page.
+ */
 export function EmptyState({
   title,
   children,
   action,
   illustration,
   focusTitle,
+  heading: Heading = 'h2',
 }: {
   title: string
   children?: ReactNode
@@ -118,6 +130,7 @@ export function EmptyState({
   illustration?: ReactNode
   /** Moves focus to the title on arrival, for when the control the Customer used just went away. */
   focusTitle?: boolean
+  heading?: HeadingLevel
 }) {
   const heading = useRef<HTMLHeadingElement>(null)
   useEffect(() => {
@@ -127,9 +140,9 @@ export function EmptyState({
   return (
     <div className="empty">
       {illustration}
-      <h2 ref={heading} tabIndex={focusTitle ? -1 : undefined}>
+      <Heading ref={heading} tabIndex={focusTitle ? -1 : undefined}>
         {title}
-      </h2>
+      </Heading>
       {children && <p>{children}</p>}
       {action}
     </div>

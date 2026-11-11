@@ -203,7 +203,7 @@ test.describe('with the assistant stubbed', () => {
     await expect(box).toHaveValue('')
     await expect(box).toBeFocused()
     await expect(newConversation).toBeEnabled()
-    await expectAccessible(page)
+    await expectAccessible(page, { keyboard: true })
     await list.getByRole('link', { name: 'Order #7F1C2A3B' }).click()
     await expect(page).toHaveURL(/\/orders\/7f1c2a3b-0000-4000-8000-000000000001$/)
   })

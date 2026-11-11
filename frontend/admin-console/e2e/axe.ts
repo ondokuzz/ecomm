@@ -1,11 +1,13 @@
 import AxeBuilder from '@axe-core/playwright'
 import { type Page, expect, test } from '@playwright/test'
 import type { NodeResult, Result } from 'axe-core'
+import { expectKeyboardWalk, expectPageRules } from './page-rules'
 
 /**
  * The WCAG 2.2 AA check every page this suite visits gets once its content shows (#143): axe's
  * rules for levels A and AA, failing on a serious or critical violation. A minor or moderate one is
- * left to the keyboard and screen-reader passes.
+ * left to the keyboard and screen-reader passes. Each page also keeps the rules in `page-rules.ts`,
+ * and with `keyboard`, the page is walked by Tab alone: the flows #144 names are.
  */
 const wcag22aa = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
 const failingImpacts = new Set(['serious', 'critical'])
@@ -30,7 +32,7 @@ const scriptlessFrames = 'iframe[sandbox]:not([sandbox~="allow-scripts"])'
  * Checks the page as it now shows against WCAG 2.2 AA, failing on a serious or critical violation
  * with each one's rule, what it asks, and the elements it was found on.
  */
-export async function expectAccessible(page: Page): Promise<void> {
+export async function expectAccessible(page: Page, { keyboard = false }: { keyboard?: boolean } = {}): Promise<void> {
   await test.step(`axe: ${new URL(page.url()).pathname}`, async () => {
     const { violations } = await new AxeBuilder({ page }).withTags(wcag22aa).exclude(scriptlessFrames).analyze()
     const failing: Result[] = []
@@ -40,6 +42,8 @@ export async function expectAccessible(page: Page): Promise<void> {
       if (nodes.length > 0) failing.push({ ...violation, nodes })
     }
     expect.soft(failing.map(describeViolation), `WCAG 2.2 AA violations on ${page.url()}`).toEqual([])
+    await expectPageRules(page)
+    if (keyboard) await expectKeyboardWalk(page)
   })
 }
 

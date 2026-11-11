@@ -7,6 +7,7 @@ import { useModerate, useModeratedReview } from '../api/reviews'
 import { NotFound } from '../components/NotFound'
 import { ReviewStatusBadge } from '../components/ReviewStatusBadge'
 import { ErrorMessage, FieldError } from '../components/Status'
+import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { Button } from '../components/ui/Button'
 import { Icon } from '../components/ui/Icon'
 import { formatTime } from '../domain/order'
@@ -218,6 +219,7 @@ function Moderate({ review }: { review: ModeratedReview }) {
   const actions = actionsOf(review)
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string>()
+  const [confirmingRemoval, setConfirmingRemoval] = useState(false)
 
   const remove = (event: FormEvent) => {
     event.preventDefault()
@@ -227,7 +229,13 @@ function Moderate({ review }: { review: ModeratedReview }) {
       return
     }
     setError(undefined)
-    moderate.mutate({ action: 'remove', body: removal.body })
+    // Removing takes the Review down for good, so it is asked once more.
+    setConfirmingRemoval(true)
+  }
+  const confirmRemoval = () => {
+    const removal = removalOf(reason)
+    if ('error' in removal) return
+    moderate.mutate({ action: 'remove', body: removal.body }, { onSettled: () => setConfirmingRemoval(false) })
   }
   const pending = (action: string) => moderate.isPending && moderate.variables?.action === action
   const movedOn =
@@ -297,6 +305,16 @@ function Moderate({ review }: { review: ModeratedReview }) {
           </div>
         </form>
       </div>
+      <ConfirmDialog
+        open={confirmingRemoval}
+        title="Remove this Review?"
+        confirmLabel="Remove Review"
+        confirming={pending('remove')}
+        onConfirm={confirmRemoval}
+        onCancel={() => setConfirmingRemoval(false)}
+      >
+        It comes off the Product's page, and its author is told your reason. This can't be undone.
+      </ConfirmDialog>
     </section>
   )
 }

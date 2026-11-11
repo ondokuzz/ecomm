@@ -3,6 +3,7 @@ import { useShipment } from '../api/shipments'
 import { type Shipment, type ShipmentStatus, shipmentStatusLabel, trackingEventsOf } from '../domain/shipment'
 import { Badge, type Tone } from './ui/Badge'
 import { Card } from './ui/Card'
+import { formatDateTime } from '../domain/dates'
 
 const shipmentStatusTones: Record<ShipmentStatus, Tone> = {
   AWAITING_PICK: 'info',
@@ -59,7 +60,7 @@ export function ShipmentPanel({ shipment, title }: { shipment: Shipment; title: 
             <li key={row.id}>
               <span>{row.label}</span>
               <time className="muted" dateTime={row.at}>
-                {new Date(row.at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+                {formatDateTime(row.at)}
               </time>
             </li>
           ))}

@@ -13,6 +13,7 @@ import { RmaStatusBadge } from '../components/RmaStatusBadge'
 import { SendBackDeadline } from '../components/SendBackDeadline'
 import { ShipmentStatusBadge } from '../components/ShipmentStatusBadge'
 import { ErrorMessage, FieldError } from '../components/Status'
+import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { Button } from '../components/ui/Button'
 import { Icon } from '../components/ui/Icon'
 import { type Money, formatMoney } from '../domain/money'
@@ -421,16 +422,25 @@ function Inspect({ rma }: { rma: Rma }) {
   const [note, setNote] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
   const refusing = isRefusing(outcome)
+  const [confirmingRefusal, setConfirmingRefusal] = useState(false)
 
-  const submit = (event: FormEvent) => {
-    event.preventDefault()
+  const record = () => {
     const request = inspectionOf(outcome, note)
     if ('errors' in request) {
       setErrors(request.errors)
       return
     }
     setErrors({})
-    step.mutate({ step: 'inspect', body: request.body }, { onError: (error) => setErrors(fieldErrorsOf(error)) })
+    step.mutate(
+      { step: 'inspect', body: request.body },
+      { onError: (error) => setErrors(fieldErrorsOf(error)), onSettled: () => setConfirmingRefusal(false) },
+    )
+  }
+  const submit = (event: FormEvent) => {
+    event.preventDefault()
+    // A refusing outcome gives nothing back, and can't be taken back, so it is asked once more.
+    if (refusing && !('errors' in inspectionOf(outcome, note))) setConfirmingRefusal(true)
+    else record()
   }
 
   const errorId = (field: string) => `${id}-${field}-error`
@@ -490,6 +500,16 @@ function Inspect({ rma }: { rma: Rma }) {
           </Button>
         </div>
       </form>
+      <ConfirmDialog
+        open={confirmingRefusal}
+        title={`Record ${rma.reference} as ${options.find((o) => o.outcome === outcome)?.label.toLowerCase() ?? 'refused'}?`}
+        confirmLabel="Record the Inspection"
+        confirming={step.isPending}
+        onConfirm={record}
+        onCancel={() => setConfirmingRefusal(false)}
+      >
+        Nothing is given back: the RMA closes with your note. This can't be undone.
+      </ConfirmDialog>
     </section>
   )
 }
@@ -600,6 +620,7 @@ function Decide({ rma }: { rma: Rma }) {
   const [note, setNote] = useState('')
   const [reason, setReason] = useState('')
   const [errors, setErrors] = useState<{ approve?: string; reject?: string }>({})
+  const [confirmingReject, setConfirmingReject] = useState(false)
 
   const submit = (decision: 'approve' | 'reject') => (event: FormEvent) => {
     event.preventDefault()
@@ -609,7 +630,14 @@ function Decide({ rma }: { rma: Rma }) {
       return
     }
     setErrors({})
-    decide.mutate({ decision, body: checked.body })
+    // Rejecting is final, so it is asked once more; approving moves the RMA on to its next step.
+    if (decision === 'reject') setConfirmingReject(true)
+    else decide.mutate({ decision, body: checked.body })
+  }
+  const confirmReject = () => {
+    const checked = decisionOf('reject', reason)
+    if ('error' in checked) return
+    decide.mutate({ decision: 'reject', body: checked.body }, { onSettled: () => setConfirmingReject(false) })
   }
 
   const alreadyDecided = decide.error instanceof ApiError && decide.error.problem.reason === 'rmaAlreadyDecided'
@@ -682,6 +710,16 @@ function Decide({ rma }: { rma: Rma }) {
           </div>
         </form>
       </div>
+      <ConfirmDialog
+        open={confirmingReject}
+        title={`Reject ${rma.reference}?`}
+        confirmLabel="Reject RMA"
+        confirming={decide.isPending}
+        onConfirm={confirmReject}
+        onCancel={() => setConfirmingReject(false)}
+      >
+        The Customer is told your reason, and the RMA is closed. This can't be undone.
+      </ConfirmDialog>
     </section>
   )
 }

@@ -133,7 +133,7 @@ test('a Customer checks out a picked Variant and another Product, and on-hand St
 
   // Variant Prices differ, so the card shows the lowest, "from".
   await expect(pickedCard).toContainText('From')
-  await expectAccessible(page)
+  await expectAccessible(page, { keyboard: true })
 
   for (const [i, { product, variant, pick }] of bought.entries()) {
     await page.getByRole('navigation', { name: 'Main', exact: true }).getByRole('link', { name: 'Products' }).click()
@@ -153,7 +153,7 @@ test('a Customer checks out a picked Variant and another Product, and on-hand St
     await expect(toast.getByRole('link', { name: 'View cart' })).toHaveAttribute('href', '/cart')
     await expect(page.getByText('1 in your cart')).toBeVisible()
     await expect(page.getByRole('link', { name: `Cart (${i + 1})` })).toBeVisible()
-    if (i === 0) await expectAccessible(page)
+    if (i === 0) await expectAccessible(page, { keyboard: true })
     await toast.getByRole('button', { name: 'Dismiss' }).click()
     await expect(toast).toHaveCount(0)
   }
@@ -165,7 +165,7 @@ test('a Customer checks out a picked Variant and another Product, and on-hand St
     await expect(cartLines.getByRole('link', { name: lineName(line), exact: true })).toBeVisible()
   }
   await expect(page.getByRole('region', { name: 'Order summary' })).toContainText('2 items')
-  await expectAccessible(page)
+  await expectAccessible(page, { keyboard: true })
   await page.getByRole('link', { name: 'Go to checkout' }).click()
   const steps = page.getByRole('navigation', { name: 'Checkout steps' })
   const currentStep = steps.locator('[aria-current=step]')
@@ -213,7 +213,7 @@ test('a Customer checks out a picked Variant and another Product, and on-hand St
   await expect(
     page.getByRole('button', { name: `Pay ${formatMoney(shippedTotal, currencies, 'en-US')}` }),
   ).toBeEnabled()
-  await expectAccessible(page)
+  await expectAccessible(page, { keyboard: true })
 
   await testCard(page, 'Approve').check()
   await payButton.click()
@@ -237,7 +237,7 @@ test('a Customer checks out a picked Variant and another Product, and on-hand St
   await expect(
     page.getByRole('list', { name: 'Order progress' }).locator('[aria-current=step] .timeline-status'),
   ).toHaveText('Paid')
-  await expectAccessible(page)
+  await expectAccessible(page, { keyboard: true })
   const orderId = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!)
   const order = await orderOf(request, token, orderId)
   expect(order.status).toBe('PAID')
@@ -281,7 +281,7 @@ test('a Customer checks out a picked Variant and another Product, and on-hand St
   }
   // One Order fits on a page, so there is no pager; paging has a test of its own.
   await expect(page.getByRole('navigation', { name: 'Order pages' })).toBeHidden()
-  await expectAccessible(page)
+  await expectAccessible(page, { keyboard: true })
 
   // Paying committed the Reservation: the units are off on-hand for good.
   for (const { variantId, stock } of bought) {
@@ -1222,7 +1222,7 @@ test.describe('Sprint 6', () => {
     await expect(form.getByRole('radio', { name: /^Return/ })).toBeChecked()
     await form.getByRole('checkbox', { name: imei }).check()
     await form.getByLabel('What’s wrong?').fill('Not what I expected')
-    await expectAccessible(page)
+    await expectAccessible(page, { keyboard: true })
     await form.getByRole('button', { name: 'Send request' }).click()
 
     // Requested, with its Refund amount: the Order's total less Shipping, as it is the only unit.
@@ -1240,7 +1240,7 @@ test.describe('Sprint 6', () => {
     await expect(refundCard).toContainText("Shipping isn't refunded")
     const reference = (await page.getByRole('heading', { level: 1 }).textContent())!
     expect(reference).toMatch(/^RMA-[0-9A-F]{8}$/)
-    await expectAccessible(page)
+    await expectAccessible(page, { keyboard: true })
 
     // The Returns page, from the account menu, lists it first.
     await page.getByRole('button', { name: 'Customer menu' }).click()
@@ -1248,7 +1248,7 @@ test.describe('Sprint 6', () => {
     const first = page.getByRole('list', { name: 'Returns' }).getByRole('listitem').first()
     await expect(first).toContainText(reference)
     await expect(first).toContainText('Requested')
-    await expectAccessible(page)
+    await expectAccessible(page, { keyboard: true })
 
     // Approved, the page says where to send it and what to write on the parcel.
     const rmaUrl = `/api/returns-warranty/rmas/${rmaId}`

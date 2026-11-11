@@ -22,6 +22,7 @@ import { Skeleton } from '../components/ui/Skeleton'
 import { type Order, nameOrderLines, orderItemCountLabel, orderReference, orderSummaryRows } from '../domain/order'
 import { cancellationReason } from '../domain/payment'
 import { addressLines, shippingOptionName } from '../domain/shipping'
+import { formatDateTime } from '../domain/dates'
 
 /**
  * An Order, its Order Status, its Payments, where it ships and how, and its lines, read from Order
@@ -140,7 +141,7 @@ function OrderFacts({ order }: { order: Order }) {
       <dl>
         <div>
           <dt>Placed</dt>
-          <dd>{new Date(order.placedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</dd>
+          <dd>{formatDateTime(order.placedAt)}</dd>
         </div>
         <div>
           <dt>Items</dt>

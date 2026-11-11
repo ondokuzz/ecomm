@@ -601,5 +601,6 @@ clears filters that match nothing, and pages through, and sees "Out of stock" on
 in for, since the seed fills less than a page. They need Chromium once:
 `npx playwright install chromium`. Set `STOREFRONT_URL` or `KEYCLOAK_URL` to aim it elsewhere.
 Each page the tests visit is checked against WCAG 2.2 AA with axe once its content shows, failing on
-a serious or critical violation ([`e2e/axe.ts`](./e2e/axe.ts); see the root README's
+a serious or critical violation, and against the rules every page keeps, some by keyboard
+([`e2e/axe.ts`](./e2e/axe.ts), [`e2e/page-rules.ts`](./e2e/page-rules.ts); see the root README's
 [Smoke tests](../../README.md#smoke-tests)).

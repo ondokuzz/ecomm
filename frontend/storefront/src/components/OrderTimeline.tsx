@@ -1,6 +1,7 @@
 import { type Order, type OrderStatus, orderStatusLabel, orderTimeline } from '../domain/order'
 import { Icon, type IconName } from './ui/Icon'
 import { cx } from './ui/cx'
+import { formatDateTime } from '../domain/dates'
 
 /** An Order Status that ends an Order off the main path, shown in its own colour and icon. */
 const finalIcons: Partial<Record<OrderStatus, IconName>> = { CANCELLED: 'close', RETURNED: 'arrowLeft' }
@@ -40,7 +41,7 @@ export function OrderTimeline({ order }: { order: Pick<Order, 'statusHistory'> }
               </span>{' '}
               {step.at && (
                 <time className="timeline-time" dateTime={step.at}>
-                  {new Date(step.at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+                  {formatDateTime(step.at)}
                 </time>
               )}
             </span>
