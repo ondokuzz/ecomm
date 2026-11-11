@@ -304,6 +304,16 @@ through Keycloak's admin API and delete them again; the Orders they place, and t
 take, stay. The tests pick from the seeded Products only, so an `E2E-` Product a failed test left
 behind doesn't throw them.
 
+Both suites check each page they visit, once its content shows, against WCAG 2.2 AA with axe
+(`expectAccessible` in each suite's `e2e/axe.ts`), Keycloak's sign-in and registration pages and the
+Storefront pages the Admin Console's suite opens included. A serious or critical violation fails
+the test, and the test runs on, so one run names every violation it finds. A violation in a library's
+markup the suite can't fix is suppressed by its rule on the one element its selector matches, with
+the reason, in that file's `suppressions`; none is, so far. The Admin Console's email previews are
+left out, their frames as well as the emails in them: the frames are sandboxed without scripts, and
+axe, which runs inside each frame it checks, waits on them until the test times out. The emails'
+HTML is so not checked, and the frames' titles only by the tests, which find each frame by it.
+
 Each suite runs its spec files side by side, one Playwright worker each. Where Docker's memory is short of what
 the stack uses, or the host swaps Docker's VM out, requests stall for tens of seconds and tests time
 out; `npx playwright test --workers=1` loads the stack less, and is how both suites passed on a

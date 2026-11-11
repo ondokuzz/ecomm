@@ -585,7 +585,6 @@ code {
 }
 .alert .support-reference {
   color: inherit;
-  opacity: 0.85;
 }
 .error-state .support-reference {
   margin-top: var(--space-4);
@@ -721,6 +720,11 @@ code {
   color: var(--color-on-gradient);
   font-size: var(--text-lg);
   box-shadow: var(--shadow-md);
+}
+/* Drawn by CSS rather than written in the markup, so the letter is no part of the brand link's
+   visible text, which its name, "Ecomm home", must contain (WCAG 2.5.3). */
+.brand-mark::before {
+  content: 'e';
 }
 .site-nav {
   display: flex;

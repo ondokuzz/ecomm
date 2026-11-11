@@ -1,6 +1,7 @@
 import { type APIRequestContext, type Page, expect, test } from '@playwright/test'
 import { type Currencies, type Currency, currenciesOf, formatMoney } from '../src/domain/money'
 import type { Product, Stock } from '../src/domain/product'
+import { expectAccessible } from './axe'
 
 /**
  * Staff create Products with two Variants in the Admin Console and set their Stock, and Customers
@@ -65,6 +66,7 @@ test('Staff create a Product with two Variants and their Stock, and Customers ca
   const listed = page.getByRole('row').filter({ hasText: sku })
   await expect(listed).toContainText(name)
   await expect(listed).toContainText(formatMoney({ amountMinor: 79900, currency: 'EUR' }, currencies))
+  await expectAccessible(page)
 
   // Catalog has the Product as typed, its Prices as Money, and Inventory their On-hand counts.
   const product = await productOf(request, sku)
@@ -94,6 +96,7 @@ test('Staff create a Product with two Variants and their Stock, and Customers ca
   await expect(page.getByLabel('Variant 1 ID')).toHaveCount(0)
   await expect(page.getByLabel('Variant 2 price in EUR')).toHaveValue('899.50')
   await expect(page.getByLabel('Variant 2 on hand')).toHaveValue('3')
+  await expectAccessible(page)
 
   // On the Storefront, a Customer picks the second Variant and sees its Price and Stock.
   const storefront = await page.context().newPage()
@@ -111,6 +114,7 @@ test('Staff create a Product with two Variants and their Stock, and Customers ca
     formatMoney({ amountMinor: 89950, currency: 'EUR' }, currencies, 'en-US'),
   )
   await expect(storefront.getByText('Only 3 left')).toBeVisible()
+  await expectAccessible(storefront)
   await storefront.close()
 
   // Deleting goes through a ConfirmDialog, and takes the Variants' Stock with the Product.
@@ -118,6 +122,8 @@ test('Staff create a Product with two Variants and their Stock, and Customers ca
   await page.getByLabel('Search').fill(sku)
   await page.getByRole('button', { name: `Delete ${name}` }).click()
   const dialog = page.getByRole('dialog', { name: `Delete ${name}?` })
+  await expect(dialog).toBeVisible()
+  await expectAccessible(page)
   await dialog.getByRole('button', { name: 'Delete Product' }).click()
   await expect(dialog).toBeHidden()
   await expect(page.getByRole('status')).toHaveText(`Deleted ${name}.`)
@@ -159,6 +165,7 @@ test('a new Product whose Stock Inventory refuses is saved, opens as itself, and
   await expect(onHand).toHaveAttribute('aria-invalid', 'true')
   await expect(page.getByText('Reservations hold 9 of it, more than that new on-hand count')).toBeVisible()
   await expect(page.getByLabel('Variant 1 on hand')).toHaveValue(String(variants[0]!.onHand))
+  await expectAccessible(page)
   expect((await request.get(`/api/inventory/stock/${encodeURIComponent(refused.id)}`)).status()).toBe(404)
 
   // A reload shows the Product as Catalog and Inventory have it.
@@ -200,6 +207,7 @@ test('a Price Staff change shows in search within seconds, on the Storefront too
   await storefront.goto(`${storefrontUrl}/?q=${word}`)
   const card = storefront.locator(`a[href="/products/${encodeURIComponent(sku)}"]`)
   await expect(card).toContainText(`From ${formatMoney({ amountMinor: 74900, currency: 'EUR' }, currencies, 'en-US')}`)
+  await expectAccessible(storefront)
   await storefront.close()
 })
 
@@ -236,6 +244,7 @@ test("Staff set a Variant's Stock and see its movements, balanced, with the Adju
   await expect(rows.nth(1).locator('th, td').first()).toHaveText('Adjusted')
   await expect(rows.nth(1).locator('td').nth(0)).toHaveText(`+${first.onHand}`)
   await expect(page.getByText('Page 1 of 1 · 2 movements')).toBeVisible()
+  await expectAccessible(page)
 
   // Nothing here changes Stock; the back link returns to the editor.
   await expect(page.getByRole('textbox')).toHaveCount(0)
@@ -259,6 +268,7 @@ test("Staff give a Product Warranty terms and Serial tracking, and the Storefron
   await page.getByRole('combobox', { name: /^Serial tracking/ }).selectOption({ label: 'IMEI' })
   await page.getByRole('button', { name: 'Save changes' }).click()
   await expect(page.getByText('must be a whole number of months from 1 to 120')).toBeVisible()
+  await expectAccessible(page)
 
   await page.getByLabel('Warranty months').fill('24')
   await page.getByRole('button', { name: 'Save changes' }).click()
@@ -271,6 +281,7 @@ test("Staff give a Product Warranty terms and Serial tracking, and the Storefron
   const storefront = await page.context().newPage()
   await storefront.goto(`${storefrontUrl}/products/${encodeURIComponent(sku)}`)
   await expect(storefront.getByText("24 months, manufacturer's warranty (Ecomm)")).toBeVisible()
+  await expectAccessible(storefront)
   await storefront.close()
 })
 
@@ -296,6 +307,7 @@ async function createInConsole(page: Page) {
     await page.getByLabel(`${row} price in EUR`).fill(variant.price)
     await page.getByLabel(`${row} on hand`).fill(String(variant.onHand))
   }
+  await expectAccessible(page)
   await page.getByRole('button', { name: 'Create Product' }).click()
 }
 

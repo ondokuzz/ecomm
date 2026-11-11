@@ -1,6 +1,7 @@
 import { type APIRequestContext, expect, test } from '@playwright/test'
 import type { Page as ListPage } from '../src/domain/paging'
 import type { Rma } from '../src/domain/rma'
+import { expectAccessible } from './axe'
 import { stackSecret } from './secrets'
 import {
   type Customer,
@@ -98,6 +99,7 @@ test('Staff approve a return and reject a warranty claim from the RMA queue', as
   await expect(row).toContainText(`#${orderReference}`)
   await expect(row).toContainText(speaker.productName)
   await expect(row).toContainText(/just now|minutes? ago/)
+  await expectAccessible(page)
 
   // The return: what it claims and the window it was checked against, approved with a note.
   await row.getByRole('link', { name: returned.reference }).click()
@@ -116,6 +118,7 @@ test('Staff approve a return and reject a warranty claim from the RMA queue', as
   await expect(requested).toHaveCount(2)
   await expect(requested.nth(1)).toContainText('Requested')
   await expect(requested.nth(1)).toContainText('Customer')
+  await expectAccessible(page)
 
   await page.getByLabel('Note').fill('Send it to the Berlin Warehouse')
   await page.getByRole('button', { name: 'Approve' }).click()
@@ -137,6 +140,7 @@ test('Staff approve a return and reject a warranty claim from the RMA queue', as
   await expect(warranty).toContainText('12 months, from JBL')
   await page.getByRole('button', { name: 'Reject' }).click()
   await expect(page.getByText('Say why it is rejected: the Customer is told.')).toBeVisible()
+  await expectAccessible(page)
   await expect(page.getByLabel('Reason')).toHaveAttribute('aria-invalid', 'true')
   await page.getByLabel('Reason').fill('Water damage is not covered')
   await page.getByRole('button', { name: 'Reject' }).click()
@@ -159,14 +163,18 @@ test('Staff approve a return and reject a warranty claim from the RMA queue', as
     .click()
   await expect(page).toHaveURL(/\/rmas\?tab=closed$/)
   await expect(page.getByText('oldest request first')).toBeVisible()
+  await expectAccessible(page)
 
   // The Order lists both, with their statuses.
   await page.goto(`/orders/${orderId}`)
   const rmas = page.getByRole('table', { name: 'RMAs' })
   await expect(rmas.getByRole('row').filter({ hasText: returned.reference })).toContainText('Approved')
   await expect(rmas.getByRole('row').filter({ hasText: claimed.reference })).toContainText('Rejected')
+  await expectAccessible(page)
   await rmas.getByRole('link', { name: claimed.reference }).click()
   await expect(page).toHaveURL(new RegExp(`/rmas/${claimed.id}$`))
+  await expect(page.getByRole('heading', { name: `Warranty claim ${claimed.reference}` })).toBeVisible()
+  await expectAccessible(page)
 })
 
 const customers: Customer[] = []
@@ -236,6 +244,7 @@ test('Staff receive a returned phone, refused a wrong IMEI, inspect it, and see 
   const serialInput = receive.getByLabel('Serial number', { exact: true })
   await serialInput.fill(newImei())
   await expect(receive.getByText('Not one of this RMA’s Serial numbers.')).toBeVisible()
+  await expectAccessible(page)
   await expect(serialInput).toHaveAttribute('aria-invalid', 'true')
   await receive.getByRole('button', { name: 'Receive' }).click()
   await expect(page.getByRole('table', { name: 'RMA history' }).getByRole('row')).toHaveCount(3)
@@ -264,6 +273,7 @@ test('Staff receive a returned phone, refused a wrong IMEI, inspect it, and see 
   await expect(resolution).toContainText(euros(rma.refundAmount!.amountMinor))
   await expect(resolution).toContainText(reference)
   await expect(history.nth(1)).toContainText('Returns Saga')
+  await expectAccessible(page)
 
   // The RMA page lists what its Customer was emailed about it, newest first; the Refund is told
   // about the Order, by PAYMENT_REFUNDED, not about the RMA.
@@ -339,6 +349,8 @@ test('Staff exchange a laptop under warranty: inspected as a confirmed fault, it
     .getByRole('table', { name: 'Shipments' })
     .getByRole('row')
     .filter({ hasText: `Replacement · ${claimed.reference}` })
+  await expect(row).toBeVisible()
+  await expectAccessible(page)
   await row.getByRole('link', { name: `#${orderId.slice(0, 8).toUpperCase()}` }).click()
   await expect(page.getByRole('heading', { name: `Replacement for ${claimed.reference}` })).toBeVisible()
   await expect(page.getByRole('table', { name: 'Lines' })).toContainText(laptop.variantId)
@@ -349,6 +361,7 @@ test('Staff exchange a laptop under warranty: inspected as a confirmed fault, it
   await serialInput.fill(serial)
   await page.getByRole('button', { name: 'Pack', exact: true }).click()
   await expect(page.getByText('Already shipped on another Shipment.')).toBeVisible()
+  await expectAccessible(page)
   await expect(serialInput).toHaveAttribute('aria-invalid', 'true')
 
   // A new one packs it, and the returns Saga dispatches it, with no Payment to capture.
@@ -364,8 +377,10 @@ test('Staff exchange a laptop under warranty: inspected as a confirmed fault, it
   await expect(page.locator('.page-heading')).toContainText('Exchanged', { timeout: 60_000 })
   await expect(resolution).toContainText(/Shipped|Delivered/)
   await expect(resolution).toContainText('WH-BER')
+  await expectAccessible(page)
   await resolution.getByRole('link', { name: 'Open the replacement' }).click()
   await expect(page.getByRole('heading', { name: `Replacement for ${claimed.reference}` })).toBeVisible()
+  await expectAccessible(page)
 })
 
 test('Staff inspect a returned phone as refused, with a note, and the returns Saga closes it with no Refund', async ({
@@ -402,6 +417,7 @@ test('Staff inspect a returned phone as refused, with a note, and the returns Sa
   await inspect.getByLabel('Refused').check()
   await inspect.getByRole('button', { name: 'Record the Inspection' }).click()
   await expect(inspect.getByText('Say why: a refusing outcome needs a note.')).toBeVisible()
+  await expectAccessible(page)
   await expect(inspect.getByLabel('Note')).toHaveAttribute('aria-invalid', 'true')
   await expect(history).toHaveCount(4)
 
@@ -423,6 +439,7 @@ test('Staff inspect a returned phone as refused, with a note, and the returns Sa
     page.getByRole('table', { name: 'RMAs' }).getByRole('row').filter({ hasText: returned.reference }),
   ).toContainText('Closed')
   await expect(page.getByRole('region', { name: 'Refunds' })).toContainText('Nothing was refunded.')
+  await expectAccessible(page)
 })
 
 /** Approves or receives an RMA as Staff, through the gateway. */

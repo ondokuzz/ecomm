@@ -51,9 +51,7 @@ export function Layout() {
 function Brand() {
   return (
     <Link to="/" className="brand" aria-label="Ecomm home">
-      <span className="brand-mark" aria-hidden="true">
-        e
-      </span>
+      <span className="brand-mark" aria-hidden="true" />
       Ecomm
     </Link>
   )
@@ -102,7 +100,8 @@ function CustomerMenu() {
       <button
         className="avatar"
         popoverTarget="customer-menu"
-        aria-label="Customer menu"
+        // The initials it shows are in its name too, as speech input names a control by what it shows (WCAG 2.5.3).
+        aria-label={`Customer menu, ${customerInitials(profile)}`}
         title={customerLabel(profile)}
       >
         {customerInitials(profile)}

@@ -1,6 +1,7 @@
 import { type APIRequestContext, expect, test } from '@playwright/test'
 import type { Page as ListPage } from '../src/domain/paging'
 import { type ModeratedReview, moderationPageSize } from '../src/domain/review'
+import { expectAccessible } from './axe'
 import {
   type Customer,
   aPhoneInStock,
@@ -60,10 +61,12 @@ test('Staff publish a held Review and remove a reported one', async ({ page, req
     const heldRow = queue.getByRole('row').filter({ hasText: 'Not a scam after all' })
     await expect(heldRow).toContainText('Held')
     await expect(heldRow).toContainText('None')
+    await expectAccessible(page)
     await heldRow.getByRole('link', { name: 'Not a scam after all' }).click()
 
     await expect(page.getByRole('heading', { name: 'Review by E2E C.' })).toBeVisible()
     await expect(page.locator('.customer-reason')).toHaveText('It does what it says.')
+    await expectAccessible(page)
     await page.getByRole('button', { name: 'Publish' }).click()
     const history = page.getByRole('table', { name: 'Moderation history' })
     await expect(history.getByRole('row').nth(1)).toContainText('Published')
@@ -83,12 +86,14 @@ test('Staff publish a held Review and remove a reported one', async ({ page, req
     await expect(reports).toContainText('About the seller, not the phone.')
     await page.getByRole('button', { name: 'Remove' }).click()
     await expect(page.getByText('Say why it is removed: its author is told.')).toBeVisible()
+    await expectAccessible(page)
     await page.getByLabel('Reason').fill('Reviews are of the product, not of the seller.')
     await page.getByRole('button', { name: 'Remove' }).click()
     await expect(page.locator('.page-heading')).toContainText('Removed')
     await expect(history.getByRole('row').nth(1)).toContainText('Reviews are of the product, not of the seller.')
     await expect(reports).toContainText('Resolved')
     await expect(page.getByRole('heading', { name: 'Moderate' })).toHaveCount(0)
+    await expectAccessible(page)
 
     expect(await publishedIds(request, sku)).not.toContain(reportedReview.id)
     const own = await eligibilityOf(request, reported, sku)

@@ -465,7 +465,6 @@ textarea.input {
   font-size: var(--text-xs);
   font-weight: 400;
   color: inherit;
-  opacity: 0.85;
   overflow-wrap: anywhere;
 }
 .support-reference code {
@@ -518,6 +517,11 @@ textarea.input {
   background: var(--gradient-brand);
   color: var(--color-on-gradient);
   font-size: var(--text-base);
+}
+/* Drawn by CSS rather than written in the markup, so the letter is no part of the brand link's
+   visible text, which its name, "Ecomm Admin home", must contain (WCAG 2.5.3). */
+.brand-mark::before {
+  content: 'e';
 }
 .brand-tag {
   font-family: var(--font-body);

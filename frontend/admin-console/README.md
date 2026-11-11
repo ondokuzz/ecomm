@@ -522,4 +522,7 @@ Each test removes its Product and Stock, Coupon, Campaign or Customer through th
 Keycloak's APIs if it failed before doing so itself, so the stack is left as it was, but for the
 Orders the Order and Campaign tests place, the RMA tests' Orders, Shipments and RMAs, and the fulfillment test's two Orders and Shipments. It runs against the console on 8090; set `ADMIN_CONSOLE_URL` to use Vite's
 5174, and `STOREFRONT_URL` or `KEYCLOAK_URL` for other hosts. Install Chromium once with
-`npx playwright install chromium`.
+`npx playwright install chromium`. Each page the tests visit is checked against WCAG 2.2 AA with axe
+once its content shows, failing on a serious or critical violation, all but the email previews'
+sandboxed frames ([`e2e/axe.ts`](./e2e/axe.ts); see the root README's
+[Smoke tests](../../README.md#smoke-tests)).

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { expectAccessible } from './axe'
 import { signInOnKeycloak } from './stack'
 
 /**
@@ -7,6 +8,8 @@ import { signInOnKeycloak } from './stack'
  */
 test('Staff preview the Order confirmation email on the Message templates page', async ({ page }) => {
   await page.goto('/')
+  await expect(page.locator('#kc-login')).toBeVisible()
+  await expectAccessible(page)
   await signInOnKeycloak(page)
   await page.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: 'Messages' }).click()
 
@@ -18,7 +21,9 @@ test('Staff preview the Order confirmation email on the Message templates page',
   const html = page.frameLocator('iframe[title="Order confirmed: Email as HTML"]')
   await expect(html.getByText('Hello Ada,')).toBeVisible()
   await expect(html.getByRole('cell', { name: 'Google Pixel 9 (128 GB, Obsidian)' })).toBeVisible()
+  await expectAccessible(page)
 
   await confirmed.getByText('Plain text').click()
   await expect(confirmed.locator('pre')).toContainText('Total: €1,406.29')
+  await expectAccessible(page)
 })

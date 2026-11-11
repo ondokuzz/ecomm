@@ -1,4 +1,5 @@
 import { type APIRequestContext, type Page, type Route, expect, test } from '@playwright/test'
+import { expectAccessible } from './axe'
 import { stackSecret } from './secrets'
 
 /**
@@ -47,6 +48,7 @@ test('a signed-out visitor is asked to sign in', async ({ page }) => {
   const help = page.getByRole('dialog', { name: 'Ecomm Agent' })
   await expect(help).toContainText('Sign in to ask about your Orders.')
   await expect(help.getByRole('button', { name: 'Log in' })).toBeFocused()
+  await expectAccessible(page)
 })
 
 test('focus moves into Help when it opens and back to the button when it closes', async ({ page }) => {
@@ -144,6 +146,7 @@ test('past the hourly message limit, the Customer is told when they can ask agai
     await expect(help.getByRole('alert')).toContainText(
       /You've sent a lot of messages\. You can ask again at \d{1,2}:\d{2}/,
     )
+    await expectAccessible(page)
     await expect(help.getByRole('textbox', { name: 'Your question' })).toHaveValue('Where is my order?')
   } finally {
     await request.delete(`/api/support-assistant/conversations/${id}`, { headers })
@@ -186,6 +189,7 @@ test.describe('with the assistant stubbed', () => {
     // Ending the Conversation mid-turn would leave its reply with nowhere to go.
     const newConversation = help.getByRole('button', { name: 'New conversation' })
     await expect(newConversation).toBeDisabled()
+    await expectAccessible(page)
     await expect.poll(() => answer !== undefined).toBe(true)
     await answer!()
 
@@ -199,6 +203,7 @@ test.describe('with the assistant stubbed', () => {
     await expect(box).toHaveValue('')
     await expect(box).toBeFocused()
     await expect(newConversation).toBeEnabled()
+    await expectAccessible(page)
     await list.getByRole('link', { name: 'Order #7F1C2A3B' }).click()
     await expect(page).toHaveURL(/\/orders\/7f1c2a3b-0000-4000-8000-000000000001$/)
   })
@@ -217,6 +222,7 @@ test.describe('with the assistant stubbed', () => {
 
     const alert = help.getByRole('alert').filter({ hasText: "Your message wasn't answered" })
     await expect(alert).toContainText('Reference: e2e-help-1')
+    await expectAccessible(page)
     await expect(help.getByRole('textbox', { name: 'Your question' })).toHaveValue('Where is my order?')
   })
 
@@ -279,6 +285,7 @@ test.describe('with the assistant stubbed', () => {
     await expect(help.getByRole('alert')).toContainText(
       'Ecomm Agent is still answering your other message. Try again in a moment.',
     )
+    await expectAccessible(page)
     await expect(help.getByRole('textbox', { name: 'Your question' })).toHaveValue('Where is my order?')
   })
 
@@ -292,6 +299,7 @@ test.describe('with the assistant stubbed', () => {
     await expect(alert).toContainText('This conversation is full.')
     const box = help.getByRole('textbox', { name: 'Your question' })
     await expect(box).toHaveValue('Where is my order?')
+    await expectAccessible(page)
 
     await page.unroute(messages)
     await page.route(messages, (route) => route.fulfill({ status: 200, json: reply }))
@@ -341,6 +349,7 @@ test.describe('with the assistant stubbed', () => {
 
     await expect(box).toHaveValue('x'.repeat(2_000))
     await expect(help).toContainText('0 of 2,000 characters left')
+    await expectAccessible(page)
   })
 })
 

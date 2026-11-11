@@ -3,6 +3,7 @@ import type { Campaign } from '../src/domain/campaign'
 import type { Coupon } from '../src/domain/coupon'
 import { type Currencies, type Currency, type Money, currenciesOf, formatMoney } from '../src/domain/money'
 import type { Order } from '../src/domain/order'
+import { expectAccessible } from './axe'
 import { stackSecret } from './secrets'
 import { aPhoneInStock, buy, paidWithin } from './stack'
 
@@ -57,6 +58,7 @@ test.describe('Coupons', () => {
     await page.getByLabel('Minimum subtotal', { exact: true }).fill('20.00')
     await page.getByLabel('Valid from').fill('2026-01-01T00:00')
     await page.getByLabel('Valid until').fill('2030-01-01T00:00')
+    await expectAccessible(page)
     await page.getByRole('button', { name: 'Create Coupon' }).click()
 
     await expect(page).toHaveURL(/\/promotions\/coupons$/)
@@ -65,6 +67,7 @@ test.describe('Coupons', () => {
     await expect(row).toContainText('off')
     await expect(row).toContainText('Active')
     await expect(row).toContainText('0 used')
+    await expectAccessible(page)
     expect(await couponOf(request, code)).toMatchObject({
       code,
       discount: { type: 'AMOUNT_OFF', amountOff: { amountMinor: 500, currency: 'EUR' } },
@@ -75,6 +78,7 @@ test.describe('Coupons', () => {
     // Edited, it becomes a percentage with no minimum; the code stays.
     await row.getByRole('link', { name: code, exact: true }).click()
     await expect(page.getByLabel('Amount off', { exact: true })).toHaveValue('5.00')
+    await expectAccessible(page)
     await page.getByLabel('Percentage off').check()
     await percentage(page).fill('15')
     await page.getByLabel('Minimum subtotal', { exact: true }).fill('')
@@ -92,6 +96,8 @@ test.describe('Coupons', () => {
 
     await row.getByRole('button', { name: `Delete ${code}` }).click()
     const dialog = page.getByRole('dialog', { name: `Delete ${code}?` })
+    await expect(dialog).toBeVisible()
+    await expectAccessible(page)
     await dialog.getByRole('button', { name: 'Delete Coupon' }).click()
     await expect(page.getByRole('status')).toHaveText(`Deleted ${code}.`)
     await expect(page.getByRole('row').filter({ hasText: code })).toHaveCount(0)
@@ -131,6 +137,7 @@ test.describe('Coupons', () => {
     await row.getByRole('link', { name: code, exact: true }).click()
     await expect(page.getByText('1 redemption, 0 Checkout Sessions holding it now.')).toBeVisible()
     await expect(page.getByRole('textbox', { name: 'Usage limit' })).toHaveValue('1')
+    await expectAccessible(page)
   })
 
   test('a window that ends before it starts is refused beside Valid until', async ({ page }) => {
@@ -147,6 +154,7 @@ test.describe('Coupons', () => {
     await expect(until).toHaveAttribute('aria-invalid', 'true')
     await expect(until).toHaveAccessibleDescription('must be after validFrom')
     await expect(page.getByRole('alert')).toContainText("Couldn't save the Coupon")
+    await expectAccessible(page)
   })
 })
 
@@ -177,6 +185,7 @@ test.describe('Campaigns', () => {
     await page.goto('/promotions/campaigns')
     await signInOnKeycloak(page, staff)
     await expect(page.getByRole('row').filter({ hasText: 'Audio week' })).toContainText('Running')
+    await expectAccessible(page)
 
     await page.getByRole('link', { name: 'New Campaign' }).click()
     await page.getByLabel('Name').fill(name)
@@ -191,6 +200,7 @@ test.describe('Campaigns', () => {
     const priorityField = page.getByLabel('Priority')
     await expect(priorityField).toHaveAttribute('aria-invalid', 'true')
     await expect(priorityField).toHaveAccessibleDescription(/is taken/)
+    await expectAccessible(page)
     await priorityField.fill(String(priority))
     await expect(priorityField).not.toHaveAttribute('aria-invalid')
     await page.getByRole('button', { name: 'Create Campaign' }).click()
@@ -218,6 +228,7 @@ test.describe('Campaigns', () => {
     await expect(page.getByRole('status')).toHaveText(`Saved ${name} later.`)
     const later = page.getByRole('row').filter({ hasText: `${name} later` })
     await expect(later).toContainText('Scheduled')
+    await expectAccessible(page)
 
     await later.getByRole('button', { name: 'Switch off' }).click()
     await expect(later).toContainText('Off')
@@ -268,6 +279,8 @@ test.describe('Campaigns', () => {
     let orderId: string
     try {
       await storefront.goto(`${storefrontUrl}/checkout`)
+      await expect(storefront.locator('#kc-login')).toBeVisible()
+      await expectAccessible(storefront)
       await signInOnKeycloak(storefront, shopper)
       const summary = storefront.getByRole('region', { name: 'Order summary' })
       await expect(summary.getByText(`Campaign: ${name}`)).toBeVisible()
@@ -283,6 +296,7 @@ test.describe('Campaigns', () => {
       await shippingForm.getByRole('button', { name: 'Use this address' }).click()
       await storefront.getByRole('radio', { name: /^Standard/ }).click()
       await expect(summary.getByText('Shipping (Standard)')).toBeVisible()
+      await expectAccessible(storefront)
       const total = { ...price, amountMinor: price.amountMinor - discount.amountMinor + 499 }
 
       // Paying ends the Checkout Session rather than leaving its Stock held, and the Order keeps the Discount.
@@ -293,6 +307,7 @@ test.describe('Campaigns', () => {
       await storefront.getByRole('button', { name: `Pay ${formatMoney(total, currencies, 'en-US')}` }).click()
       await expect(storefront).toHaveURL(/\/orders\/[^/?]+\?placed$/, paidWithin)
       await expect(storefront.getByText(`Campaign: ${name}`)).toBeVisible()
+      await expectAccessible(storefront)
       orderId = decodeURIComponent(new URL(storefront.url()).pathname.split('/').pop()!)
       const order = await request.get(`/api/order-management/orders/${encodeURIComponent(orderId)}`, {
         headers: { Authorization: `Bearer ${token}` },

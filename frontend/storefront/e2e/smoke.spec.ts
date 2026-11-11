@@ -7,6 +7,7 @@ import type { AlsoBought } from '../src/domain/recommendations'
 import type { Eligibility, RatingSummary, Review } from '../src/domain/reviews'
 import type { SearchResults } from '../src/domain/search'
 import type { Shipment } from '../src/domain/shipment'
+import { expectAccessible } from './axe'
 import { stackSecret } from './secrets'
 
 /**
@@ -120,13 +121,19 @@ test('a Customer checks out a picked Variant and another Product, and on-hand St
   const bought = [picked, await aProductInStock(request, picked.product.sku)]
   const currencies = await currenciesOfCatalog(request)
 
+  const pickedCard = page.locator(`a[href="/products/${encodeURIComponent(picked.product.sku)}"]`)
   await page.goto('/')
+  await expect(pickedCard).toBeVisible()
+  await expectAccessible(page)
   await page.getByRole('button', { name: 'Log in' }).click()
+  await expect(page.locator('#kc-login')).toBeVisible()
+  await expectAccessible(page)
   await signInOnKeycloak(page, customer)
   await expectSignedIn(page, customer.email)
 
   // Variant Prices differ, so the card shows the lowest, "from".
-  await expect(page.locator(`a[href="/products/${encodeURIComponent(picked.product.sku)}"]`)).toContainText('From')
+  await expect(pickedCard).toContainText('From')
+  await expectAccessible(page)
 
   for (const [i, { product, variant, pick }] of bought.entries()) {
     await page.getByRole('navigation', { name: 'Main', exact: true }).getByRole('link', { name: 'Products' }).click()
@@ -146,6 +153,7 @@ test('a Customer checks out a picked Variant and another Product, and on-hand St
     await expect(toast.getByRole('link', { name: 'View cart' })).toHaveAttribute('href', '/cart')
     await expect(page.getByText('1 in your cart')).toBeVisible()
     await expect(page.getByRole('link', { name: `Cart (${i + 1})` })).toBeVisible()
+    if (i === 0) await expectAccessible(page)
     await toast.getByRole('button', { name: 'Dismiss' }).click()
     await expect(toast).toHaveCount(0)
   }
@@ -157,6 +165,7 @@ test('a Customer checks out a picked Variant and another Product, and on-hand St
     await expect(cartLines.getByRole('link', { name: lineName(line), exact: true })).toBeVisible()
   }
   await expect(page.getByRole('region', { name: 'Order summary' })).toContainText('2 items')
+  await expectAccessible(page)
   await page.getByRole('link', { name: 'Go to checkout' }).click()
   const steps = page.getByRole('navigation', { name: 'Checkout steps' })
   const currentStep = steps.locator('[aria-current=step]')
@@ -185,6 +194,7 @@ test('a Customer checks out a picked Variant and another Product, and on-hand St
   const postcode = addressForm.getByLabel('Postcode')
   await expect(postcode).toHaveAttribute('aria-invalid', 'true')
   await expect(addressForm).toContainText("Isn't a postcode in DE, such as 10115")
+  await expectAccessible(page)
   await postcode.fill(' 10115 ')
   await addressForm.getByRole('button', { name: 'Use this address' }).click()
   const shippingTo = page.locator('address[aria-label="Shipping address"]')
@@ -203,6 +213,7 @@ test('a Customer checks out a picked Variant and another Product, and on-hand St
   await expect(
     page.getByRole('button', { name: `Pay ${formatMoney(shippedTotal, currencies, 'en-US')}` }),
   ).toBeEnabled()
+  await expectAccessible(page)
 
   await testCard(page, 'Approve').check()
   await payButton.click()
@@ -226,6 +237,7 @@ test('a Customer checks out a picked Variant and another Product, and on-hand St
   await expect(
     page.getByRole('list', { name: 'Order progress' }).locator('[aria-current=step] .timeline-status'),
   ).toHaveText('Paid')
+  await expectAccessible(page)
   const orderId = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!)
   const order = await orderOf(request, token, orderId)
   expect(order.status).toBe('PAID')
@@ -269,6 +281,7 @@ test('a Customer checks out a picked Variant and another Product, and on-hand St
   }
   // One Order fits on a page, so there is no pager; paging has a test of its own.
   await expect(page.getByRole('navigation', { name: 'Order pages' })).toBeHidden()
+  await expectAccessible(page)
 
   // Paying committed the Reservation: the units are off on-hand for good.
   for (const { variantId, stock } of bought) {
@@ -331,6 +344,7 @@ test('a declined card shows why, and the held session can then be paid with one 
   const declined = page.getByRole('alert').filter({ hasText: 'Your card was declined' })
   await expect(declined).toContainText('Your bank declined the payment. Try another card.')
   await expect(page).toHaveURL(/\/checkout$/)
+  await expectAccessible(page)
   // The decline cancelled that Order, but the session still holds the Stock, so paying again works.
   expect(await currentSessionId(request, token)).toBe(sessionId)
   expect((await stockOf(request, variantId)).quantity).toBe(stock.quantity - 1)
@@ -372,6 +386,7 @@ test('WELCOME10 takes 10% off at checkout, and the PAID Order shows the discount
   await summary.getByRole('button', { name: 'Apply' }).click()
   await expect(summary.getByRole('alert')).toHaveText("We don't know that code. Check it and try again.")
   await expect(couponField).toHaveAttribute('aria-invalid', 'true')
+  await expectAccessible(page)
 
   // Codes are matched whatever their case.
   await couponField.fill('welcome10')
@@ -476,8 +491,11 @@ test('a Customer empties their Cart after confirming', async ({ page, request })
   await signInOnKeycloak(page, customer)
   await expect(page.getByRole('link', { name: 'Cart (2)' })).toBeVisible()
 
+  await expectAccessible(page)
   await page.getByRole('button', { name: 'Empty cart' }).click()
   const dialog = page.getByRole('dialog', { name: 'Empty your cart?' })
+  await expect(dialog).toBeVisible()
+  await expectAccessible(page)
   await dialog.getByRole('button', { name: 'Cancel' }).click()
   await expect(dialog).toBeHidden()
   await expect(page.getByRole('link', { name: 'Cart (2)' })).toBeVisible()
@@ -487,6 +505,7 @@ test('a Customer empties their Cart after confirming', async ({ page, request })
   await expect(page.getByRole('heading', { name: 'Your cart is empty' })).toBeFocused()
   await expect(page.getByRole('link', { name: 'Browse products' })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Cart', exact: true })).toBeVisible()
+  await expectAccessible(page)
   const cart = await request.get('/api/cart/cart', { headers: { Authorization: `Bearer ${token}` } })
   expect(((await cart.json()) as { items: unknown[] }).items).toEqual([])
 })
@@ -550,6 +569,7 @@ test('after a Customer buys two Products together, each one’s page shows the o
       await expect(first).toHaveAttribute('href', `/products/${encodeURIComponent(other.sku)}`)
       await expect(first).toContainText(other.name)
       await expect(first).not.toContainText('Popular in')
+      await expectAccessible(page)
     }
   } finally {
     for (const { sku } of pair) {
@@ -615,6 +635,7 @@ test('a Product nothing was bought with shows its Category’s best seller under
     const card = row.getByRole('link', { name: new RegExp(escape(seller.name)) })
     await expect(card).toHaveAttribute('href', `/products/${encodeURIComponent(seller.sku)}`)
     await expect(card).toContainText(`Popular in ${category.name}`)
+    await expectAccessible(page)
   } finally {
     for (const { sku } of [seller, lonely]) {
       const product = await request.delete(`/api/catalog/products/${encodeURIComponent(sku)}`, { headers: staff })
@@ -632,6 +653,8 @@ test('a new Customer registers on Keycloak and comes back signed in', async ({ p
 
   await page.goto('/')
   await page.getByRole('button', { name: 'Register' }).click()
+  await expect(page.locator('#email')).toBeVisible()
+  await expectAccessible(page)
   await page.locator('#email').fill(email)
   await page.locator('#firstName').fill('Smoke')
   await page.locator('#lastName').fill('Test')
@@ -677,6 +700,7 @@ test('a Customer turns on text messages with their mobile number in Notification
   await form.getByRole('button', { name: 'Save' }).click()
   await expect(form.getByRole('alert')).toContainText('international form')
   await expect(number).toHaveAttribute('aria-invalid', 'true')
+  await expectAccessible(page)
 
   await number.fill('+49 151 12345678')
   await form.getByRole('button', { name: 'Save' }).click()
@@ -707,6 +731,7 @@ test('a Customer’s Orders come a page at a time, newest first', async ({ page 
   await expect(page).toHaveURL(/\/orders\?page=2$/)
   await expect(pager).toContainText('Page 2 of 2')
   await expect(page.getByText(`Order #${orderIdOf(ordersPageSize).slice(0, 8).toUpperCase()}`)).toBeVisible()
+  await expectAccessible(page)
   expect(new URL(requested.at(-1)!).searchParams.get('page')).toBe('1')
 })
 
@@ -752,6 +777,7 @@ test.describe('Sprint 3', () => {
     const found = await searchOf(request, { ...filtered, q: brand })
     expect(found.items.map((item) => item.sku)).toContain(product.sku)
     await expect(cards(page).locator('.product-name')).toHaveText(found.items.map((item) => item.name))
+    await expectAccessible(page)
     await card(page, product.name).click()
 
     await expect(page.getByRole('heading', { name: product.name })).toBeVisible()
@@ -808,6 +834,7 @@ test.describe('Sprint 3', () => {
     await expect(form.getByRole('radio', { name: '4 stars' })).toBeChecked()
     await form.getByLabel(/^Title/).fill('Does what it says')
     await form.getByLabel('Review').fill('Bought it in Audio week. Sounds great, and the battery lasts.')
+    await expectAccessible(page)
     await form.getByRole('button', { name: 'Post review' }).click()
     await expect(page.locator('.own-review')).toContainText('Does what it says')
     // Shown under the Customer's given name and family name's initial.
@@ -821,6 +848,7 @@ test.describe('Sprint 3', () => {
     const stars = `Rated ${average} out of 5`
     await expect(page.locator('.summary-link').getByRole('img', { name: stars })).toBeVisible()
     await expect(page.locator('.rating-summary')).toContainText(reviews)
+    await expectAccessible(page)
     await page.goto(`/?${new URLSearchParams({ category: 'audio' })}`)
     await expect(card(page, product.name).getByRole('img', { name: stars })).toBeVisible()
     await expect(card(page, product.name)).toContainText(`${average} · ${reviews}`)
@@ -841,6 +869,7 @@ test.describe('Sprint 3', () => {
       page.getByRole('status').filter({ hasText: 'Only Customers who have bought this product can review it.' }),
     ).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Write a review' })).toHaveCount(0)
+    await expectAccessible(page)
     // Reviews refuses a post anyway, with the same reason.
     const posted = await request.post(`/api/reviews-ratings/products/${encodeURIComponent(product.sku)}/reviews`, {
       headers: { Authorization: `Bearer ${await tokenFor(request, customer)}` },
@@ -967,6 +996,7 @@ test.describe('Sprint 5', () => {
     await expect(panel.locator('.shipment-delivered')).toHaveText('Delivered', { timeout: 90_000 })
     await expect(tracking).toHaveText([/^In transit/, /^Out for delivery/, /^Delivered/])
     await expect(page.locator('.status-delivered')).toHaveText('Delivered', { timeout: 30_000 })
+    await expectAccessible(page)
   })
 
   test('an Order without a Shipment shows no Shipment panel', async ({ page, request }) => {
@@ -1007,6 +1037,7 @@ test.describe('Sprint 5', () => {
     await expect(page.locator('.status-placed')).toHaveText('Placed')
     expect((await asked).status()).toBe(404)
     await expect(page.getByRole('region', { name: 'Shipment' })).toHaveCount(0)
+    await expectAccessible(page)
   })
 })
 
@@ -1055,6 +1086,7 @@ test.describe('Sprint 6', () => {
       await summary.getByLabel('Coupon code').fill(code)
       await summary.getByRole('button', { name: 'Apply' }).click()
       await expect(summary.getByRole('alert')).toHaveText('That code has been used up.')
+      await expectAccessible(page)
       await expect(summary.getByText(`Coupon: ${code}`)).toBeHidden()
     } finally {
       if (other) await deleteCustomer(request, other)
@@ -1099,6 +1131,7 @@ test.describe('Sprint 6', () => {
       const form = item.getByRole('form', { name: /^Report the review by/ })
       await form.getByRole('button', { name: 'Send report' }).click()
       await expect(form.getByRole('alert')).toHaveText('Choose why you are reporting it.')
+      await expectAccessible(page)
       await form.getByLabel('Spam or advertising').check()
       await form.getByLabel('Note').fill('Links to another shop.')
       await form.getByRole('button', { name: 'Send report' }).click()
@@ -1189,6 +1222,7 @@ test.describe('Sprint 6', () => {
     await expect(form.getByRole('radio', { name: /^Return/ })).toBeChecked()
     await form.getByRole('checkbox', { name: imei }).check()
     await form.getByLabel('What’s wrong?').fill('Not what I expected')
+    await expectAccessible(page)
     await form.getByRole('button', { name: 'Send request' }).click()
 
     // Requested, with its Refund amount: the Order's total less Shipping, as it is the only unit.
@@ -1206,6 +1240,7 @@ test.describe('Sprint 6', () => {
     await expect(refundCard).toContainText("Shipping isn't refunded")
     const reference = (await page.getByRole('heading', { level: 1 }).textContent())!
     expect(reference).toMatch(/^RMA-[0-9A-F]{8}$/)
+    await expectAccessible(page)
 
     // The Returns page, from the account menu, lists it first.
     await page.getByRole('button', { name: 'Customer menu' }).click()
@@ -1213,6 +1248,7 @@ test.describe('Sprint 6', () => {
     const first = page.getByRole('list', { name: 'Returns' }).getByRole('listitem').first()
     await expect(first).toContainText(reference)
     await expect(first).toContainText('Requested')
+    await expectAccessible(page)
 
     // Approved, the page says where to send it and what to write on the parcel.
     const rmaUrl = `/api/returns-warranty/rmas/${rmaId}`
@@ -1236,6 +1272,7 @@ test.describe('Sprint 6', () => {
         `Your RMA ${reference}, a return of 1 .+ on Order #[0-9A-F]{8}, is approved\\. Please send it back by \\d{1,2} \\w+ \\d{4}, with ${reference} on the parcel, to Ecomm Returns Berlin, `,
       ),
     )
+    await expectAccessible(page)
     await conversation.getByRole('link', { name: reference }).click()
     await expect(page).toHaveURL(new RegExp(`/returns/${rmaId}$`))
     await help.getByRole('button', { name: 'Close Ecomm Agent' }).click()
@@ -1254,6 +1291,7 @@ test.describe('Sprint 6', () => {
     await expect(page.locator('.page-heading .rma-refunded')).toHaveText('Refunded', { timeout: 90_000 })
     await expect(refundCard).toContainText(`${refund} refunded to your card`)
     await expect(page.getByRole('list', { name: 'RMA progress' })).toContainText('Inspected: accepted')
+    await expectAccessible(page)
 
     // The Order shows the Refund on its Payment, and is Returned once every unit is refunded.
     await page.getByRole('region', { name: 'Return summary' }).getByRole('link').click()
@@ -1262,6 +1300,7 @@ test.describe('Sprint 6', () => {
     await expect(page.getByRole('list', { name: 'Payments' })).toContainText(`Refunded ${refund} of`)
     await expect(page.getByRole('list', { name: 'Payment activity' })).toContainText(`Refunded for ${reference}`)
     await expect(page.locator('.status-returned')).toHaveText('Returned', { timeout: 30_000 })
+    await expectAccessible(page)
   })
 })
 

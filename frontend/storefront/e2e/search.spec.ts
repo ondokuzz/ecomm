@@ -1,5 +1,6 @@
 import { type APIRequestContext, type Page, expect, test } from '@playwright/test'
 import type { ProductSummary, SearchResults } from '../src/domain/search'
+import { expectAccessible } from './axe'
 
 /**
  * The listing is Search's: Customers search, filter by Category and attributes with disjunctive
@@ -41,6 +42,7 @@ test('a Customer searches, filters and sorts, and a reload or a shared URL resto
     .values.find((v) => v.value === '128 GB')!.count
   await expect(storage.getByRole('checkbox', { name: /^128 GB/ })).toBeEnabled()
   await expect(storage.locator('label').filter({ hasText: '128 GB' })).toContainText(String(count128))
+  await expectAccessible(page)
 
   await page.getByRole('checkbox', { name: /^In stock only/ }).click()
   await expect(page.getByRole('checkbox', { name: /^In stock only/ })).toBeChecked()
@@ -65,6 +67,7 @@ test('a Customer searches, filters and sorts, and a reload or a shared URL resto
 test('a search that matches nothing offers to clear the filters', async ({ page }) => {
   await page.goto('/?category=phones&attr.storage=1+TB&attr.brand=Nobody')
   await expect(page.getByRole('heading', { name: 'No products match' })).toBeVisible()
+  await expectAccessible(page)
   await page.getByRole('link', { name: 'Clear filters' }).last().click()
   await expect(page).toHaveURL(/\/$/)
   await expect(cards(page).first()).toBeVisible()
@@ -83,11 +86,13 @@ test('results come a page at a time, and a Product with no Stock is marked', asy
   await expect(page.getByText('Page 1 of 2')).toBeVisible()
   await expect(card(page, 'Product 1').getByText('Out of stock')).toBeVisible()
   await expect(card(page, 'Product 2').getByText('Out of stock')).toHaveCount(0)
+  await expectAccessible(page)
 
   await page.getByRole('link', { name: 'Next page' }).click()
   await expect(page).toHaveURL(/\/\?page=2$/)
   await expect(page.getByText('Page 2 of 2')).toBeVisible()
   await expect(cards(page).locator('.product-name').getByText('Product 25', { exact: true })).toBeVisible()
+  await expectAccessible(page)
   expect(new URL(requested.at(-1)!).searchParams.get('page')).toBe('1')
 
   await page.reload()

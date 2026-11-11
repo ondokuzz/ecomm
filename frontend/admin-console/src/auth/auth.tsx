@@ -167,9 +167,7 @@ function Gate({ title, children }: { title: string; children?: ReactNode }) {
     <main className="gate">
       <div className="gate-card">
         <span className="brand">
-          <span className="brand-mark" aria-hidden="true">
-            e
-          </span>
+          <span className="brand-mark" aria-hidden="true" />
           Ecomm Admin
         </span>
         <h1>{title}</h1>

@@ -1,6 +1,7 @@
 import { type APIRequestContext, expect, test } from '@playwright/test'
 import type { Page as ListPage } from '../src/domain/paging'
 import type { Shipment } from '../src/domain/shipment'
+import { expectAccessible } from './axe'
 import {
   type Customer,
   aPhoneInStock,
@@ -66,6 +67,7 @@ test('Staff pick and pack a Shipment from the queue, and the fulfillment Saga di
   await expect(row).toContainText('WH-BER')
   await expect(row).toContainText('DE')
   await expect(row).toContainText(/just now|minutes? ago/)
+  await expectAccessible(page)
 
   // What to pick and where it goes.
   await row.getByRole('link', { name: reference }).click()
@@ -75,6 +77,7 @@ test('Staff pick and pack a Shipment from the queue, and the fulfillment Saga di
   await expect(page.getByRole('table', { name: 'Lines' })).toContainText(phone.variantId)
   await page.getByRole('button', { name: 'Mark picked' }).click()
   await expect(page.getByRole('region', { name: 'Pack', exact: true })).toBeVisible()
+  await expectAccessible(page)
 
   // An IMEI with a wrong check digit is refused as it is typed, and Pack sends nothing.
   const imeiInput = page.getByRole('form', { name: 'Pack' }).getByLabel('IMEI', { exact: true })
@@ -82,6 +85,7 @@ test('Staff pick and pack a Shipment from the queue, and the fulfillment Saga di
   await imeiInput.fill(imei.slice(0, 14) + String((Number(imei[14]) + 1) % 10))
   await expect(page.getByText('Not a valid IMEI: its check digit is wrong. Check for a typo.')).toBeVisible()
   await expect(imeiInput).toHaveAttribute('aria-invalid', 'true')
+  await expectAccessible(page)
   await page.getByRole('button', { name: 'Pack', exact: true }).click()
   await expect(page.getByRole('table', { name: 'Status history' }).getByRole('row')).toHaveCount(3)
 
@@ -99,6 +103,7 @@ test('Staff pick and pack a Shipment from the queue, and the fulfillment Saga di
   const history = page.getByRole('table', { name: 'Status history' })
   await expect(history.getByRole('row').nth(1)).toContainText('Shipped')
   await expect(history.getByRole('row').nth(1)).toContainText('Fulfillment Saga')
+  await expectAccessible(page)
   await expect(history.getByRole('row').filter({ hasText: 'Packed' })).toContainText(
     subjectOf(await staffToken(request)),
   )
@@ -125,9 +130,12 @@ test('Staff pick and pack a Shipment from the queue, and the fulfillment Saga di
     page.frameLocator('iframe[title="Order shipped: as HTML"]').getByText(dispatched.trackingNumber!),
   ).toBeVisible()
   await expect(notifications.getByRole('row').filter({ hasText: 'Order confirmed' })).toContainText('Sent')
+  await expectAccessible(page)
 
   await onOrder.getByRole('link', { name: 'Open the Shipment' }).click()
   await expect(page).toHaveURL(new RegExp(`/fulfillment/${shipment.id}$`))
+  await expect(page.locator('.page-heading')).toContainText(/Shipped|Delivered/)
+  await expectAccessible(page)
 })
 
 test('a Shipment whose Payment is refused at capture goes on hold with the reason', async ({ page, request }) => {
@@ -166,6 +174,7 @@ test('a Shipment whose Payment is refused at capture goes on hold with the reaso
   await expect(alert).toContainText("On hold: the Payment couldn't be captured")
   await expect(alert).toContainText(held!.holdReason!)
   await expect(page.getByRole('region', { name: 'Tracking', exact: true })).toHaveCount(0)
+  await expectAccessible(page)
 
   // Under the On hold tab, too.
   const lastPage = await lastQueuePage(request, 'ON_HOLD', undefined)
@@ -175,6 +184,7 @@ test('a Shipment whose Payment is refused at capture goes on hold with the reaso
   await expect(
     page.getByRole('table', { name: 'Shipments' }).getByRole('link', { name: `#${orderId.slice(0, 8).toUpperCase()}` }),
   ).toBeVisible()
+  await expectAccessible(page)
 })
 
 /** The last page of a queue tab, from one Warehouse or all, counting from 1. */

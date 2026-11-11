@@ -1,5 +1,6 @@
 import { type APIRequestContext, type Page, expect, test } from '@playwright/test'
 import { type Product, defaultVariant } from '../src/domain/catalog'
+import { expectAccessible } from './axe'
 
 /**
  * Every page fails gracefully: unknown addresses show the Not Found page, a failed request shows the
@@ -11,18 +12,22 @@ const demoCustomer = { email: 'demo@ecomm.local', password: 'demo' }
 test('unknown routes, Products and Orders show the Not Found page', async ({ page }) => {
   await page.goto('/no-such-page')
   await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible()
+  await expectAccessible(page)
 
   await page.goto('/products/NO-SUCH-SKU')
   await expect(page.getByRole('heading', { name: 'Product not found' })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Back to products' })).toBeVisible()
+  await expectAccessible(page)
 
   await page.goto('/orders/00000000-0000-0000-0000-000000000000')
   await signInOnKeycloak(page)
   await expect(page.getByRole('heading', { name: 'Order not found' })).toBeVisible()
   await expect(page.getByRole('link', { name: 'All my orders' })).toBeVisible()
+  await expectAccessible(page)
   // Order Management answers an ID that isn't a UUID the same way.
   await page.goto('/orders/not-an-order')
   await expect(page.getByRole('heading', { name: 'Order not found' })).toBeVisible()
+  await expectAccessible(page)
 })
 
 test('a failed request shows the error panel with its reference, and "Try again" reloads it', async ({ page }) => {
@@ -39,6 +44,7 @@ test('a failed request shows the error panel with its reference, and "Try again"
   const panel = page.getByRole('alert').filter({ hasText: "We couldn't load the products" })
   await expect(panel).toContainText('Something went wrong on our side')
   await expect(panel).toContainText('Reference: e2e-reference-1')
+  await expectAccessible(page)
 
   await page.unroute(search)
   await panel.getByRole('button', { name: 'Try again' }).click()
@@ -61,6 +67,7 @@ test('a lookup beside the main content that fails says so, with its reference', 
   await expect(page.getByRole('heading', { name: product.name })).toBeVisible()
   const alert = page.getByRole('alert').filter({ hasText: "We couldn't check the stock" })
   await expect(alert).toContainText('Reference: e2e-stock-1')
+  await expectAccessible(page)
 
   await page.unroute(stockRead)
   await alert.getByRole('button', { name: 'Try again' }).click()

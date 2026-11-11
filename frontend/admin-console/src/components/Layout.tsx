@@ -16,9 +16,7 @@ export function Layout() {
       <header className="site-header">
         <div className="site-header-inner">
           <Link to="/" className="brand" aria-label="Ecomm Admin home">
-            <span className="brand-mark" aria-hidden="true">
-              e
-            </span>
+            <span className="brand-mark" aria-hidden="true" />
             Ecomm <span className="brand-tag">Admin</span>
           </Link>
           <nav className="site-nav" aria-label="Sections">

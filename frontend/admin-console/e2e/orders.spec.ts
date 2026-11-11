@@ -1,6 +1,7 @@
 import { type APIRequestContext, type Page, expect, test } from '@playwright/test'
 import type { Order } from '../src/domain/order'
 import type { Payment } from '../src/domain/payment'
+import { expectAccessible } from './axe'
 import { stackSecret } from './secrets'
 
 /**
@@ -39,6 +40,7 @@ test('Staff find a Customer’s Order and see its Status history', async ({ page
   await expect(rows).toHaveCount(2)
   await expect(rows.nth(1)).toContainText(customerId)
   await expect(rows.nth(1)).toContainText('Cancelled')
+  await expectAccessible(page)
 
   // By the Customer and a Status: the Order is Cancelled, so it is no longer among the Paid ones.
   // The form is remade from the URL once Clear lands; typing before then would be lost.
@@ -49,6 +51,7 @@ test('Staff find a Customer’s Order and see its Status history', async ({ page
   await page.getByLabel('Status').selectOption('PAID')
   await page.getByRole('button', { name: 'Filter' }).click()
   await expect(page.getByRole('table')).toContainText('No Orders match these filters.')
+  await expectAccessible(page)
   await page.getByLabel('Status').selectOption('CANCELLED')
   await page.getByRole('button', { name: 'Filter' }).click()
   await page.getByRole('link', { name: `Order #${reference}` }).click()
@@ -65,6 +68,7 @@ test('Staff find a Customer’s Order and see its Status history', async ({ page
     await expect(row.locator('time')).toHaveAttribute('datetime', entry.at)
   }
   await expect(history.nth(1)).toContainText('(current)')
+  await expectAccessible(page)
   // Read only: nothing on the page changes the Order.
   await expect(page.getByRole('main').getByRole('button')).toHaveCount(0)
 
@@ -98,6 +102,7 @@ test('Staff open a paid Order and see its Payment’s authorization transaction'
   await expect(transactions.nth(1)).toContainText('Approved')
   await expect(transactions.nth(1)).toContainText(authorization.gatewayReference!)
   await expect(transactions.nth(1).locator('time')).toHaveAttribute('datetime', authorization.at)
+  await expectAccessible(page)
   // Read only: nothing on the page changes the Order or its Payment.
   await expect(page.getByRole('main').getByRole('button')).toHaveCount(0)
 })
