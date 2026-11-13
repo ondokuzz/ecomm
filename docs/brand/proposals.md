@@ -1,6 +1,8 @@
 # Brand proposals (#146)
 
-Three proposals for the brand that replaces the purple, each a logo and the Storefront's colour tokens in light and dark. They are shown on the running Storefront's home and Product pages and Keycloak's sign-in page, in a page published for the product owner to compare: https://claude.ai/artifact/Uh3EFmqzL2kPPPtwbYDAez. The product owner records their pick on #146, and #147 builds it.
+Three proposals for the brand that replaces the purple, each a logo and the Storefront's colour tokens in light and dark. They are shown on the running Storefront's home and Product pages and Keycloak's sign-in page, in a page published for the product owner to compare: https://claude.ai/artifact/Uh3EFmqzL2kPPPtwbYDAez. #147 builds the pick.
+
+**The pick (2026-11-13, on #146):** Lagoon's colours, with Graphite & Citrus's mark in Lagoon's colours: [`pick.svg`](pick.svg). It is the rounded square with the "e" and the corner tab, in Lagoon's teal gradient with a coral tab (`#ff7a52`, the coral of Lagoon's `--gradient-sun`). It reads on both Lagoon backgrounds, so it needs no dark variant.
 
 Each table lists every colour token the proposal sets in `frontend/storefront/src/index.css`. The tokens it doesn't list (fonts, sizes, spacing, radii) are unchanged. Every text colour on the backgrounds it is used on meets WCAG AA (4.5:1), and `--color-primary`, the focus ring, meets 3:1 on each background, in both modes. The marks are 64 × 64 SVGs beside this file.
 
