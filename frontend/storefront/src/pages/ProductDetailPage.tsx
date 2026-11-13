@@ -7,7 +7,7 @@ import { useRatingSummary } from '../api/reviews'
 import { useFormatMoney } from '../api/currencies'
 import { useAuthPending, useSignin } from '../auth/session'
 import { AlsoBought } from '../components/AlsoBought'
-import { ProductImage } from '../components/ProductImage'
+import { ProductGallery } from '../components/ProductGallery'
 import { ProductReviews } from '../components/ProductReviews'
 import { SummaryStars } from '../components/StarRating'
 import { NotFound } from '../components/NotFound'
@@ -67,13 +67,12 @@ function ProductDetail({ product }: { product: Product }) {
   return (
     <>
       <article className="product-page">
-        <div className="product-media">
-          <ProductImage product={product} variant={variant} />
-        </div>
+        {/* A fresh gallery for each Variant, starting on its first image. */}
+        <ProductGallery key={variant.id} product={product} variant={variant} />
         <div className="product-info">
           <Card className="purchase-panel">
             <Breadcrumb product={product} />
-            {product.attributes.brand && <span className="brand-name">{product.attributes.brand}</span>}
+            {product.attributes.brand && <span className="product-brand">{product.attributes.brand}</span>}
             <h1>{product.name}</h1>
             <SummaryLink sku={product.sku} />
             <p className="price large">{formatMoney(variant.price)}</p>

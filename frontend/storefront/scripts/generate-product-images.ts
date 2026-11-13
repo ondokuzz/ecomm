@@ -14,19 +14,19 @@ import { type SeedProduct, type SeedVariant, publicFile, seedProducts } from './
 
 /** Bold colours from the design tokens in src/index.css, one per brand. */
 const brandColors: Record<string, string> = {
-  Apple: '#db1664',
-  Google: '#6a2cf5',
+  Apple: '#c8401f',
+  Google: '#0b7a75',
   Samsung: '#0b63a8',
-  Nothing: '#ff6b3d',
-  Dell: '#c026d3',
-  Lenovo: '#d9381e',
-  ASUS: '#6a2cf5',
+  Nothing: '#ff7a52',
+  Dell: '#0f5f7a',
+  Lenovo: '#b4231b',
+  ASUS: '#0b7a75',
   Framework: '#127a3e',
   Microsoft: '#0b63a8',
-  Sony: '#c026d3',
-  Bose: '#ff6b3d',
-  Sennheiser: '#6a2cf5',
-  JBL: '#d9381e',
+  Sony: '#8a5300',
+  Bose: '#ff7a52',
+  Sennheiser: '#08605c',
+  JBL: '#c8401f',
   Sonos: '#127a3e',
 }
 

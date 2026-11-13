@@ -204,14 +204,23 @@ function Footer() {
       <div className="site-footer-inner">
         <div className="footer-brand">
           <Brand />
-          <span className="muted">A demo store. Payments are mocked, nothing ships.</span>
+          <p className="muted">Phones, laptops and audio from the brands you love.</p>
         </div>
-        <nav aria-label="Footer">
-          <Link to="/">All products</Link>
-          <Link to="/cart">Your cart</Link>
-          <Link to="/orders">Your orders</Link>
-          <Link to="/returns">Your returns</Link>
+        <nav className="footer-nav" aria-label="Footer">
+          <div className="footer-column">
+            <h2 className="footer-heading">Shop</h2>
+            <Link to="/">All products</Link>
+            <Link to="/cart">Your cart</Link>
+          </div>
+          <div className="footer-column">
+            <h2 className="footer-heading">Your account</h2>
+            <Link to="/orders">Your orders</Link>
+            <Link to="/returns">Your returns</Link>
+          </div>
         </nav>
+      </div>
+      <div className="site-footer-note">
+        <p>A demo store. Payments are mocked, nothing ships.</p>
       </div>
     </footer>
   )

@@ -484,7 +484,8 @@ textarea.input {
   content: '';
   display: block;
   height: 3px;
-  background: var(--gradient-brand);
+  /* The Storefront's teal running into the console's own coral. */
+  background: linear-gradient(90deg, var(--color-primary) 0%, var(--color-primary) 40%, var(--color-accent) 100%);
 }
 .site-header-inner {
   display: flex;
@@ -509,28 +510,21 @@ textarea.input {
   text-decoration: none;
 }
 .brand-mark {
-  display: grid;
-  place-items: center;
-  width: 1.625rem;
-  height: 1.625rem;
-  border-radius: var(--radius-sm);
-  background: var(--gradient-brand);
-  color: var(--color-on-gradient);
-  font-size: var(--text-base);
+  flex: none;
+  width: 1.75rem;
+  height: 1.75rem;
+  background: var(--logo-mark) center / contain no-repeat;
 }
-/* Drawn by CSS rather than written in the markup, so the letter is no part of the brand link's
-   visible text, which its name, "Ecomm Admin home", must contain (WCAG 2.5.3). */
-.brand-mark::before {
-  content: 'e';
-}
-.brand-tag {
+/* The Staff marker, in the console's secondary colour, Lagoon's coral, so it never passes for the
+   Storefront. */
+.staff-marker {
   font-family: var(--font-body);
   font-size: var(--text-xs);
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--color-primary-text);
-  background: var(--color-primary-soft);
+  color: var(--color-on-accent);
+  background: var(--color-accent);
   padding: 0.1rem var(--space-2);
   border-radius: var(--radius-pill);
 }

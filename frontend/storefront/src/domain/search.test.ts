@@ -6,6 +6,7 @@ import {
   attributeGroups,
   categoryOptions,
   emptySearch,
+  featuredCategories,
   hasFilters,
   listingHref,
   searchFromUrl,
@@ -156,6 +157,28 @@ describe('categoryOptions', () => {
     ])
     expect(query(options[0].search)).toBe('')
     expect(query(options[2].search)).toBe('category=phones')
+  })
+})
+
+describe('featuredCategories', () => {
+  it('is the Categories with Products, the fullest first, at most four, each leading to its listing', () => {
+    const featured = featuredCategories({
+      ...facets,
+      categories: [
+        { slug: 'audio', name: 'Audio', count: 0 },
+        { slug: 'cameras', name: 'Cameras', count: 1 },
+        { slug: 'laptops', name: 'Laptops', count: 6 },
+        { slug: 'phones', name: 'Phones', count: 9 },
+        { slug: 'tablets', name: 'Tablets', count: 2 },
+        { slug: 'wearables', name: 'Wearables', count: 2 },
+      ],
+    })
+    expect(featured).toEqual([
+      { slug: 'phones', name: 'Phones', count: 9, href: '/?category=phones' },
+      { slug: 'laptops', name: 'Laptops', count: 6, href: '/?category=laptops' },
+      { slug: 'tablets', name: 'Tablets', count: 2, href: '/?category=tablets' },
+      { slug: 'wearables', name: 'Wearables', count: 2, href: '/?category=wearables' },
+    ])
   })
 })
 

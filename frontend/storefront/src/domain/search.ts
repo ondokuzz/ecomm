@@ -256,6 +256,23 @@ export function categoryOptions(facets: Facets, search: Search): FacetOption[] {
   ]
 }
 
+/** A Category the home page features, leading to its listing. */
+export interface FeaturedCategory {
+  slug: string
+  name: string
+  count: number
+  href: string
+}
+
+/** The home page's Categories: those with Products, the fullest first, at most four. */
+export function featuredCategories(facets: Facets): FeaturedCategory[] {
+  return facets.categories
+    .filter((c) => c.count > 0)
+    .toSorted((a, b) => b.count - a.count)
+    .slice(0, 4)
+    .map((c) => ({ ...c, href: listingHref(withCategory(emptySearch, c.slug)) }))
+}
+
 function option(label: string, count: number, selected: boolean, search: Search): FacetOption {
   return { label, count, selected, disabled: count === 0 && !selected, search }
 }

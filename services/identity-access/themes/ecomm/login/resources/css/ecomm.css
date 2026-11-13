@@ -60,7 +60,7 @@
   background: var(--gradient-brand);
 }
 
-/* The wordmark: the gradient "e" and the realm's name, as in the Storefront's header. */
+/* The wordmark: the logo and the realm's name, as in the Storefront's header. */
 #kc-header-wrapper {
   display: flex;
   align-items: center;
@@ -76,16 +76,12 @@
   color: var(--color-fg) !important;
 }
 #kc-header-wrapper::before {
-  content: 'e';
-  display: grid;
-  place-items: center;
+  content: '';
+  flex: none;
   width: 3rem;
   height: 3rem;
-  border-radius: var(--radius-md);
-  background: var(--gradient-brand);
-  color: var(--color-on-gradient);
-  font-size: var(--text-2xl);
-  box-shadow: var(--shadow-md);
+  background: var(--logo-mark) center / contain no-repeat;
+  filter: drop-shadow(0 6px 12px color-mix(in srgb, var(--color-primary) 30%, transparent));
 }
 
 /* The card */

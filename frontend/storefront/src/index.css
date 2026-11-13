@@ -5,22 +5,22 @@
 :root {
   color-scheme: light;
 
-  --color-bg: #faf7ff;
+  --color-bg: #f4faf9;
   --color-surface: #ffffff;
-  --color-surface-2: #f2ecff;
-  --color-fg: #1a1033;
-  --color-muted: #5d5575;
-  --color-line: #e4dcf5;
-  --color-line-strong: #c9bce8;
+  --color-surface-2: #e4f2f0;
+  --color-fg: #0b2523;
+  --color-muted: #4a5f5c;
+  --color-line: #d3e5e2;
+  --color-line-strong: #a7c9c4;
 
-  --color-primary: #6a2cf5;
-  --color-primary-hover: #5719e0;
-  --color-primary-soft: #ece4ff;
+  --color-primary: #0b7a75;
+  --color-primary-hover: #08625e;
+  --color-primary-soft: #d6f1ed;
   --color-on-primary: #ffffff;
-  --color-primary-text: #5a1ee6;
-  --color-accent: #db1664;
-  --color-accent-soft: #ffe3ee;
-  --color-accent-text: #b8104f;
+  --color-primary-text: #08706b;
+  --color-accent: #c8401f;
+  --color-accent-soft: #ffe6dd;
+  --color-accent-text: #a5341a;
   --color-on-accent: #ffffff;
   --color-sun: #ffc233;
   --color-on-sun: #2b1a00;
@@ -34,13 +34,15 @@
   --color-info: #0b63a8;
   --color-info-soft: #dcefff;
 
-  --gradient-brand: linear-gradient(120deg, #6a2cf5 0%, #c026d3 50%, #d9381e 100%);
+  --gradient-brand: linear-gradient(120deg, #08605c 0%, #0b7a75 55%, #0f5f7a 100%);
   --color-on-gradient: #ffffff;
-  --color-scrim: #1a103366;
-  --gradient-sun: linear-gradient(120deg, #ffc233 0%, #ff6b3d 100%);
+  --color-scrim: #0b252366;
+  /* The logo: docs/brand/pick.svg, which reads on both modes' backgrounds. */
+  --logo-mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='lg' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%230a6b67'/%3E%3Cstop offset='1' stop-color='%230d857f'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='14' fill='url(%23lg)'/%3E%3Cpath d='M45 35H22.6c.9 5 4.6 8 9.6 8 3.3 0 5.9-1.1 7.7-3.4l4 3.4c-2.8 3.5-6.8 5.2-11.9 5.2-9 0-15.3-6.2-15.3-15.2S23 17.8 31.8 17.8c8.9 0 14.4 6.4 13.2 17.2zm-22.6-5.2h16.6c-.6-4.4-3.6-7.2-8.1-7.2s-7.7 2.8-8.5 7.2z' fill='%23fff'/%3E%3Cpath d='M64 46v4c0 7.7-6.3 14-14 14h-4z' fill='%23ff7a52'/%3E%3C/svg%3E");
+  --gradient-sun: linear-gradient(120deg, #ffc233 0%, #ff7a52 100%);
   --gradient-glow:
-    radial-gradient(60rem 30rem at 0% 0%, #6a2cf51f, transparent 60%),
-    radial-gradient(50rem 30rem at 100% 0%, #ff6b3d17, transparent 60%);
+    radial-gradient(60rem 30rem at 0% 0%, #0b7a751f, transparent 60%),
+    radial-gradient(50rem 30rem at 100% 0%, #ff7a5217, transparent 60%);
 
   --font-body: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-display: 'Bricolage Grotesque Variable', 'Inter Variable', system-ui, sans-serif;
@@ -69,9 +71,9 @@
   --radius-lg: 20px;
   --radius-pill: 999px;
 
-  --shadow-sm: 0 1px 2px #2a124f14, 0 1px 1px #2a124f0a;
-  --shadow-md: 0 6px 16px -4px #2a124f24, 0 2px 4px #2a124f0f;
-  --shadow-lg: 0 18px 40px -12px #3b1a7a40, 0 4px 10px #2a124f14;
+  --shadow-sm: 0 1px 2px #0b252314, 0 1px 1px #0b25230a;
+  --shadow-md: 0 6px 16px -4px #0b252324, 0 2px 4px #0b25230f;
+  --shadow-lg: 0 18px 40px -12px #0b3d3a40, 0 4px 10px #0b252314;
   --shadow-primary: 0 6px 18px -6px var(--color-primary);
   --shadow-primary-hover: 0 10px 24px -8px var(--color-primary);
   --focus-width: 2px;
@@ -88,23 +90,23 @@
   :root {
     color-scheme: dark;
 
-    --color-bg: #0e0a1c;
-    --color-surface: #19122f;
-    --color-surface-2: #241a44;
-    --color-fg: #f4f0ff;
-    --color-muted: #b4aad2;
-    --color-line: #332858;
-    --color-line-strong: #4a3c7a;
+    --color-bg: #061716;
+    --color-surface: #0d2423;
+    --color-surface-2: #14322f;
+    --color-fg: #ecfaf8;
+    --color-muted: #a1c1bc;
+    --color-line: #1e403d;
+    --color-line-strong: #2f5a56;
 
-    --color-primary: #a58bff;
-    --color-primary-hover: #bba6ff;
-    --color-primary-soft: #2e2160;
-    --color-on-primary: #14082f;
-    --color-primary-text: #bda9ff;
-    --color-accent: #ff5c9a;
-    --color-accent-soft: #4a1630;
-    --color-accent-text: #ff8ab6;
-    --color-on-accent: #24030f;
+    --color-primary: #4fd1c5;
+    --color-primary-hover: #76ddd3;
+    --color-primary-soft: #123f3b;
+    --color-on-primary: #03201e;
+    --color-primary-text: #6fdace;
+    --color-accent: #ff8a65;
+    --color-accent-soft: #4a1e12;
+    --color-accent-text: #ffa486;
+    --color-on-accent: #2a0a00;
     --color-sun: #ffcc4d;
     --color-on-sun: #2b1a00;
 
@@ -120,8 +122,8 @@
     --color-scrim: #000000a6;
 
     --gradient-glow:
-      radial-gradient(60rem 30rem at 0% 0%, #6a2cf540, transparent 60%),
-      radial-gradient(50rem 30rem at 100% 0%, #c026d326, transparent 60%);
+      radial-gradient(60rem 30rem at 0% 0%, #4fd1c533, transparent 60%),
+      radial-gradient(50rem 30rem at 100% 0%, #ff8a6526, transparent 60%);
 
     --shadow-sm: 0 1px 2px #00000066;
     --shadow-md: 0 6px 16px -4px #00000080, 0 2px 4px #0000004d;
@@ -731,20 +733,11 @@ code {
   text-decoration: none;
 }
 .brand-mark {
-  display: grid;
-  place-items: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: var(--radius-md);
-  background: var(--gradient-brand);
-  color: var(--color-on-gradient);
-  font-size: var(--text-lg);
-  box-shadow: var(--shadow-md);
-}
-/* Drawn by CSS rather than written in the markup, so the letter is no part of the brand link's
-   visible text, which its name, "Ecomm home", must contain (WCAG 2.5.3). */
-.brand-mark::before {
-  content: 'e';
+  flex: none;
+  width: 2.25rem;
+  height: 2.25rem;
+  background: var(--logo-mark) center / contain no-repeat;
+  filter: drop-shadow(0 4px 8px color-mix(in srgb, var(--color-primary) 30%, transparent));
 }
 .site-nav {
   display: flex;
@@ -892,28 +885,70 @@ main {
 }
 
 .site-footer {
+  position: relative;
   border-top: 1px solid var(--color-line);
-  background: var(--color-surface);
+  background: radial-gradient(40rem 14rem at 0% 0%, var(--color-primary-soft), transparent 70%), var(--color-surface);
+}
+.site-footer::before {
+  content: '';
+  position: absolute;
+  inset: -1px 0 auto;
+  height: 3px;
+  background: var(--gradient-brand);
 }
 .site-footer-inner {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
-  align-items: center;
-  gap: var(--space-4);
+  gap: var(--space-6);
   max-width: var(--content-width);
   margin: 0 auto;
-  padding: var(--space-6) var(--gutter);
+  padding: var(--space-7) var(--gutter) var(--space-6);
   font-size: var(--text-sm);
 }
 .footer-brand {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--space-3);
+  max-width: 20rem;
 }
-.site-footer nav {
+.footer-brand p {
+  margin: 0;
+}
+.footer-nav {
   display: flex;
-  gap: var(--space-4);
+  flex-wrap: wrap;
+  gap: var(--space-6) var(--space-8);
+}
+.footer-column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.footer-heading {
+  margin: 0 0 var(--space-1);
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+.footer-column a {
+  color: var(--color-fg);
+}
+.footer-column a:hover {
+  color: var(--color-primary-text);
+}
+.site-footer-note {
+  border-top: 1px solid var(--color-line);
+}
+.site-footer-note p {
+  max-width: var(--content-width);
+  margin: 0 auto;
+  padding: var(--space-4) var(--gutter);
+  color: var(--color-muted);
+  font-size: var(--text-xs);
 }
 .site-footer .brand {
   font-size: var(--text-lg);
@@ -979,10 +1014,17 @@ main {
   background: var(--gradient-brand);
   color: var(--color-on-gradient);
   box-shadow: var(--shadow-lg);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-6);
+  isolation: isolate;
 }
-/* Two soft blobs of sunlight, for depth. */
+/* Two soft blobs of sunlight, for depth, behind the showcase on the right; on narrower screens they
+   would sit under the words and take from their contrast. */
 .hero::before,
 .hero::after {
+  display: none;
   content: '';
   position: absolute;
   border-radius: 50%;
@@ -990,6 +1032,7 @@ main {
   opacity: 0.35;
   filter: blur(40px);
   pointer-events: none;
+  z-index: -1;
 }
 .hero::before {
   width: 22rem;
@@ -1005,7 +1048,81 @@ main {
 }
 .hero > * {
   position: relative;
+}
+.hero-copy {
   max-width: 36rem;
+}
+/* A faint grid over the gradient, for texture. */
+.hero-copy::before {
+  content: '';
+  position: absolute;
+  inset: calc(-1 * var(--space-8)) auto calc(-1 * var(--space-8)) calc(-1 * var(--space-6));
+  width: 70%;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--color-on-gradient) 7%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--color-on-gradient) 7%, transparent) 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask-image: linear-gradient(90deg, #000, transparent);
+  pointer-events: none;
+  z-index: -1;
+}
+.hero-showcase {
+  display: none;
+}
+@media (min-width: 860px) {
+  .hero {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  }
+  .hero::before,
+  .hero::after {
+    display: block;
+  }
+  .hero-showcase {
+    display: block;
+    position: relative;
+    height: 15rem;
+  }
+  .hero-showcase-card {
+    position: absolute;
+    width: 13rem;
+    height: auto;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    border: 4px solid var(--color-surface);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    animation: rise calc(var(--duration) * 4) var(--ease) backwards;
+  }
+  .hero-showcase-card:nth-child(1) {
+    left: 0;
+    top: 2.5rem;
+    transform: rotate(-8deg);
+  }
+  .hero-showcase-card:nth-child(2) {
+    left: 30%;
+    top: 0;
+    z-index: 1;
+    transform: rotate(2deg);
+    animation-delay: 80ms;
+  }
+  .hero-showcase-card:nth-child(3) {
+    right: 0;
+    top: 3.5rem;
+    transform: rotate(9deg);
+    animation-delay: 160ms;
+  }
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    translate: 0 1.5rem;
+  }
+}
+/* The global rule shortens animations but leaves their delays, so the cards stay still outright. */
+@media (prefers-reduced-motion: reduce) {
+  .hero-showcase-card {
+    animation: none;
+  }
 }
 .hero h1 {
   font-size: var(--text-4xl);
@@ -1041,6 +1158,84 @@ main {
   margin: 0;
   color: var(--color-muted);
   font-weight: 600;
+}
+
+.featured-categories h2 {
+  margin-bottom: var(--space-3);
+}
+.category-tiles {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: var(--space-4);
+}
+.category-tile {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    'icon name'
+    'icon count';
+  align-items: center;
+  column-gap: var(--space-4);
+  min-height: 6.5rem;
+  padding: var(--space-5);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-lg);
+  background: radial-gradient(14rem 8rem at 100% 0%, var(--color-primary-soft), transparent 70%), var(--color-surface);
+  color: var(--color-fg);
+  box-shadow: var(--shadow-sm);
+  transition:
+    border-color var(--duration) var(--ease),
+    box-shadow var(--duration) var(--ease),
+    transform var(--duration) var(--ease);
+}
+.category-tile:hover {
+  text-decoration: none;
+  border-color: var(--color-primary);
+}
+@media (hover: hover) {
+  .category-tile:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+}
+.category-tile-icon {
+  grid-area: icon;
+  display: grid;
+  place-items: center;
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: var(--radius-md);
+  background: var(--gradient-brand);
+  color: var(--color-on-gradient);
+  box-shadow: var(--shadow-primary);
+}
+.category-tile-name {
+  grid-area: name;
+  align-self: end;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 700;
+}
+.category-tile-count {
+  grid-area: count;
+  align-self: start;
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+.category-tile-go {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  color: var(--color-primary-text);
+  transition: translate var(--duration) var(--ease);
+}
+.category-tile:hover .category-tile-go {
+  translate: 3px 0;
 }
 
 .chips-nav {
@@ -1152,7 +1347,15 @@ main {
 .variant-option:has(input:checked) {
   border-color: var(--color-primary);
   box-shadow: inset 0 0 0 1px var(--color-primary);
+  background: var(--color-primary-soft);
   color: var(--color-primary-text);
+}
+.variant-option-check {
+  display: none;
+}
+.variant-option:has(input:checked) .variant-option-check {
+  display: block;
+  margin-left: calc(-1 * var(--space-1));
 }
 .variant-option:has(input:focus-visible) {
   outline: 2px solid var(--color-primary);
@@ -1241,8 +1444,37 @@ main {
 }
 /* The image zooms inside its frame when the card is hovered. */
 .product-card-media {
+  position: relative;
   overflow: hidden;
   border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+}
+.product-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: auto;
+  padding-top: var(--space-3);
+}
+.product-card-go {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  background: var(--color-primary-soft);
+  color: var(--color-primary-text);
+  transition:
+    background var(--duration) var(--ease),
+    color var(--duration) var(--ease);
+}
+@media (hover: hover) {
+  .card-link:hover .product-card-go {
+    background: var(--color-primary);
+    color: var(--color-on-primary);
+  }
 }
 .product-card-media .product-image {
   transition: transform calc(var(--duration) * 2) var(--ease);
@@ -1255,7 +1487,7 @@ main {
 .product-image-skeleton {
   aspect-ratio: 4 / 3;
 }
-.brand-name {
+.product-brand {
   color: var(--color-muted);
   font-size: var(--text-xs);
   font-weight: 700;
@@ -1280,8 +1512,6 @@ main {
   color: var(--color-muted);
 }
 .product-card .price {
-  margin-top: auto;
-  padding-top: var(--space-3);
   font-size: var(--text-lg);
 }
 .price.large {
@@ -1308,10 +1538,60 @@ main {
     top: calc(var(--header-height) + 4px + var(--space-5));
   }
 }
-.product-media .product-image,
 .product-page > .product-image-skeleton {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
+}
+.gallery {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+/* The image on a soft stage of the brand's colours. */
+.gallery-stage {
+  padding: var(--space-4);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(80% 70% at 30% 20%, var(--color-primary-soft), transparent 70%),
+    radial-gradient(60% 60% at 90% 100%, var(--color-accent-soft), transparent 70%), var(--color-surface);
+  box-shadow: var(--shadow-md);
+}
+.gallery-stage .product-image {
+  border-radius: var(--radius-md);
+}
+.gallery-thumbs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.gallery-thumb {
+  display: block;
+  width: 5rem;
+  padding: 3px;
+  border: 2px solid var(--color-line);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  cursor: pointer;
+  transition: border-color var(--duration) var(--ease);
+}
+.gallery-thumb img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+}
+.gallery-thumb:hover {
+  border-color: var(--color-line-strong);
+}
+.gallery-thumb[aria-pressed='true'] {
+  border-color: var(--color-primary);
 }
 .product-info {
   display: flex;
@@ -1973,7 +2253,7 @@ main {
   border: none;
   box-shadow: none;
 }
-.compact .brand-name {
+.compact .product-brand {
   display: none;
 }
 .compact .cart-line-name,

@@ -1,5 +1,6 @@
 import { useId } from 'react'
 import type { Variant, VariantAxis } from '../domain/catalog'
+import { Icon } from './ui/Icon'
 import { cx } from './ui/cx'
 
 /**
@@ -29,6 +30,7 @@ export function VariantPicker({ axes, onChoose }: { axes: VariantAxis[]; onChoos
                   onChange={() => option.variant && onChoose(option.variant)}
                   className="variant-option-input"
                 />
+                <Icon name="check" size={16} className="variant-option-check" />
                 {option.value}
                 {option.outOfStock && <span className="variant-option-note">Sold out</span>}
               </label>

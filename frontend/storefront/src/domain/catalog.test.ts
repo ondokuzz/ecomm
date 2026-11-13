@@ -6,6 +6,7 @@ import {
   chosenVariant,
   productCardOf,
   productCountLabel,
+  galleryImages,
   productImage,
   specs,
   variantAxes,
@@ -32,6 +33,24 @@ const product = (images: string[], variants: Variant[] = [variant('PHN-PIXEL-9',
   variants,
   warranty: null,
   serialTracking: 'NONE',
+})
+
+describe('galleryImages', () => {
+  it("is the chosen Variant's own images, then the Product's, each once", () => {
+    const porcelain = variant('P', 'Porcelain', '128 GB', 79900, ['/images/a/porcelain.svg', '/images/a/front.svg'])
+    expect(galleryImages(product(['/images/a/front.svg', '/images/a/back.svg']), porcelain)).toEqual([
+      '/images/a/porcelain.svg',
+      '/images/a/front.svg',
+      '/images/a/back.svg',
+    ])
+  })
+
+  it("is the Product's images for a Variant without its own, and none when neither has any", () => {
+    expect(galleryImages(product(['/images/a/front.svg']), variant('O', 'Obsidian', '128 GB'))).toEqual([
+      '/images/a/front.svg',
+    ])
+    expect(galleryImages(product([]), variant('O', 'Obsidian', '128 GB'))).toEqual([])
+  })
 })
 
 describe('productImage', () => {

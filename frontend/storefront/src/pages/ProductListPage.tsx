@@ -7,7 +7,7 @@ import { ProductCard } from '../components/ProductCard'
 import { EmptyState, ErrorState } from '../components/Status'
 import { Button, ButtonLink } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
-import { Icon } from '../components/ui/Icon'
+import { Icon, type IconName } from '../components/ui/Icon'
 import { Input } from '../components/ui/Input'
 import { Skeleton } from '../components/ui/Skeleton'
 import { productCountLabel } from '../domain/catalog'
@@ -19,6 +19,7 @@ import {
   type SearchResults,
   type SortKey,
   categoryOptions,
+  featuredCategories,
   hasFilters,
   listingHref,
   searchFromUrl,
@@ -45,6 +46,10 @@ export function ProductListPage() {
   return (
     <div className="catalog">
       <ListingHeader search={search} results={data} />
+      {/* Not while Search is failing: its tiles would wait forever beside the error. */}
+      {!search.text && !search.category && !hasFilters(search) && !(results.error && !data) && (
+        <FeaturedCategories facets={data?.facets} />
+      )}
       {/* Keyed by the text, so a URL that changes it, such as on Back, refills the box. */}
       <SearchBox key={search.text} text={search.text} onSearch={(text) => go(withText(search, text))} />
       <CategoryChips facets={data?.facets} search={search} />
@@ -74,9 +79,12 @@ function ListingHeader({ search, results }: { search: Search; results: SearchRes
   if (!search.text && !search.category) {
     return (
       <header className="hero">
-        <p className="hero-eyebrow">New season, new gear</p>
-        <h1>Find your next favourite gadget</h1>
-        <p className="hero-tagline">Phones, laptops and audio from the brands you love, all in one place.</p>
+        <div className="hero-copy">
+          <p className="hero-eyebrow">New season, new gear</p>
+          <h1>Find your next favourite gadget</h1>
+          <p className="hero-tagline">Phones, laptops and audio from the brands you love, all in one place.</p>
+        </div>
+        <HeroShowcase images={results?.items.flatMap((p) => (p.image ? [p.image] : [])).slice(0, 3) ?? []} />
       </header>
     )
   }
@@ -93,6 +101,50 @@ function ListingHeader({ search, results }: { search: Search; results: SearchRes
         </p>
       )}
     </header>
+  )
+}
+
+/** Three of the newest Products' images fanned out beside the hero's words; decoration only. */
+function HeroShowcase({ images }: { images: string[] }) {
+  return (
+    <div className="hero-showcase" aria-hidden="true">
+      {images.map((src) => (
+        <img key={src} src={src} alt="" width={400} height={300} decoding="async" className="hero-showcase-card" />
+      ))}
+    </div>
+  )
+}
+
+const categoryIcons: Record<string, IconName> = { phones: 'phone', laptops: 'laptop', audio: 'headphones' }
+
+/** The fullest Categories as tiles, each leading to its listing; placeholders until Search answers. */
+function FeaturedCategories({ facets }: { facets: Facets | undefined }) {
+  const featured = facets && featuredCategories(facets)
+  if (featured?.length === 0) return null
+  return (
+    <section className="featured-categories" aria-labelledby="featured-categories-heading">
+      <h2 id="featured-categories-heading">Shop by category</h2>
+      <ul className="category-tiles">
+        {featured
+          ? featured.map((c) => (
+              <li key={c.slug}>
+                <Link to={c.href} className="category-tile">
+                  <span className="category-tile-icon">
+                    <Icon name={categoryIcons[c.slug] ?? 'grid'} size={26} />
+                  </span>
+                  <span className="category-tile-name capitalize">{c.name}</span>
+                  <span className="category-tile-count">{productCountLabel(c.count)}</span>
+                  <Icon name="arrowRight" size={18} className="category-tile-go" />
+                </Link>
+              </li>
+            ))
+          : Array.from({ length: 3 }, (_, i) => (
+              <li key={i}>
+                <Skeleton height="6.5rem" radius="var(--radius-lg)" />
+              </li>
+            ))}
+      </ul>
+    </section>
   )
 }
 

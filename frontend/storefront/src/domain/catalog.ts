@@ -67,6 +67,11 @@ export function chosenVariant(product: Product, variantId: string | null): Varia
   return product.variants.find((v) => v.id === variantId) ?? defaultVariant(product)
 }
 
+/** A Product page's gallery: the chosen Variant's own images, then the Product's, each once. */
+export function galleryImages(product: Pick<Product, 'images'>, variant: Pick<Variant, 'images'>): string[] {
+  return [...new Set([...variant.images, ...product.images])]
+}
+
 /** The image the Storefront shows a Product (or one of its Variants) by: the Variant's own first, else the Product's. */
 export function productImage(product: Pick<Product, 'images'>, variant?: Pick<Variant, 'images'>): string | undefined {
   return variant?.images[0] ?? product.images[0]
