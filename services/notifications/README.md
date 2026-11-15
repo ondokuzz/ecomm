@@ -214,8 +214,13 @@ Answers, a Customer it doesn't know included, are kept for 10 minutes
   projection of `catalog.product`, kept at each Product's newest version, by Variant ID while it
   hasn't caught up. Each Variant's Price is kept too, with when it last changed: the `occurredAt` of
   the event whose Price differed from the one held, so a rebuild gives the same. A Variant's first
-  Price is no change, and a Variant projected before Prices were kept has none until its Product's
-  next event or a rebuild. `make notifications-rebuild` rebuilds it from the topic: it stops the service,
+  Price is no change. A Variant projected before Prices were kept has none: while any has none,
+  `notifications.products` reads `catalog.product` from the start each time its partitions are
+  assigned ("Replaying catalog.product from the start: Variants without a Price"), and such a
+  Product takes its event at the version held, so a stack upgraded from Sprint 7 fills them in on
+  `make up`, with no rebuild. A Variant its Product no longer lists keeps none, and the topic is
+  then read from the start on each start, changing nothing. `make notifications-rebuild` rebuilds it
+  from the topic: it stops the service,
   resets `notifications.products` to the earliest offset, empties the projection and starts it
   again. The ledger stays, and so does `notifications.orders`'s offset, so nothing is sent again.
 - An event that can't be read, or keeps failing, goes to its group's dead-letter topic, and `make
@@ -302,7 +307,8 @@ SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_NOTIFICATIONS_CLIENT_SECRET="$(cat .s
   link, Cart read with Notifications' token), a Price changed since, lines no longer sold, and
   nothing for a Cart all of whose lines are gone, a Customer who never turned them on or turned them
   off, a Cart gone or emptied, or one changed since; the same abandonment twice is one email, and
-  never an SMS or push; and Cart failing at first. Where nothing should be recorded, a reminder to
+  never an SMS or push; Cart failing at first; and a Variant stored without a Price, as before
+  Prices were kept, taking it from its event replayed at the same version. Where nothing should be recorded, a reminder to
   another Customer published after it, on the topic's one partition, shows the first was handled.
   Postgres, Kafka and the registry run in Testcontainers.
 - **Start-up** (`TemplatesStartUpTest`): an application of its own, whose templates lack the

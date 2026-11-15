@@ -8,17 +8,24 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.apache.kafka.common.TopicPartition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.listener.ConsumerSeekAware;
 import org.springframework.stereotype.Component;
 
 /**
- * Projects Catalog's Products' names, which name an Order's lines in its messages. Its group reads
- * from the start when new; {@code make notifications-rebuild} resets it to the earliest offset.
+ * Projects Catalog's Products' names, which name an Order's lines in its messages, and their
+ * Variants' Prices. Its group reads from the start when new; {@code make notifications-rebuild}
+ * resets it to the earliest offset. While any Variant projected before Prices were kept has none,
+ * the topic is read from the start whenever its partitions are assigned, so a stack upgraded from
+ * Sprint 7 fills them in on {@code make up}, with no rebuild.
  */
 @Component
-class ProductListener {
+class ProductListener implements ConsumerSeekAware {
+
+  private static final String TOPIC = "catalog.product";
 
   private static final Logger log = LoggerFactory.getLogger(ProductListener.class);
 
@@ -48,7 +55,17 @@ class ProductListener {
     this.products = products;
   }
 
-  @KafkaListener(topics = "catalog.product", groupId = "notifications.products")
+  @Override
+  public void onPartitionsAssigned(
+      Map<TopicPartition, Long> assignments, ConsumerSeekCallback callback) {
+    var partitions = assignments.keySet().stream().filter(p -> p.topic().equals(TOPIC)).toList();
+    if (!partitions.isEmpty() && products.needsReplay()) {
+      log.info("Replaying {} from the start: Variants without a Price", TOPIC);
+      callback.seekToBeginning(partitions);
+    }
+  }
+
+  @KafkaListener(topics = TOPIC, groupId = "notifications.products")
   void on(ProductEvent event) {
     var variants = new LinkedHashMap<String, Map<String, String>>();
     var prices = new LinkedHashMap<String, Money>();

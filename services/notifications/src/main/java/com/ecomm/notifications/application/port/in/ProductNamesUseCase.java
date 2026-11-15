@@ -19,6 +19,12 @@ public interface ProductNamesUseCase {
       Map<String, Map<String, String>> variantAxisValues,
       Map<String, Money> variantPrices) {}
 
-  /** Whether it was newer than what is held, and so applied. */
+  /**
+   * Whether it was applied: newer than what is held, or the version held of a Product with a
+   * Variant projected before Prices were kept, which so takes its Price.
+   */
   boolean apply(ProductPublished event);
+
+  /** Whether the topic should be read from the start: some Variant has no Price yet. */
+  boolean needsReplay();
 }

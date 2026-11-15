@@ -9,7 +9,8 @@ import java.util.LinkedHashMap;
 
 /**
  * Applies a Product's event if it is newer than what is held, reading and writing in one
- * transaction.
+ * transaction. A Product with a Variant projected before Prices were kept also takes the version
+ * held, so a replay from the start gives it its Prices; as its first, they are no change.
  */
 public class ProductNamesService implements ProductNamesUseCase {
 
@@ -32,14 +33,24 @@ public class ProductNamesService implements ProductNamesUseCase {
                     variantId,
                     new VariantPrice(
                         String.join(", ", axes.values()), event.variantPrices().get(variantId))));
-    return transactions.inTransaction(
+    Runnable save =
         () ->
-            Versions.applyIfNewer(
-                event.version(),
-                products.versionOf(event.sku()),
-                Long::longValue,
-                () ->
-                    products.save(
-                        event.sku(), event.version(), event.name(), variants, event.occurredAt())));
+            products.save(event.sku(), event.version(), event.name(), variants, event.occurredAt());
+    return transactions.inTransaction(
+        () -> {
+          var held = products.versionOf(event.sku());
+          if (held.isPresent()
+              && held.get() == event.version()
+              && products.withoutPrice(event.sku())) {
+            save.run();
+            return true;
+          }
+          return Versions.applyIfNewer(event.version(), held, Long::longValue, save);
+        });
+  }
+
+  @Override
+  public boolean needsReplay() {
+    return products.anyWithoutPrice();
   }
 }

@@ -9,6 +9,8 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.simple.JdbcClient;
 
 /**
  * A Customer who turned cart reminders on is emailed once about each Abandoned Cart, listing the
@@ -22,6 +24,8 @@ import org.junit.jupiter.api.Test;
 class CartRemindersApiTest extends NotificationsApiTest {
 
   private static final Instant LEFT_AT = Instant.parse("2026-11-14T09:00:00Z");
+
+  @Autowired JdbcClient jdbc;
 
   @Test
   void anOptedInCustomerIsEmailedTheirCartAsItIsNow() {
@@ -59,6 +63,32 @@ class CartRemindersApiTest extends NotificationsApiTest {
     Events.product(sku, "Pixel 9a", variant).version(2).price(69900).publish();
     awaitNamed(variant, "Pixel 9a");
     var customer = optedIn("hedy");
+    SearchDiscovery.product(sku, "Pixel 9a").variant(variant, 69900, true).listed();
+    var leftAt = Instant.now().minus(Duration.ofHours(1));
+    Carts.cart(customer.id, leftAt, items(variant, 1));
+
+    abandonedCart(customer.id, leftAt, items(variant, 1)).publish();
+
+    assertThat(email.awaitOneSentTo(customer.address).message().text())
+        .contains("1 × Pixel 9a: €699.00 each, its Price has changed");
+  }
+
+  @Test
+  void aVariantProjectedBeforePricesWereKeptTakesItsPriceFromItsReplayedEvent() {
+    var sku = newSku();
+    var variant = sku + "-V";
+    Events.product(sku, "Pixel 9", variant).price(79900).publish();
+    awaitNamed(variant, "Pixel 9");
+    jdbc.sql(
+            "UPDATE product_variant SET price_minor = NULL, price_currency = NULL WHERE sku = :sku")
+        .param("sku", sku)
+        .update();
+
+    // Replayed from the start, the version held is applied again, now that it has no Price.
+    Events.product(sku, "Pixel 9", variant).price(79900).publish();
+    Events.product(sku, "Pixel 9a", variant).version(2).price(69900).publish();
+    awaitNamed(variant, "Pixel 9a");
+    var customer = optedIn("vera");
     SearchDiscovery.product(sku, "Pixel 9a").variant(variant, 69900, true).listed();
     var leftAt = Instant.now().minus(Duration.ofHours(1));
     Carts.cart(customer.id, leftAt, items(variant, 1));

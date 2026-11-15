@@ -24,6 +24,22 @@ class PostgresProductNames implements ProductNames {
     this.jdbc = jdbc;
   }
 
+  @Override
+  public boolean anyWithoutPrice() {
+    return jdbc.sql("SELECT EXISTS (SELECT 1 FROM product_variant WHERE price_minor IS NULL)")
+        .query(Boolean.class)
+        .single();
+  }
+
+  @Override
+  public boolean withoutPrice(String sku) {
+    return jdbc.sql(
+            "SELECT EXISTS (SELECT 1 FROM product_variant WHERE sku = :sku AND price_minor IS NULL)")
+        .param("sku", sku)
+        .query(Boolean.class)
+        .single();
+  }
+
   /** Locks the row, if there is one, until the transaction ends. */
   @Override
   public Optional<Long> versionOf(String sku) {

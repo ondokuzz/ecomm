@@ -22,6 +22,12 @@ public interface ProductNames {
    */
   record ProjectedVariant(String sku, String name, Instant priceChangedAt) {}
 
+  /** Whether any Variant was projected before Prices were kept, and so has none. */
+  boolean anyWithoutPrice();
+
+  /** Whether any of the Product's Variants has no Price, as one projected before Prices. */
+  boolean withoutPrice(String sku);
+
   /** The version held of the Product, locking it until the transaction ends. */
   Optional<Long> versionOf(String sku);
 
