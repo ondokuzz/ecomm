@@ -22,7 +22,10 @@ import org.springframework.stereotype.Component;
 /**
  * Email over SMTP: to Mailpit in the compose stack, to any relay elsewhere (ADR 0005). Each message
  * is {@code multipart/alternative}, its text body then its HTML one, from {@code
- * ecomm.notifications.email.from}. Its reference is the message's {@code Message-ID}.
+ * ecomm.notifications.email.from}. Its reference is the message's {@code Message-ID}. A message
+ * with an unsubscribe link, a Cart reminder's, has RFC 8058's {@code List-Unsubscribe} and {@code
+ * List-Unsubscribe-Post: List-Unsubscribe=One-Click} headers, so a mail client can unsubscribe with
+ * one click.
  *
  * <p>An address that isn't one, or a 5xx reply refusing the recipient or the message, is a
  * permanent failure; a 4xx reply, or a server that can't be reached or doesn't answer, is
@@ -61,6 +64,11 @@ class SmtpEmailProvider implements NotificationProvider {
       helper.setTo(to);
       helper.setSubject(message.subject());
       helper.setText(message.text(), message.html());
+      if (message.unsubscribeUrl() != null) {
+        // RFC 8058: a mail client offers its own unsubscribe button, which POSTs to the link.
+        mime.setHeader("List-Unsubscribe", "<" + message.unsubscribeUrl() + ">");
+        mime.setHeader("List-Unsubscribe-Post", "List-Unsubscribe=One-Click");
+      }
     } catch (AddressException e) {
       return SendOutcome.Failed.permanent("invalidAddress");
     } catch (MessagingException | UnsupportedEncodingException e) {

@@ -31,7 +31,7 @@ the one not about their own Orders, Payments or RMAs.
 | `RMA_RECEIVED` | The same with `change` `RECEIVED` | `EMAIL` | That its units arrived, to be inspected |
 | `RMA_CLOSED` | The same with `change` `CLOSED` | `EMAIL` | That it was closed with no Refund or replacement, and the Inspection's note (`inspection.note`) |
 | `RMA_EXPIRED` | The same with `change` `EXPIRED` | `EMAIL` | That its units didn't arrive by the Send-back deadline |
-| `CART_ABANDONED` | A `cart.cart` event with `change` `ABANDONED`, for a Customer who turned cart reminders on, whose Cart is unchanged since ([Cart reminders](#cart-reminders)) | `EMAIL` | Each line of the Cart as Cart answers it now: its quantity, Product name with axis values, Price each, whether it is out of Stock and whether its Price changed, and a link to the Storefront's `/cart`; it is about no Order |
+| `CART_ABANDONED` | A `cart.cart` event with `change` `ABANDONED`, for a Customer who turned cart reminders on, whose Cart is unchanged since ([Cart reminders](#cart-reminders)) | `EMAIL` | Each line of the Cart as Cart answers it now: its quantity, Product name with axis values, Price each, whether it is out of Stock and whether its Price changed, a link to the Storefront's `/cart`, and an unsubscribe link ([Unsubscribing](#unsubscribing)); it is about no Order |
 
 Email is always sent, but for a Cart reminder, which needs the Customer's consent; SMS and push only
 to a Customer whose Notification preferences turn them on, and never an RMA's step or a Cart
@@ -98,6 +98,8 @@ out. A Customer who never saved theirs has email only, and no Cart reminders.
 | `GET /preferences/me` | Customer | Their Notification preferences |
 | `PUT /preferences/me` | Customer | Saves them: `{"phoneNumber": "+4915112345678", "sms": true, "push": false, "cartReminders": true}` |
 | `GET /mock-providers/sms?customerId=` (or `push`) | Staff | What the mock SMS or push provider took for the Customer, newest first |
+| `GET /unsubscribe/cart-reminders?token=` | Anyone, by the token | A page asking to turn cart reminders off, its button posting back ([Unsubscribing](#unsubscribing)) |
+| `POST /unsubscribe/cart-reminders?token=` | Anyone, by the token | Turns the token's Customer's cart reminders off; a page saying so |
 
 The lists are newest first, a page at a time (`page` from 0, `size` 1 to 100, 20 by default), as
 `{"items": [...], "page": 0, "size": 20, "total": 1}`. Staff name exactly one of `orderId`, `rmaId`
@@ -267,6 +269,52 @@ before the transaction. The link is `ecomm.notifications.storefront-url` with `/
 browser-facing Storefront (`http://localhost:8080` locally), which asks a Customer who isn't signed
 in to sign in.
 
+### Unsubscribing
+
+Every Cart reminder has an unsubscribe link, in both its bodies and as RFC 8058's `List-Unsubscribe`
+header, with `List-Unsubscribe-Post: List-Unsubscribe=One-Click`, so a mail client can offer its own
+button. The link is `ecomm.notifications.unsubscribe.url` (`<storefront-url>/api/notifications/unsubscribe/cart-reminders`,
+through the gateway, which routes it without a token as a signed link) with `?token=`, issued as the
+reminder is recorded and kept on the Notification with its content.
+
+- **The token** names only the Customer's ID and the preference, `cartReminders`, and expires 30
+  days after it was issued: `<payload>.<signature>`, each base64url, signed with HMAC-SHA256 under
+  the secret `notifications-unsubscribe-key` (`ecomm.notifications.unsubscribe.key`, with no
+  default; [ADR 0011](../../docs/adr/0011-secrets-as-generated-files.md)). It can't be turned to
+  another Customer or preference without the key.
+- **`POST`**, a mail client's one-click or the page's button, turns the Customer's cart reminders
+  off and leaves the rest of their Notification preferences as they were. It needs no sign-in.
+  Using it again is harmless: preferences already off aren't saved again. It answers a small page
+  saying they are off, linking to the Notification preferences page.
+- **`GET`**, opening the link, changes nothing: it answers a page with a "Turn off cart reminders"
+  button, which posts back to the same URL, so a link scanner that opens it unsubscribes nobody.
+- **A bad or expired token**, on either, is a 400 page saying to sign in and change the
+  Notification preferences there.
+- A new key, after rotating the secret, only spoils the links already sent, which then say to sign
+  in.
+- **Kept from Staff.** The token is kept with the reminder, but the ledger's reads show its
+  rendered message with the token cut out (`…?token=…`), so a Staff reader can't use it; only the
+  email carries it.
+
+### Measuring them
+
+`notifications_cart_reminders_total{outcome}` counts what came of each `ABANDONED` event: `sent`, a
+reminder recorded for the dispatcher to send, once per event however often it is delivered;
+`skippedOptedOut`, the Customer didn't turn them on; `skippedChanged`, the Cart changed since; and
+`skippedEmpty`, the Cart is gone or empty, or nothing in it is sold any more. A skip is counted
+again if its event is delivered again, since nothing records it. Each outcome is on
+`/actuator/prometheus` at 0 from the start, and the Services dashboard plots them per hour as **Cart
+reminders**, beside Cart's **Abandoned Carts** (`cart_abandoned_total`).
+
+Whether reminders bring Customers back is `make cart-reminders-report`
+([`infra/docker/cart-reminders-report.py`](../../infra/docker/cart-reminders-report.py)): the
+reminders recorded, which the metric's `sent` counts, and those delivered (`SENT`); how many
+delivered were followed by the same Customer paying an Order (an Order Status history row `PAID`)
+within `DAYS` days, 7 by default, and before their next reminder; and how many of the Customers
+reminded paid so. It reads this
+ledger and Order Management's database on the running stack and joins them itself, as no service
+joins them live.
+
 ## Run it
 
 ```sh
@@ -284,6 +332,7 @@ postgres-databases keycloak-realm mailpit kafka-topics`) and start the service w
 ```sh
 SPRING_DATASOURCE_PASSWORD="$(cat .secrets/ecomm/postgres-password)" \
 SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_NOTIFICATIONS_CLIENT_SECRET="$(cat .secrets/ecomm/notifications-client-secret)" \
+ECOMM_NOTIFICATIONS_UNSUBSCRIBE_KEY="$(cat .secrets/ecomm/notifications-unsubscribe-key)" \
 ./gradlew :services:notifications:bootRun
 ```
 
@@ -308,14 +357,20 @@ SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_NOTIFICATIONS_CLIENT_SECRET="$(cat .s
   nothing for a Cart all of whose lines are gone, a Customer who never turned them on or turned them
   off, a Cart gone or emptied, or one changed since; the same abandonment twice is one email, and
   never an SMS or push; Cart failing at first; and a Variant stored without a Price, as before
-  Prices were kept, taking it from its event replayed at the same version. Where nothing should be recorded, a reminder to
+  Prices were kept, taking it from its event replayed at the same version. Unsubscribing covers the
+  reminder's link in both bodies and on the message, the ledger's read without its token, its one-click `POST` turning reminders off
+  without a token, the `GET` page changing nothing, a second use changing nothing more, and a
+  tampered token (another Customer's payload under this one's signature, another key's, none) and
+  one 30 days old refused with a 400 page, one 29 days old taken; and each outcome is counted, from
+  0, a redelivered event's reminder once. Where nothing should be recorded, a reminder to
   another Customer published after it, on the topic's one partition, shows the first was handled.
   Postgres, Kafka and the registry run in Testcontainers.
 - **Start-up** (`TemplatesStartUpTest`): an application of its own, whose templates lack the
   confirmation's text part, refuses to start, and so does one whose shipped SMS is over 160
   characters.
 - **The outbound ports**: `EmailDeliveryTest` sends through the SMTP provider to a GreenMail
-  container and reads the message over IMAP (subject, both bodies, recipient), fails an invalid
+  container and reads the message over IMAP (subject, both bodies, recipient, and for a message
+  with an unsubscribe link the `List-Unsubscribe` headers), fails an invalid
   address at once, and with the container paused, so the server stops answering, tries six times
   and then fails. GreenMail takes every recipient, so the mapping of SMTP reply codes (5xx
   permanent, 4xx transient) has no test against a server yet; `CustomerDirectoryTest`

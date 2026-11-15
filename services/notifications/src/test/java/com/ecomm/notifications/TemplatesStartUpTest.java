@@ -47,6 +47,7 @@ class TemplatesStartUpTest {
     registry.add("ecomm.notifications.dispatch.enabled", () -> "false");
     registry.add("spring.kafka.listener.auto-startup", () -> "false");
     registry.add("ecomm.notifications.templates.location", () -> templates);
+    registry.add("ecomm.notifications.unsubscribe.key", () -> NotificationsApiTest.UNSUBSCRIBE_KEY);
 
     assertThatThrownBy(
             () ->

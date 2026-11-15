@@ -60,6 +60,11 @@ ecomm:
     search-discovery-url: http://localhost:8089
     search-discovery-timeout: 5s
     storefront-url: http://localhost:8080
+    # A Cart reminder's unsubscribe link, through the gateway's public route on the browser-facing
+    # Storefront, and the key its token is signed with: a secret, notifications-unsubscribe-key
+    # (ADR 0011), with no default.
+    unsubscribe:
+      url: ${ecomm.notifications.storefront-url}/api/notifications/unsubscribe/cart-reminders
     dispatch:
       # How often the dispatcher looks for due Notifications, and how it retries a transient
       # failure: 6 attempts in all, waiting 2, 4, 8, 16 and 32 minutes between them, about an hour.

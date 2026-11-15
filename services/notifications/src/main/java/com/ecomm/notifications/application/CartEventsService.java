@@ -1,6 +1,8 @@
 package com.ecomm.notifications.application;
 
 import com.ecomm.notifications.application.port.in.CartEventsUseCase;
+import com.ecomm.notifications.application.port.out.CartReminderCounter;
+import com.ecomm.notifications.application.port.out.CartReminderCounter.Outcome;
 import com.ecomm.notifications.application.port.out.Carts;
 import com.ecomm.notifications.application.port.out.Carts.CustomerCart;
 import com.ecomm.notifications.application.port.out.ListedProducts;
@@ -12,6 +14,7 @@ import com.ecomm.notifications.application.port.out.TimeSource;
 import com.ecomm.notifications.application.port.out.Transactions;
 import com.ecomm.notifications.domain.CartAbandoned;
 import com.ecomm.notifications.domain.RemindedLine;
+import com.ecomm.notifications.domain.UnsubscribeTokens;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -26,7 +29,8 @@ import org.slf4j.LoggerFactory;
  * last changed no later than the event says (#105). Its lines are the Cart's as Cart answers it
  * now, named from the Catalog projection, with Price and Stock from Search & Discovery. A line no
  * longer sold is left out, and a Cart left with none records nothing. Cart and Search are read
- * before the transaction.
+ * before the transaction. Each reminder carries a link that turns cart reminders off without
+ * signing in, its token signed and valid for 30 days.
  */
 public class CartEventsService implements CartEventsUseCase {
 
@@ -38,7 +42,11 @@ public class CartEventsService implements CartEventsUseCase {
   private final ProductNames products;
   private final ListedProducts listings;
   private final String cartUrl;
+  private final UnsubscribeTokens tokens;
+  private final String unsubscribeUrl;
   private final Transactions transactions;
+  private final TimeSource time;
+  private final CartReminderCounter counter;
 
   public CartEventsService(
       NotificationStore notifications,
@@ -47,38 +55,63 @@ public class CartEventsService implements CartEventsUseCase {
       ProductNames products,
       ListedProducts listings,
       String cartUrl,
+      UnsubscribeTokens tokens,
+      String unsubscribeUrl,
       Transactions transactions,
-      TimeSource time) {
+      TimeSource time,
+      CartReminderCounter counter) {
     this.ledger = new Ledger(notifications, preferences, time);
     this.preferences = preferences;
     this.carts = carts;
     this.products = products;
     this.listings = listings;
     this.cartUrl = cartUrl;
+    this.tokens = tokens;
+    this.unsubscribeUrl = unsubscribeUrl;
     this.transactions = transactions;
+    this.time = time;
+    this.counter = counter;
   }
 
   @Override
   public List<String> cartAbandoned(CartAbandonedEvent event) {
     if (!preferences.preferencesOf(event.customerId()).cartReminders()) {
-      return List.of();
+      return skipped(Outcome.SKIPPED_OPTED_OUT);
     }
     var cart = carts.cartOf(event.customerId()).orElse(null);
     if (cart == null) {
       log.info("Skipped event {}: the Customer's Cart is gone or empty", event.eventId());
-      return List.of();
+      return skipped(Outcome.SKIPPED_EMPTY);
     }
     if (cart.lastChangedAt().isAfter(event.lastChangedAt())) {
       log.info("Skipped event {}: the Cart changed since it was abandoned", event.eventId());
-      return List.of();
+      return skipped(Outcome.SKIPPED_CHANGED);
     }
     var lines = linesOf(cart);
     if (lines.isEmpty()) {
       log.info("Skipped event {}: nothing in the Cart is sold any more", event.eventId());
-      return List.of();
+      return skipped(Outcome.SKIPPED_EMPTY);
     }
-    var content = new CartAbandoned(event.customerId(), lines, cartUrl);
-    return transactions.inTransaction(() -> ledger.record(event.eventId(), content));
+    var content =
+        new CartAbandoned(
+            event.customerId(),
+            lines,
+            cartUrl,
+            unsubscribeUrl + "?token=" + tokens.issue(event.customerId(), time.now()));
+    var recorded = transactions.inTransaction(() -> ledger.record(event.eventId(), content));
+    if (!recorded.isEmpty()) {
+      counter.count(Outcome.SENT); // a redelivered event records, and counts, nothing more
+    }
+    return recorded;
+  }
+
+  /**
+   * Nothing recorded. A skip is counted on every delivery of its event, as nothing marks it
+   * handled: only a redelivery, which Kafka makes rare, counts it twice.
+   */
+  private List<String> skipped(Outcome outcome) {
+    counter.count(outcome);
+    return List.of();
   }
 
   /** The Cart's lines still sold, in its order. */

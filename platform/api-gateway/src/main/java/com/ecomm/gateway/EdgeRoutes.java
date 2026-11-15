@@ -50,7 +50,10 @@ final class EdgeRoutes {
     return anyOf(routes.stream().map(Route::routed).toList());
   }
 
-  /** Routed requests that need no token: public reads, and webhooks the service authenticates. */
+  /**
+   * Routed requests that need no token: public reads, and webhooks and signed links the service
+   * authenticates.
+   */
   RequestMatcher tokenless() {
     return new AndRequestMatcher(routed(), anyOf(routes.stream().map(Route::tokenless).toList()));
   }
@@ -85,9 +88,11 @@ final class EdgeRoutes {
           new AndRequestMatcher(path(null, prefix + "/**"), new NegatedRequestMatcher(internal));
       var tokenless =
           anyOf(
-              Stream.concat(
+              Stream.of(
                       service.publicReads().stream().map(p -> path(HttpMethod.GET, prefix + p)),
-                      service.webhooks().stream().map(entry -> endpoint(prefix, entry)))
+                      service.webhooks().stream().map(entry -> endpoint(prefix, entry)),
+                      service.signedLinks().stream().map(entry -> endpoint(prefix, entry)))
+                  .flatMap(matchers -> matchers)
                   .toList());
       return new Route(name, service, routed, tokenless);
     }

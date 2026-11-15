@@ -29,6 +29,14 @@ public sealed interface MessageContent
     return null;
   }
 
+  /**
+   * The link that turns this Message type off without signing in, for one a Customer opted in to,
+   * or {@code null}.
+   */
+  default String unsubscribeUrl() {
+    return null;
+  }
+
   /** The model its templates are rendered against, with Money and dates written for the locale. */
   Map<String, Object> model(Locale locale);
 }

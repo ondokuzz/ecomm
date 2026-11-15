@@ -114,7 +114,8 @@ public enum MessageType {
                   new RemindedLine("Google Pixel 9 (128 GB, Obsidian)", 1, eur(79900), true, false),
                   new RemindedLine("Sony WH-1000XM5 (Black)", 2, eur(34900), true, true),
                   new RemindedLine("JBL Flip 6 (Blue)", 1, eur(12900), false, false)),
-              "http://localhost:8080/cart"));
+              "http://localhost:8080/cart",
+              "http://localhost:8080/api/notifications/unsubscribe/cart-reminders?token=sample"));
 
   private final Set<NotificationChannel> channels;
   private final Supplier<MessageContent> sample;

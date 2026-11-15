@@ -11,8 +11,8 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 
 /**
- * Public reads pass without a token; every other routed request needs a valid {@code ecomm} token,
- * or gets a 401 at the gateway and never reaches the service.
+ * Public reads, webhooks and signed links pass without a token; every other routed request needs a
+ * valid {@code ecomm} token, or gets a 401 at the gateway and never reaches the service.
  */
 class EdgeAuthenticationApiTest extends GatewayApiTest {
 
@@ -170,7 +170,28 @@ class EdgeAuthenticationApiTest extends GatewayApiTest {
   }
 
   @ParameterizedTest
+  @ValueSource(strings = {"GET", "POST"})
+  void aCartRemindersUnsubscribeLinkIsForwardedWithoutAToken(String method) {
+    http.method(HttpMethod.valueOf(method))
+        .uri("/api/notifications/unsubscribe/cart-reminders?token=abc.def")
+        .exchange()
+        .expectStatus()
+        .isOk();
+
+    assertThat(forwarded())
+        .singleElement()
+        .satisfies(
+            call -> {
+              assertThat(call.getMethod().getName()).isEqualTo(method);
+              assertThat(call.getUrl()).isEqualTo("/unsubscribe/cart-reminders?token=abc.def");
+            });
+  }
+
+  @ParameterizedTest
   @CsvSource({
+    "GET, /api/notifications/unsubscribe/other",
+    "DELETE, /api/notifications/unsubscribe/cart-reminders",
+    "PUT, /api/notifications/preferences/me",
     "GET, /api/payment/webhooks/gateway",
     "POST, /api/payment/webhooks/other",
     "GET, /api/fulfillment-shipping/webhooks/carrier"

@@ -15,3 +15,11 @@ All browser traffic enters through one API gateway ([`platform/api-gateway`](../
 - The gateway is where a request's Correlation ID is usually born, and it writes the only access log.
 - The services keep their dev host ports, which bypass the gateway. They are for development only.
 - Rate limiting and circuit breakers arrive at the gateway in Sprint 7.
+
+## Revised 2026-11-15
+
+The route table gains a third kind of tokenless route beside public reads and webhooks: **signed links**, which a Customer opens from a message the service sent, without signing in, and which the service authenticates by the signed token the link carries (#127). The first is Notifications' Cart reminder unsubscribe link, `GET` and `POST /api/notifications/unsubscribe/cart-reminders?token=…`: `GET` answers a page asking to confirm, and `POST`, the page's button or a mail client's RFC 8058 one-click, turns cart reminders off. Like a webhook, it passes for its own methods and path only, and the service, not the gateway, decides: Notifications permits the path without a token and refuses a bad or expired one with a 400 page. The tokenless routes are now:
+
+- public reads: Catalog's, Inventory's Stock, Search & Discovery's, Reviews & Ratings' and Recommendations' (the gateway's README lists them);
+- webhooks: Payment's `POST /webhooks/gateway` and Fulfillment & Shipping's `POST /webhooks/carrier`;
+- signed links: Notifications' `GET` and `POST /unsubscribe/cart-reminders`.

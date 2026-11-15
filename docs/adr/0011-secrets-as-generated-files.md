@@ -33,3 +33,7 @@ This is the shape a secrets manager takes on in Sprint 8: in AWS, a secret is mo
 ## Revised 2026-11-05
 
 A key in `anthropic-api-key` now has the AI Support Assistant answer with Claude (#118). As the secret can't be generated, the assistant's README says how to give the stack one: write it into `.secrets/<project>/anthropic-api-key`, then `docker compose up -d ai-support-assistant`, which recreates the service with the new file; emptying the file the same way goes back to the mock provider. The key still lives only in that file, never in the Compose file or the environment, and is never logged.
+
+## Revised 2026-11-15
+
+`notifications-unsubscribe-key` is a new generated secret (#127): the key Notifications signs a Cart reminder's unsubscribe link with, HMAC-SHA256, and checks it by. `make secrets` writes it like the client and webhook secrets, always new and never overwritten, and Compose mounts it into Notifications alone as `ecomm.notifications.unsubscribe.key`, which has no default, so the service doesn't start without it. Rotating it, as for any client or webhook secret, needs no other change: it only spoils the links already sent, whose page then says to sign in and change the Notification preferences there.

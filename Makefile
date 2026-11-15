@@ -14,7 +14,7 @@ RETURNS_GROUPS := $(filter returns-warranty.%,$(GROUPS))
 NOTIFICATIONS_PRODUCT_GROUPS := notifications.products
 DEAD_LETTER_TOPICS := $(foreach group,$(GROUPS),$(group).dlt $(group).redrive)
 
-.PHONY: secrets up down status memory realm-sync seed-reset e2e search-rebuild reviews-rebuild recommendations-rebuild recommendations-report fulfillment-rebuild returns-rebuild notifications-rebuild dlt-redrive upgrade-from upgrade-to upgrade-clean
+.PHONY: secrets up down status memory realm-sync seed-reset e2e search-rebuild reviews-rebuild recommendations-rebuild recommendations-report cart-reminders-report fulfillment-rebuild returns-rebuild notifications-rebuild dlt-redrive upgrade-from upgrade-to upgrade-clean
 
 ## Write each of the stack's secrets that is missing to .secrets/<project>/, never overwriting one
 ## (infra/docker/secrets.sh). `make up` runs it first.
@@ -121,6 +121,11 @@ recommendations-rebuild:
 ## in all and by reason (infra/docker/recommendations-report.py).
 recommendations-report:
 	@python3 -B infra/docker/recommendations-report.py
+
+## Say how many Cart reminders Notifications sent, and how many were followed by the Customer
+## paying an Order within DAYS (7) days (infra/docker/cart-reminders-report.py).
+cart-reminders-report:
+	@python3 -B infra/docker/cart-reminders-report.py
 
 ## Rebuild Fulfillment & Shipping's Product projection from catalog.product: stop the service, reset
 ## its group to the earliest offset, empty the projection, and start it again. Shipments keep the

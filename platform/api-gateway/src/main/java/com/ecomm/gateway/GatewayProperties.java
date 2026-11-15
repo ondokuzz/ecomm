@@ -24,10 +24,14 @@ record GatewayProperties(@DefaultValue Map<String, Service> services) {
    * @param webhooks endpoints a third party calls from outside, such as a payment gateway, routed
    *     without a token since the service authenticates them itself; in the same form as {@code
    *     internal}
+   * @param signedLinks endpoints a link the service sent, such as an email's unsubscribe link,
+   *     opens from outside, routed without a token since the link's signed token authenticates it;
+   *     in the same form as {@code internal}
    */
   record Service(
       URI uri,
       @DefaultValue List<String> publicReads,
       @DefaultValue List<String> internal,
-      @DefaultValue List<String> webhooks) {}
+      @DefaultValue List<String> webhooks,
+      @DefaultValue List<String> signedLinks) {}
 }

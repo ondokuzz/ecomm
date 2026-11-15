@@ -299,6 +299,7 @@ test('a Customer checks out a picked Variant and another Product, and on-hand St
 const mailpitUrl = process.env.MAILPIT_URL ?? 'http://localhost:8025'
 
 interface Email {
+  ID: string
   Subject: string
   To: { Address: string }[]
   Text: string
@@ -1428,7 +1429,7 @@ test.describe('Sprint 7', () => {
 const cartAbandonedAfter = process.env.CART_ABANDONED_AFTER
 
 test.describe('Sprint 8', () => {
-  test('a Customer who turned on cart reminders is emailed about the Cart they left, and its link opens it', async ({
+  test('a Customer who turned on cart reminders is emailed about the Cart they left, its link opens it, and its unsubscribe link turns them off', async ({
     page,
     request,
   }) => {
@@ -1465,6 +1466,25 @@ test.describe('Sprint 8', () => {
     await page.goto(link as string)
     await expect(page).toHaveURL(/\/cart$/)
     await expect(page.getByRole('main')).toContainText(bought.product.name)
+
+    // Its unsubscribe link, and RFC 8058's one-click header a mail client posts to, turn reminders
+    // off without signing in: the page sends no token.
+    const unsubscribe = reminder.Text.match(/https?:\/\/\S+\/unsubscribe\/cart-reminders\?token=\S+/)?.[0]
+    expect(unsubscribe).toBeDefined()
+    const headers = (await (await request.get(`${mailpitUrl}/api/v1/message/${reminder.ID}/headers`)).json()) as Record<
+      string,
+      string[]
+    >
+    expect(headers['List-Unsubscribe']).toEqual([`<${unsubscribe}>`])
+    expect(headers['List-Unsubscribe-Post']).toEqual(['List-Unsubscribe=One-Click'])
+    await page.goto(unsubscribe as string)
+    await page.getByRole('button', { name: 'Turn off cart reminders' }).click()
+    await expect(page.getByRole('heading', { name: 'Cart reminders are off' })).toBeVisible()
+    await expectAccessible(page)
+    await page.getByRole('link', { name: 'Notification preferences' }).click()
+    await expect(
+      page.getByRole('form', { name: 'Notification preferences' }).getByRole('switch', { name: /Cart reminders/ }),
+    ).not.toBeChecked()
   })
 })
 

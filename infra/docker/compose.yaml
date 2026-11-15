@@ -398,8 +398,8 @@ services:
       keycloak: { condition: service_healthy }
 
   # Notifications: Customers' messages about their Orders, triggered by Order Management's,
-  # Fulfillment & Shipping's and Payment's events, rendered from Message templates and kept in a
-  # ledger in Postgres's notifications database. Email goes to Mailpit over SMTP; SMS and push go to
+  # Fulfillment & Shipping's and Payment's events, and Cart reminders, rendered from Message
+  # templates and kept in a ledger in Postgres's notifications database. Email goes to Mailpit over SMTP; SMS and push go to
   # mock providers, which record them in the same database (ADR 0005). Recipients come from
   # Keycloak's admin API.
   notifications:
@@ -415,6 +415,9 @@ services:
       # realm-management's view-users; realm sync sets its secret from the same file.
       - source: notifications-client-secret
         target: spring.security.oauth2.client.registration.notifications.client-secret
+      # The key it signs a Cart reminder's unsubscribe link with.
+      - source: notifications-unsubscribe-key
+        target: ecomm.notifications.unsubscribe.key
     # It only consumes, so it waits for the topics but not for their schemas.
     depends_on:
       kafka-topics: { condition: service_completed_successfully }
@@ -881,6 +884,8 @@ secrets:
     file: ../../.secrets/${COMPOSE_PROJECT_NAME}/orchestration-client-secret
   notifications-client-secret:
     file: ../../.secrets/${COMPOSE_PROJECT_NAME}/notifications-client-secret
+  notifications-unsubscribe-key:
+    file: ../../.secrets/${COMPOSE_PROJECT_NAME}/notifications-unsubscribe-key
   payment-webhook-secret:
     file: ../../.secrets/${COMPOSE_PROJECT_NAME}/payment-webhook-secret
   carrier-webhook-secret:

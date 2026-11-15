@@ -6,11 +6,18 @@ import static org.awaitility.Awaitility.await;
 
 import com.ecomm.commons.events.EventBackbone;
 import com.ecomm.commons.security.FakeKeycloak;
+import com.ecomm.notifications.application.port.out.NotificationProvider;
+import com.ecomm.notifications.domain.NotificationChannel;
+import com.ecomm.notifications.domain.Recipient;
+import com.ecomm.notifications.domain.RenderedMessage;
+import com.ecomm.notifications.domain.SendOutcome;
 import jakarta.mail.Message;
 import jakarta.mail.Multipart;
 import jakarta.mail.Part;
 import jakarta.mail.internet.InternetAddress;
 import java.time.Duration;
+import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,9 +31,10 @@ import org.springframework.test.web.servlet.client.RestTestClient;
 /**
  * Email over SMTP, to a GreenMail container: a paid Order's confirmation arrives with its subject,
  * its text and HTML bodies and the Customer as its recipient; an address no server could take fails
- * the Notification at once; and a server that stops answering is a transient failure, tried six
- * times, then {@code FAILED}. GreenMail takes every recipient, so it can't refuse one with an SMTP
- * reply code. SMTP calls time out after a second here, so a stalled server fails quickly.
+ * the Notification at once; a message with an unsubscribe link carries RFC 8058's one-click
+ * headers; and a server that stops answering is a transient failure, tried six times, then {@code
+ * FAILED}. GreenMail takes every recipient, so it can't refuse one with an SMTP reply code. SMTP
+ * calls time out after a second here, so a stalled server fails quickly.
  */
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
@@ -35,7 +43,8 @@ import org.springframework.test.web.servlet.client.RestTestClient;
       "ecomm.notifications.dispatch.first-retry-after=20ms",
       "spring.mail.properties.mail.smtp.connectiontimeout=1000",
       "spring.mail.properties.mail.smtp.timeout=1000",
-      "spring.mail.properties.mail.smtp.writetimeout=1000"
+      "spring.mail.properties.mail.smtp.writetimeout=1000",
+      "ecomm.notifications.unsubscribe.key=" + NotificationsApiTest.UNSUBSCRIBE_KEY
     })
 @AutoConfigureRestTestClient
 class EmailDeliveryTest {
@@ -53,6 +62,7 @@ class EmailDeliveryTest {
   }
 
   @Autowired RestTestClient http;
+  @Autowired List<NotificationProvider> providers;
   NotificationsClient notifications;
 
   @BeforeEach
@@ -81,8 +91,32 @@ class EmailDeliveryTest {
         .containsExactly(new InternetAddress("orders@ecomm.local", "Ecomm"));
     assertThat(part(message, "text/plain")).contains("Hello Ada,").contains("Total: €54.99");
     assertThat(part(message, "text/html")).contains("<strong>€54.99</strong>");
+    assertThat(message.getHeader("List-Unsubscribe")).isNull();
     var notification = notifications.awaitSettled(NotificationsApiTest.STAFF, order.orderId());
     assertThat(notification.status()).isEqualTo("SENT");
+  }
+
+  @Test
+  void aMessageWithAnUnsubscribeLinkOffersRfc8058sOneClickUnsubscribe() throws Exception {
+    var address = "ada-" + UUID.randomUUID() + "@example.com";
+    var link = "http://localhost:8080/api/notifications/unsubscribe/cart-reminders?token=abc.def";
+    var email =
+        providers.stream().filter(p -> p.channel() == NotificationChannel.EMAIL).findFirst().get();
+
+    var outcome =
+        email.send(
+            new Recipient("customer-1", address, "Ada", "Lovelace", Locale.ENGLISH),
+            new RenderedMessage("You left something in your Cart", "<p>Hi</p>", "Hi", link));
+
+    assertThat(outcome).isInstanceOf(SendOutcome.Sent.class);
+    var message =
+        await()
+            .atMost(Duration.ofSeconds(20))
+            .until(() -> GreenMail.inbox(address), l -> !l.isEmpty())
+            .getFirst();
+    assertThat(message.getHeader("List-Unsubscribe")).containsExactly("<" + link + ">");
+    assertThat(message.getHeader("List-Unsubscribe-Post"))
+        .containsExactly("List-Unsubscribe=One-Click");
   }
 
   @Test

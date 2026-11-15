@@ -78,6 +78,9 @@ write orchestration-client-secret "$(random)"
 write notifications-client-secret "$(random)"
 write payment-webhook-secret "$(random)"
 write carrier-webhook-secret "$(random)"
+# The key Notifications signs a Cart reminder's unsubscribe link with. A new one only spoils the
+# links already sent, whose page then says to sign in instead.
+write notifications-unsubscribe-key "$(random)"
 
 # The Support Assistant's Anthropic API key can't be generated: it is written empty, which runs the
 # mock provider, and a key written into it by hand is kept, as every secret is.

@@ -120,12 +120,14 @@ public class DispatchService implements DispatchUseCase {
       }
       var locale = templates.localeFor(recipient.locale());
       var message =
-          channel.fit(
-              templates.render(
-                  notification.type(),
-                  channel,
-                  locale,
-                  Messages.model(notification.content(), recipient, locale)));
+          channel
+              .fit(
+                  templates.render(
+                      notification.type(),
+                      channel,
+                      locale,
+                      Messages.model(notification.content(), recipient, locale)))
+              .withUnsubscribeUrl(notification.content().unsubscribeUrl());
       switch (providers.get(channel).send(recipient, message)) {
         case SendOutcome.Sent sent -> notification.sent(now, recipient, message, sent.reference());
         case SendOutcome.Failed failed ->

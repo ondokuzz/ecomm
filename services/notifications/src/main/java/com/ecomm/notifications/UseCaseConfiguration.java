@@ -11,6 +11,7 @@ import com.ecomm.notifications.application.ProductNamesService;
 import com.ecomm.notifications.application.RmaEventsService;
 import com.ecomm.notifications.application.ShipmentEventsService;
 import com.ecomm.notifications.application.TemplatesService;
+import com.ecomm.notifications.application.UnsubscribeService;
 import com.ecomm.notifications.application.port.in.CartEventsUseCase;
 import com.ecomm.notifications.application.port.in.DispatchUseCase;
 import com.ecomm.notifications.application.port.in.MockProviderReadsUseCase;
@@ -22,6 +23,8 @@ import com.ecomm.notifications.application.port.in.ProductNamesUseCase;
 import com.ecomm.notifications.application.port.in.RmaEventsUseCase;
 import com.ecomm.notifications.application.port.in.ShipmentEventsUseCase;
 import com.ecomm.notifications.application.port.in.TemplatesUseCase;
+import com.ecomm.notifications.application.port.in.UnsubscribeUseCase;
+import com.ecomm.notifications.application.port.out.CartReminderCounter;
 import com.ecomm.notifications.application.port.out.Carts;
 import com.ecomm.notifications.application.port.out.CustomerDirectory;
 import com.ecomm.notifications.application.port.out.ListedProducts;
@@ -35,6 +38,7 @@ import com.ecomm.notifications.application.port.out.ReturnAddresses;
 import com.ecomm.notifications.application.port.out.TimeSource;
 import com.ecomm.notifications.application.port.out.Transactions;
 import com.ecomm.notifications.domain.RetryPolicy;
+import com.ecomm.notifications.domain.UnsubscribeTokens;
 import java.time.Duration;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
@@ -88,7 +92,8 @@ class UseCaseConfiguration {
 
   /**
    * Cart reminders, linking to the Cart on the Storefront at {@code
-   * ecomm.notifications.storefront-url}.
+   * ecomm.notifications.storefront-url}, and to {@code ecomm.notifications.unsubscribe.url} with a
+   * token signed by {@code ecomm.notifications.unsubscribe.key}.
    */
   @Bean
   CartEventsUseCase cartEventsUseCase(
@@ -98,8 +103,11 @@ class UseCaseConfiguration {
       ProductNames products,
       ListedProducts listings,
       @Value("${ecomm.notifications.storefront-url}") String storefrontUrl,
+      UnsubscribeTokens tokens,
+      @Value("${ecomm.notifications.unsubscribe.url}") String unsubscribeUrl,
       Transactions transactions,
-      TimeSource time) {
+      TimeSource time,
+      CartReminderCounter counter) {
     return new CartEventsService(
         notifications,
         preferences,
@@ -107,8 +115,23 @@ class UseCaseConfiguration {
         products,
         listings,
         storefrontUrl + "/cart",
+        tokens,
+        unsubscribeUrl,
         transactions,
-        time);
+        time,
+        counter);
+  }
+
+  /** Signed with the secret {@code notifications-unsubscribe-key} (ADR 0011). */
+  @Bean
+  UnsubscribeTokens unsubscribeTokens(@Value("${ecomm.notifications.unsubscribe.key}") String key) {
+    return new UnsubscribeTokens(key);
+  }
+
+  @Bean
+  UnsubscribeUseCase unsubscribeUseCase(
+      UnsubscribeTokens tokens, NotificationPreferencesStore preferences, TimeSource time) {
+    return new UnsubscribeService(tokens, preferences, time);
   }
 
   @Bean

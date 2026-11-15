@@ -36,16 +36,23 @@ Two webhooks are routed without a token, since their senders call from outside a
 checks the webhook's signature itself: Payment's `POST /webhooks/gateway`, from the payment gateway,
 and Fulfillment & Shipping's `POST /webhooks/carrier`, from the Carrier.
 
+One signed link is routed without a token too, since a Customer opens it from an email, or their
+mail client posts to it, without signing in, and the service checks the link's signed token
+itself: Notifications' `GET` and `POST /unsubscribe/cart-reminders`, a Cart reminder's unsubscribe
+link ([Notifications](../../services/notifications/README.md#unsubscribing)).
+
 The table lives in [`application.yml`](./src/main/resources/application.yml) under
 `ecomm.gateway.services`, and routing and edge security are both built from it (`EdgeRoutes`), so
-they can't disagree. Adding a service is one entry: its `uri`, and any `public-reads`, `internal`
-and `webhooks` paths, written as the service's own paths. An `internal` or `webhooks` entry is a
+they can't disagree. Adding a service is one entry: its `uri`, and any `public-reads`, `internal`,
+`webhooks` and `signed-links` paths, written as the service's own paths. An `internal`, `webhooks`
+or `signed-links` entry is a
 path pattern, for every method, or a method and a pattern. `application-docker.yml` points each `uri` at the compose
 network; outside Docker they are the services' dev host ports.
 
 - **Public reads** pass without a token. A token that is sent is still checked, and forwarded.
 - **Webhooks** pass without a token too, for the method and path listed only: the service
   authenticates them itself.
+- **Signed links** pass alike: the service checks the token the link carries.
 - **Everything else routed** needs a valid `ecomm` token: the same JWT validation as every
   service, from `service-commons`. Without one the gateway answers a 401 problem detail and the
   service never sees the request. `Authorization` is forwarded unchanged, so the service checks
@@ -90,7 +97,7 @@ HTTP-seam tests start the gateway with one WireMock server standing in for every
 
 - `RoutingApiTest`: each service is reached with the prefix stripped; internal and unknown
   endpoints are 404s that never reach the stub; no CORS headers.
-- `EdgeAuthenticationApiTest`: public reads and Payment's webhook pass without a token; every other route is a 401
+- `EdgeAuthenticationApiTest`: public reads, the webhooks and Notifications' unsubscribe link pass without a token, for their own methods and paths only; every other route is a 401
   without a valid one and never reaches the stub; `Authorization` is forwarded untouched.
 - `CorrelationIdApiTest`: a valid incoming ID is kept and a malformed one replaced, on both the
   forwarded request and the response; the access log line.

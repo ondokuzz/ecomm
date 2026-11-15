@@ -119,6 +119,13 @@ Content-Type: application/json
 POST {{gateway}}/api/notifications/templates/CART_ABANDONED/EMAIL/preview
 Authorization: Bearer {{staffToken}}
 
+### A Cart reminder's unsubscribe link, as a mail client's one-click posts to it: no token needed.
+### Paste the token from a reminder in Mailpit; this one is made up, so it answers the 400 page
+POST {{gateway}}/api/notifications/unsubscribe/cart-reminders?token=made-up.token
+Content-Type: application/x-www-form-urlencoded
+
+List-Unsubscribe=One-Click
+
 ### Back to email only, with no cart reminders: left out, they are off
 PUT {{notifications}}/preferences/me
 Authorization: Bearer {{customerToken}}

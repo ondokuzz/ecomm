@@ -4,7 +4,8 @@ spring:
 
 # The routed services, at /api/<name>/**. The URIs are the services' dev host ports;
 # application-docker.yml points them at the compose network. Every other method and path under a
-# service's prefix needs a token, except its public reads and webhooks; internal endpoints get a 404.
+# service's prefix needs a token, except its public reads, webhooks and signed links; internal
+# endpoints get a 404.
 ecomm:
   gateway:
     services:
@@ -71,6 +72,9 @@ ecomm:
         # Staff read the Notification ledger and the mock SMS and push providers, and preview the
         # Message templates; a Customer reads their own Notifications and saves their Notification
         # preferences. Nothing is internal.
+        # A Cart reminder's unsubscribe link: the Customer opens it, and their mail client posts to
+        # it, without signing in; Notifications checks its signed token.
+        signed-links: [GET /unsubscribe/cart-reminders, POST /unsubscribe/cart-reminders]
       support-assistant:
         uri: http://localhost:8102
         # A Customer's Conversations with the Support Assistant. Nothing is internal.

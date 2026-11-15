@@ -31,7 +31,8 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
     properties = {
       "ecomm.notifications.email.smtp.enabled=false",
       "ecomm.notifications.dispatch.poll-every=50ms",
-      "ecomm.notifications.dispatch.first-retry-after=20ms"
+      "ecomm.notifications.dispatch.first-retry-after=20ms",
+      "ecomm.notifications.unsubscribe.key=" + NotificationsApiTest.UNSUBSCRIBE_KEY
     })
 @AutoConfigureRestTestClient
 @Import(TestEmailProvider.class)
@@ -62,6 +63,9 @@ abstract class NotificationsApiTest {
     registry.add("spring.datasource.username", POSTGRES::getUsername);
     registry.add("spring.datasource.password", POSTGRES::getPassword);
   }
+
+  /** What the secret notifications-unsubscribe-key holds in these tests. */
+  static final String UNSUBSCRIBE_KEY = "test-unsubscribe-key";
 
   static final String STAFF = FakeKeycloak.token("staff-7", "STAFF");
 

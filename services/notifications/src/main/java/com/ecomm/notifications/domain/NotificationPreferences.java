@@ -54,6 +54,11 @@ public record NotificationPreferences(
     return new NotificationPreferences(customerId, number, sms, push, cartReminders, now);
   }
 
+  /** These, with cart reminders off as of {@code now}: what their unsubscribe link does. */
+  public NotificationPreferences withoutCartReminders(Instant now) {
+    return new NotificationPreferences(customerId, phoneNumber, sms, push, false, now);
+  }
+
   /** Email always; SMS and push when on and {@code type} goes on them. */
   public Set<NotificationChannel> channelsFor(MessageType type) {
     var channels = EnumSet.of(NotificationChannel.EMAIL);

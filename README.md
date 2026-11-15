@@ -204,7 +204,9 @@ dashboards, under **ecomm**, are files in [`infra/docker/grafana`](./infra/docke
 - **Services:** request rate, 5xx rate and p95 latency per service, request rate per route,
   each Postgres service's outbox events not yet sent to Kafka (Catalog's Couchbase outbox isn't
   measured), Inventory's Stock cache: its hit ratio, and its hits, misses and Redis errors, and
-  Cart's Abandoned Carts, per hour; and a Support Assistant row: its tokens per hour by kind,
+  Cart's Abandoned Carts and, beside them, what came of each in Notifications: a Cart reminder sent,
+  or skipped because the Customer hadn't opted in, the Cart changed, or it was empty or held nothing
+  still sold, per hour; and a Support Assistant row: its tokens per hour by kind,
   Claude's errors by kind, its turns' p95 duration and rate by how they ended, its circuit
   breaker's state, and the messages and turns refused by its limits
   ([its README](./services/ai-support-assistant/README.md#logs-and-metrics)).
@@ -224,7 +226,7 @@ dashboards, under **ecomm**, are files in [`infra/docker/grafana`](./infra/docke
 
 A panel plotting `rate()` or `increase()` counts a series only from its second sample, so a
 counter has to be on `/actuator/prometheus` at 0 before its first count, or that count is missed.
-Orchestration's checkout counters, Inventory's Stock cache counters, Cart's `cart_abandoned_total` and the Support Assistant's are. Some can't be, since
+Orchestration's checkout counters, Inventory's Stock cache counters, Cart's `cart_abandoned_total`, Notifications' `notifications_cart_reminders_total` and the Support Assistant's are. Some can't be, since
 what they are tagged with is known only when they count, so their panels miss the first count of
 each new series after a service starts: **Retries** (per group and topic), the **5xx rate** and
 **request rate per route** (per route and status), and Temporal's own **activity failures** and
@@ -369,13 +371,14 @@ properties, through its config tree ([ADR 0011](./docs/adr/0011-secrets-as-gener
 | `checkout-client-secret`, `orchestration-client-secret`, `notifications-client-secret` | The confidential Keycloak clients and the services that use them; realm sync sets each client's secret from its file on every start ([Identity & Access](./services/identity-access/README.md#client-secrets)) |
 | `payment-webhook-secret` | Payment, and its mock gateway, which signs its webhooks with it |
 | `carrier-webhook-secret` | Fulfillment & Shipping, and its mock carrier, which signs its Carrier webhooks with it |
+| `notifications-unsubscribe-key` | Notifications, which signs a Cart reminder's unsubscribe link with it and checks the link by it; a new one only makes the links already sent say to sign in instead ([its README](./services/notifications/README.md#unsubscribing)) |
 | `anthropic-api-key` | The AI Support Assistant's Anthropic API key: written empty, which runs its mock provider; a key written into it runs Claude ([its README](./services/ai-support-assistant/README.md#claude)). `ANTHROPIC_API_KEY_FILE`, an absolute path, mounts another file in its place, such as an empty one for the Playwright suites |
 
 A new secret is 32 random bytes, URL-safe, except `anthropic-api-key`, which can't be generated
 and is written empty. An existing file is never overwritten. On a stack whose
 volumes were made before Sprint 5, the infrastructure passwords are written with the dev values
 they were made with (`ecomm`, `password` and `admin`), since Postgres, Couchbase and Keycloak keep
-the password they started with; the client and webhook secrets are new on every stack. So never
+the password they started with; the client and webhook secrets and the unsubscribe key are new on every stack. So never
 delete an infrastructure password's file while the stack's volumes exist: `make secrets` would write
 the old dev value back, which a stack made since doesn't have.
 `docker compose --profile '*' down -v` removes the volumes but not `.secrets/`, and a fresh stack
@@ -384,7 +387,7 @@ starts with the passwords that are there.
 The demo Customer's and the Staff user's passwords and the public `dev-cli` client stay in the
 realm file: they are demo data for trying the stack and for the tests, not secrets.
 
-Rotation is by hand. A client or webhook secret: delete its file, run `make secrets`, and recreate
+Rotation is by hand. A client or webhook secret, or the unsubscribe key: delete its file, run `make secrets`, and recreate
 what reads it, e.g. for Checkout's client:
 
 ```sh
@@ -432,6 +435,7 @@ d=.secrets/ecomm; printf '{"dev": {"checkoutClientSecret": "%s", "orchestrationC
 | `make reviews-rebuild` | Rebuild Reviews' projection of Orders and Products from the topics, keeping the reviews ([Reviews & Ratings](./services/reviews-ratings/README.md#rebuilding)) |
 | `make recommendations-rebuild` | Rebuild Recommendations' projection of Orders, Products, Categories and Stock from the topics ([Recommendations](./services/recommendations/README.md#rebuilding)) |
 | `make recommendations-report` | Print the share of the Catalog's Products with at least one Recommendation and with four, in all and by reason ([Recommendations](./services/recommendations/README.md#measuring-it)) |
+| `make cart-reminders-report` | Print how many Cart reminders were sent, and how many were followed by the Customer paying an Order within `DAYS` (7) days ([Notifications](./services/notifications/README.md#measuring-them)) |
 | `make fulfillment-rebuild` | Rebuild Fulfillment & Shipping's Product projection from `catalog.product`, keeping the Shipments ([Fulfillment & Shipping](./services/fulfillment-shipping/README.md#shipments)) |
 | `make returns-rebuild` | Rebuild Returns & Warranty's projections of Shipments, Products and Orders from the topics, keeping the RMAs ([Returns & Warranty](./services/returns-warranty/README.md#rebuilding)) |
 | `make notifications-rebuild` | Rebuild Notifications' projection of Product names from `catalog.product`, keeping the Notification ledger and sending nothing again ([Notifications](./services/notifications/README.md#the-events-it-consumes)) |

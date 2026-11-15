@@ -505,6 +505,61 @@
       "interval": "1h"
     },
     {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Cart reminders",
+      "description": "What came of each Abandoned Cart in Notifications, beside the Carts abandoned: a Cart reminder sent (recorded for the dispatcher to send), or skipped because the Customer hasn't turned cart reminders on, the Cart changed since it was abandoned, or it is gone, empty or holds nothing still sold. How many reminded Customers paid afterwards is make cart-reminders-report's. Each bar is an hour's.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 34,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            },
+            "drawStyle": "bars"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "sum"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (outcome) (increase(notifications_cart_reminders_total[1h]))",
+          "legendFormat": "{{outcome}}"
+        }
+      ],
+      "interval": "1h"
+    },
+    {
       "id": 100,
       "type": "row",
       "title": "Support Assistant",
