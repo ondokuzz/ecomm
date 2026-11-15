@@ -331,6 +331,13 @@ out; `npx playwright test --workers=1` loads the stack less, and is how both sui
 seconds for its Order page, since on a loaded stack a Pay has taken 15, and the Storefront itself
 confirms one for up to two minutes.
 
+The Storefront's cart-reminder test needs Cart to abandon a Cart within the test, so it runs only
+where `CART_ABANDONED_AFTER` is set, as `make e2e` and CI set it, to `1m`, with
+`CART_ABANDONMENT_SWEEP` at `10s`; Compose starts Cart with the same variables. Against a stack
+started with Cart's defaults it is reported skipped. To run it against the default stack, start it
+with `CART_ABANDONED_AFTER=1m CART_ABANDONMENT_SWEEP=10s make up` and run the suite with
+`CART_ABANDONED_AFTER=1m` too.
+
 `make e2e` runs both suites, the Storefront's and then the Admin Console's, one worker each, against
 a stack of their own: the `ecomm-e2e` Compose project, on fresh volumes and with its own secrets in
 `.secrets/ecomm-e2e/`, both removed after. Each run so starts on the seed, as in CI, and the
@@ -403,9 +410,9 @@ The `.http` files' client and webhook secrets come from the IntelliJ HTTP client
 environment. Write it, git-ignored, at the repo root:
 
 ```sh
-d=.secrets/ecomm; printf '{"dev": {"checkoutClientSecret": "%s", "orchestrationClientSecret": "%s", "paymentWebhookSecret": "%s", "carrierWebhookSecret": "%s"}}\n' \
-  "$(cat $d/checkout-client-secret)" "$(cat $d/orchestration-client-secret)" "$(cat $d/payment-webhook-secret)" \
-  "$(cat $d/carrier-webhook-secret)" \
+d=.secrets/ecomm; printf '{"dev": {"checkoutClientSecret": "%s", "orchestrationClientSecret": "%s", "notificationsClientSecret": "%s", "paymentWebhookSecret": "%s", "carrierWebhookSecret": "%s"}}\n' \
+  "$(cat $d/checkout-client-secret)" "$(cat $d/orchestration-client-secret)" "$(cat $d/notifications-client-secret)" \
+  "$(cat $d/payment-webhook-secret)" "$(cat $d/carrier-webhook-secret)" \
   > http-client.private.env.json
 ```
 

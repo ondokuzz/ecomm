@@ -108,7 +108,7 @@
     {
       "clientId": "notifications",
       "name": "Notifications service",
-      "description": "Client credentials for Notifications' reads of Customers through the admin API, as realm-management's view-users, and of Warehouses' return addresses, as NOTIFICATIONS. Its secret is set from the stack's secrets on every start, by realm sync.",
+      "description": "Client credentials for Notifications' reads of Customers through the admin API, as realm-management's view-users, and of Warehouses' return addresses and Customers' Carts, as NOTIFICATIONS. Its secret is set from the stack's secrets on every start, by realm sync.",
       "enabled": true,
       "publicClient": false,
       "clientAuthenticatorType": "client-secret",

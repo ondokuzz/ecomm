@@ -14,5 +14,6 @@ public interface PreferencesUseCase {
    * @throws NotificationPreferences.InvalidPhoneNumberException for a mobile number that isn't
    *     E.164, or SMS on without one
    */
-  NotificationPreferences save(String customerId, String phoneNumber, boolean sms, boolean push);
+  NotificationPreferences save(
+      String customerId, String phoneNumber, boolean sms, boolean push, boolean cartReminders);
 }

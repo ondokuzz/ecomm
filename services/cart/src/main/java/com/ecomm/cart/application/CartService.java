@@ -1,6 +1,7 @@
 package com.ecomm.cart.application;
 
 import com.ecomm.cart.application.port.in.ClearCartUseCase;
+import com.ecomm.cart.application.port.in.ReadNamedCartUseCase;
 import com.ecomm.cart.application.port.in.RemoveFromCartUseCase;
 import com.ecomm.cart.application.port.in.SetQuantityUseCase;
 import com.ecomm.cart.application.port.in.ViewCartUseCase;
@@ -8,9 +9,15 @@ import com.ecomm.cart.application.port.out.CartRepository;
 import com.ecomm.cart.application.port.out.TimeSource;
 import com.ecomm.cart.domain.Cart;
 import com.ecomm.cart.domain.CartItem;
+import com.ecomm.cart.domain.ChangedCart;
+import java.util.Optional;
 
 public class CartService
-    implements ViewCartUseCase, SetQuantityUseCase, RemoveFromCartUseCase, ClearCartUseCase {
+    implements ViewCartUseCase,
+        SetQuantityUseCase,
+        RemoveFromCartUseCase,
+        ClearCartUseCase,
+        ReadNamedCartUseCase {
 
   private final CartRepository carts;
   private final TimeSource time;
@@ -23,6 +30,11 @@ public class CartService
   @Override
   public Cart cart(String customerId) {
     return carts.find(customerId);
+  }
+
+  @Override
+  public Optional<ChangedCart> cartOf(String customerId) {
+    return carts.findWithLastChange(customerId);
   }
 
   @Override

@@ -18,8 +18,8 @@ ecomm:
         internal: [/stock/decrement, /reservations/**]
       cart:
         uri: http://localhost:8083
-        # Only Orchestration clears a named Customer's Cart.
-        internal: [/carts/**]
+        # Only Orchestration clears a named Customer's Cart, and only Notifications reads one.
+        internal: [/carts/**, /internal/**]
       checkout-pricing:
         uri: http://localhost:8086
         # Only Orchestration ends a named Customer's Checkout Session.

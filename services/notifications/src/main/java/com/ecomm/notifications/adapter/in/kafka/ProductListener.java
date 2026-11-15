@@ -1,8 +1,10 @@
 package com.ecomm.notifications.adapter.in.kafka;
 
+import com.ecomm.commons.money.Money;
 import com.ecomm.notifications.application.port.in.ProductNamesUseCase;
 import com.ecomm.notifications.application.port.in.ProductNamesUseCase.ProductPublished;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +24,7 @@ class ProductListener {
 
   /** The fields of a {@code catalog.product} event Notifications needs. */
   record ProductEvent(
+      @JsonProperty(required = true) Instant occurredAt,
       @JsonProperty(required = true) String sku,
       @JsonProperty(required = true) long version,
       @JsonProperty(required = true) Product product) {
@@ -31,7 +34,12 @@ class ProductListener {
 
     record Variant(
         @JsonProperty(required = true) String variantId,
-        @JsonProperty(required = true) LinkedHashMap<String, String> axisValues) {}
+        @JsonProperty(required = true) LinkedHashMap<String, String> axisValues,
+        @JsonProperty(required = true) Price price) {}
+
+    record Price(
+        @JsonProperty(required = true) long amountMinor,
+        @JsonProperty(required = true) String currency) {}
   }
 
   private final ProductNamesUseCase products;
@@ -43,12 +51,21 @@ class ProductListener {
   @KafkaListener(topics = "catalog.product", groupId = "notifications.products")
   void on(ProductEvent event) {
     var variants = new LinkedHashMap<String, Map<String, String>>();
+    var prices = new LinkedHashMap<String, Money>();
     for (var variant : event.product().variants()) {
       variants.put(variant.variantId(), variant.axisValues());
+      prices.put(
+          variant.variantId(), Money.of(variant.price().amountMinor(), variant.price().currency()));
     }
     var applied =
         products.apply(
-            new ProductPublished(event.sku(), event.version(), event.product().name(), variants));
+            new ProductPublished(
+                event.sku(),
+                event.version(),
+                event.occurredAt(),
+                event.product().name(),
+                variants,
+                prices));
     log.info(
         "{} Product {} version {}", applied ? "Applied" : "Ignored", event.sku(), event.version());
   }

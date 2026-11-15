@@ -1,5 +1,6 @@
 package com.ecomm.notifications;
 
+import com.ecomm.notifications.application.CartEventsService;
 import com.ecomm.notifications.application.DispatchService;
 import com.ecomm.notifications.application.MockProviderReadsService;
 import com.ecomm.notifications.application.NotificationReadsService;
@@ -10,6 +11,7 @@ import com.ecomm.notifications.application.ProductNamesService;
 import com.ecomm.notifications.application.RmaEventsService;
 import com.ecomm.notifications.application.ShipmentEventsService;
 import com.ecomm.notifications.application.TemplatesService;
+import com.ecomm.notifications.application.port.in.CartEventsUseCase;
 import com.ecomm.notifications.application.port.in.DispatchUseCase;
 import com.ecomm.notifications.application.port.in.MockProviderReadsUseCase;
 import com.ecomm.notifications.application.port.in.NotificationReadsUseCase;
@@ -20,7 +22,9 @@ import com.ecomm.notifications.application.port.in.ProductNamesUseCase;
 import com.ecomm.notifications.application.port.in.RmaEventsUseCase;
 import com.ecomm.notifications.application.port.in.ShipmentEventsUseCase;
 import com.ecomm.notifications.application.port.in.TemplatesUseCase;
+import com.ecomm.notifications.application.port.out.Carts;
 import com.ecomm.notifications.application.port.out.CustomerDirectory;
+import com.ecomm.notifications.application.port.out.ListedProducts;
 import com.ecomm.notifications.application.port.out.MessageTemplates;
 import com.ecomm.notifications.application.port.out.MockProviderLog;
 import com.ecomm.notifications.application.port.out.NotificationPreferencesStore;
@@ -80,6 +84,31 @@ class UseCaseConfiguration {
       Transactions transactions,
       TimeSource time) {
     return new RmaEventsService(notifications, preferences, returnAddresses, transactions, time);
+  }
+
+  /**
+   * Cart reminders, linking to the Cart on the Storefront at {@code
+   * ecomm.notifications.storefront-url}.
+   */
+  @Bean
+  CartEventsUseCase cartEventsUseCase(
+      NotificationStore notifications,
+      NotificationPreferencesStore preferences,
+      Carts carts,
+      ProductNames products,
+      ListedProducts listings,
+      @Value("${ecomm.notifications.storefront-url}") String storefrontUrl,
+      Transactions transactions,
+      TimeSource time) {
+    return new CartEventsService(
+        notifications,
+        preferences,
+        carts,
+        products,
+        listings,
+        storefrontUrl + "/cart",
+        transactions,
+        time);
   }
 
   @Bean

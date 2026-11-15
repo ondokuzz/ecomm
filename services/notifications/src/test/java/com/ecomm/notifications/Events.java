@@ -16,9 +16,9 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Test-only: the events Notifications consumes, as Order Management, Catalog, Fulfillment &
- * Shipping, Payment and Returns & Warranty publish them. Each is checked against its topic's schema
- * in {@code platform/event-schemas} before it is sent, so a test can't rely on an event no producer
- * could publish.
+ * Shipping, Payment, Returns & Warranty and Cart publish them. Each is checked against its topic's
+ * schema in {@code platform/event-schemas} before it is sent, so a test can't rely on an event no
+ * producer could publish.
  */
 final class Events {
 
@@ -27,14 +27,16 @@ final class Events {
   static final String SHIPMENTS = "fulfillment-shipping.shipment";
   static final String PAYMENTS = "payment.payment";
   static final String RMAS = "returns-warranty.rma";
-  static final List<String> TOPICS = List.of(ORDERS, PRODUCTS, SHIPMENTS, PAYMENTS, RMAS);
+  static final String CARTS = "cart.cart";
+  static final List<String> TOPICS = List.of(ORDERS, PRODUCTS, SHIPMENTS, PAYMENTS, RMAS, CARTS);
   static final List<String> GROUPS =
       List.of(
           "notifications.orders",
           "notifications.products",
           "notifications.shipments",
           "notifications.payments",
-          "notifications.rmas");
+          "notifications.rmas",
+          "notifications.carts");
 
   private static final JsonMapper JSON = new JsonMapper();
   private static final JsonSchemaFactory SCHEMAS =
@@ -65,6 +67,15 @@ final class Events {
   /** A new return of one unit of the Customer's Order, not yet published. */
   static RmaEvent rma(String orderId, String customerId) {
     return new RmaEvent(orderId, customerId);
+  }
+
+  /**
+   * The Customer's Cart abandoned, last changed at {@code lastChangedAt} and holding {@code items},
+   * not yet published.
+   */
+  static CartEvent abandonedCart(
+      String customerId, Instant lastChangedAt, Map<String, Integer> items) {
+    return new CartEvent(customerId, lastChangedAt, items);
   }
 
   /** A Product with one Variant per {@code variantIds}, each with no axis values. */
@@ -190,6 +201,7 @@ final class Events {
     private final List<String> variantIds;
     private final Map<String, Map<String, String>> axisValues = new LinkedHashMap<>();
     private long version = 1;
+    private long priceMinor = 1000;
 
     private ProductEvent(String sku, String name, List<String> variantIds) {
       this.sku = sku;
@@ -199,6 +211,12 @@ final class Events {
 
     ProductEvent version(long version) {
       this.version = version;
+      return this;
+    }
+
+    /** Every Variant's Price, in euros' Minor unit; {@code 1000} unless given. */
+    ProductEvent price(long amountMinor) {
+      this.priceMinor = amountMinor;
       return this;
     }
 
@@ -225,7 +243,7 @@ final class Events {
                           "axisValues",
                           axisValues.getOrDefault(id, Map.of()),
                           "price",
-                          Map.of("amountMinor", 1000, "currency", "EUR"),
+                          Map.of("amountMinor", priceMinor, "currency", "EUR"),
                           "images",
                           List.of()))
               .toList());
@@ -564,6 +582,35 @@ final class Events {
       lastEvent.put("change", change);
       lastEvent.put("rma", rma);
       send(RMAS, rmaId, lastEvent);
+      return this;
+    }
+  }
+
+  static final class CartEvent {
+    private final Map<String, Object> event = new LinkedHashMap<>();
+    private final String customerId;
+
+    private CartEvent(String customerId, Instant lastChangedAt, Map<String, Integer> items) {
+      this.customerId = customerId;
+      event.put("eventId", UUID.randomUUID().toString());
+      event.put("occurredAt", Instant.now().toString());
+      event.put("customerId", customerId);
+      event.put("version", lastChangedAt.toEpochMilli());
+      event.put("change", "ABANDONED");
+      event.put(
+          "cart",
+          Map.of(
+              "items",
+              items.entrySet().stream()
+                  .map(e -> Map.of("variantId", e.getKey(), "quantity", e.getValue()))
+                  .toList(),
+              "lastChangedAt",
+              lastChangedAt.toString()));
+    }
+
+    /** Publishes it; again, the same event ID included, for a redelivery. */
+    CartEvent publish() {
+      send(CARTS, customerId, event);
       return this;
     }
   }

@@ -18,7 +18,7 @@ import {
 /**
  * `/notification-preferences`: how the Customer hears about their Orders. Email always; text messages
  * to a mobile number, and push, when they turn them on, for their Orders shipping and arriving,
- * replacements shipping, and Refunds.
+ * replacements shipping, and Refunds; and, as marketing they must turn on, cart reminders by email.
  */
 export function NotificationPreferencesPage() {
   const preferences = usePreferences()
@@ -123,6 +123,23 @@ function PreferencesEditor({ saved }: { saved: Preferences }) {
           <span>
             <strong>Push notifications</strong>
             <small className="muted">On your devices.</small>
+          </span>
+        </label>
+
+        <h2 className="preferences-heading">Marketing</h2>
+        <label className="preference">
+          <input
+            type="checkbox"
+            role="switch"
+            checked={form.cartReminders}
+            onChange={(event) => update({ cartReminders: event.target.checked })}
+          />
+          <span>
+            <strong>Cart reminders</strong>
+            <small className="muted">
+              Marketing: an email about items you left in your cart, a day after, with today's prices. Off until you
+              turn it on.
+            </small>
           </span>
         </label>
 

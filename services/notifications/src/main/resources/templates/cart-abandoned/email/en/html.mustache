@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>You left something in your Cart</title></head>
+<body style="font-family: Helvetica, Arial, sans-serif; color: #1f2937; line-height: 1.5;">
+  <p>Hello {{customer.givenName}},</p>
+  <p>You left these in your Cart:</p>
+  <ul>
+    {{#lines}}
+    <li>{{quantity}} × {{name}}: {{price}} each{{#outOfStock}}, <strong>out of Stock for now</strong>{{/outOfStock}}{{#priceChanged}}, <strong>its Price has changed</strong>{{/priceChanged}}</li>
+    {{/lines}}
+  </ul>
+  <p><a href="{{cartUrl}}">Your Cart</a> is still there, with today's Prices.</p>
+  <p style="font-size: 0.875em; color: #4b5563;">You get this email because you turned on cart reminders in your Notification preferences.</p>
+  <p>Ecomm</p>
+</body>
+</html>

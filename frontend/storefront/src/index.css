@@ -3426,6 +3426,10 @@ main {
   display: grid;
   gap: var(--space-1);
 }
+.preferences-heading {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-lg);
+}
 .preferences-form .field-error {
   margin-top: calc(-1 * var(--space-3));
   margin-left: calc(1.25rem + var(--space-3));

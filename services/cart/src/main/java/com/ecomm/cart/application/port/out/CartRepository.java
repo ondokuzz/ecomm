@@ -3,8 +3,10 @@ package com.ecomm.cart.application.port.out;
 import com.ecomm.cart.domain.AbandonedCart;
 import com.ecomm.cart.domain.Cart;
 import com.ecomm.cart.domain.CartItem;
+import com.ecomm.cart.domain.ChangedCart;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Every change to a Cart keeps it for another {@code Cart.LIFETIME}, records when it was made, and
@@ -14,6 +16,12 @@ public interface CartRepository {
 
   /** The Customer's Cart; empty if they have none or it has expired. */
   Cart find(String customerId);
+
+  /**
+   * The Customer's Cart with when it last changed, whether or not it has been marked abandoned
+   * since; empty if they have none, or it has expired.
+   */
+  Optional<ChangedCart> findWithLastChange(String customerId);
 
   /**
    * Sets the item's Variant to its quantity in the Customer's Cart, creating the Cart if need be.

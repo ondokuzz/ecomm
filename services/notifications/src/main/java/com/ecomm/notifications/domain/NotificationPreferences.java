@@ -6,20 +6,27 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * A Customer's Notification preferences: which channels besides email their messages go on. Email
- * is always on, since every message is about their own Orders, Payments and RMAs. SMS is off until
- * they save a mobile number in E.164 form and turn it on; push is off until they turn it on. {@code
- * updatedAt} is {@code null} for a Customer who never saved theirs.
+ * A Customer's Notification preferences: which channels besides email their messages go on, and
+ * whether they want cart reminders. Email is always on for the messages about their own Orders,
+ * Payments and RMAs. SMS is off until they save a mobile number in E.164 form and turn it on; push
+ * is off until they turn it on. Cart reminders are marketing, so they are off until the Customer
+ * turns them on: their consent, which decides whether one is recorded at all. {@code updatedAt} is
+ * {@code null} for a Customer who never saved theirs.
  */
 public record NotificationPreferences(
-    String customerId, String phoneNumber, boolean sms, boolean push, Instant updatedAt) {
+    String customerId,
+    String phoneNumber,
+    boolean sms,
+    boolean push,
+    boolean cartReminders,
+    Instant updatedAt) {
 
   /** E.164: a plus, a country code that doesn't start with 0, and at most 15 digits in all. */
   private static final Pattern E164 = Pattern.compile("\\+[1-9]\\d{1,14}");
 
   /** What a Customer who never saved theirs has: email only. */
   public static NotificationPreferences defaults(String customerId) {
-    return new NotificationPreferences(customerId, null, false, false, null);
+    return new NotificationPreferences(customerId, null, false, false, false, null);
   }
 
   /**
@@ -29,7 +36,12 @@ public record NotificationPreferences(
    * @throws InvalidPhoneNumberException for a number that isn't E.164, or SMS on without one
    */
   public static NotificationPreferences of(
-      String customerId, String phoneNumber, boolean sms, boolean push, Instant now) {
+      String customerId,
+      String phoneNumber,
+      boolean sms,
+      boolean push,
+      boolean cartReminders,
+      Instant now) {
     var number = phoneNumber == null || phoneNumber.isBlank() ? null : phoneNumber.replace(" ", "");
     if (number != null && !E164.matcher(number).matches()) {
       throw new InvalidPhoneNumberException(
@@ -39,7 +51,7 @@ public record NotificationPreferences(
     if (sms && number == null) {
       throw new InvalidPhoneNumberException("SMS needs a mobile number");
     }
-    return new NotificationPreferences(customerId, number, sms, push, now);
+    return new NotificationPreferences(customerId, number, sms, push, cartReminders, now);
   }
 
   /** Email always; SMS and push when on and {@code type} goes on them. */

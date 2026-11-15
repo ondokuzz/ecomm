@@ -1,17 +1,20 @@
 # Notifications
 
-The messages Customers get about their Orders and RMAs. Notifications consumes other contexts'
+The messages Customers get about their Orders and RMAs, and the Cart reminders they ask for. Notifications consumes other contexts'
 integration events, records a **Notification** in its ledger for each message an event triggers on
 each channel the Customer's **Notification preferences** allow, renders it from its **Message
 templates** and sends it through the **Notification channel**'s `NotificationProvider`. It keeps its
 ledger, the Notification preferences, what the mock SMS and push providers took, and a projection of
-Product names in its own Postgres database, `notifications`, and publishes no events. It reads
-Warehouses' Return addresses from Fulfillment & Shipping. Built from
+Product names and Prices in its own Postgres database, `notifications`, and publishes no events. It
+reads Warehouses' Return addresses from Fulfillment & Shipping, and a Cart reminder's Cart from Cart
+and its lines' Prices and Stock from Search & Discovery. Built from
 [`platform/service-template`](../../platform/service-template/README.md), so its layout, security
 and testing conventions apply here.
 
 It sends the Order's confirmation, its Shipment shipped and delivered, a replacement shipped, a
-Refund, and each step of an RMA.
+Refund, each step of an RMA, and, to a Customer who turned them on, a Cart reminder about an
+Abandoned Cart. That is the one Message type a Customer must opt in to, since it is marketing, and
+the one not about their own Orders, Payments or RMAs.
 
 ## What is sent
 
@@ -28,9 +31,11 @@ Refund, and each step of an RMA.
 | `RMA_RECEIVED` | The same with `change` `RECEIVED` | `EMAIL` | That its units arrived, to be inspected |
 | `RMA_CLOSED` | The same with `change` `CLOSED` | `EMAIL` | That it was closed with no Refund or replacement, and the Inspection's note (`inspection.note`) |
 | `RMA_EXPIRED` | The same with `change` `EXPIRED` | `EMAIL` | That its units didn't arrive by the Send-back deadline |
+| `CART_ABANDONED` | A `cart.cart` event with `change` `ABANDONED`, for a Customer who turned cart reminders on, whose Cart is unchanged since ([Cart reminders](#cart-reminders)) | `EMAIL` | Each line of the Cart as Cart answers it now: its quantity, Product name with axis values, Price each, whether it is out of Stock and whether its Price changed, and a link to the Storefront's `/cart`; it is about no Order |
 
-Email is always sent; SMS and push only to a Customer whose Notification preferences turn them on,
-and never an RMA's step. Nothing else triggers a message: an Order placed, cancelled, fulfilled,
+Email is always sent, but for a Cart reminder, which needs the Customer's consent; SMS and push only
+to a Customer whose Notification preferences turn them on, and never an RMA's step or a Cart
+reminder. Nothing else triggers a message: an Order placed, cancelled, fulfilled,
 shipped, delivered or returned, a Payment authorized, declined, voided or captured (a Capture is
 covered by `ORDER_SHIPPED`), a Refund declined, any other Shipment change, a replacement delivered,
 and an RMA inspected, put on hold or backfilled, `REFUNDED` (covered by `PAYMENT_REFUNDED`, which
@@ -69,11 +74,13 @@ reference and every attempt, with when it was made and what came of it.
 
 ## Notification preferences
 
-Per Customer, which channels besides email their messages go on. Email is always on, since every
-message is about their own Orders, Payments and RMAs. SMS is off until the Customer saves a mobile
-number in E.164 form (`+4915112345678`; spaces are dropped) and turns it on; push is off until they
-turn it on, and needs no device while its provider is a mock. A Customer who never saved theirs has
-email only.
+Per Customer, which channels besides email their messages go on, and whether they want Cart
+reminders. Email is always on for the messages about their own Orders, Payments and RMAs. SMS is off
+until the Customer saves a mobile number in E.164 form (`+4915112345678`; spaces are dropped) and
+turns it on; push is off until they turn it on, and needs no device while its provider is a mock.
+Cart reminders are marketing: off until the Customer turns them on, every Customer who saved theirs
+before they existed included (`V3__cart_reminders.sql`), and saved off whenever a save leaves them
+out. A Customer who never saved theirs has email only, and no Cart reminders.
 
 - **Recording** reads them in the consumer's transaction: an event's Message type is recorded on
   email, and on SMS and push when the type goes on them and the Customer turned them on.
@@ -89,7 +96,7 @@ email only.
 | `GET /templates` | Staff | Every Message type on each channel it goes on, rendered with its sample content |
 | `POST /templates/{type}/{channel}/preview` | Staff | One of them; an optional body `{"locale": "en"}` |
 | `GET /preferences/me` | Customer | Their Notification preferences |
-| `PUT /preferences/me` | Customer | Saves them: `{"phoneNumber": "+4915112345678", "sms": true, "push": false}` |
+| `PUT /preferences/me` | Customer | Saves them: `{"phoneNumber": "+4915112345678", "sms": true, "push": false, "cartReminders": true}` |
 | `GET /mock-providers/sms?customerId=` (or `push`) | Staff | What the mock SMS or push provider took for the Customer, newest first |
 
 The lists are newest first, a page at a time (`page` from 0, `size` 1 to 100, 20 by default), as
@@ -114,8 +121,9 @@ push's title, and `html` is `null` but for email. `outcome` is `SENT`, `TRANSIEN
 Notifications, and its RMA page the RMA's.
 
 Notification preferences read
-`{"email": true, "sms": true, "phoneNumber": "+4915112345678", "push": false, "updatedAt": "…"}`,
-`updatedAt` `null` until first saved. Saving needs `sms` and `push` (a 400 without them); a
+`{"email": true, "sms": true, "phoneNumber": "+4915112345678", "push": false, "cartReminders": false,
+"updatedAt": "…"}`, `updatedAt` `null` until first saved. Saving needs `sms` and `push` (a 400
+without them), and takes `cartReminders` left out as off; a
 `phoneNumber` that isn't E.164, or `sms` on without one, is a 422 with `"reason":
 "invalidPhoneNumber"`. The mock providers' reads are pages of `{"reference", "channel",
 "customerId", "to", "title", "text", "sentAt"}`, `to` masked as above and `title` push's only; `email`
@@ -195,15 +203,19 @@ Answers, a Customer it doesn't know included, are kept for 10 minutes
 | `fulfillment-shipping.shipment` | `notifications.shipments` | latest offset | The Notifications a Shipment's change triggers |
 | `payment.payment` | `notifications.payments` | latest offset | The Notifications a Refund triggers |
 | `returns-warranty.rma` | `notifications.rmas` | latest offset | The Notifications an RMA's step triggers |
-| `catalog.product` | `notifications.products` | earliest offset | A row in `product` per SKU, its name and version, and in `product_variant` each Variant's axis values |
+| `cart.cart` | `notifications.carts` | latest offset | The Cart reminder an Abandoned Cart triggers |
+| `catalog.product` | `notifications.products` | earliest offset | A row in `product` per SKU, its name and version, and in `product_variant` each Variant's axis values, Price, and when that last changed |
 
-- **Nothing from before.** `notifications.orders`, `.shipments`, `.payments` and `.rmas` read from
-  the latest offset on their first start, so nobody is told about an Order paid, a Shipment shipped,
-  a Refund made or an RMA's step taken before Notifications existed. From then on each resumes where
+- **Nothing from before.** `notifications.orders`, `.shipments`, `.payments`, `.rmas` and `.carts`
+  read from the latest offset on their first start, so nobody is told about an Order paid, a
+  Shipment shipped, a Refund made, an RMA's step taken or a Cart abandoned before the group existed. From then on each resumes where
   it left off, so what happened while Notifications was down is still told.
 - **Product names.** Order events name only Variants, so the confirmation names each line from the
   projection of `catalog.product`, kept at each Product's newest version, by Variant ID while it
-  hasn't caught up. `make notifications-rebuild` rebuilds it from the topic: it stops the service,
+  hasn't caught up. Each Variant's Price is kept too, with when it last changed: the `occurredAt` of
+  the event whose Price differed from the one held, so a rebuild gives the same. A Variant's first
+  Price is no change, and a Variant projected before Prices were kept has none until its Product's
+  next event or a rebuild. `make notifications-rebuild` rebuilds it from the topic: it stops the service,
   resets `notifications.products` to the earliest offset, empties the projection and starts it
   again. The ledger stays, and so does `notifications.orders`'s offset, so nothing is sent again.
 - An event that can't be read, or keeps failing, goes to its group's dead-letter topic, and `make
@@ -222,6 +234,33 @@ as it was then. A Warehouse it answers 404 for is sent without an address, with 
 log. If Fulfillment & Shipping doesn't answer, the event is retried, then dead-lettered to
 `notifications.rmas.dlt`; `make dlt-redrive GROUP=notifications.rmas` records it once it answers
 again.
+
+## Cart reminders
+
+A `cart.cart` `ABANDONED` event records a `CART_ABANDONED` Notification, by email alone, once per
+event ID however often it is delivered, after three checks, in order:
+
+1. **Consent.** The Customer's Notification preferences have cart reminders on; otherwise nothing,
+   and nothing is read.
+2. **The Cart is the one abandoned** (#105). The `Carts` port reads it from Cart's internal
+   `GET /internal/carts/{customerId}` (`ecomm.notifications.cart-url`) with Notifications' own
+   token, whose `NOTIFICATIONS` realm role Cart checks. A 404, a Cart gone or emptied, records
+   nothing, and so does one whose `lastChangedAt` is later than the event's: it changed since, and
+   is a candidate for its own abandonment. A 5xx, a timeout or no token retries the event, then
+   dead-letters it to `notifications.carts.dlt`.
+3. **Something in it is still sold.** Each line is named from the Product projection, and priced
+   from Search & Discovery's public `GET /products/{sku}`
+   (`ecomm.notifications.search-discovery-url`), which gives each Variant's Price and whether it is
+   in Stock. A line whose Variant the projection doesn't know, whose Product Search answers 404 for,
+   or which is gone from its Product, is left out, and a Cart left with no line records nothing. A
+   line out of Stock says so, and so does one whose Price changed, by the projection, after the
+   Cart's `lastChangedAt`. Search not answering retries the event, as Cart does.
+
+The model is the Cart as that read answered it, not the event's lines, and is kept on the
+Notification, so the email says what the Cart held when it was recorded. Cart and Search are read
+before the transaction. The link is `ecomm.notifications.storefront-url` with `/cart`, the
+browser-facing Storefront (`http://localhost:8080` locally), which asks a Customer who isn't signed
+in to sign in.
 
 ## Run it
 
@@ -246,19 +285,25 @@ SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_NOTIFICATIONS_CLIENT_SECRET="$(cat .s
 ## Tests
 
 - **The HTTP seam and the topics** (`OrderConfirmedApiTest`, `ShipmentMessagesApiTest`,
-  `RefundMessagesApiTest`, `RmaMessagesApiTest`, `PreferencesApiTest`, `LedgerApiTest`,
-  `DispatchFailuresApiTest`, `TemplatesApiTest`): events are published as Order Management,
-  Catalog, Fulfillment & Shipping, Payment and Returns & Warranty would, each checked against its
-  schema first, and the ledger is read over HTTP. Email goes to a test double of the
+  `RefundMessagesApiTest`, `RmaMessagesApiTest`, `CartRemindersApiTest`, `PreferencesApiTest`,
+  `LedgerApiTest`, `DispatchFailuresApiTest`, `TemplatesApiTest`): events are published as Order
+  Management, Catalog, Fulfillment & Shipping, Payment, Returns & Warranty and Cart would, each
+  checked against its schema first, and the ledger is read over HTTP. Email goes to a test double of the
   `NotificationProvider`; SMS and push go to the mock providers, read over HTTP as Staff read them;
-  Keycloak's token endpoint and admin API, and Fulfillment & Shipping's Warehouse read, are
-  WireMock. They cover each message's content, the same event twice recorded once, changes that
+  Keycloak's token endpoint and admin API, Fulfillment & Shipping's Warehouse read, Cart's internal
+  read and Search & Discovery's Product read are WireMock. They cover each message's content, the same event twice recorded once, changes that
   trigger nothing, the Notification preferences (defaults, saving, an invalid number, SMS without
   one), an opted-in Customer's SMS and push, and their RMA messages by email alone, each RMA step
   (the approval's Return address read with Notifications' token, read again after Fulfillment &
   Shipping failed, and left out for a Warehouse it doesn't know), `optedOut`, reads by Staff and
   owner, retries then `FAILED`, permanent failures, `noRecipient`, Keycloak down then back, and the
-  previews, every SMS within 160 characters and the approval's text as the Customer reads it.
+  previews, every SMS within 160 characters and the approval's text as the Customer reads it. Cart
+  reminders cover an opted-in Customer's email with the Cart as it is now (Prices, out of Stock, the
+  link, Cart read with Notifications' token), a Price changed since, lines no longer sold, and
+  nothing for a Cart all of whose lines are gone, a Customer who never turned them on or turned them
+  off, a Cart gone or emptied, or one changed since; the same abandonment twice is one email, and
+  never an SMS or push; and Cart failing at first. Where nothing should be recorded, a reminder to
+  another Customer published after it, on the topic's one partition, shows the first was handled.
   Postgres, Kafka and the registry run in Testcontainers.
 - **Start-up** (`TemplatesStartUpTest`): an application of its own, whose templates lack the
   confirmation's text part, refuses to start, and so does one whose shipped SMS is over 160

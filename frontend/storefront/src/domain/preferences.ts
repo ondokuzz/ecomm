@@ -1,12 +1,14 @@
 /**
  * A Customer's Notification preferences, as Notifications keeps them: email is always on; SMS needs a
- * mobile number in E.164 form; push needs nothing.
+ * mobile number in E.164 form; push needs nothing. Cart reminders are marketing, off until the
+ * Customer turns them on, and go by email only.
  */
 export interface Preferences {
   email: true
   sms: boolean
   phoneNumber: string | null
   push: boolean
+  cartReminders: boolean
   /** When they were last saved; null until the Customer first saves them. */
   updatedAt: string | null
 }
@@ -16,19 +18,26 @@ export interface PreferencesForm {
   phoneNumber: string
   sms: boolean
   push: boolean
+  cartReminders: boolean
 }
 
 export interface PreferencesRequest {
   phoneNumber: string | null
   sms: boolean
   push: boolean
+  cartReminders: boolean
 }
 
 /** E.164: a plus, a country code that doesn't start with 0, and at most 15 digits in all. */
 const e164 = /^\+[1-9]\d{1,14}$/
 
 export function preferencesFormOf(preferences: Preferences): PreferencesForm {
-  return { phoneNumber: preferences.phoneNumber ?? '', sms: preferences.sms, push: preferences.push }
+  return {
+    phoneNumber: preferences.phoneNumber ?? '',
+    sms: preferences.sms,
+    push: preferences.push,
+    cartReminders: preferences.cartReminders,
+  }
 }
 
 /** The number as Notifications takes it: spaces dropped, and a blank one none. */
@@ -51,5 +60,5 @@ export function preferencesErrorsOf(form: PreferencesForm): { phoneNumber?: stri
 }
 
 export function preferencesRequestOf(form: PreferencesForm): PreferencesRequest {
-  return { phoneNumber: phoneNumberOf(form), sms: form.sms, push: form.push }
+  return { phoneNumber: phoneNumberOf(form), sms: form.sms, push: form.push, cartReminders: form.cartReminders }
 }

@@ -13,7 +13,8 @@ public sealed interface MessageContent
         OrderDelivered,
         ReplacementShipped,
         PaymentRefunded,
-        RmaMessage {
+        RmaMessage,
+        CartAbandoned {
 
   MessageType type();
 

@@ -22,8 +22,9 @@ public class PreferencesService implements PreferencesUseCase {
 
   @Override
   public NotificationPreferences save(
-      String customerId, String phoneNumber, boolean sms, boolean push) {
-    var saved = NotificationPreferences.of(customerId, phoneNumber, sms, push, time.now());
+      String customerId, String phoneNumber, boolean sms, boolean push, boolean cartReminders) {
+    var saved =
+        NotificationPreferences.of(customerId, phoneNumber, sms, push, cartReminders, time.now());
     preferences.save(saved);
     return saved;
   }

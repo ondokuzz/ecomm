@@ -3,6 +3,7 @@ package com.ecomm.notifications.application;
 import com.ecomm.commons.events.Versions;
 import com.ecomm.notifications.application.port.in.ProductNamesUseCase;
 import com.ecomm.notifications.application.port.out.ProductNames;
+import com.ecomm.notifications.application.port.out.ProductNames.VariantPrice;
 import com.ecomm.notifications.application.port.out.Transactions;
 import java.util.LinkedHashMap;
 
@@ -22,16 +23,23 @@ public class ProductNamesService implements ProductNamesUseCase {
 
   @Override
   public boolean apply(ProductPublished event) {
-    var labels = new LinkedHashMap<String, String>();
+    var variants = new LinkedHashMap<String, VariantPrice>();
     event
         .variantAxisValues()
-        .forEach((variantId, axes) -> labels.put(variantId, String.join(", ", axes.values())));
+        .forEach(
+            (variantId, axes) ->
+                variants.put(
+                    variantId,
+                    new VariantPrice(
+                        String.join(", ", axes.values()), event.variantPrices().get(variantId))));
     return transactions.inTransaction(
         () ->
             Versions.applyIfNewer(
                 event.version(),
                 products.versionOf(event.sku()),
                 Long::longValue,
-                () -> products.save(event.sku(), event.version(), event.name(), labels)));
+                () ->
+                    products.save(
+                        event.sku(), event.version(), event.name(), variants, event.occurredAt())));
   }
 }

@@ -16,6 +16,9 @@ export COMPOSE_PROJECT_NAME=ecomm-e2e
 # The suites aim at the stack on the default ports, run `make status` against it, and expect the
 # Support Assistant's mock provider, which an empty key, as the e2e stack's is written, runs.
 unset STOREFRONT_URL ADMIN_CONSOLE_URL KEYCLOAK_URL ANTHROPIC_API_KEY_FILE
+# Cart abandons a Cart after a minute, looking every 10 seconds, so the Storefront's cart-reminder
+# test, which reads the same variable, sees its reminder within the test.
+export CART_ABANDONED_AFTER=1m CART_ABANDONMENT_SWEEP=10s
 compose_all=(docker compose --profile '*')
 logs=.scratch/e2e/compose.log
 began=$SECONDS

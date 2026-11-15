@@ -16,13 +16,19 @@ import org.springframework.test.web.servlet.client.RestTestClient;
 
 /**
  * A Customer's Notification preferences: email always on, SMS once they save an E.164 mobile number
- * and turn it on, push once they turn it on. An opted-in Customer's shipped, delivered and refunded
- * messages also go to the mock SMS and push providers, which Staff read.
+ * and turn it on, push once they turn it on, and cart reminders, marketing, off until they turn
+ * them on. An opted-in Customer's shipped, delivered and refunded messages also go to the mock SMS
+ * and push providers, which Staff read.
  */
 class PreferencesApiTest extends NotificationsApiTest {
 
   record Preferences(
-      boolean email, boolean sms, String phoneNumber, boolean push, String updatedAt) {}
+      boolean email,
+      boolean sms,
+      String phoneNumber,
+      boolean push,
+      boolean cartReminders,
+      String updatedAt) {}
 
   record Mocked(
       String reference,
@@ -39,7 +45,18 @@ class PreferencesApiTest extends NotificationsApiTest {
   void aCustomerWhoNeverSavedThemHasEmailOnly() {
     var mine = get(FakeKeycloak.token(newCustomerId(), "CUSTOMER"));
 
-    assertThat(mine).isEqualTo(new Preferences(true, false, null, false, null));
+    assertThat(mine).isEqualTo(new Preferences(true, false, null, false, false, null));
+  }
+
+  @Test
+  void aCustomerTurnsCartRemindersOnAndOff() {
+    var token = FakeKeycloak.token(newCustomerId(), "CUSTOMER");
+
+    put(token, Map.of("sms", false, "push", false, "cartReminders", true)).expectStatus().isOk();
+    assertThat(get(token).cartReminders()).isTrue();
+
+    put(token, Map.of("sms", false, "push", false)).expectStatus().isOk();
+    assertThat(get(token).cartReminders()).isFalse();
   }
 
   @Test

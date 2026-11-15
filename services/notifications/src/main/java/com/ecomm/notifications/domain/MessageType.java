@@ -11,8 +11,8 @@ import java.util.function.Supplier;
  * What a Notification says, and so the Message templates it is rendered from: one per Notification
  * channel it goes on and locale. Email is always one of them; SMS and push are for the messages a
  * Customer would want on their phone, and are sent only when their Notification preferences opt in;
- * an RMA's steps go by email alone. Each has sample content, which its templates must render at
- * start-up and which Staff preview them with.
+ * an RMA's steps go by email alone, and so does a Cart reminder, which is marketing. Each has
+ * sample content, which its templates must render at start-up and which Staff preview them with.
  */
 public enum MessageType {
   /** An Order's change to {@code PAID}: what was bought, and what was paid. */
@@ -99,7 +99,22 @@ public enum MessageType {
   /** An RMA whose units weren't received by its Send-back deadline. */
   RMA_EXPIRED(
       Samples.EMAIL,
-      () -> new RmaExpired(RmaSummary.sample("RETURN"), Instant.parse("2026-11-06T12:05:00Z")));
+      () -> new RmaExpired(RmaSummary.sample("RETURN"), Instant.parse("2026-11-06T12:05:00Z"))),
+  /**
+   * A Cart reminder: an Abandoned Cart of a Customer who turned cart reminders on, unchanged since.
+   * The first Message type a Customer must opt in to, and the first not about their own Orders,
+   * Payments or RMAs.
+   */
+  CART_ABANDONED(
+      Samples.EMAIL,
+      () ->
+          new CartAbandoned(
+              Samples.CUSTOMER_ID,
+              List.of(
+                  new RemindedLine("Google Pixel 9 (128 GB, Obsidian)", 1, eur(79900), true, false),
+                  new RemindedLine("Sony WH-1000XM5 (Black)", 2, eur(34900), true, true),
+                  new RemindedLine("JBL Flip 6 (Blue)", 1, eur(12900), false, false)),
+              "http://localhost:8080/cart"));
 
   private final Set<NotificationChannel> channels;
   private final Supplier<MessageContent> sample;

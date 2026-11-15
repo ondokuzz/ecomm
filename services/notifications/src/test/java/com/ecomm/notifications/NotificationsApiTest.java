@@ -20,8 +20,9 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * Base for HTTP-seam tests: the app runs against one Postgres container shared by every test class,
  * the shared Kafka and schema registry from {@link EventBackbone} with the topics Notifications
  * consumes and its groups' dead-letter and redrive topics, {@link FakeKeycloak} tokens, and
- * Keycloak's admin API and Fulfillment & Shipping's Warehouse read in WireMock ({@link Keycloak},
- * {@link FulfillmentShipping}). Email goes to {@link TestEmailProvider} instead of SMTP. The
+ * Keycloak's admin API, Fulfillment & Shipping's Warehouse read, Cart's internal read and Search &
+ * Discovery's Product read in WireMock ({@link Keycloak}, {@link FulfillmentShipping}, {@link
+ * Carts}, {@link SearchDiscovery}). Email goes to {@link TestEmailProvider} instead of SMTP. The
  * dispatcher looks for due Notifications every 50 ms, and retries a transient failure after 20 ms,
  * doubling, so six attempts take well under a second.
  */
@@ -55,6 +56,8 @@ abstract class NotificationsApiTest {
     EventBackbone.registerWith(registry);
     Keycloak.registerWith(registry);
     FulfillmentShipping.registerWith(registry);
+    Carts.registerWith(registry);
+    SearchDiscovery.registerWith(registry);
     registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
     registry.add("spring.datasource.username", POSTGRES::getUsername);
     registry.add("spring.datasource.password", POSTGRES::getPassword);
@@ -69,6 +72,8 @@ abstract class NotificationsApiTest {
   void resetStubs() {
     Keycloak.reset();
     FulfillmentShipping.reset();
+    Carts.reset();
+    SearchDiscovery.reset();
   }
 
   /** A new Customer's ID, as Keycloak's user IDs are. */
@@ -90,6 +95,15 @@ abstract class NotificationsApiTest {
       event.axis(variantId, axis, value);
     }
     event.publish();
+    awaitNamed(variantId, name);
+    return variantId;
+  }
+
+  /**
+   * Waits until Notifications names the Variant {@code name}: each try pays a throwaway Order for
+   * it until its confirmation does.
+   */
+  void awaitNamed(String variantId, String name) {
     var probe = newCustomerId();
     var address = "probe-" + probe + "@example.com";
     Keycloak.customer(probe, address, "Probe", "Customer");
@@ -104,7 +118,6 @@ abstract class NotificationsApiTest {
                   .until(() -> email.sentTo(address).size() > before);
               return email.sentTo(address).getLast().message().text().contains(name);
             });
-    return variantId;
   }
 
   /** A new email address, such as {@code ada-1f2e3d4c@example.com}, so tests don't share them. */

@@ -3,6 +3,7 @@ package com.ecomm.notifications.adapter.out.postgres;
 import com.ecomm.notifications.application.port.in.NotificationFilter;
 import com.ecomm.notifications.application.port.in.Page;
 import com.ecomm.notifications.application.port.out.NotificationStore;
+import com.ecomm.notifications.domain.CartAbandoned;
 import com.ecomm.notifications.domain.MessageContent;
 import com.ecomm.notifications.domain.MessageType;
 import com.ecomm.notifications.domain.Notification;
@@ -199,6 +200,7 @@ class PostgresNotificationStore implements NotificationStore {
       case RMA_RECEIVED -> RmaReceived.class;
       case RMA_CLOSED -> RmaClosed.class;
       case RMA_EXPIRED -> RmaExpired.class;
+      case CART_ABANDONED -> CartAbandoned.class;
     };
   }
 

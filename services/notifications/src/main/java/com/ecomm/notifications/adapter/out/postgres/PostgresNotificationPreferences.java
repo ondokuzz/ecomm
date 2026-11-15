@@ -27,6 +27,7 @@ class PostgresNotificationPreferences implements NotificationPreferencesStore {
                     rs.getString("phone_number"),
                     rs.getBoolean("sms"),
                     rs.getBoolean("push"),
+                    rs.getBoolean("cart_reminders"),
                     rs.getTimestamp("updated_at").toInstant()))
         .optional()
         .orElseGet(() -> NotificationPreferences.defaults(customerId));
@@ -36,15 +37,18 @@ class PostgresNotificationPreferences implements NotificationPreferencesStore {
   public void save(NotificationPreferences p) {
     jdbc.sql(
             """
-            INSERT INTO notification_preferences (customer_id, phone_number, sms, push, updated_at)
-            VALUES (:customerId, :phoneNumber, :sms, :push, :updatedAt)
+            INSERT INTO notification_preferences
+              (customer_id, phone_number, sms, push, cart_reminders, updated_at)
+            VALUES (:customerId, :phoneNumber, :sms, :push, :cartReminders, :updatedAt)
             ON CONFLICT (customer_id) DO UPDATE SET phone_number = excluded.phone_number,
-              sms = excluded.sms, push = excluded.push, updated_at = excluded.updated_at
+              sms = excluded.sms, push = excluded.push, cart_reminders = excluded.cart_reminders,
+              updated_at = excluded.updated_at
             """)
         .param("customerId", p.customerId())
         .param("phoneNumber", p.phoneNumber())
         .param("sms", p.sms())
         .param("push", p.push())
+        .param("cartReminders", p.cartReminders())
         .param("updatedAt", Timestamp.from(p.updatedAt()))
         .update();
   }

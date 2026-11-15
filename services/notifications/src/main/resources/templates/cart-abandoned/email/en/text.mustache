@@ -1,0 +1,13 @@
+Hello {{customer.givenName}},
+
+You left these in your Cart:
+
+{{#lines}}
+{{quantity}} × {{name}}: {{price}} each{{#outOfStock}}, out of Stock for now{{/outOfStock}}{{#priceChanged}}, its Price has changed{{/priceChanged}}
+{{/lines}}
+
+Your Cart is still there, with today's Prices: {{cartUrl}}
+
+You get this email because you turned on cart reminders in your Notification preferences.
+
+Ecomm

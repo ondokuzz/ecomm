@@ -142,7 +142,8 @@ class TemplatesApiTest extends NotificationsApiTest {
             "RMA_REJECTED",
             "RMA_RECEIVED",
             "RMA_CLOSED",
-            "RMA_EXPIRED")) {
+            "RMA_EXPIRED",
+            "CART_ABANDONED")) {
       preview(type, "EMAIL", STAFF).expectStatus().isOk();
       preview(type, "SMS", STAFF).expectStatus().isNotFound();
       preview(type, "PUSH", STAFF).expectStatus().isNotFound();

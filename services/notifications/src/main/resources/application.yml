@@ -52,6 +52,14 @@ ecomm:
     # may take to connect and to answer.
     fulfillment-shipping-url: http://localhost:8099
     fulfillment-shipping-timeout: 5s
+    # For cart reminders: Cart's internal read of a Customer's Cart, Search & Discovery's Product
+    # read for its lines' Prices and Stock, and how long each call may take to connect and to
+    # answer; and the browser-facing Storefront the reminder links to.
+    cart-url: http://localhost:8083
+    cart-timeout: 5s
+    search-discovery-url: http://localhost:8089
+    search-discovery-timeout: 5s
+    storefront-url: http://localhost:8080
     dispatch:
       # How often the dispatcher looks for due Notifications, and how it retries a transient
       # failure: 6 attempts in all, waiting 2, 4, 8, 16 and 32 minutes between them, about an hour.

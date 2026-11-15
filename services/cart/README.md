@@ -24,16 +24,18 @@ names (its `sub`). No one can reach another Customer's Cart. Staff have no Cart:
 The quantity must be a positive JSON integer; anything else (`0`, `-1`, `1.5`, `"2"`, `null`, a
 missing field, a number past 2^31−1) is a 400. Every error is a problem detail.
 
-One endpoint is internal. The checkout Saga clears a Customer's Cart once their Order is paid, with
-Orchestration's own token (`ORCHESTRATION`,
-[ADR 0002](../identity-access/docs/adr/0002-service-identity-by-client-credentials.md)), naming
-the Customer in the body. Any other token, a Customer's or Checkout's included, gets 403, and the
-API gateway doesn't route it. Clearing an empty Cart changes nothing, so it takes no
-`Idempotency-Key`.
+Two endpoints are internal, each called with a service's own token
+([ADR 0002](../identity-access/docs/adr/0002-service-identity-by-client-credentials.md)) and
+naming the Customer, and the API gateway routes neither. The checkout Saga clears a Customer's Cart
+once their Order is paid, with Orchestration's token (`ORCHESTRATION`). Clearing an empty Cart
+changes nothing, so it takes no `Idempotency-Key`. Notifications reads a Customer's Cart before it
+sends a Cart reminder, with its token (`NOTIFICATIONS`), to check the Cart is the one abandoned.
+Any other token, a Customer's included, gets 403.
 
-| Endpoint | |
-|---|---|
-| `POST /carts/clear` | Body `{"customerId": "…"}`: empties that Customer's Cart; 204. A missing or blank `customerId` is a 400 |
+| Endpoint | Role | |
+|---|---|---|
+| `POST /carts/clear` | `ORCHESTRATION` | Body `{"customerId": "…"}`: empties that Customer's Cart; 204. A missing or blank `customerId` is a 400 |
+| `GET /internal/carts/{customerId}` | `NOTIFICATIONS` | `{"items": [{"variantId", "quantity"}], "lastChangedAt", "version"}`: the Cart in Variant ID order, when it last changed, and that in epoch milliseconds, as a `cart.cart` event's `version`. It is the same change whether or not the Cart has been marked abandoned since. 404 when the Customer has no Cart, or it is empty |
 
 [`http/cart.http`](./http/cart.http) exercises every endpoint against the compose stack.
 
@@ -61,9 +63,12 @@ For each, it publishes a `cart.cart` event with `change: ABANDONED`, the Custome
 - `cart_abandoned_total` counts the Carts marked abandoned, from 0, and Grafana's Services dashboard
   plots it per hour.
 
-Nothing consumes `cart.cart` yet; Sprint 8's abandoned-cart recovery will. To see one by hand,
-shorten the threshold and the sweep with a Compose override, such as
-`ECOMM_CART_ABANDONED_AFTER=2m` and `ECOMM_CART_ABANDONMENT_SWEEP=30s`.
+Notifications consumes `cart.cart` for its Cart reminders, and reads the Cart through
+`GET /internal/carts/{customerId}` to drop an event whose Cart is gone, emptied or changed since,
+such as one emptied mid-sweep (#105). Compose sets the threshold and the sweep from
+`CART_ABANDONED_AFTER` and `CART_ABANDONMENT_SWEEP`, 24 hours and 5 minutes unless they are set:
+`make e2e` and CI start Cart with `1m` and `10s`, for the Storefront's cart-reminder test, and
+`CART_ABANDONED_AFTER=2m CART_ABANDONMENT_SWEEP=30s make up` shows one by hand.
 
 ## Storage
 

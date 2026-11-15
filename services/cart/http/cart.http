@@ -108,3 +108,30 @@ Authorization: Bearer {{customerToken}}
 Content-Type: application/json
 
 {"customerId": "{{customerId}}"}
+
+### Notifications token: its own identity, for the reads it makes before a Cart reminder
+POST {{keycloak}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&client_id=notifications&client_secret={{notificationsClientSecret}}
+
+> {% client.global.set("notificationsToken", response.body.access_token); %}
+
+### The Cart Orchestration cleared: 404
+GET {{cart}}/internal/carts/{{customerId}}
+Authorization: Bearer {{notificationsToken}}
+
+### Put something in the Cart for Notifications to read
+PUT {{cart}}/cart/items/PHN-PIXEL-9
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"quantity": 2}
+
+### Notifications reads the named Customer's Cart: its lines, lastChangedAt and version
+GET {{cart}}/internal/carts/{{customerId}}
+Authorization: Bearer {{notificationsToken}}
+
+### A Customer can't: 403
+GET {{cart}}/internal/carts/{{customerId}}
+Authorization: Bearer {{customerToken}}

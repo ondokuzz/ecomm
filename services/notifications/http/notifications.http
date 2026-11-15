@@ -108,7 +108,18 @@ Authorization: Bearer {{staffToken}}
 GET {{notifications}}/mock-providers/push?customerId={{demoCustomerId}}
 Authorization: Bearer {{staffToken}}
 
-### Back to email only
+### Turn on cart reminders, which are marketing and off until the Customer turns them on
+PUT {{gateway}}/api/notifications/preferences/me
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{"phoneNumber": null, "sms": false, "push": false, "cartReminders": true}
+
+### Staff preview the Cart reminder, by email only
+POST {{gateway}}/api/notifications/templates/CART_ABANDONED/EMAIL/preview
+Authorization: Bearer {{staffToken}}
+
+### Back to email only, with no cart reminders: left out, they are off
 PUT {{notifications}}/preferences/me
 Authorization: Bearer {{customerToken}}
 Content-Type: application/json

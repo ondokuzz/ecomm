@@ -305,17 +305,23 @@ interface Email {
 }
 
 /**
- * The email with exactly `subject`, once Mailpit has it, checking no second one came: the
- * dispatcher sends within a second or two of the event, so a duplicate would be there by then. Its
- * `Text` comes over SMTP with CRLF line endings, given back as `\n`.
+ * The email with exactly `subject`, and to `to` when given, once Mailpit has it within `timeout`
+ * (30 seconds unless given), checking no second one came: the dispatcher sends within a second or
+ * two of the event, so a duplicate would be there by then. Its `Text` comes over SMTP with CRLF line
+ * endings, given back as `\n`.
  */
-async function theOneEmail(request: APIRequestContext, subject: string): Promise<Email> {
-  const search = `${mailpitUrl}/api/v1/search?query=${encodeURIComponent(`subject:"${subject}"`)}`
+async function theOneEmail(
+  request: APIRequestContext,
+  subject: string,
+  { to, timeout = 30_000 }: { to?: string; timeout?: number } = {},
+): Promise<Email> {
+  const query = to ? `to:"${to}" subject:"${subject}"` : `subject:"${subject}"`
+  const search = `${mailpitUrl}/api/v1/search?query=${encodeURIComponent(query)}`
   const found = async () =>
     ((await (await request.get(search)).json()) as { messages: { ID: string; Subject: string }[] }).messages.filter(
       (message) => message.Subject === subject,
     )
-  await expect.poll(async () => (await found()).length, { timeout: 30_000 }).toBeGreaterThan(0)
+  await expect.poll(async () => (await found()).length, { timeout }).toBeGreaterThan(0)
   await new Promise((resolve) => setTimeout(resolve, 3_000))
   const messages = await found()
   expect(messages).toHaveLength(1)
@@ -1411,6 +1417,54 @@ test.describe('Sprint 7', () => {
     await conversation.getByRole('link', { name: pixel.name }).click()
     await expect(page.getByRole('heading', { level: 1, name: pixel.name })).toBeVisible()
     await expect(page).toHaveURL(/\/products\/PHN-PIXEL-9$/)
+  })
+})
+
+/**
+ * How long Cart waits before it abandons a Cart on the stack under test, such as `1m`, when it is
+ * shortened as `make e2e` and CI start it; unset on a stack with Cart's default of 24 hours, where
+ * no reminder could arrive within a test.
+ */
+const cartAbandonedAfter = process.env.CART_ABANDONED_AFTER
+
+test.describe('Sprint 8', () => {
+  test('a Customer who turned on cart reminders is emailed about the Cart they left, and its link opens it', async ({
+    page,
+    request,
+  }) => {
+    test.skip(!cartAbandonedAfter, "Cart's abandonment isn't shortened on this stack: set CART_ABANDONED_AFTER")
+    test.setTimeout(5 * 60_000)
+    const customer = signedUp()
+    await page.goto('/')
+    await page.getByRole('button', { name: 'Log in' }).click()
+    await signInOnKeycloak(page, customer)
+    await page.getByRole('button', { name: 'Customer menu' }).click()
+    await page.getByRole('link', { name: 'Notification preferences' }).click()
+    const form = page.getByRole('form', { name: 'Notification preferences' })
+    // Cart reminders are marketing, so they are off until the Customer turns them on.
+    const reminders = form.getByRole('switch', { name: /Cart reminders/ })
+    await expect(reminders).not.toBeChecked()
+    await expect(form).toContainText('Marketing')
+    await reminders.check()
+    await form.getByRole('button', { name: 'Save' }).click()
+    await expect(page.locator('.toast').filter({ hasText: 'Notification preferences saved' })).toBeVisible()
+    await expectAccessible(page)
+
+    const bought = await aProductInStock(request)
+    await putInCart(request, await tokenFor(request, customer), bought.variantId)
+
+    // Once Cart abandons it and its sweep publishes it, Notifications emails the reminder, once.
+    const reminder = await theOneEmail(request, 'You left something in your Cart', {
+      to: customer.email,
+      timeout: 4 * 60_000,
+    })
+    expect(reminder.Text).toContain(`1 × ${bought.product.name}`)
+    const link = reminder.Text.match(/https?:\/\/\S+\/cart\b/)?.[0]
+    expect(link).toBeDefined()
+
+    await page.goto(link as string)
+    await expect(page).toHaveURL(/\/cart$/)
+    await expect(page.getByRole('main')).toContainText(bought.product.name)
   })
 })
 

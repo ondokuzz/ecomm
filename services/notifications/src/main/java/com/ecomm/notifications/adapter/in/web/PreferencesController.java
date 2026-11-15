@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * The calling Customer's Notification preferences: email always on, SMS with a mobile number in
- * E.164 form, and push.
+ * E.164 form, push, and cart reminders.
  */
 @RestController
 @RequestMapping("/preferences")
@@ -26,15 +26,24 @@ class PreferencesController {
 
   /** As a Customer reads theirs; {@code updatedAt} is {@code null} until they first save them. */
   record PreferencesResponse(
-      boolean email, boolean sms, String phoneNumber, boolean push, Instant updatedAt) {
+      boolean email,
+      boolean sms,
+      String phoneNumber,
+      boolean push,
+      boolean cartReminders,
+      Instant updatedAt) {
 
     static PreferencesResponse of(NotificationPreferences p) {
-      return new PreferencesResponse(true, p.sms(), p.phoneNumber(), p.push(), p.updatedAt());
+      return new PreferencesResponse(
+          true, p.sms(), p.phoneNumber(), p.push(), p.cartReminders(), p.updatedAt());
     }
   }
 
-  /** What a Customer saves: email can't be turned off, so it isn't asked. */
-  record PreferencesBody(String phoneNumber, Boolean sms, Boolean push) {}
+  /**
+   * What a Customer saves: email can't be turned off, so it isn't asked. Cart reminders left out
+   * are off, since they need the Customer's consent.
+   */
+  record PreferencesBody(String phoneNumber, Boolean sms, Boolean push, Boolean cartReminders) {}
 
   private final PreferencesUseCase preferences;
 
@@ -62,7 +71,12 @@ class PreferencesController {
       throw new InvalidRequestException("push", "is required");
     }
     return PreferencesResponse.of(
-        preferences.save(customer.id(), body.phoneNumber(), body.sms(), body.push()));
+        preferences.save(
+            customer.id(),
+            body.phoneNumber(),
+            body.sms(),
+            body.push(),
+            Boolean.TRUE.equals(body.cartReminders())));
   }
 
   @ExceptionHandler(InvalidPhoneNumberException.class)

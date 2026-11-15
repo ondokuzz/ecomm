@@ -265,6 +265,12 @@ services:
       dockerfile: services/cart/Dockerfile
     image: ${IMAGE_PREFIX:-ecomm}/cart:${IMAGE_TAG:-latest}
     ports: ["${CART_PORT:-8083}:8080"]
+    environment:
+      <<: *spring-jvm
+      # How long an unchanged Cart waits before it is abandoned, and how often the sweep looks.
+      # `make e2e` and CI shorten them, so the Storefront's cart-reminder test sees one abandoned.
+      ECOMM_CART_ABANDONED_AFTER: ${CART_ABANDONED_AFTER:-24h}
+      ECOMM_CART_ABANDONMENT_SWEEP: ${CART_ABANDONMENT_SWEEP:-5m}
     depends_on:
       <<: *event-backbone
       redis: { condition: service_healthy }

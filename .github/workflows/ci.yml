@@ -144,6 +144,11 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
+    # Cart abandons a Cart after a minute, looking every 10 seconds, so the Storefront's
+    # cart-reminder test, which reads the same variable, sees its reminder within the test.
+    env:
+      CART_ABANDONED_AFTER: 1m
+      CART_ABANDONMENT_SWEEP: 10s
     defaults:
       run:
         working-directory: frontend/storefront

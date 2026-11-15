@@ -5,9 +5,11 @@ import com.ecomm.cart.application.port.out.TimeSource;
 import com.ecomm.cart.domain.AbandonedCart;
 import com.ecomm.cart.domain.Cart;
 import com.ecomm.cart.domain.CartItem;
+import com.ecomm.cart.domain.ChangedCart;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationStartedEvent;
@@ -111,6 +113,23 @@ class RedisCartRepository implements CartRepository {
           """,
           List.class);
 
+  // A Cart's last change and its hash, read together: the set's score while it is a candidate, or
+  // the change it was marked abandoned at. A Cart in neither, not yet indexed on start, has none.
+  @SuppressWarnings("rawtypes")
+  private static final RedisScript<List> READ_WITH_LAST_CHANGE =
+      RedisScript.of(
+          """
+          local cart = redis.call('HGETALL', KEYS[1])
+          local score = redis.call('ZSCORE', KEYS[2], ARGV[1])
+          if not score then
+            score = redis.call('HGET', KEYS[1], '%s')
+          end
+          table.insert(cart, 1, score or '')
+          return cart
+          """
+              .formatted(ABANDONED),
+          List.class);
+
   // A Cart that lapsed, or lost its last Variant some other way, leaves the set unabandoned.
   private static final RedisScript<Long> FORGET_IF_GONE =
       RedisScript.of(
@@ -156,6 +175,27 @@ class RedisCartRepository implements CartRepository {
             .toList());
   }
 
+  /**
+   * A Cart not yet indexed, which only a start before the index existed leaves, is taken as changed
+   * now, as the start's indexing takes it.
+   */
+  @Override
+  public Optional<ChangedCart> findWithLastChange(String customerId) {
+    List<?> read =
+        redis.execute(READ_WITH_LAST_CHANGE, List.of(key(customerId), LAST_CHANGE), customerId);
+    if (read == null || read.isEmpty()) {
+      return Optional.empty();
+    }
+    var score = (String) read.getFirst();
+    var cart = new Cart(itemsOf(read.subList(1, read.size())));
+    if (cart.items().isEmpty()) {
+      return Optional.empty();
+    }
+    var lastChangedAt =
+        score.isEmpty() ? time.now() : Instant.ofEpochMilli((long) Double.parseDouble(score));
+    return Optional.of(new ChangedCart(customerId, cart, lastChangedAt));
+  }
+
   @Override
   public void put(String customerId, CartItem item, Instant changedAt) {
     redis.execute(
@@ -196,14 +236,7 @@ class RedisCartRepository implements CartRepository {
         continue; // changed and marked, or emptied, since the range was read
       }
       var score = (long) Double.parseDouble((String) read.getFirst());
-      var items = new ArrayList<CartItem>();
-      for (var i = 1; i + 1 < read.size(); i += 2) {
-        var field = (String) read.get(i);
-        if (!field.equals(ABANDONED)) {
-          items.add(new CartItem(field, Integer.parseInt((String) read.get(i + 1))));
-        }
-      }
-      var cart = new Cart(items);
+      var cart = new Cart(itemsOf(read.subList(1, read.size())));
       if (cart.items().isEmpty()) {
         redis.execute(
             FORGET_IF_GONE,
@@ -226,6 +259,18 @@ class RedisCartRepository implements CartRepository {
             abandoned.customerId(),
             millis(abandoned.lastChangedAt()));
     return marked != null && marked == 1;
+  }
+
+  /** A hash's fields and values, in turn, as its Cart's items. */
+  private static List<CartItem> itemsOf(List<?> fieldsAndValues) {
+    var items = new ArrayList<CartItem>();
+    for (var i = 0; i + 1 < fieldsAndValues.size(); i += 2) {
+      var field = (String) fieldsAndValues.get(i);
+      if (!field.equals(ABANDONED)) {
+        items.add(new CartItem(field, Integer.parseInt((String) fieldsAndValues.get(i + 1))));
+      }
+    }
+    return items;
   }
 
   /** Adds each Cart missing from the set, and not marked abandoned, as changed now. */
