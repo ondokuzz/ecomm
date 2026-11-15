@@ -6,7 +6,6 @@ import { FilterPanel } from '../components/FilterPanel'
 import { ProductCard } from '../components/ProductCard'
 import { EmptyState, ErrorState } from '../components/Status'
 import { Button, ButtonLink } from '../components/ui/Button'
-import { Card } from '../components/ui/Card'
 import { Icon, type IconName } from '../components/ui/Icon'
 import { Input } from '../components/ui/Input'
 import { Skeleton } from '../components/ui/Skeleton'
@@ -361,12 +360,12 @@ function Pager({ results, search }: { results: SearchResults; search: Search }) 
 function ProductCardSkeletons() {
   return Array.from({ length: 8 }, (_, i) => (
     <li key={i}>
-      <Card className="product-card">
-        <Skeleton height="auto" radius="var(--radius-md)" className="product-image-skeleton" />
+      <div className="product-card">
+        <Skeleton height="auto" radius="var(--radius-lg)" className="product-image-skeleton" />
         <Skeleton width="30%" height="0.75rem" />
         <Skeleton width="80%" height="1.25rem" />
         <Skeleton width="40%" height="1.25rem" />
-      </Card>
+      </div>
     </li>
   ))
 }

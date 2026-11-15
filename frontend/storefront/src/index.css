@@ -928,11 +928,9 @@ main {
 .footer-heading {
   margin: 0 0 var(--space-1);
   font-family: var(--font-body);
-  font-size: var(--text-xs);
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-muted);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--color-fg);
 }
 .footer-column a {
   color: var(--color-fg);
@@ -1135,10 +1133,8 @@ main {
   border-radius: var(--radius-pill);
   background: var(--color-sun);
   color: var(--color-on-sun);
-  font-size: var(--text-xs);
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-size: var(--text-sm);
+  font-weight: 700;
 }
 .hero-tagline {
   margin: 0;
@@ -1184,9 +1180,8 @@ main {
   padding: var(--space-5);
   border: 1px solid var(--color-line);
   border-radius: var(--radius-lg);
-  background: radial-gradient(14rem 8rem at 100% 0%, var(--color-primary-soft), transparent 70%), var(--color-surface);
+  background: var(--color-surface);
   color: var(--color-fg);
-  box-shadow: var(--shadow-sm);
   transition:
     border-color var(--duration) var(--ease),
     box-shadow var(--duration) var(--ease),
@@ -1196,12 +1191,6 @@ main {
   text-decoration: none;
   border-color: var(--color-primary);
 }
-@media (hover: hover) {
-  .category-tile:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-md);
-  }
-}
 .category-tile-icon {
   grid-area: icon;
   display: grid;
@@ -1209,9 +1198,15 @@ main {
   width: 3.25rem;
   height: 3.25rem;
   border-radius: var(--radius-md);
-  background: var(--gradient-brand);
-  color: var(--color-on-gradient);
-  box-shadow: var(--shadow-primary);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-text);
+  transition:
+    background var(--duration) var(--ease),
+    color var(--duration) var(--ease);
+}
+.category-tile:hover .category-tile-icon {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
 }
 .category-tile-name {
   grid-area: name;
@@ -1229,8 +1224,9 @@ main {
 }
 .category-tile-go {
   position: absolute;
-  top: var(--space-4);
-  right: var(--space-4);
+  top: 50%;
+  right: var(--space-5);
+  margin-top: -9px;
   color: var(--color-primary-text);
   transition: translate var(--duration) var(--ease);
 }
@@ -1400,12 +1396,13 @@ main {
   padding: 0;
   margin: 0;
   display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--space-4);
+  /* Two to a row even on a phone, as a shop window is browsed, not read. */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-5) var(--space-3);
 }
 @media (min-width: 540px) {
   .product-grid {
-    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-6) var(--space-5);
   }
 }
 @media (min-width: 860px) {
@@ -1418,10 +1415,13 @@ main {
     grid-template-columns: repeat(4, 1fr);
   }
 }
+/* A Product tile: no box around it; the Product stands on a tinted plate, and its name and price
+   sit under it, so a grid reads as a shelf rather than a stack of cards. */
 .product-card {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+  height: 100%;
 }
 .product-image {
   display: block;
@@ -1442,68 +1442,58 @@ main {
 .product-card .product-image-skeleton {
   margin-bottom: var(--space-3);
 }
-/* The image zooms inside its frame when the card is hovered. */
+/* The image zooms inside its plate, and the plate takes the brand's line, when the tile is hovered. */
 .product-card-media {
   position: relative;
   overflow: hidden;
-  border-radius: var(--radius-md);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-lg);
   background: var(--color-surface-2);
-}
-.product-card-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  margin-top: auto;
-  padding-top: var(--space-3);
-}
-.product-card-go {
-  display: grid;
-  place-items: center;
-  flex: none;
-  width: 2.25rem;
-  height: 2.25rem;
-  border-radius: 50%;
-  background: var(--color-primary-soft);
-  color: var(--color-primary-text);
-  transition:
-    background var(--duration) var(--ease),
-    color var(--duration) var(--ease);
-}
-@media (hover: hover) {
-  .card-link:hover .product-card-go {
-    background: var(--color-primary);
-    color: var(--color-on-primary);
-  }
+  transition: border-color var(--duration) var(--ease);
 }
 .product-card-media .product-image {
+  border-radius: 0;
   transition: transform calc(var(--duration) * 2) var(--ease);
 }
 @media (hover: hover) {
-  .card-link:hover .product-card-media .product-image {
-    transform: scale(1.06);
+  .card-link:hover .product-card-media {
+    border-color: var(--color-primary);
   }
+  .card-link:hover .product-card-media .product-image {
+    transform: scale(1.04);
+  }
+  .card-link:hover .product-name {
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+  }
+}
+.product-card .price {
+  margin-top: auto;
+  padding-top: var(--space-2);
 }
 .product-image-skeleton {
   aspect-ratio: 4 / 3;
 }
 .product-brand {
   color: var(--color-muted);
-  font-size: var(--text-xs);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-size: var(--text-sm);
+  font-weight: 500;
 }
 .product-name {
   font-family: var(--font-display);
   font-size: var(--text-lg);
-  font-weight: 700;
+  font-weight: 650;
   line-height: 1.25;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
 }
+/* Prices are the ink colour: teal is kept for what a Customer can act on. */
 .price {
   font-family: var(--font-display);
-  font-weight: 800;
-  color: var(--color-primary-text);
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-fg);
 }
 .price-from {
   font-family: var(--font-body);
@@ -1513,6 +1503,12 @@ main {
 }
 .product-card .price {
   font-size: var(--text-lg);
+}
+@media (max-width: 539px) {
+  .product-card .product-name,
+  .product-card .price {
+    font-size: var(--text-base);
+  }
 }
 .price.large {
   font-size: var(--text-3xl);
@@ -1548,18 +1544,15 @@ main {
   gap: var(--space-3);
   min-width: 0;
 }
-/* The image on a soft stage of the brand's colours. */
+/* The image on the same plate as the Product's tile in a grid, only larger. */
 .gallery-stage {
-  padding: var(--space-4);
+  overflow: hidden;
   border: 1px solid var(--color-line);
   border-radius: var(--radius-lg);
-  background:
-    radial-gradient(80% 70% at 30% 20%, var(--color-primary-soft), transparent 70%),
-    radial-gradient(60% 60% at 90% 100%, var(--color-accent-soft), transparent 70%), var(--color-surface);
-  box-shadow: var(--shadow-md);
+  background: var(--color-surface-2);
 }
 .gallery-stage .product-image {
-  border-radius: var(--radius-md);
+  border-radius: 0;
 }
 .gallery-thumbs {
   list-style: none;
@@ -2104,9 +2097,8 @@ main {
   border-bottom: 1px solid var(--color-line);
 }
 .lines thead th {
-  font-size: var(--text-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  font-size: var(--text-sm);
+  font-weight: 600;
   color: var(--color-muted);
   background: var(--color-surface-2);
 }
