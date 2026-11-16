@@ -1,6 +1,7 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from 'react-oidc-context'
-import { type Order, ordersPageSize } from '../domain/order'
+import { type Order, lastShippingAddress, ordersPageSize } from '../domain/order'
+import type { ShippingAddress } from '../domain/shipping'
 import type { Page } from '../domain/paging'
 import { type Shipment, trackingRefreshInterval } from '../domain/shipment'
 import { api } from './http'
@@ -29,9 +30,33 @@ export function useOrder(id: string) {
 export function useOrders(page: number) {
   const token = useAuth().user?.access_token
   return useQuery({
-    queryKey: [...ordersKey, 'page', page],
-    queryFn: () => api<Page<Order>>('order-management', `/orders?page=${page}&size=${ordersPageSize}`, { token }),
+    queryKey: ordersPageKey(page),
+    queryFn: () => ordersPage(token, page),
     enabled: token !== undefined,
     placeholderData: keepPreviousData,
   })
+}
+
+const ordersPageKey = (page: number) => [...ordersKey, 'page', page]
+
+const ordersPage = (token: string | undefined, page: number) =>
+  api<Page<Order>>('order-management', `/orders?page=${page}&size=${ordersPageSize}`, { token })
+
+/**
+ * The Shipping address of the Customer's latest Order with one, from the first page of their Orders,
+ * as My Orders reads it, while `enabled`: undefined while it is read, null when no Order there has
+ * one or it was never read, since checkout then simply asks for an address.
+ */
+export function useLastShippingAddress(enabled: boolean): ShippingAddress | null | undefined {
+  const token = useAuth().user?.access_token
+  const orders = useQuery({
+    queryKey: ordersPageKey(0),
+    queryFn: () => ordersPage(token, 0),
+    enabled: enabled && token !== undefined,
+    select: (page) => lastShippingAddress(page.items) ?? null,
+  })
+  if (!enabled) return null
+  // A read that failed after one that answered keeps the address it had.
+  if (orders.data !== undefined) return orders.data
+  return orders.isError ? null : undefined
 }

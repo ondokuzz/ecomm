@@ -9,10 +9,12 @@ import {
   payFailureOf,
   rememberPaymentReference,
   rememberedPaymentReference,
+  type StartedAgain,
   useCheckoutSession,
   usePayCheckoutSession,
   usePaymentAttempt,
   useSessionCoupon,
+  useStartAgain,
 } from '../api/checkout'
 import { useFormatMoney } from '../api/currencies'
 import { failureOf } from '../api/failure'
@@ -31,6 +33,7 @@ import { type CartLine, itemCountLabel } from '../domain/cart'
 import { variantName } from '../domain/catalog'
 import {
   type CheckoutSession,
+  carriedOver,
   checkoutProblem,
   hasShipping,
   sessionCountdown,
@@ -49,7 +52,9 @@ import { formatClock } from '../domain/dates'
 
 /**
  * Starts a Checkout Session for the Cart, or resumes the one that already holds it, and shows its
- * lines at their held Prices with a countdown to when the hold ends. The Customer gives a Shipping
+ * lines at their held Prices and when the hold ends, counting down once under five minutes are left.
+ * An expired session's "Start again" starts a new one with its Shipping address and Coupon put back,
+ * each if it still applies. The Customer gives a Shipping
  * address and chooses a Shipping option, whose cost joins the total; Pay waits for both. Paying it with the chosen test
  * card starts the checkout Saga. A Pay still unanswered after 2 seconds, as one the bank confirms
  * later is, shows "Confirming your payment…". When it hasn't finished within Checkout's wait (a
@@ -60,9 +65,10 @@ import { formatClock } from '../domain/dates'
 export function CheckoutPage() {
   const formatMoney = useFormatMoney()
   const cart = useCart()
-  // Each "Start again" is a new attempt, which always starts a fresh session.
+  // Each "Start again" is a new attempt, whose fresh session it starts itself.
   const [attempt, setAttempt] = useState(0)
   const session = useCheckoutSession(cart.data, attempt)
+  const restart = useStartAgain()
   const pay = usePayCheckoutSession()
   const coupon = useSessionCoupon()
   const [card, setCard] = useState(defaultTestCard)
@@ -95,11 +101,19 @@ export function CheckoutPage() {
   }, [paidOrderId, navigate])
 
   const startAgain = () => {
-    pay.reset()
-    coupon.reset()
-    setConfirmingSince(undefined)
-    setReference(undefined)
-    setAttempt((n) => n + 1)
+    const next = attempt + 1
+    restart.mutate(
+      { attempt: next, carried: carriedOver(session.data) },
+      {
+        onSuccess: () => {
+          pay.reset()
+          coupon.reset()
+          setConfirmingSince(undefined)
+          setReference(undefined)
+          setAttempt(next)
+        },
+      },
+    )
   }
 
   if (cart.isPending) return <CheckoutSkeleton />
@@ -114,12 +128,13 @@ export function CheckoutPage() {
     )
   }
   if (cart.data.items.length === 0) return <EmptyCart>There is nothing to check out yet.</EmptyCart>
+  if (restart.error) return <StartError error={restart.error} retrying={restart.isPending} onRetry={startAgain} />
   if (session.isPending) return <CheckoutSkeleton />
   if (session.error) return <StartError error={session.error} retrying={session.isFetching} onRetry={startAgain} />
 
   const countdown = sessionCountdown(session.data.expiresAt, now)
   if (countdown.expired || isSessionOver(pay.error) || isSessionOver(coupon.error))
-    return <SessionExpired onStartAgain={startAgain} />
+    return <SessionExpired onStartAgain={startAgain} starting={restart.isPending} />
 
   const payNow = () => {
     setConfirmingSince(null)
@@ -140,7 +155,8 @@ export function CheckoutPage() {
       },
     )
   }
-  const busy = pay.isPending || paidOrderId !== undefined || confirming?.kind === 'confirming'
+  // Starting again leaves the old session shown until the new one is ready; nothing acts on it meanwhile.
+  const busy = pay.isPending || paidOrderId !== undefined || confirming?.kind === 'confirming' || restart.isPending
   const confirmingPayment =
     (pay.isPending && payingSince !== undefined && confirmingPay === payingSince) || confirming?.kind === 'confirming'
   const payFailure = payFailureOf(pay.error)
@@ -150,10 +166,11 @@ export function CheckoutPage() {
     <section>
       <CheckoutSteps current="Payment" />
       <h1>Checkout</h1>
-      <HeldUntilNotice expiresAt={session.data.expiresAt} left={countdown.label} />
+      <HeldUntilNotice expiresAt={session.data.expiresAt} left={countdown.nearlyOver ? countdown.label : undefined} />
       <div className="cart-layout">
         <div className="cart-main stack">
           <CheckoutShipping
+            key={session.data.id}
             session={session.data}
             disabled={busy}
             onChange={() => {
@@ -198,7 +215,12 @@ export function CheckoutPage() {
               </div>
             )}
             {confirming?.kind === 'failed' && (
-              <PaymentFailureAlert failure={confirming.failure} reference={reference} onStartAgain={startAgain} />
+              <PaymentFailureAlert
+                failure={confirming.failure}
+                reference={reference}
+                onStartAgain={startAgain}
+                starting={restart.isPending}
+              />
             )}
             {pay.error &&
               (payFailure ? (
@@ -206,6 +228,7 @@ export function CheckoutPage() {
                   failure={payFailure}
                   reference={failureOf(pay.error).reference}
                   onStartAgain={startAgain}
+                  starting={restart.isPending}
                 />
               ) : (
                 <ErrorMessage error={pay.error} />
@@ -234,7 +257,9 @@ export function CheckoutPage() {
         </div>
         <SessionSummary session={session.data}>
           <CouponField
+            key={session.data.id}
             session={session.data}
+            carried={restart.data?.session.id === session.data.id ? restart.data : undefined}
             coupon={coupon}
             disabled={busy}
             onChange={() => {
@@ -259,20 +284,26 @@ function useNow(): number {
 }
 
 /**
- * When the session ends, as a clock time, and a live countdown to it. The countdown is a timer, which
- * screen readers don't announce every second; the clock time says the same once.
+ * When the session ends, as a clock time, and, once it is nearly over, a live countdown to it: the
+ * time `left`. The countdown is a timer, which screen readers don't announce every second; the clock
+ * time says the same once.
  */
-function HeldUntilNotice({ expiresAt, left }: { expiresAt: string; left: string }) {
+function HeldUntilNotice({ expiresAt, left }: { expiresAt: string; left: string | undefined }) {
   const until = formatClock(expiresAt)
   return (
-    <p className="alert alert-info held-until">
+    <p className={`alert ${left === undefined ? 'alert-info' : 'alert-warning'} held-until`}>
       <Icon name="lock" size={18} />
       <span>
-        Your items and their prices are held until <strong>{until}</strong>.{' '}
-        <span className="session-countdown" role="timer" aria-label="Time left">
-          {left}
-        </span>{' '}
-        left
+        Your items and their prices are held until <strong>{until}</strong>.
+        {left !== undefined && (
+          <>
+            {' '}
+            <span className="session-countdown" role="timer" aria-label="Time left">
+              {left}
+            </span>{' '}
+            left
+          </>
+        )}
       </span>
     </p>
   )
@@ -314,29 +345,37 @@ function SessionSummary({ session, children }: { session: CheckoutSession; child
 
 /**
  * The Coupon field: a code to apply, or the one applied with a way to remove it. A code that doesn't
- * apply says why, next to the field, and leaves the session as it was.
+ * apply says why, next to the field, and leaves the session as it was. A Coupon carried over from an
+ * expired session that doesn't apply to the new one is shown in the field, with why, as applying it
+ * would have, until the Customer changes the code. It is meant to be keyed by the session.
  */
 function CouponField({
   session,
+  carried,
   coupon,
   disabled,
   onChange,
 }: {
   session: CheckoutSession
+  carried: StartedAgain | undefined
   coupon: ReturnType<typeof useSessionCoupon>
   disabled: boolean
   /** Called before the Coupon changes, since the amount to pay does too. */
   onChange: () => void
 }) {
-  const [code, setCode] = useState('')
+  const refused = carried?.couponError !== undefined
+  const [code, setCode] = useState(refused ? (carried.couponCode ?? '') : '')
+  const [carriedError, setCarriedError] = useState(refused ? carried.couponError : undefined)
   const inputId = useId()
   const errorId = useId()
   const change = (next: string | null) => {
     onChange()
+    setCarriedError(undefined)
     coupon.mutate({ sessionId: session.id, code: next }, { onSuccess: () => setCode('') })
   }
-  const rejection = couponRejectionOf(coupon.error)
-  const otherError = coupon.error && !rejection && !isSessionOver(coupon.error) ? coupon.error : undefined
+  const error = coupon.error ?? carriedError
+  const rejection = couponRejectionOf(error)
+  const otherError = error && !rejection && !isSessionOver(error) ? error : undefined
 
   const applied = appliedCoupon(session.discounts)
   if (applied) {
@@ -376,6 +415,7 @@ function CouponField({
           value={code}
           onChange={(event) => {
             setCode(event.target.value)
+            setCarriedError(undefined)
             coupon.reset()
           }}
           autoComplete="off"
@@ -401,8 +441,11 @@ function CouponField({
   )
 }
 
-/** The session expired before the Customer paid: nothing was bought, and they can start over. */
-function SessionExpired({ onStartAgain }: { onStartAgain: () => void }) {
+/**
+ * The session expired before the Customer paid: nothing was bought, and they can start over, keeping
+ * their Shipping address and Coupon, each if it still applies.
+ */
+function SessionExpired({ onStartAgain, starting }: { onStartAgain: () => void; starting: boolean }) {
   return (
     <section>
       <CheckoutSteps current="Payment" />
@@ -411,12 +454,13 @@ function SessionExpired({ onStartAgain }: { onStartAgain: () => void }) {
         heading="h1"
         focusTitle
         action={
-          <Button variant="primary" size="lg" onClick={onStartAgain}>
+          <Button variant="primary" size="lg" onClick={onStartAgain} loading={starting}>
             Start again
           </Button>
         }
       >
-        We held your items for 15 minutes. Nothing was charged; start again to check the prices and stock.
+        We held your items for 15 minutes. Nothing was charged; start again to check the prices and stock. Your address
+        and coupon come with you, each if it still applies.
       </EmptyState>
     </section>
   )
@@ -509,10 +553,12 @@ function PaymentFailureAlert({
   failure,
   reference,
   onStartAgain,
+  starting,
 }: {
   failure: PaymentFailure
   reference: string | undefined
   onStartAgain: () => void
+  starting: boolean
 }) {
   return (
     <div className={`alert alert-danger pay-error pay-error-${failure.kind}`} role="alert">
@@ -523,7 +569,7 @@ function PaymentFailureAlert({
         {reference && <SupportReference reference={reference} />}
       </div>
       {failure.kind === 'holdExpired' && (
-        <Button size="sm" className="alert-action" onClick={onStartAgain}>
+        <Button size="sm" className="alert-action" onClick={onStartAgain} loading={starting}>
           Start again
         </Button>
       )}

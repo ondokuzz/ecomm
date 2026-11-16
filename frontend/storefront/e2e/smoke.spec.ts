@@ -51,6 +51,9 @@ import { stackSecret } from './secrets'
  *   why they were charged, the assistant explains its Authorization as a hold (Sprint 7).
  * - A Customer asks Help whether a seeded Product is in Stock in a Variant, is told so with its
  *   Price, and opens its Product page from the reply (Sprint 7).
+ * - A returning Customer is offered their last Order's Shipping address at checkout; told their
+ *   session is nearly over, they see the time left, and once it expires, "Start again" puts the
+ *   address and Coupon back on a new one (Sprint 8).
  */
 
 // The first checkout compares Stock before and after, so nothing else may check out meanwhile:
@@ -173,9 +176,10 @@ test('a Customer checks out a picked Variant and another Product, and on-hand St
   const doneSteps = steps.getByRole('listitem').filter({ hasText: '(done)' })
   await expect(currentStep).toContainText('Payment')
   await expect(doneSteps).toHaveText([/^Cart/])
-  // The Checkout Session holds the Cart for 15 minutes: its Stock is reserved, not yet taken.
+  // The Checkout Session holds the Cart for 15 minutes: its Stock is reserved, not yet taken. The
+  // time left shows only once under five minutes are left.
   await expect(page.getByText(/held until/)).toBeVisible()
-  await expect(page.getByRole('timer', { name: 'Time left' })).toHaveText(/^1[45]:\d\d$/)
+  await expect(page.getByRole('timer', { name: 'Time left' })).toBeHidden()
   const checkoutLines = page.getByRole('list', { name: 'Checkout lines' })
   for (const line of bought) {
     await expect(checkoutLines.getByRole('link', { name: lineName(line), exact: true })).toBeVisible()
@@ -341,7 +345,7 @@ test('a declined card shows why, and the held session can then be paid with one 
 
   await page.goto('/checkout')
   await signInOnKeycloak(page, customer)
-  await expect(page.getByRole('timer', { name: 'Time left' })).toBeVisible()
+  await expect(page.getByText(/held until/)).toBeVisible()
   const sessionId = await currentSessionId(request, token)
   await shipTo(page)
 
@@ -383,7 +387,7 @@ test('WELCOME10 takes 10% off at checkout, and the PAID Order shows the discount
 
   await page.goto('/checkout')
   await signInOnKeycloak(page, customer)
-  await expect(page.getByRole('timer', { name: 'Time left' })).toBeVisible()
+  await expect(page.getByText(/held until/)).toBeVisible()
   await shipTo(page)
   const summary = page.getByRole('region', { name: 'Order summary' })
   const couponField = summary.getByLabel('Coupon code')
@@ -896,7 +900,7 @@ test.describe('Sprint 4', () => {
 
     await page.goto('/checkout')
     await signInOnKeycloak(page, customer)
-    await expect(page.getByRole('timer', { name: 'Time left' })).toBeVisible()
+    await expect(page.getByText(/held until/)).toBeVisible()
     await shipTo(page)
     await testCard(page, 'Bank confirms, approves').check()
     const confirmingShown = await watchForStatus(page, 'Confirming your payment…')
@@ -927,7 +931,7 @@ test.describe('Sprint 4', () => {
 
     await page.goto('/checkout')
     await signInOnKeycloak(page, customer)
-    await expect(page.getByRole('timer', { name: 'Time left' })).toBeVisible()
+    await expect(page.getByText(/held until/)).toBeVisible()
     const sessionId = await currentSessionId(request, token)
     await shipTo(page)
     await testCard(page, 'Bank confirms, declines').check()
@@ -961,7 +965,7 @@ test.describe('Sprint 5', () => {
 
     await page.goto('/checkout')
     await signInOnKeycloak(page, customer)
-    await expect(page.getByRole('timer', { name: 'Time left' })).toBeVisible()
+    await expect(page.getByText(/held until/)).toBeVisible()
     await shipTo(page)
     await testCard(page, 'Approve').check()
     await page.getByRole('button', { name: /^Pay/ }).click()
@@ -1088,7 +1092,7 @@ test.describe('Sprint 6', () => {
       await putInCart(request, await tokenFor(request, customer), phone.variantId)
       await page.goto('/checkout')
       await signInOnKeycloak(page, customer)
-      await expect(page.getByRole('timer', { name: 'Time left' })).toBeVisible()
+      await expect(page.getByText(/held until/)).toBeVisible()
       const summary = page.getByRole('region', { name: 'Order summary' })
       await summary.getByLabel('Coupon code').fill(code)
       await summary.getByRole('button', { name: 'Apply' }).click()
@@ -1186,7 +1190,7 @@ test.describe('Sprint 6', () => {
 
     await page.goto('/checkout')
     await signInOnKeycloak(page, customer)
-    await expect(page.getByRole('timer', { name: 'Time left' })).toBeVisible()
+    await expect(page.getByText(/held until/)).toBeVisible()
     await shipTo(page)
     await testCard(page, 'Approve').check()
     await page.getByRole('button', { name: /^Pay/ }).click()
@@ -1486,6 +1490,65 @@ test.describe('Sprint 8', () => {
       page.getByRole('form', { name: 'Notification preferences' }).getByRole('switch', { name: /Cart reminders/ }),
     ).not.toBeChecked()
   })
+  test('a returning Customer is offered their last Order’s address, and an expired session starts again with it and its Coupon', async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(3 * 60_000)
+    const customer = signedUp()
+    const token = await tokenFor(request, customer)
+    await checkOutThroughApi(request, token, (await aProductInStock(request)).variantId)
+    await putInCart(request, token, (await aProductInStock(request)).variantId)
+
+    // The first Order went to Berlin, and the second checkout offers it.
+    await page.goto('/checkout')
+    await signInOnKeycloak(page, customer)
+    const offer = page.getByRole('group', { name: 'Your last address' })
+    await expect(offer).toContainText('10115 Berlin')
+    await expectAccessible(page, { keyboard: true })
+    // Editing it starts from it; going back offers it again.
+    await offer.getByRole('button', { name: 'Edit' }).click()
+    const form = page.getByRole('form', { name: 'Shipping address' })
+    await expect(form.getByLabel('Postcode')).toHaveValue('10115')
+    await form.getByRole('button', { name: 'Cancel' }).click()
+    await offer.getByRole('button', { name: 'Enter another address' }).click()
+    await expect(form.getByLabel('Postcode')).toHaveValue('')
+    await form.getByRole('button', { name: 'Cancel' }).click()
+    await offer.getByRole('button', { name: 'Use this address' }).click()
+    const shippingTo = page.locator('address[aria-label="Shipping address"]')
+    await expect(shippingTo).toContainText('10115 Berlin')
+    await expect(page.getByRole('radio', { name: /^Standard/ })).toBeVisible()
+    const summary = page.getByRole('region', { name: 'Order summary' })
+    await summary.getByLabel('Coupon code').fill('WELCOME10')
+    await summary.getByRole('button', { name: 'Apply' }).click()
+    await expect(summary.getByText('Coupon: WELCOME10')).toBeVisible()
+
+    // A session is held for 15 minutes, too long for a test to wait, so the page is told this one
+    // ends in 30 seconds. The time left shows, as it does once under five minutes, then it expires.
+    const expired = await currentSessionId(request, token)
+    const endsAt = new Date(Date.now() + 30_000).toISOString()
+    const currentSessionRead = '**/api/checkout-pricing/checkout/sessions/current'
+    await page.route(currentSessionRead, async (route) => {
+      const response = await route.fetch()
+      await route.fulfill({ response, json: { ...(await response.json()), expiresAt: endsAt } })
+    })
+    await page.reload()
+    await expect(page.getByRole('timer', { name: 'Time left' })).toHaveText(/^0:[0-3]\d$/)
+    await expect(shippingTo).toContainText('10115 Berlin')
+    await expectAccessible(page)
+    await expect(page.getByRole('heading', { name: 'Your hold expired' })).toBeVisible({ timeout: 45_000 })
+    await expectAccessible(page)
+    await page.unroute(currentSessionRead)
+
+    // Starting again starts a new session, with the address and the Coupon put back. Starting one
+    // reserves its Stock, which has taken 30 seconds on a loaded stack.
+    await page.getByRole('button', { name: 'Start again' }).click()
+    await expect(shippingTo).toContainText('10115 Berlin', { timeout: 45_000 })
+    await expect(page.getByRole('radio', { name: /^Standard/ })).toBeVisible()
+    await expect(summary.getByText('Coupon: WELCOME10')).toBeVisible()
+    await expect(page.getByRole('timer', { name: 'Time left' })).toBeHidden()
+    expect(await currentSessionId(request, token)).not.toBe(expired)
+  })
 })
 
 /** One Product as Search & Discovery answers it, with each Variant's Price and whether it is in Stock. */
@@ -1576,10 +1639,20 @@ async function fillAddress(page: Page, fields: Record<keyof typeof berlin, strin
   await expect(form.getByLabel('Country')).toHaveValue('DE')
 }
 
-/** Ships the Checkout Session to Berlin, Standard, and waits for its cost in the summary. */
+/**
+ * Ships the Checkout Session to Berlin, Standard, and waits for its cost in the summary. A Customer
+ * with an Order before is offered its address, Berlin as every test ships, and uses it.
+ */
 async function shipTo(page: Page) {
-  await fillAddress(page, berlin)
-  await page.getByRole('form', { name: 'Shipping address' }).getByRole('button', { name: 'Use this address' }).click()
+  const form = page.getByRole('form', { name: 'Shipping address' })
+  const offer = page.getByRole('group', { name: 'Your last address' })
+  await expect(form.or(offer)).toBeVisible()
+  if (await offer.isVisible()) {
+    await offer.getByRole('button', { name: 'Use this address' }).click()
+  } else {
+    await fillAddress(page, berlin)
+    await form.getByRole('button', { name: 'Use this address' }).click()
+  }
   const standard = page.getByRole('radio', { name: /^Standard/ })
   await standard.click()
   await expect(standard).toBeChecked()

@@ -1,20 +1,24 @@
 import { type FormEvent, useId, useState } from 'react'
 import { addressProblemOf, isSessionOver, useSessionShippingAddress, useSessionShippingOption } from '../api/checkout'
 import { useFormatMoney } from '../api/currencies'
+import { useLastShippingAddress } from '../api/orders'
 import type { CheckoutSession } from '../domain/checkout'
 import {
+  type AddressChoice,
   type AddressField,
   type AddressForm,
   addressFormOf,
   addressLines,
   shippingOptionLabel,
   shippingOptionName,
+  shippingStep,
 } from '../domain/shipping'
 import { ErrorMessage } from './Status'
 import { Button } from './ui/Button'
 import { Card } from './ui/Card'
 import { Icon } from './ui/Icon'
 import { Input } from './ui/Input'
+import { Skeleton } from './ui/Skeleton'
 
 /** The countries the store ships to: the EU's 27, as the mock Carrier and address validator serve. */
 const countries = [
@@ -52,7 +56,10 @@ const countryNames = new Intl.DisplayNames(undefined, { type: 'region' })
 /**
  * Where the Order goes and how: the Shipping address form, each field's problem shown against it,
  * then, once Checkout has validated the address, the normalised address and the Shipping options
- * quoted for it, each with its Carrier, days and cost.
+ * quoted for it, each with its Carrier, days and cost. A session without an address is first
+ * offered the one the Customer's latest Order went to, to use as it is, edit, or replace with
+ * another; using it sends it to Checkout as one typed in. It is meant to be keyed by the session,
+ * so a new session starts from its own address.
  */
 export function CheckoutShipping({
   session,
@@ -66,40 +73,82 @@ export function CheckoutShipping({
 }) {
   const address = useSessionShippingAddress()
   const option = useSessionShippingOption()
-  const [editing, setEditing] = useState(session.shippingAddress === null)
+  const [choice, setChoice] = useState<AddressChoice>('none')
+  const last = useLastShippingAddress(session.shippingAddress === null)
+  const step = shippingStep(session.shippingAddress, last, choice)
   const formatMoney = useFormatMoney()
   const optionsName = useId()
   // The option being chosen shows as chosen at once; the session's own once Checkout answers.
   const chosenId = option.isPending ? option.variables?.optionId : session.shippingOption?.id
+  const send = (form: AddressForm, onRefused?: () => void) => {
+    onChange()
+    address.mutate({ sessionId: session.id, form }, { onSuccess: () => setChoice('none'), onError: onRefused })
+  }
 
   return (
     <Card className="shipping">
       <h2>Shipping</h2>
-      {editing || session.shippingAddress === null ? (
+      {step.kind === 'reading' && (
+        <div className="stack" aria-hidden="true">
+          <Skeleton width="60%" />
+          <Skeleton width="40%" />
+        </div>
+      )}
+      {step.kind === 'offer' && (
+        <div className="shipping-offer" role="group" aria-label="Your last address">
+          <p className="muted">Ship to the address of your last order?</p>
+          <address aria-label="Last order's shipping address">
+            {addressLines(step.address).map((line) => (
+              <span key={line}>{line}</span>
+            ))}
+          </address>
+          <div className="address-actions">
+            <Button
+              variant="primary"
+              loading={address.isPending}
+              disabled={disabled}
+              // A refusal shows against the address's fields, in the form, to correct there.
+              onClick={() => send(addressFormOf(step.address), () => setChoice('edit'))}
+            >
+              Use this address
+            </Button>
+            <Button variant="ghost" onClick={() => setChoice('edit')} disabled={disabled || address.isPending}>
+              Edit
+            </Button>
+            <Button variant="ghost" onClick={() => setChoice('another')} disabled={disabled || address.isPending}>
+              Enter another address
+            </Button>
+          </div>
+        </div>
+      )}
+      {step.kind === 'form' && (
         <AddressFormFields
-          initial={addressFormOf(session.shippingAddress)}
+          // The form starts afresh from what it is given each time it opens.
+          key={choice}
+          initial={step.initial}
           disabled={disabled}
           mutation={address}
-          canCancel={session.shippingAddress !== null}
-          onCancel={() => setEditing(false)}
-          onSubmit={(form) => {
-            onChange()
-            address.mutate({ sessionId: session.id, form }, { onSuccess: () => setEditing(false) })
+          canCancel={step.canCancel}
+          onCancel={() => {
+            address.reset()
+            setChoice('none')
           }}
+          onSubmit={(form) => send(form)}
         />
-      ) : (
+      )}
+      {step.kind === 'address' && session.shippingAddress && (
         <div className="shipping-address">
           <address aria-label="Shipping address">
             {addressLines(session.shippingAddress).map((line) => (
               <span key={line}>{line}</span>
             ))}
           </address>
-          <Button variant="ghost" size="sm" onClick={() => setEditing(true)} disabled={disabled}>
+          <Button variant="ghost" size="sm" onClick={() => setChoice('edit')} disabled={disabled}>
             Change address
           </Button>
         </div>
       )}
-      {!editing && session.shippingOptions.length > 0 && (
+      {step.kind === 'address' && session.shippingOptions.length > 0 && (
         <fieldset className="test-cards shipping-options" disabled={disabled || option.isPending}>
           <legend>Shipping option</legend>
           {session.shippingOptions.map((quoted) => (

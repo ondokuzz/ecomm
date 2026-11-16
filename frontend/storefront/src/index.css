@@ -3279,6 +3279,16 @@ main {
   align-items: flex-start;
   gap: var(--space-3);
 }
+.shipping-offer {
+  display: grid;
+  gap: var(--space-3);
+}
+.shipping-offer p {
+  margin: 0;
+}
+.address-actions {
+  flex-wrap: wrap;
+}
 .shipping address,
 .order-shipping address {
   display: flex;

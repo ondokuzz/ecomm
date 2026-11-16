@@ -11,7 +11,7 @@ React, TypeScript, React Router and TanStack Query.
 | `/?q=&category=&…` | Products, searched and filtered, as Search & Discovery finds them: see [Search](#search) | no |
 | `/products/{sku}?variant=` | A Product with a Variant picker, and the chosen Variant's image, Price, Stock and specs, laid out by its Category's attribute definitions; add it to the Cart. Below, its ratings and reviews: see [Reviews](#reviews) | no (adding and reviewing need it) |
 | `/cart` | The Cart, priced from Catalog's current Prices; change quantities, remove lines or empty it | yes |
-| `/checkout` | Starts or resumes a Checkout Session: its lines, price breakdown, a Coupon field and a countdown to when it expires, a Shipping address form and Shipping options, a test-card picker and a "Pay" button | yes |
+| `/checkout` | Starts or resumes a Checkout Session: its lines, price breakdown, a Coupon field, when it expires and, under five minutes before, a countdown to it, a Shipping address form, or the last Order's address offered, and Shipping options, a test-card picker and a "Pay" button | yes |
 | `/orders/{id}` | An Order: its Order Status timeline, drawn from its Order Status history with times, its Payment, its Shipping, its lines and summary; after checkout, the confirmation first | yes |
 | `/orders?page=` | My Orders as cards, newest first, 12 to a page; `page` counts from 1 | yes |
 | `/returns?page=` | My Returns: the Customer's RMAs as cards, newest first, 20 to a page; in the account menu. See [Returns](#returns) | yes |
@@ -397,11 +397,17 @@ resumes the Customer's Checkout Session when it still holds exactly their Cart
 Reservation.
 The page shows the session's lines at their held Prices, its price breakdown (subtotal, a line
 for each Discount in the order it applied, "Campaign: Audio week" or "Coupon: WELCOME10", tax,
-total: `sessionSummaryRows`), and "held until" the session's expiry with a live `m:ss` countdown
-(`sessionCountdown`), all in [`src/domain/checkout.ts`](./src/domain/checkout.ts). The countdown is a
+total: `sessionSummaryRows`), and "held until" the session's expiry; once under five minutes are
+left, the notice turns to a warning with a live `m:ss` countdown (`sessionCountdown`'s `nearlyOver`),
+all in [`src/domain/checkout.ts`](./src/domain/checkout.ts). The countdown is a
 `timer`, so screen readers aren't told every second; the clock time says it once. When the session
 expires, or paying finds it over (410 or 404), the page becomes "Your hold expired" with a "Start
-again" button, which always starts a new session. Pay is disabled while a payment is in flight.
+again" button, which always starts a new session (`useStartAgain`) and puts back the old one's
+Shipping address, then its Coupon (`carriedOver`), as the Customer would, so Checkout validates and
+quotes the address again. An address it refuses now is left off, and the Shipping card asks for one;
+a Coupon that doesn't apply now is left off, with its code in the Coupon field and why next to it,
+as applying it would have said. The page goes on showing what it showed, with "Start again"
+busy, until the new session is ready. Pay is disabled while a payment is in flight.
 
 The price breakdown has a Coupon field. Applying a code, in any case, sends it to Checkout, and the
 session it answers with replaces the one shown, so the Discount lines, the total and the Pay button
@@ -421,7 +427,12 @@ their Variants, and the page lists their Products (`checkoutProblem`) with a lin
 
 Above the payment, a Shipping card asks where the Order goes. Its form takes the recipient's name,
 the address, an optional second line, postcode, city, optional region and phone, and a country from
-the EU's 27, which the store ships to. "Use this address" sends it to Checkout, which validates it
+the EU's 27, which the store ships to. A session without an address first offers the one the
+Customer's latest Order with one went to, read from the first page of their Orders as My Orders reads
+it (`useLastShippingAddress`, `lastShippingAddress`), with "Use this address", "Edit", which opens the
+form filled with it, and "Enter another address", which opens it empty; the form's "Cancel" goes back
+to the offer (`shippingStep`). A Customer with no such Order, or whose Orders can't be read, gets the
+form. "Use this address" sends it to Checkout, which validates it
 and quotes Shipping options for it; each field's problem is shown against its field
 (`addressProblem` in [`src/domain/shipping.ts`](./src/domain/shipping.ts)), a country the store
 doesn't ship to or Shipping that can't be quoted right now is said once, and the session is
@@ -514,7 +525,7 @@ Sign in as `demo@ecomm.local` / `demo`, or register a new Customer.
 ```sh
 npm run typecheck
 npm run lint
-npm test          # Vitest: failed responses as messages and support references, Money formatting by Catalog's Minor units, Cart pricing, checkout problems, the session countdown and the price breakdown with each Discount and the Shipping cost, address violations mapped to their fields, Shipping options and addresses in words, whether a session can be paid, Coupon rejections, test cards and payment failures, an Order's Payment statuses and transactions and why a cancelled Order was cancelled, quantities, Stock levels and Cart lines' availability, toasts, the search's URL and its Facets as chips and filters, rating stars and summaries, the review and report forms' validation and a review's status for its author, Product specs by their Category's definitions, Warranty terms in words, Customer initials, Orders and their timeline from the Order Status history, Shipment statuses in words, Tracking events oldest first and when the Order page refreshes them, the Orders list's paging, Order Status colours, RMA kinds offered or disabled with why, the request form's checks, Returns & Warranty's refusals by field, the RMA timeline and when its page refreshes, Refunds named by their RMA, the Notification preferences form's mobile number, the Recommendation label and the row's heading, Ecomm Agent's characters left and its references' links, seed Product images, the Keycloak theme's and the Admin Console's copies of the tokens
+npm test          # Vitest: failed responses as messages and support references, Money formatting by Catalog's Minor units, Cart pricing, checkout problems, the session countdown and when it shows, what "Start again" carries over, the last Order's address and the Shipping card's steps, and the price breakdown with each Discount and the Shipping cost, address violations mapped to their fields, Shipping options and addresses in words, whether a session can be paid, Coupon rejections, test cards and payment failures, an Order's Payment statuses and transactions and why a cancelled Order was cancelled, quantities, Stock levels and Cart lines' availability, toasts, the search's URL and its Facets as chips and filters, rating stars and summaries, the review and report forms' validation and a review's status for its author, Product specs by their Category's definitions, Warranty terms in words, Customer initials, Orders and their timeline from the Order Status history, Shipment statuses in words, Tracking events oldest first and when the Order page refreshes them, the Orders list's paging, Order Status colours, RMA kinds offered or disabled with why, the request form's checks, Returns & Warranty's refusals by field, the RMA timeline and when its page refreshes, Refunds named by their RMA, the Notification preferences form's mobile number, the Recommendation label and the row's heading, Ecomm Agent's characters left and its references' links, seed Product images, the Keycloak theme's and the Admin Console's copies of the tokens
 npm run test:e2e  # Playwright smoke, search, product-page, error-states and help tests against the running compose stack (`make up`)
 ```
 
@@ -577,7 +588,13 @@ Order Status, and opens its page from the reply's link. Another asks about its O
 reference, typed in lower case without the `#`, and is told where it is, then asks why they were
 charged and sees its Authorization explained as a hold, nothing charged yet. Another asks Ecomm Agent
 whether the seeded Pixel 9 is in stock in 256 GB, is told whether it is, with its Price, as Search &
-Discovery answers them at the time, and opens its Product page from the reply's link. The help test
+Discovery answers them at the time, and opens its Product page from the reply's link. Of Sprint 8's,
+one checks out through the gateway to Berlin, then goes to checkout and is offered that address,
+edits it and enters another and goes back each time, uses it, and applies `WELCOME10`. The page is
+then told the session ends in 30 seconds, since a test can't wait 15 minutes: the session's read is
+answered with an earlier `expiresAt`, and the page reloaded. It sees the time left, then "Your hold
+expired", and "Start again" gives a new session with Berlin and `WELCOME10` put back. The other
+checkouts' Shipping step uses the offered address when there is one. The help test
 ([`e2e/help.spec.ts`](./e2e/help.spec.ts)) opens Ecomm Agent signed out and is asked to sign in; signed in
 as a Customer made for each test, whose Conversation and Customer it deletes after, it sees focus move into the panel and back to its button on Escape and on close,
 follows a Conversation across pages and a reload, starts a new one, has a lapsed one replaced, and

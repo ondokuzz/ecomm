@@ -7,6 +7,7 @@ import {
   appliedCoupon,
   discountLabel,
   discountNames,
+  lastShippingAddress,
   nameOrderLines,
   orderItemCountLabel,
   orderReference,
@@ -238,5 +239,23 @@ describe('orderTimeline', () => {
 describe('orderStatusLabel', () => {
   it('reads as a word', () => {
     expect(orderStatusLabel('CANCELLED')).toBe('Cancelled')
+  })
+})
+
+describe('lastShippingAddress', () => {
+  const berlin = { recipientName: 'Erika', line1: 'Hauptstraße 5', postcode: '10115', city: 'Berlin', country: 'DE' }
+  const paris = { recipientName: 'Erika', line1: '1 rue de Rivoli', postcode: '75001', city: 'Paris', country: 'FR' }
+
+  it("is the newest Order's, as the Customer's list comes newest first", () => {
+    expect(lastShippingAddress([order({ shippingAddress: paris }), order({ shippingAddress: berlin })])).toEqual(paris)
+  })
+
+  it('skips an Order placed before Shipping, which has none', () => {
+    expect(lastShippingAddress([order(), order({ shippingAddress: berlin })])).toEqual(berlin)
+  })
+
+  it('is undefined when no Order has one', () => {
+    expect(lastShippingAddress([])).toBeUndefined()
+    expect(lastShippingAddress([order()])).toBeUndefined()
   })
 })

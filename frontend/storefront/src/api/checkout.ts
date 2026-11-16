@@ -1,9 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from 'react-oidc-context'
 import type { Cart } from '../domain/cart'
-import { type CheckoutSession, sessionHoldsCart } from '../domain/checkout'
+import { type CarriedOver, type CheckoutSession, sessionHoldsCart } from '../domain/checkout'
 import { type CouponRejection, couponRejection } from '../domain/coupon'
-import { type AddressForm, type AddressProblem, addressProblem, shippingRequest } from '../domain/shipping'
+import {
+  type AddressForm,
+  type AddressProblem,
+  addressFormOf,
+  addressProblem,
+  shippingRequest,
+} from '../domain/shipping'
 import { type PaymentAttempt, type PaymentFailure, confirmation, paymentFailure, pollEvery } from '../domain/payment'
 import { cartKey } from './cart'
 import { stockKey } from './catalog'
@@ -16,7 +22,8 @@ const sessionKey = ['checkout-session']
 /**
  * The Customer's Checkout Session for `cart`. The first attempt resumes the one they have when it
  * still holds this Cart, and starts a new one otherwise; each later `attempt` always starts anew,
- * which replaces the old session and releases its Reservation.
+ * which replaces the old session and releases its Reservation, unless {@link useStartAgain} has
+ * already started it.
  */
 export function useCheckoutSession(cart: Cart | undefined, attempt: number) {
   const token = useAuth().user?.access_token
@@ -25,7 +32,7 @@ export function useCheckoutSession(cart: Cart | undefined, attempt: number) {
     queryFn: async () => {
       const current = attempt === 0 ? await currentSession(token) : undefined
       if (current && cart && sessionHoldsCart(current, cart)) return current
-      return api<CheckoutSession>('checkout-pricing', '/checkout/sessions', { method: 'POST', token })
+      return startSession(token)
     },
     enabled: token !== undefined && cart !== undefined && cart.items.length > 0,
     // Starting one has side effects (a Reservation), so never behind the Customer's back.
@@ -34,6 +41,62 @@ export function useCheckoutSession(cart: Cart | undefined, attempt: number) {
     gcTime: 0,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
+  })
+}
+
+const startSession = (token: string | undefined) =>
+  api<CheckoutSession>('checkout-pricing', '/checkout/sessions', { method: 'POST', token })
+
+const setCoupon = (token: string | undefined, sessionId: string, code: string | null) =>
+  api<CheckoutSession>('checkout-pricing', `/checkout/sessions/${encodeURIComponent(sessionId)}/coupon`, {
+    method: code === null ? 'DELETE' : 'PUT',
+    token,
+    body: code === null ? undefined : { code },
+  })
+
+const putShippingAddress = (token: string | undefined, sessionId: string, form: AddressForm) =>
+  api<CheckoutSession>('checkout-pricing', `/checkout/sessions/${encodeURIComponent(sessionId)}/shipping-address`, {
+    method: 'PUT',
+    token,
+    body: shippingRequest(form),
+  })
+
+/** A session started again, with the Coupon carried over to it and, when it didn't apply, why. */
+export interface StartedAgain {
+  session: CheckoutSession
+  couponCode?: string
+  couponError?: unknown
+}
+
+/**
+ * "Start again": starts a new Checkout Session from the Cart, as the given `attempt`, and puts back
+ * what the old one `carried`, each as the Customer would: its Shipping address, which Checkout
+ * validates and quotes again, then its Coupon. An address Checkout refuses now is left off, so the
+ * Customer gives one again; a Coupon that doesn't apply now is left off with its error, which the
+ * Coupon field shows as applying it would have. Only starting the session failing fails it.
+ */
+export function useStartAgain() {
+  const token = useAuth().user?.access_token
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ carried }: { attempt: number; carried: CarriedOver }): Promise<StartedAgain> => {
+      let session = await startSession(token)
+      if (carried.address) {
+        try {
+          session = await putShippingAddress(token, session.id, addressFormOf(carried.address))
+        } catch {
+          // Left off: the Shipping card asks for an address, as for any session without one.
+        }
+      }
+      if (!carried.couponCode) return { session }
+      try {
+        return { session: await setCoupon(token, session.id, carried.couponCode), couponCode: carried.couponCode }
+      } catch (couponError) {
+        return { session, couponCode: carried.couponCode, couponError }
+      }
+    },
+    // The attempt's session query finds it there, and starts none of its own.
+    onSuccess: ({ session }, { attempt }) => queryClient.setQueryData([...sessionKey, attempt], session),
   })
 }
 
@@ -54,12 +117,7 @@ export function useSessionCoupon() {
   const token = useAuth().user?.access_token
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ sessionId, code }: { sessionId: string; code: string | null }) =>
-      api<CheckoutSession>('checkout-pricing', `/checkout/sessions/${encodeURIComponent(sessionId)}/coupon`, {
-        method: code === null ? 'DELETE' : 'PUT',
-        token,
-        body: code === null ? undefined : { code },
-      }),
+    mutationFn: ({ sessionId, code }: { sessionId: string; code: string | null }) => setCoupon(token, sessionId, code),
     onSuccess: (session) => queryClient.setQueriesData({ queryKey: sessionKey }, session),
   })
 }
@@ -74,11 +132,7 @@ export function useSessionShippingAddress() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: ({ sessionId, form }: { sessionId: string; form: AddressForm }) =>
-      api<CheckoutSession>('checkout-pricing', `/checkout/sessions/${encodeURIComponent(sessionId)}/shipping-address`, {
-        method: 'PUT',
-        token,
-        body: shippingRequest(form),
-      }),
+      putShippingAddress(token, sessionId, form),
     onSuccess: (session) => queryClient.setQueriesData({ queryKey: sessionKey }, session),
   })
 }

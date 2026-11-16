@@ -36,7 +36,7 @@ The first build takes several minutes. Then open the Storefront on http://localh
 2. sign in as `demo@ecomm.local` / `demo`, or register a new Customer on Keycloak's page;
 3. add Products to the Cart, which warns of a line that asks for more than is in Stock, and go to
    checkout, which holds them and their Prices for 15 minutes
-   and shows the time left. An `audio` Product gets the "Audio week" Campaign's 15% off by itself.
+   and shows the time left once under five minutes are left. An `audio` Product gets the "Audio week" Campaign's 15% off by itself.
    Enter the Coupon `WELCOME10` for 10% off what is left. Give a Shipping address in the EU: each
    field's problem is named (a German postcode is five digits, a Dutch one `1012 AB`), and a valid
    one comes back normalised. Choose **Standard** or **Express**, whose Shipping cost, quoted from
@@ -98,7 +98,8 @@ The payment gateway is mocked, and each test card stands for a Payment method:
 | Bank confirms, declines | `tok_async_decline` | shows "Confirming your payment…", then "Your card was declined" once the webhook declines it |
 | Charge refused | `tok_capture_decline` | pays: the Order is **Paid**, but the mock gateway refuses to capture the Payment, as `authorization_expired` |
 
-A checkout left unpaid expires after 15 minutes, and the Storefront offers to start again. Its
+A checkout left unpaid expires after 15 minutes, and the Storefront offers to start again, with
+the old session's Shipping address and Coupon put back, each if it still applies. Its
 Reservation stops holding the Stock 2 minutes later, and Inventory's sweeper marks it `RELEASED`
 within 30 seconds of that ([Checkout ADR 0001](./services/checkout-pricing/docs/adr/0001-checkout-sessions-hold-stock-through-reservations.md)).
 `GET http://localhost:8000/api/inventory/stock/{variantId}` shows the Stock held and given back.

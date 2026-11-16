@@ -108,3 +108,35 @@ export function addressLines(address: ShippingAddress): string[] {
     address.phone,
   ].filter((line): line is string => Boolean(line))
 }
+
+/** What the Customer chose to do with the address shown: nothing yet, edit it, or enter another. */
+export type AddressChoice = 'none' | 'edit' | 'another'
+
+/**
+ * What checkout's Shipping card shows: the session's own address; the last Order's offered to a
+ * session without one, to use as it is, edit or replace; nothing while that is being read; or the
+ * address form, filled with the address being edited, with a way back when there is one to go back to.
+ */
+export type ShippingStep =
+  | { kind: 'address' }
+  | { kind: 'offer'; address: ShippingAddress }
+  | { kind: 'reading' }
+  | { kind: 'form'; initial: AddressForm; canCancel: boolean }
+
+/**
+ * The Shipping card's step for a session's address, the last Order's (undefined while it is read,
+ * null when there is none), and what the Customer chose.
+ */
+export function shippingStep(
+  current: ShippingAddress | null,
+  last: ShippingAddress | null | undefined,
+  choice: AddressChoice,
+): ShippingStep {
+  const canCancel = current !== null || Boolean(last)
+  if (choice === 'another') return { kind: 'form', initial: emptyAddressForm, canCancel }
+  if (choice === 'edit') return { kind: 'form', initial: addressFormOf(current ?? last), canCancel }
+  if (current) return { kind: 'address' }
+  if (last === undefined) return { kind: 'reading' }
+  if (last) return { kind: 'offer', address: last }
+  return { kind: 'form', initial: emptyAddressForm, canCancel: false }
+}

@@ -7,6 +7,7 @@ import {
   sessionHoldsCart,
   hasShipping,
   sessionSummaryRows,
+  carriedOver,
 } from './checkout'
 
 const lines: CartLine[] = [
@@ -81,21 +82,31 @@ describe('sessionCountdown', () => {
   it('shows the minutes and seconds left', () => {
     expect(sessionCountdown(session.expiresAt, expiresAt - 14 * 60_000 - 5_000)).toEqual({
       expired: false,
+      nearlyOver: false,
       label: '14:05',
     })
   })
 
   it('shows a whole 15 minutes at the start', () => {
-    expect(sessionCountdown(session.expiresAt, expiresAt - 15 * 60_000)).toEqual({ expired: false, label: '15:00' })
+    expect(sessionCountdown(session.expiresAt, expiresAt - 15 * 60_000)).toMatchObject({
+      expired: false,
+      label: '15:00',
+    })
   })
 
   it('rounds a part second up, so it never shows 0:00 while the session lasts', () => {
-    expect(sessionCountdown(session.expiresAt, expiresAt - 300)).toEqual({ expired: false, label: '0:01' })
+    expect(sessionCountdown(session.expiresAt, expiresAt - 300)).toMatchObject({ expired: false, label: '0:01' })
   })
 
   it('is expired from the moment the session ends', () => {
-    expect(sessionCountdown(session.expiresAt, expiresAt)).toEqual({ expired: true, label: '0:00' })
-    expect(sessionCountdown(session.expiresAt, expiresAt + 60_000)).toEqual({ expired: true, label: '0:00' })
+    expect(sessionCountdown(session.expiresAt, expiresAt)).toMatchObject({ expired: true, label: '0:00' })
+    expect(sessionCountdown(session.expiresAt, expiresAt + 60_000)).toMatchObject({ expired: true, label: '0:00' })
+  })
+
+  it('is nearly over once under five minutes are left, when the page shows the time left', () => {
+    expect(sessionCountdown(session.expiresAt, expiresAt - 5 * 60_000).nearlyOver).toBe(false)
+    expect(sessionCountdown(session.expiresAt, expiresAt - 5 * 60_000 + 1).nearlyOver).toBe(true)
+    expect(sessionCountdown(session.expiresAt, expiresAt - 1_000).nearlyOver).toBe(true)
   })
 })
 
@@ -156,5 +167,38 @@ describe('sessionHoldsCart', () => {
     expect(sessionHoldsCart(session, { items: [{ variantId: 'PIXEL-9', quantity: 2 }] })).toBe(false)
     const more = { items: [...session.lines, { variantId: 'IPHONE', quantity: 1 }] }
     expect(sessionHoldsCart(session, more)).toBe(false)
+  })
+})
+
+describe('carriedOver', () => {
+  const berlin = { recipientName: 'Erika', line1: 'Hauptstraße 5', postcode: '10115', city: 'Berlin', country: 'DE' }
+  const welcome10 = {
+    source: 'COUPON' as const,
+    couponCode: 'WELCOME10',
+    campaignId: null,
+    campaignName: null,
+    amount: eur(17270),
+  }
+  const audioWeek = {
+    source: 'CAMPAIGN' as const,
+    couponCode: null,
+    campaignId: 'c-1',
+    campaignName: 'Audio week',
+    amount: eur(500),
+  }
+
+  it("takes an expired session's Shipping address and Coupon to the one that starts again", () => {
+    expect(carriedOver({ ...session, shippingAddress: berlin, discounts: [audioWeek, welcome10] })).toEqual({
+      address: berlin,
+      couponCode: 'WELCOME10',
+    })
+  })
+
+  it('takes nothing it lacked, nor a Campaign, which the new session works out for itself', () => {
+    expect(carriedOver({ ...session, discounts: [audioWeek] })).toEqual({})
+  })
+
+  it('takes nothing when there was no session, as when one could not start', () => {
+    expect(carriedOver(undefined)).toEqual({})
   })
 })

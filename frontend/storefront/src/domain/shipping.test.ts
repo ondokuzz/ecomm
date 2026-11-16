@@ -7,6 +7,7 @@ import {
   shippingOptionLabel,
   shippingOptionName,
   shippingRequest,
+  shippingStep,
 } from './shipping'
 
 const eur = (amountMinor: number) => ({ amountMinor, currency: 'EUR' })
@@ -135,5 +136,44 @@ describe('summaryRows with Shipping', () => {
   it('shows no shipping row until an option is chosen, or for an Order placed before Shipping', () => {
     const rows = summaryRows({ subtotal: eur(100), discounts: [], tax: eur(0), shippingOption: null, total: eur(100) })
     expect(rows.map((row) => row.label)).toEqual(['Subtotal', 'Tax', 'Total'])
+  })
+})
+
+describe('shippingStep', () => {
+  const berlin = { recipientName: 'Erika', line1: 'Hauptstraße 5', postcode: '10115', city: 'Berlin', country: 'DE' }
+  const paris = { recipientName: 'Erika', line1: '1 rue de Rivoli', postcode: '75001', city: 'Paris', country: 'FR' }
+  const parisForm = { ...emptyAddressForm, ...paris }
+
+  it("offers the last Order's address to a session without one", () => {
+    expect(shippingStep(null, paris, 'none')).toEqual({ kind: 'offer', address: paris })
+  })
+
+  it("waits for the last Order's address before showing an empty form", () => {
+    expect(shippingStep(null, undefined, 'none')).toEqual({ kind: 'reading' })
+  })
+
+  it('shows an empty form to a Customer with no Order to take one from', () => {
+    expect(shippingStep(null, null, 'none')).toEqual({ kind: 'form', initial: emptyAddressForm, canCancel: false })
+  })
+
+  it('fills the form with the offered address to edit it, and can go back to the offer', () => {
+    expect(shippingStep(null, paris, 'edit')).toEqual({ kind: 'form', initial: parisForm, canCancel: true })
+  })
+
+  it('shows an empty form to enter another address, and can go back to the offer', () => {
+    expect(shippingStep(null, paris, 'another')).toEqual({ kind: 'form', initial: emptyAddressForm, canCancel: true })
+  })
+
+  it("shows the session's own address once it has one, whatever was offered", () => {
+    expect(shippingStep(berlin, paris, 'none')).toEqual({ kind: 'address' })
+    expect(shippingStep(berlin, undefined, 'none')).toEqual({ kind: 'address' })
+  })
+
+  it("fills the form with the session's own address to change it", () => {
+    expect(shippingStep(berlin, paris, 'edit')).toEqual({
+      kind: 'form',
+      initial: { ...emptyAddressForm, ...berlin },
+      canCancel: true,
+    })
   })
 })

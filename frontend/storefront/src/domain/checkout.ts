@@ -1,6 +1,6 @@
 import type { Cart, CartLine } from './cart'
 import type { Money } from './money'
-import { type Discount, type OrderSummaryRow, summaryRows } from './order'
+import { type Discount, type OrderSummaryRow, appliedCoupon, summaryRows } from './order'
 import type { ShippingAddress, ShippingOption } from './shipping'
 
 /** One line of a Checkout Session, at the Price captured when it started. */
@@ -37,17 +37,50 @@ export interface CheckoutSession {
   expiresAt: string
 }
 
-/** How long a Checkout Session has left at `now` (epoch ms), as `m:ss`, rounded up to the second. */
-export function sessionCountdown(expiresAt: string, now: number): { expired: boolean; label: string } {
-  const secondsLeft = Math.max(0, Math.ceil((Date.parse(expiresAt) - now) / 1000))
+/** How long before a Checkout Session ends the page shows the time it has left: five minutes. */
+const nearlyOverWithin = 5 * 60_000
+
+/**
+ * How long a Checkout Session has left at `now` (epoch ms), as `m:ss`, rounded up to the second, and
+ * whether it is nearly over: under {@link nearlyOverWithin} left.
+ */
+export function sessionCountdown(
+  expiresAt: string,
+  now: number,
+): { expired: boolean; nearlyOver: boolean; label: string } {
+  const left = Date.parse(expiresAt) - now
+  const secondsLeft = Math.max(0, Math.ceil(left / 1000))
   const minutes = Math.floor(secondsLeft / 60)
   const seconds = secondsLeft % 60
-  return { expired: secondsLeft === 0, label: `${minutes}:${String(seconds).padStart(2, '0')}` }
+  return {
+    expired: secondsLeft === 0,
+    nearlyOver: left < nearlyOverWithin,
+    label: `${minutes}:${String(seconds).padStart(2, '0')}`,
+  }
 }
 
 /** What a Checkout Session comes to: subtotal, each Discount, Shipping once chosen, tax (even when zero) and total. */
 export function sessionSummaryRows(session: CheckoutSession): OrderSummaryRow[] {
   return summaryRows(session)
+}
+
+/** What "Start again" puts back on the new Checkout Session, when each still applies. */
+export interface CarriedOver {
+  address?: ShippingAddress
+  couponCode?: string
+}
+
+/**
+ * What an expired Checkout Session gives the one that replaces it: its Shipping address and its
+ * Coupon's code, each if it had one. Campaigns and the Shipping option aren't carried: the new
+ * session works out its Campaigns, and quotes its options again for the address.
+ */
+export function carriedOver(previous: CheckoutSession | undefined): CarriedOver {
+  const carried: CarriedOver = {}
+  if (previous?.shippingAddress) carried.address = previous.shippingAddress
+  const coupon = previous && appliedCoupon(previous.discounts)
+  if (coupon?.couponCode) carried.couponCode = coupon.couponCode
+  return carried
 }
 
 /** Whether a Checkout Session can be paid: Checkout refuses one without an address and a chosen option. */

@@ -74,6 +74,14 @@ export interface Order {
   statusHistory: StatusHistoryEntry[]
 }
 
+/**
+ * The Shipping address of the latest of `orders` with one, which checkout offers a returning
+ * Customer; `orders` come newest first, as the Customer's list does. Undefined when none has one.
+ */
+export function lastShippingAddress(orders: Order[]): ShippingAddress | undefined {
+  return orders.find((order) => order.shippingAddress)?.shippingAddress
+}
+
 /** How many Orders a page of the Customer's list shows. */
 export const ordersPageSize = 12
 
