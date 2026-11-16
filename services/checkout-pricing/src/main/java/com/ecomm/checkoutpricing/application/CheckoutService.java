@@ -4,6 +4,8 @@ import com.ecomm.checkoutpricing.application.port.in.CheckoutUseCase;
 import com.ecomm.checkoutpricing.application.port.out.AddressValidator;
 import com.ecomm.checkoutpricing.application.port.out.CartPort;
 import com.ecomm.checkoutpricing.application.port.out.CatalogPort;
+import com.ecomm.checkoutpricing.application.port.out.CheckoutFunnel;
+import com.ecomm.checkoutpricing.application.port.out.CheckoutFunnel.Step;
 import com.ecomm.checkoutpricing.application.port.out.CheckoutSaga;
 import com.ecomm.checkoutpricing.application.port.out.CheckoutSessionRepository;
 import com.ecomm.checkoutpricing.application.port.out.InventoryPort;
@@ -51,6 +53,7 @@ public class CheckoutService implements CheckoutUseCase {
   private final AddressValidator addresses;
   private final ShippingQuotes shippingQuotes;
   private final TimeSource time;
+  private final CheckoutFunnel funnel;
 
   public CheckoutService(
       CartPort cart,
@@ -62,7 +65,8 @@ public class CheckoutService implements CheckoutUseCase {
       CheckoutSessionRepository sessions,
       AddressValidator addresses,
       ShippingQuotes shippingQuotes,
-      TimeSource time) {
+      TimeSource time,
+      CheckoutFunnel funnel) {
     this.cart = cart;
     this.catalog = catalog;
     this.inventory = inventory;
@@ -73,6 +77,7 @@ public class CheckoutService implements CheckoutUseCase {
     this.addresses = addresses;
     this.shippingQuotes = shippingQuotes;
     this.time = time;
+    this.funnel = funnel;
   }
 
   @Override
@@ -105,12 +110,25 @@ public class CheckoutService implements CheckoutUseCase {
     // Kept past its expiry, until its Reservation's, so paying it late is told apart from paying
     // one that never existed.
     sessions.save(session, Duration.between(now, reservationExpiresAt));
+    funnel.reached(session.id(), Step.STARTED);
     return session;
   }
 
   @Override
   public Optional<CheckoutSession> current(String customerId) {
-    return sessions.findByCustomer(customerId).filter(s -> !s.isExpiredAt(time.now()));
+    return sessions.findByCustomer(customerId).filter(s -> !foundExpired(s));
+  }
+
+  @Override
+  public void lapsed(String sessionId) {
+    // An outcome nobody read, the Customer having left while it was being confirmed.
+    var attempt = saga.latestAttempt(sessionId);
+    attempt.ifPresent(a -> counted(sessionId, a));
+    // Paid, though the Saga hasn't ended it yet.
+    if (attempt.map(a -> a.status() == PaymentAttempt.Status.PAID).orElse(false)) {
+      return;
+    }
+    funnel.reached(sessionId, Step.EXPIRED);
   }
 
   @Override
@@ -148,14 +166,18 @@ public class CheckoutService implements CheckoutUseCase {
     if (options.isEmpty()) {
       throw new UndeliverableCountryException(validated.country());
     }
-    return replaced(session.withShippingAddress(validated, options));
+    var addressed = replaced(session.withShippingAddress(validated, options));
+    funnel.reached(sessionId, Step.ADDRESSED);
+    return addressed;
   }
 
   @Override
   public CheckoutSession chooseShippingOption(
       String customerId, String sessionId, String optionId) {
     var session = live(customerId, sessionId);
-    return replaced(session.withShippingOption(optionId));
+    var chosen = replaced(session.withShippingOption(optionId));
+    funnel.reached(sessionId, Step.OPTION_CHOSEN);
+    return chosen;
   }
 
   @Override
@@ -166,18 +188,47 @@ public class CheckoutService implements CheckoutUseCase {
     }
     // Its session ends once it is paid, but until then, paying it again must not buy it twice.
     var paid = saga.latestAttempt(sessionId).filter(a -> a.status() == PaymentAttempt.Status.PAID);
-    return paid.orElseGet(() -> saga.pay(session, paymentMethod));
+    if (paid.isPresent()) {
+      return paid.get();
+    }
+    var attempt = saga.pay(session, paymentMethod);
+    funnel.reached(sessionId, Step.PAY_ATTEMPTED);
+    return counted(sessionId, attempt);
   }
 
   @Override
   public PaymentAttempt latestPayment(String customerId, String sessionId) {
-    return saga.latestAttempt(sessionId)
-        .filter(attempt -> attempt.customerId().equals(customerId))
-        .orElseThrow(() -> new NoPaymentAttemptException(sessionId));
+    var attempt =
+        saga.latestAttempt(sessionId)
+            .filter(a -> a.customerId().equals(customerId))
+            .orElseThrow(() -> new NoPaymentAttemptException(sessionId));
+    return counted(sessionId, attempt);
+  }
+
+  /** {@code attempt}, once the funnel has counted how it ended, if it has. */
+  private PaymentAttempt counted(String sessionId, PaymentAttempt attempt) {
+    switch (attempt.status()) {
+      case PAID -> funnel.reached(sessionId, Step.PAID);
+      case DECLINED -> funnel.reached(sessionId, Step.DECLINED);
+      case HOLD_EXPIRED -> funnel.reached(sessionId, Step.HOLD_EXPIRED);
+      case PROCESSING, FAILED -> {}
+    }
+    return attempt;
+  }
+
+  /** Whether {@code session} has expired, which the funnel counts the first time it is found so. */
+  private boolean foundExpired(CheckoutSession session) {
+    if (session.isExpiredAt(time.now())) {
+      funnel.reached(session.id(), Step.EXPIRED);
+      return true;
+    }
+    return false;
   }
 
   @Override
   public void end(String customerId, String sessionId) {
+    // Only once its Order is paid, which the Customer may have left before reading.
+    funnel.reached(sessionId, Step.PAID);
     sessions
         .findByCustomer(customerId)
         .filter(session -> session.id().equals(sessionId))
@@ -196,7 +247,7 @@ public class CheckoutService implements CheckoutUseCase {
             .find(sessionId)
             .filter(s -> s.customerId().equals(customerId))
             .orElseThrow(() -> new CheckoutSessionNotFoundException(sessionId));
-    if (session.isExpiredAt(time.now())) {
+    if (foundExpired(session)) {
       throw new CheckoutSessionExpiredException(sessionId);
     }
     return session;
@@ -251,6 +302,7 @@ public class CheckoutService implements CheckoutUseCase {
 
   /** Gives a replaced session's Stock and Coupon back and forgets it. */
   private void discard(CheckoutSession session) {
+    foundExpired(session);
     inventory.release(session.customerId(), session.reservationId());
     if (session.couponCode().isPresent()) {
       promotions.release(session.id());

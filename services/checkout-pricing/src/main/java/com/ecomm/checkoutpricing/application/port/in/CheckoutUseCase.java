@@ -26,6 +26,15 @@ public interface CheckoutUseCase {
   Optional<CheckoutSession> current(String customerId);
 
   /**
+   * The Checkout Session {@code sessionId} lapsed: its store let it go once its time ran out, past
+   * its expiry, without its being ended or replaced. The checkout funnel counts how its latest
+   * payment ended, if it was paid for, and counts it expired unless it was paid.
+   *
+   * @throws CheckoutUnavailableException when the Saga can't be read; nothing is counted
+   */
+  void lapsed(String sessionId);
+
+  /**
    * Applies the Coupon {@code couponCode} to the Customer's Checkout Session, in place of any it
    * had, and works out its tax and total again.
    *
@@ -96,7 +105,7 @@ public interface CheckoutUseCase {
   /**
    * Ends the Customer's Checkout Session {@code sessionId} once its Order is paid, but only while
    * the Customer's pointer still names it: a session they have since replaced, or one that is gone,
-   * is left as it is.
+   * is left as it is. The checkout funnel counts it paid either way.
    */
   void end(String customerId, String sessionId);
 }

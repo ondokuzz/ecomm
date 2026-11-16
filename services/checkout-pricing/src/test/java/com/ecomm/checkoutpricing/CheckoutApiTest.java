@@ -50,7 +50,11 @@ abstract class CheckoutApiTest {
 
   static final WireMockServer DOWNSTREAM = new WireMockServer(wireMockConfig().dynamicPort());
 
-  static final GenericContainer<?> REDIS = new GenericContainer<>("redis:7").withExposedPorts(6379);
+  // Tells Checkout when it drops a key, as Compose's Redis does.
+  static final GenericContainer<?> REDIS =
+      new GenericContainer<>("redis:7")
+          .withCommand("redis-server", "--notify-keyspace-events", "Ex")
+          .withExposedPorts(6379);
 
   static {
     DOWNSTREAM.start();

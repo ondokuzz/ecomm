@@ -263,6 +263,42 @@ Reservation lapses by itself.
 A session that expires unpaid leaves its Reservation to Inventory, which stops holding the Stock
 at the Reservation's own `expiresAt`, 2 minutes later.
 
+## The checkout funnel
+
+`checkout_sessions_total{step}` counts Checkout Sessions by the steps they reach, so Staff can see
+where Customers stop. Each step is on `/actuator/prometheus` at 0 from the start, so that Grafana's
+`increase()` counts its first session, and the Services dashboard's "Checkout funnel" panel shows
+each hour's, over the last day.
+
+| `step` | A session counts when |
+|---|---|
+| `started` | it starts |
+| `addressed` | it is given a Shipping address that is quoted |
+| `optionChosen` | it is given a quoted Shipping option |
+| `payAttempted` | paying it starts the checkout Saga, or joins the run still going; not when it was paid already, or the Saga couldn't be started |
+| `paid` | Checkout sees its attempt paid, answering a pay or a read of `…/payment`; or the Saga ends it, which it does only once its Order is paid |
+| `declined`, `holdExpired` | Checkout sees its attempt end so, answering a pay or a read of `…/payment`; or Redis drops it after its latest attempt ended so |
+| `expired` | it is found expired: read as `current`, changed or paid after its `expiresAt`, or replaced by a new session once expired; or Redis drops it, unended and unreplaced, once its TTL runs out, unless its latest attempt paid it |
+
+A session counts once per step however often its Customer repeats it, re-reads it or reads its
+payment, so one declined and then paid counts at `declined` and at `paid`, once each, and a
+`FAILED` run counts at neither. A Customer who leaves while their payment is being confirmed still
+has it counted: as `paid` when the Saga ends the session, or, when it ended otherwise, once Redis
+drops the session and Checkout reads its latest attempt from Temporal. A session whose hold ran
+out, or that was declined, and was then left to expire counts at that step and at `expired`.
+
+The steps a session has counted at are a Redis hash, `checkout-funnel:<session ID>`, kept for a day
+after its latest step, so replicas don't count a session twice between them. When that Redis can't be reached, the step goes uncounted rather than
+failing the Customer's.
+
+Redis drops a session's keys at the Reservation's expiry, 2 minutes after the session's, and says
+so only with expired-key events on: Compose starts Redis with `--notify-keyspace-events Ex`.
+Checkout doesn't set it itself, since other services' keys share that Redis, so another
+environment's Redis needs it too; without it, a session nobody reads after it expires goes
+uncounted at `expired`, and so does an outcome nobody read but `paid`. Every replica hears each
+event and reads the attempt; the hash counts it once. When Temporal can't be read then, the
+session goes uncounted.
+
 ## Outbound identity
 
 Checkout calls each service with the identity that service expects
@@ -335,5 +371,12 @@ and untouched by Discounts, re-quoting on a new address, and Pay refused while i
 apply never held, replacing, removing and starting over releasing it, Promotions failing to hold or
 release, and a Campaign started, a Campaign ended and a Coupon expired mid-session leaving the paid
 session's Discounts as they were.
+`CheckoutFunnelApiTest` reads `/actuator/prometheus`: every step at 0 first, each step counted once
+however often it is repeated or read, a decline then a payment counting both, a hold run out, an
+outcome read from `…/payment`, a `FAILED` run counting only the attempt, a session found expired
+counted once even when Redis drops it later, one Redis drops unread counted, replaced sessions
+not counted expired, a payment nobody read counted paid when the Saga ends the session, a decline
+nobody read counted when Redis drops the session, a paid session Redis drops not counted
+expired, and a Saga that couldn't start counting nothing. Its Redis, as Compose's, has expired-key events on.
 `MockAddressValidatorTest` is pure JUnit for the mock validator's table of countries and postcode
 formats, a deliberate exception to testing at the HTTP seam.

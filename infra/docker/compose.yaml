@@ -115,6 +115,8 @@ services:
 
   redis:
     image: redis:7
+    # Expired-key events, by which Checkout counts a Checkout Session Redis drops as expired.
+    command: ["redis-server", "--notify-keyspace-events", "Ex"]
     ports: ["${REDIS_PORT:-6379}:6379"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]

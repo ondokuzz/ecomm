@@ -1,7 +1,7 @@
 {
   "uid": "ecomm-services",
   "title": "Services",
-  "description": "Every Spring service's HTTP traffic, from Spring's request metrics, and, in a Postgres service, its outbox's events not yet sent to Kafka, Inventory's Stock cache, and Cart's Abandoned Carts. Actuator requests (health checks and scrapes) are left out.",
+  "description": "Every Spring service's HTTP traffic, from Spring's request metrics, and, in a Postgres service, its outbox's events not yet sent to Kafka, Inventory's Stock cache, Cart's Abandoned Carts, and Checkout's funnel. Actuator requests (health checks and scrapes) are left out.",
   "tags": [
     "ecomm"
   ],
@@ -560,13 +560,160 @@
       "interval": "1h"
     },
     {
+      "id": 16,
+      "type": "barchart",
+      "title": "Checkout funnel",
+      "description": "Checkout Sessions in Checkout that reached each step, hour by hour: started, given a Shipping address, given a Shipping option, handed to the checkout Saga to be paid, then paid, declined, or held past the Reservation's expiry while being paid. Expired ones were found expired, or dropped by Redis unpaid. Each session counts once per step, however often its Customer repeats it, so the drop from one step to the next is where Customers stop. A session started near the end of an hour may reach its later steps in the next. Each group of bars is an hour's.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 42,
+        "w": 24,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "custom": {
+            "fillOpacity": 80
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "vertical",
+        "xField": "Time",
+        "groupWidth": 0.8,
+        "barWidth": 0.95,
+        "showValue": "never",
+        "stacking": "none",
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 100,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(checkout_sessions_total{step=\"started\"}[1h]))",
+          "legendFormat": "started",
+          "range": true,
+          "instant": false
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(checkout_sessions_total{step=\"addressed\"}[1h]))",
+          "legendFormat": "addressed",
+          "range": true,
+          "instant": false
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(checkout_sessions_total{step=\"optionChosen\"}[1h]))",
+          "legendFormat": "optionChosen",
+          "range": true,
+          "instant": false
+        },
+        {
+          "refId": "D",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(checkout_sessions_total{step=\"payAttempted\"}[1h]))",
+          "legendFormat": "payAttempted",
+          "range": true,
+          "instant": false
+        },
+        {
+          "refId": "E",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(checkout_sessions_total{step=\"paid\"}[1h]))",
+          "legendFormat": "paid",
+          "range": true,
+          "instant": false
+        },
+        {
+          "refId": "F",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(checkout_sessions_total{step=\"declined\"}[1h]))",
+          "legendFormat": "declined",
+          "range": true,
+          "instant": false
+        },
+        {
+          "refId": "G",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(checkout_sessions_total{step=\"holdExpired\"}[1h]))",
+          "legendFormat": "holdExpired",
+          "range": true,
+          "instant": false
+        },
+        {
+          "refId": "H",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(checkout_sessions_total{step=\"expired\"}[1h]))",
+          "legendFormat": "expired",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "Time",
+            "mode": "outer"
+          }
+        }
+      ],
+      "interval": "1h",
+      "timeFrom": "24h"
+    },
+    {
       "id": 100,
       "type": "row",
       "title": "Support Assistant",
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 42,
+        "y": 50,
         "w": 24,
         "h": 1
       },
@@ -583,7 +730,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 43,
+        "y": 51,
         "w": 12,
         "h": 8
       },
@@ -638,7 +785,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 43,
+        "y": 51,
         "w": 12,
         "h": 8
       },
@@ -691,7 +838,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 51,
+        "y": 59,
         "w": 12,
         "h": 8
       },
@@ -745,7 +892,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 51,
+        "y": 59,
         "w": 12,
         "h": 8
       },
@@ -799,7 +946,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 59,
+        "y": 67,
         "w": 12,
         "h": 8
       },
@@ -853,7 +1000,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 59,
+        "y": 67,
         "w": 12,
         "h": 8
       },

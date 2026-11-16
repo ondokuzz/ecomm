@@ -4,6 +4,7 @@ import com.ecomm.checkoutpricing.application.CheckoutService;
 import com.ecomm.checkoutpricing.application.port.out.AddressValidator;
 import com.ecomm.checkoutpricing.application.port.out.CartPort;
 import com.ecomm.checkoutpricing.application.port.out.CatalogPort;
+import com.ecomm.checkoutpricing.application.port.out.CheckoutFunnel;
 import com.ecomm.checkoutpricing.application.port.out.CheckoutSaga;
 import com.ecomm.checkoutpricing.application.port.out.CheckoutSessionRepository;
 import com.ecomm.checkoutpricing.application.port.out.InventoryPort;
@@ -32,7 +33,8 @@ class UseCaseConfiguration {
       CheckoutSessionRepository sessions,
       AddressValidator addresses,
       ShippingQuotes shippingQuotes,
-      TimeSource time) {
+      TimeSource time,
+      CheckoutFunnel funnel) {
     return new CheckoutService(
         cart,
         catalog,
@@ -43,6 +45,7 @@ class UseCaseConfiguration {
         sessions,
         addresses,
         shippingQuotes,
-        time);
+        time,
+        funnel);
   }
 }
