@@ -1,6 +1,6 @@
 # Architecture
 
-Six views of the running stack as of Sprint 6, still in progress: how browsers reach the services,
+Six views of the running stack as of Sprint 8, still in progress: how browsers reach the services,
 how the contexts call each other, what flows over Kafka, how the checkout Saga pays for a Checkout
 Session, how the fulfillment Saga takes a paid Order to its Customer, and how the returns Saga takes
 an approved RMA to its resolution. [`GLOSSARY-MAP.md`](../GLOSSARY-MAP.md) is the
@@ -13,7 +13,10 @@ at the edge ([ADR 0010](./adr/0010-api-gateway-authenticates-at-the-edge.md)). E
 checks the Keycloak-issued JWT itself. Each service shows the store it owns. The gateway routes
 Payment's reads by Customers and Staff, and the payment gateway's signed webhook, but none of the
 commands only Orchestration makes. The Carrier's signed webhook reaches Fulfillment & Shipping the
-same way, without a token.
+same way, without a token, and so does a Cart reminder's unsubscribe link, a signed link to
+Notifications' `GET` and `POST /unsubscribe/cart-reminders` whose token Notifications checks. The
+Support Assistant is routed at `/api/support-assistant/`. Notifications sends its emails over SMTP
+to Mailpit.
 
 ```mermaid
 flowchart LR
@@ -42,18 +45,25 @@ flowchart LR
     payment["Payment<br/><i>Postgres</i>"]
     fulfillment["Fulfillment & Shipping<br/><i>Postgres</i>"]
     returns["Returns & Warranty<br/><i>Postgres</i>"]
+    notifications["Notifications<br/><i>Postgres</i>"]
+    assistant["AI Support Assistant<br/><i>Redis</i>"]
   end
+
+  mailpit(["Mailpit<br/>(SMTP)"])
 
   browser --> storefront & admin
   browser -. sign in .-> keycloak
   storefront & admin -- "/api/" --> gateway
   gateway -. validates JWT .-> keycloak
 
-  gateway --> catalog & search & reviews & recs & cart & checkout & promotions & inventory & orders & returns
+  gateway --> catalog & search & reviews & recs & cart & checkout & promotions & inventory & orders & returns & assistant
   bank -- "signed webhook" --> gateway
   carrier -- "signed webhook" --> gateway
+  browser -- "unsubscribe link<br/>(signed, no token)" --> gateway
   gateway -- "reads, webhook" --> payment
   gateway -- "Shipments, webhook" --> fulfillment
+  gateway -- "ledger, preferences,<br/>unsubscribe" --> notifications
+  notifications -- emails --> mailpit
 ```
 
 ## Calls between contexts
@@ -64,6 +74,11 @@ client-credentials identity
 Checkout calls five contexts to start and change a Checkout Session, and starts the checkout Saga
 to pay one. Orchestration starts the fulfillment Saga itself, from a paid Order's event, and the
 returns Saga from an approved RMA's. The Sagas' workers then send each step's command.
+Notifications reads what an email needs that no event carries: a Cart before reminding its
+Customer, each line's Price and Stock from Search, a Warehouse's Return address, and each
+Customer's email address from Keycloak's admin API. The Support Assistant reads five contexts'
+Customer reads directly, not through the gateway, with the asking Customer's own token
+([its ADR 0002](../services/ai-support-assistant/docs/adr/0002-reads-with-the-customers-own-token.md)).
 
 ```mermaid
 flowchart TB
@@ -92,6 +107,18 @@ flowchart TB
   end
 
   returns["Returns & Warranty"]
+  search["Search & Discovery"]
+  keycloak[("Keycloak<br/>admin API")]
+
+  subgraph notifying["Notifying"]
+    direction LR
+    notifications["Notifications"]
+  end
+
+  subgraph assisting["Answering Help"]
+    direction LR
+    assistant["AI Support Assistant"]
+  end
 
   checkout -- reads Cart --> cart
   checkout -- prices lines --> catalog
@@ -106,19 +133,33 @@ flowchart TB
   orchestration -- "authorize, await settlement,<br/>void, find by Order, capture, refund" --> payment
   payment -- "authorizes, captures,<br/>refunds" --> bank
   orchestration -- "commit Reservation, restock,<br/>reserve and commit for an RMA" --> inventory
+  orchestration -- redeem Coupon --> promotions
   orchestration -- clear Cart --> cart
   orchestration -- end session --> checkout
   orchestration -- "create, read, dispatch, hold Shipment,<br/>create, read, dispatch replacement" --> quotes
   orchestration -- "read, expire,<br/>resolve, hold RMA" --> returns
   quotes -- books Shipment --> carrier(["Carrier<br/>(mock)"])
+
+  notifications -- "reads an Abandoned Cart<br/>(internal)" --> cart
+  notifications -- "Prices, Stock" --> search
+  notifications -- "Warehouse's<br/>Return address" --> quotes
+  notifications -- "email addresses,<br/>names" --> keycloak
+
+  assistant -- "Customer's own token:<br/>Orders" --> orders
+  assistant -- "Shipments,<br/>Return address" --> quotes
+  assistant -- "Payments" --> payment
+  assistant -- "RMAs, eligibility" --> returns
+  assistant -- "search, Products" --> search
 ```
 
 ## Events
 
-Every event is published from its context's outbox to a compacted topic named after its schema
+Every event is published to a compacted topic named after its schema
 in [`platform/event-schemas`](../platform/event-schemas/)
 ([ADR 0002](./adr/0002-ledgers-and-outboxes-not-event-sourcing.md),
-[ADR 0006](./adr/0006-kafka-as-single-event-backbone.md)). Consumers keep the newest version of
+[ADR 0006](./adr/0006-kafka-as-single-event-backbone.md)), from its context's outbox, except Cart's
+`cart.cart`: an Abandoned Cart goes straight to Kafka, since Redis has no outbox, with an ID a
+consumer dedupes (ADR 0002's 2026-10-25 note). Consumers keep the newest version of
 each entity and never call the publisher. Each consumer group, listed in
 [`infra/docker/consumer-groups`](../infra/docker/consumer-groups), has its own `<group>.dlt` and
 `<group>.redrive` topics. Commands never travel over Kafka.
@@ -131,6 +172,7 @@ flowchart LR
   payment["Payment"]
   fulfillment["Fulfillment & Shipping"]
   returns["Returns & Warranty"]
+  cart["Cart"]
 
   subgraph kafka["Kafka"]
     tProduct[["catalog.product"]]
@@ -140,6 +182,7 @@ flowchart LR
     tPayment[["payment.payment"]]
     tShipment[["fulfillment-shipping.shipment"]]
     tRma[["returns-warranty.rma"]]
+    tCart[["cart.cart"]]
   end
 
   search["Search & Discovery"]
@@ -148,7 +191,7 @@ flowchart LR
   fulfillmentIn["Fulfillment & Shipping"]
   returnsIn["Returns & Warranty"]
   orchestration["Orchestration<br/><i>fulfillment and returns Sagas</i>"]
-  later["Notifications<br/><i>not built yet</i>"]
+  notifications["Notifications"]
 
   catalog --> tProduct & tCategory
   inventory --> tStock
@@ -156,31 +199,34 @@ flowchart LR
   payment --> tPayment
   fulfillment --> tShipment
   returns --> tRma
+  cart -- "straight to Kafka" --> tCart
 
-  tProduct --> search & reviews & recs & fulfillmentIn & returnsIn
-  tCategory --> search
-  tStock --> search
-  tOrder --> reviews & recs & orchestration
-  tShipment --> orchestration & returnsIn
-  tRma --> orchestration
-  tPayment -.-> later
-  tOrder -.-> later
-  tRma -.-> later
+  tProduct --> search & reviews & recs & fulfillmentIn & returnsIn & notifications
+  tCategory --> search & recs
+  tStock --> search & recs
+  tOrder --> reviews & recs & returnsIn & orchestration & notifications
+  tShipment --> orchestration & returnsIn & notifications
+  tRma --> orchestration & notifications
+  tPayment --> notifications
+  tCart --> notifications
 ```
 
 Fulfillment & Shipping and Returns & Warranty appear twice, as a publisher on the left and a
 consumer on the right, to keep the arrows one way. Orchestration consumes `order-management.order`
 to start a paid Order's fulfillment Saga, `returns-warranty.rma` to start an approved RMA's returns
 Saga and wake it, and `fulfillment-shipping.shipment` to wake either: an Order's Shipment wakes its
-fulfillment, a replacement wakes its RMA's returns Saga. It publishes nothing.
+fulfillment, a replacement wakes its RMA's returns Saga. It publishes nothing. Notifications
+consumes six topics and publishes nothing: Orders, Shipments, Payments' Refunds and RMAs each record
+the Notifications their Message types name, `catalog.product` gives it Product names and Prices'
+changes, and `cart.cart` a Cart reminder for a Customer who turned them on.
 
 ## Paying a Checkout Session
 
 Paying starts the checkout Saga on Temporal, with the session's ID as the workflow's ID
 ([ADR 0009](./adr/0009-sagas-on-temporal.md)). Checkout already holds the Cart's Stock in a
 Reservation. The Saga compensates a failure by voiding an authorized Payment and cancelling the
-Order. Clearing the Cart and ending the session come after the Order is paid. If either fails,
-the failure is logged and the Order stays paid.
+Order. Redeeming the session's Coupon, clearing the Cart and ending the session come after the
+Order is paid. If one fails, the failure is logged and the Order stays paid.
 
 ```mermaid
 sequenceDiagram
@@ -192,6 +238,7 @@ sequenceDiagram
   participant P as Payment
   participant B as Payment gateway
   participant I as Inventory
+  participant PR as Promotions
   participant CA as Cart
 
   C->>CO: Pay
@@ -210,6 +257,9 @@ sequenceDiagram
     S->>I: commit Reservation
     alt committed
       S->>OM: mark Order paid
+      opt the session has a Coupon
+        S->>PR: redeem Coupon
+      end
       S->>CA: clear Cart
       S->>CO: end Checkout Session
     else Reservation lapsed or failed
@@ -325,7 +375,7 @@ sequenceDiagram
 
 ## Not built yet
 
-Notifications is planned in [`docs/roadmap.md`](./roadmap.md). The AI Support Assistant consumes
-no topic: it reads Order Management with the Customer's own token when asked, through the gateway's
-`/api/support-assistant/` ([its README](../services/ai-support-assistant/README.md)).
-Prometheus and Grafana scrape every service and are left out of the diagrams.
+Sprint 8, in [`docs/roadmap.md`](./roadmap.md), adds `storefront-ssr`, which renders the
+Storefront's public pages on the server behind its nginx, and an AWS environment on EKS. Both
+are left out until they are built. Prometheus and Grafana scrape every service, and are left out
+of the diagrams.
