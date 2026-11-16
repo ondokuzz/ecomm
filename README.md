@@ -2,6 +2,22 @@
 
 A from-scratch e-commerce platform, architected as fifteen bounded contexts across five parallel team tracks, planned over nine two-week sprints for a small (4-5 person) engineering team. Sprint 7 has added the Support Assistant, and it all runs locally: search the Catalog with Facets, pick a Variant, keep a Cart, check out with a Checkout Session that reserves its Stock, gets the running Campaigns by itself and a Coupon on top, and pay through a mock payment that can decline or wait for the bank, which the checkout Saga on Temporal either completes or undoes whole, after giving a Shipping address and choosing a Shipping option. Staff pick and pack the Order from a fulfillment queue, and the fulfillment Saga captures its Payment, hands it to the carrier and follows it to delivery. Then follow the Order's Status history, its Payment and its Shipment's Tracking events, review what you bought, see what others bought with it, and ask to return it or claim its warranty, then follow the RMA to its Refund or replacement, told each step by email, and ask the Support Assistant about any of it in your own words. Staff manage the Catalog, with Warranty terms and Serial tracking, Coupons and Campaigns, look up Orders with their Payments and each Variant's Stock movements, work the fulfillment queue and each RMA from approval to inspection, moderate Reviews, and see what the platform told each Customer, in an Admin Console. Grafana, started on demand, shows the services, the event consumers and the three Sagas.
 
+## Layout
+
+- `services/` — one directory per bounded context (see `GLOSSARY.md` for the domain terms, `docs/adr/` for why each is shaped the way it is)
+- `frontend/storefront`, `frontend/admin-console` — the two customer/staff-facing React apps
+- `platform/` — shared, cross-service concerns: `service-commons`, the hexagonal-architecture service starter template, the API gateway, and `event-schemas`, the integration events' JSON Schemas
+- `infra/terraform` — infrastructure-as-code for the eventual AWS deployment
+
+## Docs
+
+- [`GLOSSARY-MAP.md`](./GLOSSARY-MAP.md) — the fifteen bounded contexts, how they relate, and where their docs live
+- [`GLOSSARY.md`](./GLOSSARY.md) — the shared domain glossary
+- [`docs/architecture.md`](./docs/architecture.md) — Mermaid diagrams of the requests, the events and the checkout Saga
+- [`docs/roadmap.md`](./docs/roadmap.md) — the sprint-by-sprint delivery plan
+- [`docs/adr/`](./docs/adr/) — system-wide architecture decision records
+- Context-specific ADRs live inside the service they belong to, e.g. [`services/catalog/docs/adr/`](./services/catalog/docs/adr/)
+
 ## Run Sprint 7
 
 You need Docker with about 8 GB of memory, `make`, and Node 24 for the smoke tests.
@@ -540,19 +556,3 @@ itself. In the repository's **Settings → Branches**, add a branch protection r
 `main`, turn on **Require status checks to pass before merging**, and choose `backend`,
 `event-schemas`, `secrets`, `frontend (storefront)`, `frontend (admin-console)`, `images` and `e2e`. A check appears in that list only after it has run
 once. On a private repository, branch protection needs a paid GitHub plan.
-
-## Layout
-
-- `services/` — one directory per bounded context (see `GLOSSARY.md` for the domain terms, `docs/adr/` for why each is shaped the way it is)
-- `frontend/storefront`, `frontend/admin-console` — the two customer/staff-facing React apps
-- `platform/` — shared, cross-service concerns: `service-commons`, the hexagonal-architecture service starter template, the API gateway, and `event-schemas`, the integration events' JSON Schemas
-- `infra/terraform` — infrastructure-as-code for the eventual AWS deployment
-
-## Docs
-
-- [`GLOSSARY-MAP.md`](./GLOSSARY-MAP.md) — the fifteen bounded contexts, how they relate, and where their docs live
-- [`GLOSSARY.md`](./GLOSSARY.md) — the shared domain glossary
-- [`docs/architecture.md`](./docs/architecture.md) — Mermaid diagrams of the requests, the events and the checkout Saga
-- [`docs/roadmap.md`](./docs/roadmap.md) — the sprint-by-sprint delivery plan
-- [`docs/adr/`](./docs/adr/) — system-wide architecture decision records
-- Context-specific ADRs live inside the service they belong to, e.g. [`services/catalog/docs/adr/`](./services/catalog/docs/adr/)
