@@ -4,7 +4,8 @@ Six views of the running stack as of Sprint 8, still in progress: how browsers r
 how the contexts call each other, what flows over Kafka, how the checkout Saga pays for a Checkout
 Session, how the fulfillment Saga takes a paid Order to its Customer, and how the returns Saga takes
 an approved RMA to its resolution. [`GLOSSARY-MAP.md`](../GLOSSARY-MAP.md) is the
-source of truth for the relationships. Update these diagrams when a relationship there changes.
+source of truth for the relationships. Each sprint's definition-of-done pass brings these diagrams
+up to date with it ([the architecture check](./agents/architecture-check.md)).
 
 ## Requests
 
