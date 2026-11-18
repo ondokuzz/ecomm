@@ -15,9 +15,16 @@ export default defineConfig({
     strictPort: true,
     proxy: { '/api': gateway },
   },
+  // e2e/ holds the Playwright tests, run with `npm run test:e2e`.
   test: {
-    environment: 'node',
-    // e2e/ holds the Playwright tests, run with `npm run test:e2e`.
-    include: ['src/**/*.test.ts', 'scripts/**/*.test.ts'],
+    projects: [
+      // Domain logic, the API's helpers and the scripts, in Node.
+      {
+        extends: true,
+        test: { name: 'unit', environment: 'node', include: ['src/**/*.test.ts', 'scripts/**/*.test.ts'] },
+      },
+      // Components and pages rendered in jsdom, with `fetch` answering for the services (src/test/).
+      { extends: true, test: { name: 'component', environment: 'jsdom', include: ['src/**/*.test.tsx'] } },
+    ],
   },
 })

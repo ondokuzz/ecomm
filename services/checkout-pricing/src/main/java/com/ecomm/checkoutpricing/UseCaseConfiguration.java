@@ -12,6 +12,8 @@ import com.ecomm.checkoutpricing.application.port.out.PromotionsPort;
 import com.ecomm.checkoutpricing.application.port.out.ShippingQuotes;
 import com.ecomm.checkoutpricing.application.port.out.TaxCalculator;
 import com.ecomm.checkoutpricing.application.port.out.TimeSource;
+import java.time.Duration;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -34,7 +36,8 @@ class UseCaseConfiguration {
       AddressValidator addresses,
       ShippingQuotes shippingQuotes,
       TimeSource time,
-      CheckoutFunnel funnel) {
+      CheckoutFunnel funnel,
+      @Value("${ecomm.checkout.session-lifetime}") Duration sessionLifetime) {
     return new CheckoutService(
         cart,
         catalog,
@@ -46,6 +49,7 @@ class UseCaseConfiguration {
         addresses,
         shippingQuotes,
         time,
-        funnel);
+        funnel,
+        sessionLifetime);
   }
 }

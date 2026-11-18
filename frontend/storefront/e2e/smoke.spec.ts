@@ -51,9 +51,9 @@ import { stackSecret } from './secrets'
  *   why they were charged, the assistant explains its Authorization as a hold (Sprint 7).
  * - A Customer asks Help whether a seeded Product is in Stock in a Variant, is told so with its
  *   Price, and opens its Product page from the reply (Sprint 7).
- * - A returning Customer is offered their last Order's Shipping address at checkout; told their
- *   session is nearly over, they see the time left, and once it expires, "Start again" puts the
- *   address and Coupon back on a new one (Sprint 8).
+ * - A returning Customer is offered their last Order's Shipping address at checkout; on a stack
+ *   whose sessions are shortened, they see the time left, and once it expires, "Start again" puts
+ *   the address and Coupon back on a new one (Sprint 8).
  */
 
 // The first checkout compares Stock before and after, so nothing else may check out meanwhile:
@@ -176,10 +176,8 @@ test('a Customer checks out a picked Variant and another Product, and on-hand St
   const doneSteps = steps.getByRole('listitem').filter({ hasText: '(done)' })
   await expect(currentStep).toContainText('Payment')
   await expect(doneSteps).toHaveText([/^Cart/])
-  // The Checkout Session holds the Cart for 15 minutes: its Stock is reserved, not yet taken. The
-  // time left shows only once under five minutes are left.
-  await expect(page.getByText(/held until/)).toBeVisible()
-  await expect(page.getByRole('timer', { name: 'Time left' })).toBeHidden()
+  // The Checkout Session holds the Cart: its Stock is reserved, not yet taken.
+  await expectSessionHeld(page)
   const checkoutLines = page.getByRole('list', { name: 'Checkout lines' })
   for (const line of bought) {
     await expect(checkoutLines.getByRole('link', { name: lineName(line), exact: true })).toBeVisible()
@@ -345,7 +343,7 @@ test('a declined card shows why, and the held session can then be paid with one 
 
   await page.goto('/checkout')
   await signInOnKeycloak(page, customer)
-  await expect(page.getByText(/held until/)).toBeVisible()
+  await expectSessionHeld(page)
   const sessionId = await currentSessionId(request, token)
   await shipTo(page)
 
@@ -387,7 +385,7 @@ test('WELCOME10 takes 10% off at checkout, and the PAID Order shows the discount
 
   await page.goto('/checkout')
   await signInOnKeycloak(page, customer)
-  await expect(page.getByText(/held until/)).toBeVisible()
+  await expectSessionHeld(page)
   await shipTo(page)
   const summary = page.getByRole('region', { name: 'Order summary' })
   const couponField = summary.getByLabel('Coupon code')
@@ -900,7 +898,7 @@ test.describe('Sprint 4', () => {
 
     await page.goto('/checkout')
     await signInOnKeycloak(page, customer)
-    await expect(page.getByText(/held until/)).toBeVisible()
+    await expectSessionHeld(page)
     await shipTo(page)
     await testCard(page, 'Bank confirms, approves').check()
     const confirmingShown = await watchForStatus(page, 'Confirming your payment…')
@@ -931,7 +929,7 @@ test.describe('Sprint 4', () => {
 
     await page.goto('/checkout')
     await signInOnKeycloak(page, customer)
-    await expect(page.getByText(/held until/)).toBeVisible()
+    await expectSessionHeld(page)
     const sessionId = await currentSessionId(request, token)
     await shipTo(page)
     await testCard(page, 'Bank confirms, declines').check()
@@ -965,7 +963,7 @@ test.describe('Sprint 5', () => {
 
     await page.goto('/checkout')
     await signInOnKeycloak(page, customer)
-    await expect(page.getByText(/held until/)).toBeVisible()
+    await expectSessionHeld(page)
     await shipTo(page)
     await testCard(page, 'Approve').check()
     await page.getByRole('button', { name: /^Pay/ }).click()
@@ -1092,7 +1090,7 @@ test.describe('Sprint 6', () => {
       await putInCart(request, await tokenFor(request, customer), phone.variantId)
       await page.goto('/checkout')
       await signInOnKeycloak(page, customer)
-      await expect(page.getByText(/held until/)).toBeVisible()
+      await expectSessionHeld(page)
       const summary = page.getByRole('region', { name: 'Order summary' })
       await summary.getByLabel('Coupon code').fill(code)
       await summary.getByRole('button', { name: 'Apply' }).click()
@@ -1190,7 +1188,7 @@ test.describe('Sprint 6', () => {
 
     await page.goto('/checkout')
     await signInOnKeycloak(page, customer)
-    await expect(page.getByText(/held until/)).toBeVisible()
+    await expectSessionHeld(page)
     await shipTo(page)
     await testCard(page, 'Approve').check()
     await page.getByRole('button', { name: /^Pay/ }).click()
@@ -1494,7 +1492,11 @@ test.describe('Sprint 8', () => {
     page,
     request,
   }) => {
-    test.setTimeout(3 * 60_000)
+    test.skip(
+      !timeLeftShownFromStart,
+      "Checkout's sessions aren't shortened on this stack: set CHECKOUT_SESSION_LIFETIME, such as 3m",
+    )
+    test.setTimeout(sessionLifetime + 3 * 60_000)
     const customer = signedUp()
     const token = await tokenFor(request, customer)
     await checkOutThroughApi(request, token, (await aProductInStock(request)).variantId)
@@ -1523,22 +1525,12 @@ test.describe('Sprint 8', () => {
     await summary.getByRole('button', { name: 'Apply' }).click()
     await expect(summary.getByText('Coupon: WELCOME10')).toBeVisible()
 
-    // A session is held for 15 minutes, too long for a test to wait, so the page is told this one
-    // ends in 30 seconds. The time left shows, as it does once under five minutes, then it expires.
+    // The shortened session shows its time left, and the page says so when it expires.
     const expired = await currentSessionId(request, token)
-    const endsAt = new Date(Date.now() + 30_000).toISOString()
-    const currentSessionRead = '**/api/checkout-pricing/checkout/sessions/current'
-    await page.route(currentSessionRead, async (route) => {
-      const response = await route.fetch()
-      await route.fulfill({ response, json: { ...(await response.json()), expiresAt: endsAt } })
-    })
-    await page.reload()
-    await expect(page.getByRole('timer', { name: 'Time left' })).toHaveText(/^0:[0-3]\d$/)
-    await expect(shippingTo).toContainText('10115 Berlin')
+    await expect(page.getByRole('timer', { name: 'Time left' })).toHaveText(/^[0-4]:\d\d$/)
     await expectAccessible(page)
-    await expect(page.getByRole('heading', { name: 'Your hold expired' })).toBeVisible({ timeout: 45_000 })
+    await expect(page.getByRole('heading', { name: 'Your hold expired' })).toBeVisible({ timeout: sessionLifetime })
     await expectAccessible(page)
-    await page.unroute(currentSessionRead)
 
     // Starting again starts a new session, with the address and the Coupon put back. Starting one
     // reserves its Stock, which has taken 30 seconds on a loaded stack.
@@ -1546,7 +1538,7 @@ test.describe('Sprint 8', () => {
     await expect(shippingTo).toContainText('10115 Berlin', { timeout: 45_000 })
     await expect(page.getByRole('radio', { name: /^Standard/ })).toBeVisible()
     await expect(summary.getByText('Coupon: WELCOME10')).toBeVisible()
-    await expect(page.getByRole('timer', { name: 'Time left' })).toBeHidden()
+    await expectSessionHeld(page)
     expect(await currentSessionId(request, token)).not.toBe(expired)
   })
 })
@@ -1629,6 +1621,32 @@ const berlin = {
 /** The mock Carrier's domestic costs from the Berlin Warehouse, in EUR's minor unit. */
 const standardFromBerlin = 499
 const expressFromBerlin = 999
+
+/**
+ * How long Checkout holds a session on the stack under test, in milliseconds: `CHECKOUT_SESSION_LIFETIME`
+ * (such as `3m`) when it is shortened, as `make e2e` and CI start it, or Checkout's default of 15 minutes.
+ */
+const sessionLifetime = durationMs(process.env.CHECKOUT_SESSION_LIFETIME ?? '15m')
+
+/** Whether the checkout page shows the time left from the start: it does under five minutes. */
+const timeLeftShownFromStart = sessionLifetime < 5 * 60_000
+
+/** A duration as Spring and Compose write it, such as `90s`, `3m` or `1h`, in milliseconds. */
+function durationMs(duration: string): number {
+  const match = /^(\d+)(s|m|h)$/.exec(duration)
+  if (!match) throw new Error(`Not a duration such as 3m: ${duration}`)
+  return Number(match[1]) * { s: 1_000, m: 60_000, h: 3_600_000 }[match[2] as 's' | 'm' | 'h']
+}
+
+/**
+ * The checkout page holds a Checkout Session: it says until when, with the time left once under five
+ * minutes are left, which a shortened session is from the start.
+ */
+async function expectSessionHeld(page: Page) {
+  await expect(page.getByText(/held until/)).toBeVisible()
+  const timeLeft = page.getByRole('timer', { name: 'Time left' })
+  await (timeLeftShownFromStart ? expect(timeLeft).toBeVisible() : expect(timeLeft).toBeHidden())
+}
 
 /** Types an address into the checkout page's Shipping address form; the country stays Germany. */
 async function fillAddress(page: Page, fields: Record<keyof typeof berlin, string>) {

@@ -145,10 +145,12 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     # Cart abandons a Cart after a minute, looking every 10 seconds, so the Storefront's
-    # cart-reminder test, which reads the same variable, sees its reminder within the test.
+    # cart-reminder test, which reads the same variable, sees its reminder within the test. Checkout
+    # holds a session for 3 minutes, so the expiry test, which reads it too, waits one out.
     env:
       CART_ABANDONED_AFTER: 1m
       CART_ABANDONMENT_SWEEP: 10s
+      CHECKOUT_SESSION_LIFETIME: 3m
     defaults:
       run:
         working-directory: frontend/storefront

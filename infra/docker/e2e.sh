@@ -19,6 +19,9 @@ unset STOREFRONT_URL ADMIN_CONSOLE_URL KEYCLOAK_URL ANTHROPIC_API_KEY_FILE
 # Cart abandons a Cart after a minute, looking every 10 seconds, so the Storefront's cart-reminder
 # test, which reads the same variable, sees its reminder within the test.
 export CART_ABANDONED_AFTER=1m CART_ABANDONMENT_SWEEP=10s
+# Checkout holds a session for 3 minutes, so the Storefront's expiry test, which reads the same
+# variable, waits one out. Under five minutes, every checkout shows its time left from the start.
+export CHECKOUT_SESSION_LIFETIME=3m
 compose_all=(docker compose --profile '*')
 logs=.scratch/e2e/compose.log
 began=$SECONDS

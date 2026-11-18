@@ -54,7 +54,12 @@ public class CheckoutService implements CheckoutUseCase {
   private final ShippingQuotes shippingQuotes;
   private final TimeSource time;
   private final CheckoutFunnel funnel;
+  private final Duration sessionLifetime;
 
+  /**
+   * {@code sessionLifetime} is how long a Checkout Session holds the Cart: 15 minutes, but for a
+   * test stack that waits one out.
+   */
   public CheckoutService(
       CartPort cart,
       CatalogPort catalog,
@@ -66,7 +71,8 @@ public class CheckoutService implements CheckoutUseCase {
       AddressValidator addresses,
       ShippingQuotes shippingQuotes,
       TimeSource time,
-      CheckoutFunnel funnel) {
+      CheckoutFunnel funnel,
+      Duration sessionLifetime) {
     this.cart = cart;
     this.catalog = catalog;
     this.inventory = inventory;
@@ -78,6 +84,7 @@ public class CheckoutService implements CheckoutUseCase {
     this.shippingQuotes = shippingQuotes;
     this.time = time;
     this.funnel = funnel;
+    this.sessionLifetime = sessionLifetime;
   }
 
   @Override
@@ -95,7 +102,7 @@ public class CheckoutService implements CheckoutUseCase {
     sessions.findByCustomer(customerId).ifPresent(this::discard);
 
     var now = time.now();
-    var expiresAt = now.plus(CheckoutSession.LIFETIME);
+    var expiresAt = now.plus(sessionLifetime);
     var reservationExpiresAt = CheckoutSession.reservationExpiresAt(expiresAt);
     var reservationId = inventory.reserve(customerId, lines, reservationExpiresAt);
     var session =

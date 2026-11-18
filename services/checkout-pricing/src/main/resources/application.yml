@@ -40,3 +40,6 @@ ecomm:
     # How long paying waits for the Saga's outcome before answering 202.
     saga:
       wait: 10s
+    # How long a Checkout Session holds the Cart. `make e2e` and CI shorten it, so the Storefront's
+    # expiry test can wait one out.
+    session-lifetime: 15m

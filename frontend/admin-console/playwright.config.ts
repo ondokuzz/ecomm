@@ -15,7 +15,8 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   forbidOnly: !!process.env.CI,
   outputDir: process.env.CI ? 'test-results' : `test-results/${process.env.E2E_RUN}`,
-  reporter: [[process.env.CI ? 'list' : 'line'], ['html', { open: 'never' }]],
+  // `list` names each test as passed, failed or skipped, so one a serial file's failure skipped shows.
+  reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL: process.env.ADMIN_CONSOLE_URL ?? 'http://localhost:8090',
     trace: 'retain-on-failure',

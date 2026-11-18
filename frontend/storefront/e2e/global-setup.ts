@@ -7,6 +7,9 @@ import { type Product, defaultVariant } from '../src/domain/catalog'
  * memory cap) is named up front rather than surfacing as connection errors in every test. Skipped
  * when `STOREFRONT_URL` aims the suite at a stack elsewhere.
  *
+ * It checks that the Support Assistant runs its mock provider, whose replies Help's tests read: a
+ * stack with an Anthropic API key mounted answers through Claude, in other words.
+ *
  * Then checks that every seeded Product's default Variant has Stock left. Each run sells some, and
  * the tests take the first seeded Product in Stock: once one sells out, they reach a later one,
  * maybe an audio Product that Audio week discounts, and fail on a total or a Discount they don't
@@ -17,6 +20,15 @@ export default async function globalSetup() {
   if (!process.env.STOREFRONT_URL) {
     const root = fileURLToPath(new URL('../../..', import.meta.url))
     execFileSync('make', ['-s', 'status'], { cwd: root, stdio: 'inherit' })
+    if (!assistantRunsMock(root)) {
+      throw new Error(
+        "The Support Assistant has an Anthropic API key, and Help's tests read its mock provider's replies. " +
+          'Run it on the mock, from the repo root:\n' +
+          '  : > /tmp/no-anthropic-api-key\n' +
+          '  ANTHROPIC_API_KEY_FILE=/tmp/no-anthropic-api-key docker compose up -d --force-recreate --wait ai-support-assistant\n' +
+          'and `docker compose up -d --force-recreate ai-support-assistant` after, for the key again.',
+      )
+    }
   }
   const soldOut = await soldOutSeededProducts(baseUrl)
   if (soldOut.length > 0) {
@@ -24,6 +36,20 @@ export default async function globalSetup() {
       `Earlier runs sold out the default Variant of ${soldOut.join(', ')}, so the tests would reach ` +
         'other Products than they expect. Run `make seed-reset` from the repo root first.',
     )
+  }
+}
+
+/** Whether the Support Assistant's mounted key is empty, which runs the mock provider. */
+function assistantRunsMock(root: string): boolean {
+  const key = '/run/secrets/ecomm.support-assistant.anthropic-api-key'
+  try {
+    execFileSync('docker', ['compose', 'exec', '-T', 'ai-support-assistant', 'sh', '-c', `test ! -s ${key}`], {
+      cwd: root,
+      stdio: 'ignore',
+    })
+    return true
+  } catch {
+    return false
   }
 }
 

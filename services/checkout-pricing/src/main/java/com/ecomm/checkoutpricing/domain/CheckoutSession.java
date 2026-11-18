@@ -46,9 +46,6 @@ public record CheckoutSession(
     this(id, customerId, cart, discounts, tax, reservationId, expiresAt, null, List.of(), null);
   }
 
-  /** How long a Checkout Session holds the Cart. */
-  public static final Duration LIFETIME = Duration.ofMinutes(15);
-
   /**
    * How much longer the Reservation holds the Stock than the session, so a payment that starts just
    * before the session expires can still commit it.

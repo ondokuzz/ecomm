@@ -476,6 +476,11 @@ services:
       dockerfile: services/checkout-pricing/Dockerfile
     image: ${IMAGE_PREFIX:-ecomm}/checkout-pricing:${IMAGE_TAG:-latest}
     ports: ["${CHECKOUT_PRICING_PORT:-8086}:8080"]
+    environment:
+      <<: *spring-jvm
+      # How long a Checkout Session holds the Cart. `make e2e` and CI shorten it, so the
+      # Storefront's expiry test, which reads the same variable, waits one out.
+      ECOMM_CHECKOUT_SESSION_LIFETIME: ${CHECKOUT_SESSION_LIFETIME:-15m}
     secrets:
       # Checkout's own client in the ecomm realm (Identity & Access ADR 0002), whose secret realm
       # sync sets from the same file.

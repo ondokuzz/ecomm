@@ -70,7 +70,9 @@ Its `total` is the `subtotal`, less every Discount, plus the `tax`:
    if it has a Coupon, and drop it: a Customer has at most one;
 5. reserve the Cart's Stock in Inventory (`POST /reservations`) until 2 minutes after the session
    expires, so a payment started in the session's last moments can still commit it;
-6. keep the session for 15 minutes, with the Reservation's ID, and return it.
+6. keep the session for 15 minutes, with the Reservation's ID, and return it. Compose sets the
+   lifetime from `CHECKOUT_SESSION_LIFETIME` (`ecomm.checkout.session-lifetime`), which `make e2e`
+   and CI set to `3m`, so the Storefront's expiry test waits a session out.
 
 The Prices captured here are the ones the Customer pays for the session's whole life, even if
 Catalog changes them meanwhile.

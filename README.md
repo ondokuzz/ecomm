@@ -357,6 +357,21 @@ started with Cart's defaults it is reported skipped. To run it against the defau
 with `CART_ABANDONED_AFTER=1m CART_ABANDONMENT_SWEEP=10s make up` and run the suite with
 `CART_ABANDONED_AFTER=1m` too.
 
+The Storefront's expiry test waits a Checkout Session out, so it runs only where
+`CHECKOUT_SESSION_LIFETIME` is under five minutes, as `make e2e` and CI set it, to `3m`; Compose
+starts Checkout with the same variable, 15 minutes unless it is set. On such a stack every checkout
+shows its time left from the start, and the suite expects it to. Against a stack with Checkout's
+default it is reported skipped; to run it there, start the stack with
+`CHECKOUT_SESSION_LIFETIME=3m make up` and run the suite with the same variable.
+
+Help's tests read the Support Assistant's mock provider's replies, so the Storefront suite's setup
+stops when the assistant has an Anthropic API key mounted, and says how to run it on the mock with
+`ANTHROPIC_API_KEY_FILE` ([its README](./services/ai-support-assistant/README.md#claude)). `make e2e`'s
+stack always runs the mock.
+
+Both suites report with Playwright's `list` reporter, which names each test as passed, failed or
+skipped. A failure in `e2e/smoke.spec.ts`, whose tests run one after another, skips the rest of it.
+
 `make e2e` runs both suites, the Storefront's and then the Admin Console's, one worker each, against
 a stack of their own: the `ecomm-e2e` Compose project, on fresh volumes and with its own secrets in
 `.secrets/ecomm-e2e/`, both removed after. Each run so starts on the seed, as in CI, and the
