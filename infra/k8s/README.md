@@ -95,8 +95,31 @@ Containers Compose leaves uncapped are given limits from the memory readings (RE
 it is limited to, so the scheduler places pods by their caps. CPU is requested, not limited, as
 Compose doesn't limit it.
 
-pgAdmin, behind Compose's `tools` profile, isn't in the cluster: it signs in to every database
-with no login of its own. Port-forward to Postgres instead.
+pgAdmin, behind Compose's `tools` profile, isn't in the cluster: with nothing reachable from
+outside, it could only be opened through a port-forward anyway, so the port-forward goes to
+Postgres instead and pgAdmin, or `psql`, runs on your machine. `kubectl port-forward` listens on a
+local port, here 15432 (Compose's Postgres holds 5433), and carries each connection to it through
+the Kubernetes API to the Postgres pod, for as long as the command runs:
+
+```bash
+kubectl -n ecomm port-forward svc/postgres 15432:5432        # leave running; Ctrl-C closes it
+kubectl -n ecomm get secret postgres-password \
+  -o jsonpath='{.data.postgres-password}' | base64 -d        # the password
+psql -h localhost -p 15432 -U ecomm -d orders                # or a pgAdmin server on localhost:15432
+```
+
+Compose's pgAdmin can't be used for this: its `servers.json` names Compose's own `postgres`.
+
+A port-forward reaches pods, so it can't reach a `postgres` Service an overlay points at a database
+outside the cluster, as the `aws` overlay does at RDS. Forward to a relay pod instead, which opens
+a connection to `postgres` for each one it is given, and delete it after:
+
+```bash
+kubectl -n ecomm run pg-relay --image=alpine/socat:1.8.0.3 --port=5432 \
+  -- tcp-listen:5432,fork,reuseaddr tcp-connect:postgres:5432
+kubectl -n ecomm port-forward pod/pg-relay 15432:5432
+kubectl -n ecomm delete pod pg-relay
+```
 
 ## Secrets
 
