@@ -23,3 +23,13 @@ Sprint 8 runs the whole stack in AWS for a load test and a fault drill, then tea
 - Kubernetes runs the Jobs at once, where Compose orders them by `depends_on`; a Job that starts before what it needs fails and is retried with a backoff, and a service that starts first exits and is restarted. Bringing the stack up takes some restarts, never a hand-run step.
 - With two replicas, each Spring service's sweeps and Outbox relays run in both pods. The sweeps still handle each record once: Inventory's and Notifications' claim each row with `FOR UPDATE SKIP LOCKED`, and Cart's runs only while holding a lock in Redis. Catalog's Outbox relay and the failed-publication resubmitter may send an event twice, as Kafka may redeliver one; consumers apply an event only if it is newer than what they hold, and the duplicate-delivery tests (#133 to #135) are to prove it of every consumer group.
 - Prometheus finds the services' pods through the Kubernetes API, since a Service would answer each scrape from either replica. The dashboards sum over instances, so they read as they do locally.
+
+## Revised 2026-11-19
+
+The `aws` overlay and its Terraform are built (#140; infra/terraform/README.md). Three choices the spec left open:
+
+- **Terraform owns the ALB.** Its target groups, listener rules, certificate and Route 53 records are Terraform's, and the AWS Load Balancer Controller only registers each Service's ready pods in its target group, through a `TargetGroupBinding`, with a policy allowing that and nothing more. With an Ingress, the controller would make the ALB after Terraform's apply, so the records naming it would need a second apply, and `make aws-down` would depend on the controller deleting an ALB Terraform doesn't know of before the VPC could go.
+- **A run's values come from Terraform's outputs, not the overlay.** The overlay holds example values in `environment.env`, which Kustomize's replacements copy into place, so CI builds and validates it; `make aws-up` builds a run's overlay over it that applies the same replacements with the run's own values, the images at the run's SHA, and a realm whose frontend clients redirect to the run's subdomains with `sslRequired` external. The repo's files never hold a run's values.
+- **The frontends read their Keycloak at run time.** The same image runs in every Environment, so nginx writes `OIDC_AUTHORITY` into the page, the local stack's realm unless set, where the Storefront and the Admin Console had it built in.
+
+EKS runs Kubernetes 1.35, in standard support, as 1.33's has ended and extended support costs six times as much per hour; CI validates against 1.35's schemas.

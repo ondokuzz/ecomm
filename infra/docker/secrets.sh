@@ -28,6 +28,10 @@ fi
 # Whether the project has this volume. Docker has to answer: a stack's volumes can't be told
 # apart from no volumes while it is down.
 volume_exists() {
+  # An AWS environment (`make aws-up`) has no Compose volumes, and needs no Docker.
+  if [ -n "${SECRETS_WITHOUT_VOLUMES:-}" ]; then
+    return 1
+  fi
   if ! docker info >/dev/null 2>&1; then
     echo "Docker isn't running, so whether $project's volumes exist is unknown" >&2
     exit 1

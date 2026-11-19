@@ -1,0 +1,56 @@
+# The AWS environment (#140): the base, with Postgres and Redis on RDS and ElastiCache, gp3 volumes,
+# the images CI pushed to GHCR, and the four Services the ALB reaches bound to its target groups.
+# What differs per run (the domain, the stores' addresses, the target groups, the commit) is in
+# environment.env as an example; `make aws-up` builds a run's overlay over this one with its own
+# (infra/aws/run-overlay.py). See infra/terraform/README.md.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: ecomm
+
+resources:
+  - ../../base
+  - resources.yaml
+
+patches:
+  - path: patches.yaml
+
+configMapGenerator:
+  # The run's values, which replacements.yaml copies into place. Only Kustomize reads it, so it is
+  # left out of what is applied.
+  - name: aws-environment
+    envs: [environment.env]
+    options:
+      disableNameSuffixHash: true
+      annotations:
+        config.kubernetes.io/local-config: "true"
+  # The issuer every Spring service trusts: tokens carry auth.<domain>, the browser-facing one.
+  - name: spring-service
+    behavior: merge
+    literals:
+      - ECOMM_SECURITY_JWT_ISSUER_URI=OIDC_AUTHORITY
+
+replacements:
+  - path: replacements.yaml
+
+# The images CI builds for each commit on main, tagged with its SHA and with main
+# (.github/workflows/ci.yml); a run's overlay sets the SHA.
+images:
+  - { name: ecomm/admin-console, newName: ghcr.io/ondokuzz/ecomm/admin-console, newTag: main }
+  - { name: ecomm/ai-support-assistant, newName: ghcr.io/ondokuzz/ecomm/ai-support-assistant, newTag: main }
+  - { name: ecomm/api-gateway, newName: ghcr.io/ondokuzz/ecomm/api-gateway, newTag: main }
+  - { name: ecomm/cart, newName: ghcr.io/ondokuzz/ecomm/cart, newTag: main }
+  - { name: ecomm/catalog, newName: ghcr.io/ondokuzz/ecomm/catalog, newTag: main }
+  - { name: ecomm/checkout-pricing, newName: ghcr.io/ondokuzz/ecomm/checkout-pricing, newTag: main }
+  - { name: ecomm/fulfillment-shipping, newName: ghcr.io/ondokuzz/ecomm/fulfillment-shipping, newTag: main }
+  - { name: ecomm/inventory, newName: ghcr.io/ondokuzz/ecomm/inventory, newTag: main }
+  - { name: ecomm/notifications, newName: ghcr.io/ondokuzz/ecomm/notifications, newTag: main }
+  - { name: ecomm/orchestration, newName: ghcr.io/ondokuzz/ecomm/orchestration, newTag: main }
+  - { name: ecomm/order-management, newName: ghcr.io/ondokuzz/ecomm/order-management, newTag: main }
+  - { name: ecomm/payment, newName: ghcr.io/ondokuzz/ecomm/payment, newTag: main }
+  - { name: ecomm/promotions, newName: ghcr.io/ondokuzz/ecomm/promotions, newTag: main }
+  - { name: ecomm/recommendations, newName: ghcr.io/ondokuzz/ecomm/recommendations, newTag: main }
+  - { name: ecomm/returns-warranty, newName: ghcr.io/ondokuzz/ecomm/returns-warranty, newTag: main }
+  - { name: ecomm/reviews-ratings, newName: ghcr.io/ondokuzz/ecomm/reviews-ratings, newTag: main }
+  - { name: ecomm/search-discovery, newName: ghcr.io/ondokuzz/ecomm/search-discovery, newTag: main }
+  - { name: ecomm/storefront, newName: ghcr.io/ondokuzz/ecomm/storefront, newTag: main }

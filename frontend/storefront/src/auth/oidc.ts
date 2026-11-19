@@ -1,4 +1,5 @@
 import { InMemoryWebStorage, type UserManagerSettings, WebStorageStateStore } from 'oidc-client-ts'
+import { authority } from './authority'
 
 const origin = window.location.origin
 
@@ -11,7 +12,7 @@ export const silentRedirectPath = '/silent-renew'
  * Keycloak session. Silent renew refreshes them before the access token expires.
  */
 export const oidcSettings: UserManagerSettings = {
-  authority: import.meta.env.VITE_OIDC_AUTHORITY ?? 'http://localhost:8180/realms/ecomm',
+  authority: authority(document.querySelector<HTMLMetaElement>('meta[name="oidc-authority"]')?.content),
   client_id: 'storefront',
   redirect_uri: `${origin}/`,
   silent_redirect_uri: `${origin}${silentRedirectPath}`,

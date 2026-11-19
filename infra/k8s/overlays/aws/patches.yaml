@@ -1,0 +1,100 @@
+# What the AWS environment changes in the base. Values that differ per run are placeholders here,
+# named after the key in environment.env that replacements.yaml copies over them.
+
+# Postgres and Redis are RDS and ElastiCache (ADR 0012): the Services keep their names, so nothing
+# that connects to them changes, and resolve to the managed stores' addresses.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+$patch: delete
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+$patch: delete
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  type: ExternalName
+  externalName: POSTGRES_HOST
+  selector: null
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+spec:
+  type: ExternalName
+  externalName: REDIS_HOST
+  selector: null
+---
+# Keycloak issues tokens for auth.<domain>, behind the ALB's TLS: it reads the browser's scheme and
+# address from the ALB's X-Forwarded headers, so the realm's sslRequired external holds for the
+# browser, while the services, on the cluster's private addresses, still call it on plain HTTP.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+spec:
+  template:
+    spec:
+      containers:
+        - name: keycloak
+          env:
+            - { name: KC_HOSTNAME, value: KEYCLOAK_HOSTNAME }
+            - { name: KC_PROXY_HEADERS, value: xforwarded }
+---
+# Each frontend signs in against the environment's Keycloak (src/auth/authority.ts).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: storefront
+spec:
+  template:
+    spec:
+      containers:
+        - name: storefront
+          env:
+            - { name: OIDC_AUTHORITY, value: OIDC_AUTHORITY }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: admin-console
+spec:
+  template:
+    spec:
+      containers:
+        - name: admin-console
+          env:
+            - { name: OIDC_AUTHORITY, value: OIDC_AUTHORITY }
+---
+# The Storefront that a Cart reminder links to, and that the Support Assistant names.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notifications
+spec:
+  template:
+    spec:
+      containers:
+        - name: notifications
+          env:
+            - { name: ECOMM_NOTIFICATIONS_STOREFRONT_URL, value: STOREFRONT_URL }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-support-assistant
+spec:
+  template:
+    spec:
+      containers:
+        - name: ai-support-assistant
+          env:
+            - { name: ECOMM_SUPPORT_ASSISTANT_STOREFRONT_URL, value: STOREFRONT_URL }

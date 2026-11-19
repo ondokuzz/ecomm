@@ -1,0 +1,65 @@
+# What the AWS environment has and the base doesn't.
+
+# gp3 volumes for the StatefulSets, made the cluster's default, so the base's claims, which name no
+# class, get one. A volume goes with its claim, which goes with the namespace (`make aws-down`).
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  encrypted: "true"
+reclaimPolicy: Delete
+# A volume is made in the zone its pod is scheduled to, as an EBS volume lives in one zone.
+volumeBindingMode: WaitForFirstConsumer
+---
+# The images come from GHCR, which is private: every pod but Prometheus runs as the namespace's
+# default ServiceAccount, and pulls with the ghcr Secret `make aws-up` creates.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: default
+imagePullSecrets:
+  - name: ghcr
+---
+# The four Services the ALB reaches. The AWS Load Balancer Controller keeps each one's ready pods
+# registered in the target group Terraform made for it (infra/terraform/environment/ingress.tf);
+# replacements.yaml gives each its ARN.
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: TargetGroupBinding
+metadata:
+  name: storefront
+spec:
+  serviceRef: { name: storefront, port: 8080 }
+  targetGroupARN: STOREFRONT_TARGET_GROUP
+  targetType: ip
+---
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: TargetGroupBinding
+metadata:
+  name: admin-console
+spec:
+  serviceRef: { name: admin-console, port: 8090 }
+  targetGroupARN: ADMIN_CONSOLE_TARGET_GROUP
+  targetType: ip
+---
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: TargetGroupBinding
+metadata:
+  name: api-gateway
+spec:
+  serviceRef: { name: api-gateway, port: 8080 }
+  targetGroupARN: API_GATEWAY_TARGET_GROUP
+  targetType: ip
+---
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: TargetGroupBinding
+metadata:
+  name: keycloak
+spec:
+  serviceRef: { name: keycloak, port: 8080 }
+  targetGroupARN: KEYCLOAK_TARGET_GROUP
+  targetType: ip

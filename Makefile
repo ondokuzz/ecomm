@@ -14,7 +14,7 @@ RETURNS_GROUPS := $(filter returns-warranty.%,$(GROUPS))
 NOTIFICATIONS_PRODUCT_GROUPS := notifications.products
 DEAD_LETTER_TOPICS := $(foreach group,$(GROUPS),$(group).dlt $(group).redrive)
 
-.PHONY: secrets up down status memory realm-sync seed-reset e2e search-rebuild reviews-rebuild recommendations-rebuild recommendations-report cart-reminders-report fulfillment-rebuild returns-rebuild notifications-rebuild dlt-redrive upgrade-from upgrade-to upgrade-clean
+.PHONY: aws-up aws-down secrets up down status memory realm-sync seed-reset e2e search-rebuild reviews-rebuild recommendations-rebuild recommendations-report cart-reminders-report fulfillment-rebuild returns-rebuild notifications-rebuild dlt-redrive upgrade-from upgrade-to upgrade-clean
 
 ## Write each of the stack's secrets that is missing to .secrets/<project>/, never overwriting one
 ## (infra/docker/secrets.sh). `make up` runs it first.
@@ -168,6 +168,20 @@ dlt-redrive:
 	$(COMPOSE) run --rm --no-deps --entrypoint java $(firstword $(subst ., ,$(GROUP))) \
 	  -Dloader.main=com.ecomm.commons.events.kafka.DeadLetterRedrive \
 	  org.springframework.boot.loader.launch.PropertiesLauncher kafka:19092 $(GROUP)
+
+## Build the AWS environment, or bring the one there is up to this tree and SHA, e.g.
+## `make aws-up DOMAIN=ecomm.example.com SHA=<a commit on main> EMAIL=<the budget alarm's address>`,
+## with GHCR_USER and GHCR_TOKEN in the environment; REGION is eu-central-1 unless given. It checks
+## its prerequisites, applies Terraform, creates the Secrets, applies the aws overlay with the images
+## CI pushed for SHA, waits for every rollout, and prints the URLs (infra/aws/aws-up.sh).
+aws-up:
+	@DOMAIN='$(DOMAIN)' SHA='$(SHA)' EMAIL='$(EMAIL)' REGION='$(or $(REGION),eu-central-1)' infra/aws/aws-up.sh
+
+## Destroy the AWS environment: the namespace first, so its volumes go, then everything Terraform
+## made, then check by the run's tag that nothing is left (infra/aws/aws-down.sh). RUN and DOMAIN
+## are read from Terraform's state, and given only when an apply failed before it held them.
+aws-down:
+	@RUN='$(RUN)' DOMAIN='$(DOMAIN)' REGION='$(or $(REGION),eu-central-1)' infra/aws/aws-down.sh
 
 # The upgrade check (docs/agents/upgrade-check.md): a stack from an earlier commit, under a Compose
 # project and image tag of its own, brought up to this tree's. Ports are shared, so the default

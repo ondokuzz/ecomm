@@ -1,0 +1,46 @@
+# Copies each of the run's values, the aws-environment ConfigMap's keys, into the fields that hold
+# it. The overlay applies these with environment.env's example values; the run's overlay
+# (infra/aws/run-overlay.py) applies them again, over the same fields, with the run's.
+- source: { kind: ConfigMap, name: aws-environment, fieldPath: data.POSTGRES_HOST }
+  targets:
+    - select: { kind: Service, name: postgres }
+      fieldPaths: [spec.externalName]
+- source: { kind: ConfigMap, name: aws-environment, fieldPath: data.REDIS_HOST }
+  targets:
+    - select: { kind: Service, name: redis }
+      fieldPaths: [spec.externalName]
+- source: { kind: ConfigMap, name: aws-environment, fieldPath: data.KEYCLOAK_HOSTNAME }
+  targets:
+    - select: { kind: Deployment, name: keycloak }
+      fieldPaths: ["spec.template.spec.containers.[name=keycloak].env.[name=KC_HOSTNAME].value"]
+- source: { kind: ConfigMap, name: aws-environment, fieldPath: data.OIDC_AUTHORITY }
+  targets:
+    - select: { kind: Deployment, name: storefront }
+      fieldPaths: ["spec.template.spec.containers.[name=storefront].env.[name=OIDC_AUTHORITY].value"]
+    - select: { kind: Deployment, name: admin-console }
+      fieldPaths: ["spec.template.spec.containers.[name=admin-console].env.[name=OIDC_AUTHORITY].value"]
+    # The issuer every Spring service trusts (JwtResourceServerProperties).
+    - select: { kind: ConfigMap, name: spring-service }
+      fieldPaths: [data.ECOMM_SECURITY_JWT_ISSUER_URI]
+- source: { kind: ConfigMap, name: aws-environment, fieldPath: data.STOREFRONT_URL }
+  targets:
+    - select: { kind: Deployment, name: notifications }
+      fieldPaths: ["spec.template.spec.containers.[name=notifications].env.[name=ECOMM_NOTIFICATIONS_STOREFRONT_URL].value"]
+    - select: { kind: Deployment, name: ai-support-assistant }
+      fieldPaths: ["spec.template.spec.containers.[name=ai-support-assistant].env.[name=ECOMM_SUPPORT_ASSISTANT_STOREFRONT_URL].value"]
+- source: { kind: ConfigMap, name: aws-environment, fieldPath: data.STOREFRONT_TARGET_GROUP }
+  targets:
+    - select: { kind: TargetGroupBinding, name: storefront }
+      fieldPaths: [spec.targetGroupARN]
+- source: { kind: ConfigMap, name: aws-environment, fieldPath: data.ADMIN_CONSOLE_TARGET_GROUP }
+  targets:
+    - select: { kind: TargetGroupBinding, name: admin-console }
+      fieldPaths: [spec.targetGroupARN]
+- source: { kind: ConfigMap, name: aws-environment, fieldPath: data.API_GATEWAY_TARGET_GROUP }
+  targets:
+    - select: { kind: TargetGroupBinding, name: api-gateway }
+      fieldPaths: [spec.targetGroupARN]
+- source: { kind: ConfigMap, name: aws-environment, fieldPath: data.KEYCLOAK_TARGET_GROUP }
+  targets:
+    - select: { kind: TargetGroupBinding, name: keycloak }
+      fieldPaths: [spec.targetGroupARN]

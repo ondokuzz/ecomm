@@ -93,8 +93,8 @@ jobs:
         run: python3 -B infra/docker/stack-wiring-check.py
 
   # The Kubernetes manifests (infra/k8s): the base and every overlay built with Kustomize and
-  # validated against Kubernetes' schemas, and the base checked against the Compose file. Nothing is
-  # applied anywhere.
+  # validated against Kubernetes' schemas, and the base checked against the Compose file. And the AWS
+  # environment's Terraform (infra/terraform), validated and linted. Nothing is applied anywhere.
   k8s:
     runs-on: ubuntu-latest
     env:
@@ -102,8 +102,13 @@ jobs:
       KUSTOMIZE_SHA256: cb9e31198d3f63b44848bd0afc4c8efc56e6cfef9c93a4a39a211940e6decd61
       KUBECONFORM_VERSION: 0.8.0
       KUBECONFORM_SHA256: 9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883
-      # The version EKS runs the environment on.
-      KUBERNETES_VERSION: 1.33.0
+      # The version EKS runs the environment on (infra/terraform/environment/variables.tf).
+      KUBERNETES_VERSION: 1.35.0
+      # The aws overlay's TargetGroupBindings are the Load Balancer Controller's own kind; their
+      # schema comes from this catalog, at a fixed commit.
+      CRD_SCHEMAS: https://raw.githubusercontent.com/datreeio/CRDs-catalog/a6db5a76b3d83fe951f2987085677c6f7fb43501/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json
+      TERRAFORM_IMAGE: hashicorp/terraform:1.17.1
+      TFLINT_IMAGE: ghcr.io/terraform-linters/tflint:v0.65.0
     # Named, so it runs with pipefail: a kustomize build that fails must fail the job, not hand
     # kubeconform nothing to validate.
     defaults:
@@ -128,13 +133,29 @@ jobs:
             [ -f "$dir/kustomization.yaml" ] || continue
             echo "== $dir"
             kustomize build --load-restrictor LoadRestrictionsNone "$dir" \
-              | kubeconform -strict -summary -kubernetes-version "$KUBERNETES_VERSION"
+              | kubeconform -strict -summary -kubernetes-version "$KUBERNETES_VERSION" \
+                  -schema-location default -schema-location "$CRD_SCHEMAS"
           done
       - run: make secrets
       - name: Check that every Compose container has its manifest
         run: |
           kustomize build --load-restrictor LoadRestrictionsNone infra/k8s/base \
             | pipx run infra/k8s/compose-parity-check.py
+      # Without a backend, so nothing reaches AWS.
+      - name: Validate the Terraform
+        run: |
+          docker run --rm -v "$PWD/infra/terraform:/tf" -w /tf "$TERRAFORM_IMAGE" fmt -check -recursive -diff
+          for root in bootstrap environment; do
+            echo "== $root"
+            docker run --rm -v "$PWD/infra/terraform:/tf" -w "/tf/$root" "$TERRAFORM_IMAGE" init -backend=false -input=false
+            docker run --rm -v "$PWD/infra/terraform:/tf" -w "/tf/$root" "$TERRAFORM_IMAGE" validate
+          done
+      - name: Lint the Terraform
+        run: |
+          docker run --rm -v "$PWD/infra/terraform:/tf" -w /tf --entrypoint sh "$TFLINT_IMAGE" -c '
+            tflint --init --config /tf/.tflint.hcl &&
+            tflint --chdir bootstrap --config /tf/.tflint.hcl &&
+            tflint --chdir environment --config /tf/.tflint.hcl'
 
   frontend:
     strategy:

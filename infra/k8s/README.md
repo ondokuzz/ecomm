@@ -14,11 +14,23 @@ infra/k8s/
     services/                the Spring services, the gateway among them
     observability/           Prometheus, with its own prometheus.yml, Grafana, the Kafka exporter
     patches/                 what every Spring service shares, and no service links for any pod
+  overlays/aws/              the AWS environment: RDS, ElastiCache, gp3, GHCR, the ALB's target groups
   compose-parity-check.py    fails if the base has drifted from the Compose file
 ```
 
-An overlay for an environment goes in `overlays/<name>/`, with `../../base` as its resource; CI
+An overlay for an Environment goes in `overlays/<name>/`, with `../../base` as its resource; CI
 builds and validates every one.
+
+The [`aws` overlay](./overlays/aws/kustomization.yaml) deletes the base's Postgres and Redis and
+makes their Services `ExternalName`s for RDS and ElastiCache, so nothing that connects to them
+changes; makes gp3 the default storage class; pulls every image built here from GHCR, through the
+`ghcr` pull secret on the namespace's default ServiceAccount; binds the Storefront, Admin Console,
+gateway and Keycloak Services to the ALB's target groups; and sets the browser-facing names:
+Keycloak's hostname and proxy headers, the frontends' `OIDC_AUTHORITY`, the issuer every Spring
+service trusts, and the Storefront URL Notifications and the Support Assistant link to. What
+differs per run is in [`environment.env`](./overlays/aws/environment.env) as an example, which
+[`replacements.yaml`](./overlays/aws/replacements.yaml) copies into place; `make aws-up` builds a
+run's overlay over it with the run's own ([infra/terraform/README.md](../terraform/README.md)).
 
 ## Building and checking
 
@@ -31,8 +43,9 @@ kustomize build --load-restrictor LoadRestrictionsNone infra/k8s/base
 # or kubectl kustomize --load-restrictor LoadRestrictionsNone infra/k8s/base
 ```
 
-CI's `k8s` job builds the base and every overlay, validates each against Kubernetes 1.33's schemas
-with [kubeconform](https://github.com/yannh/kubeconform), and runs the parity check on the base.
+CI's `k8s` job builds the base and every overlay, validates each against Kubernetes 1.35's schemas
+with [kubeconform](https://github.com/yannh/kubeconform), the Load Balancer Controller's
+`TargetGroupBinding` against [a CRD catalog](https://github.com/datreeio/CRDs-catalog)'s, and runs the parity check on the base.
 To run the check locally, with Docker running and `make secrets` done (it reads Compose's resolved
 configuration) and [uv](https://docs.astral.sh/uv/) or pipx for its one dependency:
 

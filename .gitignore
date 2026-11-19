@@ -13,6 +13,9 @@ bin/
 .secrets/
 # The JetBrains HTTP client's private environment: the stack's secrets for the .http files
 http-client.private.env.json
+# Terraform's providers and modules, and the bootstrap's local state (infra/terraform/README.md)
+.terraform/
+infra/terraform/bootstrap/terraform.tfstate*
 
 # Each machine's own Claude Code settings, such as its PATH.
 .claude/settings.local.json

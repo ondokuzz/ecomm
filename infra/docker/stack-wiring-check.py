@@ -11,7 +11,8 @@ Checked, for each Spring service in Compose (built from a Dockerfile beside a bu
 - each of its @KafkaListener groups is in consumer-groups, named after it;
 and for each service the gateway routes: application-docker.yml gives its URI on the Compose
 network, whose host is a Compose service (the route's name, or another, as support-assistant's is
-ai-support-assistant), and the gateway's Compose entry waits for it.
+ai-support-assistant), and the gateway's Compose entry waits for it. And every image Compose builds,
+the frontends' included, is taken from GHCR by the aws overlay (infra/k8s/overlays/aws).
 """
 
 import json
@@ -80,6 +81,13 @@ for name, directory in sorted(spring.items()):
                 problems.append(f"{name}: group {group} ({java.name}) isn't in infra/docker/consumer-groups")
             if not group.startswith(name + "."):
                 problems.append(f"{name}: group {group} ({java.name}) isn't named <service>.<what it projects>")
+
+# Compose names each built image ${IMAGE_PREFIX:-ecomm}/<name>:${IMAGE_TAG:-latest}, unset here.
+built = {name: s["image"].rsplit(":", 1)[0] for name, s in compose.items() if s.get("build")}
+aws_images = set(re.findall(r"name: (ecomm/[a-z-]+),", read("infra/k8s/overlays/aws/kustomization.yaml")))
+for name, image in sorted(built.items()):
+    if image not in aws_images:
+        problems.append(f"{name}: the aws overlay doesn't take {image} from GHCR (infra/k8s/overlays/aws/kustomization.yaml)")
 
 
 def gateway_services(path):
