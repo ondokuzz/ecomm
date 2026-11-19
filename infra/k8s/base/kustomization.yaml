@@ -1,0 +1,143 @@
+# The whole stack, one workload per container in the Compose file (infra/docker/compose.yaml), in
+# the ecomm namespace. See infra/k8s/README.md.
+#
+# Its ConfigMaps are made from the files Compose mounts, where they live, outside this directory, so
+# it is built with --load-restrictor LoadRestrictionsNone. Kustomize takes no globs, so each file is
+# named; compose-parity-check.py fails if one Compose mounts is missing or differs.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: ecomm
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: ecomm
+
+resources:
+  - namespace.yaml
+  # Stores
+  - stores/postgres.yaml
+  - stores/redis.yaml
+  - stores/couchbase.yaml
+  - stores/mongo.yaml
+  - stores/kafka.yaml
+  # One-shot steps
+  - init/postgres-databases.yaml
+  - init/couchbase-init.yaml
+  - init/kafka-topics.yaml
+  - init/schema-registry-init.yaml
+  - init/temporal-schema.yaml
+  - init/temporal-namespace.yaml
+  - init/keycloak-realm.yaml
+  - init/catalog-seed.yaml
+  # Platform
+  - platform/keycloak.yaml
+  - platform/apicurio.yaml
+  - platform/temporal.yaml
+  - platform/temporal-ui.yaml
+  - platform/mailpit.yaml
+  - platform/storefront.yaml
+  - platform/admin-console.yaml
+  # Spring services
+  - services/api-gateway.yaml
+  - services/catalog.yaml
+  - services/inventory.yaml
+  - services/cart.yaml
+  - services/payment.yaml
+  - services/order-management.yaml
+  - services/promotions.yaml
+  - services/checkout-pricing.yaml
+  - services/search-discovery.yaml
+  - services/reviews-ratings.yaml
+  - services/recommendations.yaml
+  - services/fulfillment-shipping.yaml
+  - services/returns-warranty.yaml
+  - services/notifications.yaml
+  - services/ai-support-assistant.yaml
+  - services/orchestration.yaml
+  # Dashboards
+  - observability/prometheus.yaml
+  - observability/grafana.yaml
+  - observability/kafka-exporter.yaml
+
+patches:
+  - path: patches/spring-service.yaml
+    target:
+      kind: Deployment
+      labelSelector: app.kubernetes.io/component=spring-service
+  - path: patches/no-service-links.yaml
+    target:
+      kind: (Deployment|StatefulSet|Job)
+
+configMapGenerator:
+  # Compose's x-spring-jvm, which every Spring service runs with. Spring Boot turns its probes'
+  # health groups on by itself in Kubernetes; they are turned on here so they don't depend on it.
+  - name: spring-service
+    literals:
+      - JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=60 -XX:TieredStopAtLevel=1 -Xss512k
+      - MALLOC_ARENA_MAX=2
+      - MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED=true
+  - name: postgres-databases
+    files:
+      - ../../docker/postgres-databases.sh
+  - name: couchbase-init
+    files:
+      - ../../docker/couchbase-init.sh
+  - name: kafka-topics
+    files:
+      - ../../docker/kafka-topics.sh
+  - name: consumer-groups
+    files:
+      - ../../docker/consumer-groups
+  - name: event-schemas
+    files:
+      - ../../../platform/event-schemas/schemas/cart.cart.json
+      - ../../../platform/event-schemas/schemas/catalog.category.json
+      - ../../../platform/event-schemas/schemas/catalog.product.json
+      - ../../../platform/event-schemas/schemas/fulfillment-shipping.shipment.json
+      - ../../../platform/event-schemas/schemas/inventory.stock.json
+      - ../../../platform/event-schemas/schemas/order-management.order.json
+      - ../../../platform/event-schemas/schemas/payment.payment.json
+      - ../../../platform/event-schemas/schemas/returns-warranty.rma.json
+  - name: schema-registry-init
+    files:
+      - ../../../platform/event-schemas/register.sh
+  - name: temporal-schema
+    files:
+      - ../../docker/temporal-schema.sh
+  - name: temporal-namespace
+    files:
+      - ../../docker/temporal-namespace.sh
+  - name: temporal-dynamicconfig
+    files:
+      - ../../docker/temporal-dynamicconfig.yaml
+  - name: keycloak-realm
+    files:
+      - ../../../services/identity-access/realm/realm-ecomm.json
+  - name: keycloak-realm-sync
+    files:
+      - ../../docker/keycloak-realm-sync.py
+  # The login theme's files, flattened; platform/keycloak.yaml puts them back in their directories.
+  - name: keycloak-theme
+    files:
+      - ../../../services/identity-access/themes/ecomm/login/theme.properties
+      - ../../../services/identity-access/themes/ecomm/login/resources/css/ecomm.css
+      - ../../../services/identity-access/themes/ecomm/login/resources/css/fonts.css
+      - ../../../services/identity-access/themes/ecomm/login/resources/css/tokens.css
+      - ../../../services/identity-access/themes/ecomm/login/resources/fonts/bricolage-grotesque-LICENSE.txt
+      - ../../../services/identity-access/themes/ecomm/login/resources/fonts/bricolage-grotesque-latin-wght-normal.woff2
+      - ../../../services/identity-access/themes/ecomm/login/resources/fonts/inter-LICENSE.txt
+      - ../../../services/identity-access/themes/ecomm/login/resources/fonts/inter-latin-wght-normal.woff2
+      - ../../../services/identity-access/themes/ecomm/login/resources/img/favicon.svg
+  - name: prometheus
+    files:
+      - observability/prometheus.yml
+  - name: grafana-provisioning
+    files:
+      - ../../docker/grafana/provisioning/dashboards/dashboards.yaml
+      - ../../docker/grafana/provisioning/datasources/prometheus.yaml
+  - name: grafana-dashboards
+    files:
+      - ../../docker/grafana/dashboards/checkout-saga.json
+      - ../../docker/grafana/dashboards/event-consumers.json
+      - ../../docker/grafana/dashboards/services.json

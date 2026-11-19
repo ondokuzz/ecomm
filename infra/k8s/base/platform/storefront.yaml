@@ -1,0 +1,50 @@
+# The Storefront: nginx serving the build and sending /api/ to the gateway. nginx's resolver takes
+# no search domains, so the gateway is named in full; it resolves the name on each request, as it
+# does on the Compose network (frontend/storefront/nginx.conf).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: storefront
+  labels:
+    app.kubernetes.io/name: storefront
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: storefront
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: storefront
+    spec:
+      containers:
+        - name: storefront
+          image: ecomm/storefront:latest
+          env:
+            - { name: API_GATEWAY, value: "api-gateway.ecomm.svc.cluster.local:8080" }
+          ports:
+            - { name: http, containerPort: 8080 }
+          readinessProbe:
+            httpGet: { path: /, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet: { path: /, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              memory: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: storefront
+spec:
+  selector:
+    app.kubernetes.io/name: storefront
+  ports:
+    - { name: http, port: 8080, targetPort: http }

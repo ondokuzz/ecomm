@@ -18,6 +18,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.type.TypeReference;
@@ -26,9 +27,11 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * On startup, loads the seed Categories and Products into the Catalog if it is empty. Otherwise it
  * gives the seeded Products stored before Warranty terms the seed's Warranty terms and Serial
- * tracking.
+ * tracking. With {@code ecomm.catalog.seed.on-start} false, as Catalog's replicas run in
+ * Kubernetes, it doesn't, and {@link com.ecomm.catalog.CatalogSeed} does it once instead.
  */
 @Component
+@ConditionalOnBooleanProperty(name = "ecomm.catalog.seed.on-start", matchIfMissing = true)
 class SeedDataLoader implements ApplicationRunner {
 
   private static final Logger log = LoggerFactory.getLogger(SeedDataLoader.class);

@@ -1,0 +1,38 @@
+# What every Spring service's container shares, as Compose's x-spring-service does: the JVM options
+# (the spring-service ConfigMap), port 8080, and probes on the actuator's health groups. A service's
+# own env, set in its Deployment, overrides the ConfigMap's, as Orchestration's JAVA_TOOL_OPTIONS do.
+#
+# Startup is given 10 minutes, as many JVMs start at once on few cores, and Catalog waits up to 5
+# for a cold Couchbase's bucket. Then a pod that fails readiness three times running stops getting
+# requests, and one that fails liveness three times running is restarted.
+- op: add
+  path: /spec/template/spec/containers/0/envFrom
+  value:
+    - configMapRef:
+        name: spring-service
+- op: add
+  path: /spec/template/spec/containers/0/ports
+  value:
+    - name: http
+      containerPort: 8080
+- op: add
+  path: /spec/template/spec/containers/0/startupProbe
+  value:
+    httpGet: { path: /actuator/health/liveness, port: http }
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 60
+- op: add
+  path: /spec/template/spec/containers/0/readinessProbe
+  value:
+    httpGet: { path: /actuator/health/readiness, port: http }
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+- op: add
+  path: /spec/template/spec/containers/0/livenessProbe
+  value:
+    httpGet: { path: /actuator/health/liveness, port: http }
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3

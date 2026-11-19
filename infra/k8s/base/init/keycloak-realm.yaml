@@ -1,0 +1,60 @@
+# Adds the realm file's roles and clients that the running ecomm realm lacks, and sets each
+# confidential client's secret from its file, then exits (infra/docker/keycloak-realm-sync.py).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-realm
+  labels:
+    app.kubernetes.io/name: keycloak-realm
+    app.kubernetes.io/component: init
+spec:
+  backoffLimit: 10
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak-realm
+        app.kubernetes.io/component: init
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: keycloak-realm
+          image: python:3.13-alpine
+          command: ["python", "/init/keycloak-realm-sync.py"]
+          env:
+            - { name: KEYCLOAK_URL, value: "http://keycloak:8080" }
+            - { name: KEYCLOAK_ADMIN_USERNAME, value: admin }
+            - { name: REALM_FILE, value: /realm/realm-ecomm.json }
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 64Mi
+          volumeMounts:
+            - name: secrets
+              mountPath: /run/secrets
+              readOnly: true
+            - name: init
+              mountPath: /init
+              readOnly: true
+            - name: realm
+              mountPath: /realm
+              readOnly: true
+      volumes:
+        - name: secrets
+          projected:
+            sources:
+              - secret:
+                  name: keycloak-admin-password
+              - secret:
+                  name: checkout-client-secret
+              - secret:
+                  name: orchestration-client-secret
+              - secret:
+                  name: notifications-client-secret
+        - name: init
+          configMap:
+            name: keycloak-realm-sync
+        - name: realm
+          configMap:
+            name: keycloak-realm

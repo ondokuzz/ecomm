@@ -244,6 +244,12 @@ step gives each seeded Product stored before Warranty terms (one whose document 
 publishes it as `UPDATED`. A Product Staff have saved since has both fields, even with no warranty,
 so their edits stay; a Product they deleted stays deleted. A restart changes nothing more.
 
+In Kubernetes, Catalog's two replicas start with `ECOMM_CATALOG_SEED_ON_START=false`
+(`ecomm.catalog.seed.on-start`, true by default), since both would seed an empty bucket. The
+`catalog-seed` Job does it instead, running `com.ecomm.catalog.CatalogSeed` in Catalog's image:
+Catalog without its web server, seeding as it starts and then exiting
+([`infra/k8s`](../../infra/k8s/README.md)).
+
 Each seed Product's first Variant has the SKU as its Variant ID, so Inventory's seed Stock and
 existing Carts and Orders stay valid. The Google Pixel 9, the Apple iPhone 16 and the Apple MacBook
 Air 13 (M3) come in several Variants along their axes. Not every combination exists, and

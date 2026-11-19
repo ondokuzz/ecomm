@@ -1,0 +1,59 @@
+# Products and Categories in Couchbase. The seed is the catalog-seed Job's, so the two replicas don't both seed an empty bucket.
+# Probes, the shared JVM options and port 8080 come from patches/spring-service.yaml.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: catalog
+  labels:
+    app.kubernetes.io/name: catalog
+    app.kubernetes.io/component: spring-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: catalog
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: catalog
+        app.kubernetes.io/component: spring-service
+    spec:
+      containers:
+        - name: catalog
+          image: ecomm/catalog:latest
+          env:
+            - name: ECOMM_CATALOG_BUCKET_READY_TIMEOUT
+              value: 5m
+            - name: ECOMM_CATALOG_SEED_ON_START
+              value: "false"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 384Mi
+            limits:
+              memory: 384Mi
+          volumeMounts:
+            - name: secrets
+              mountPath: /run/secrets
+              readOnly: true
+      volumes:
+        - name: secrets
+          projected:
+            sources:
+              - secret:
+                  name: couchbase-password
+                  items:
+                    - key: couchbase-password
+                      path: spring.couchbase.password
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: catalog
+spec:
+  selector:
+    app.kubernetes.io/name: catalog
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

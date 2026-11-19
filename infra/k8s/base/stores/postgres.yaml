@@ -1,0 +1,81 @@
+# The shared Postgres, holding every service's database, Keycloak's, Apicurio's and Temporal's. An
+# overlay that uses a managed Postgres replaces it with a Service of the same name. Compose leaves it
+# uncapped; 512 MiB is over twice the most it has been read at (206 MB, 2026-11-03).
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  labels:
+    app.kubernetes.io/name: postgres
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16
+          args: ["postgres", "-c", "max_connections=200"]
+          env:
+            - name: POSTGRES_USER
+              value: ecomm
+            - name: POSTGRES_PASSWORD_FILE
+              value: /run/secrets/postgres-password
+          ports:
+            - name: postgres
+              containerPort: 5432
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-h", "localhost", "-U", "ecomm", "-d", "postgres"]
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            tcpSocket: { port: postgres }
+            periodSeconds: 10
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              memory: 512Mi
+          volumeMounts:
+            - name: secrets
+              mountPath: /run/secrets
+              readOnly: true
+            # A subdirectory, since initdb refuses a directory holding the volume's lost+found.
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+              subPath: pgdata
+      volumes:
+        - name: secrets
+          projected:
+            sources:
+              - secret:
+                  name: postgres-password
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  selector:
+    app.kubernetes.io/name: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres

@@ -1,0 +1,56 @@
+# Carts, Checkout Sessions, the Support Assistant's Conversations and the rate limits. As in
+# Compose, it keeps nothing on disk. An overlay that uses a managed Redis replaces it with a Service
+# of the same name. Compose leaves it uncapped; it has been read at 11 MB (2026-11-03).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  labels:
+    app.kubernetes.io/name: redis
+spec:
+  replicas: 1
+  # Never two at once: each would hold Carts the other lacks.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redis
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7
+          # Expired-key events, by which Checkout counts a Checkout Session Redis drops as expired.
+          args: ["redis-server", "--notify-keyspace-events", "Ex"]
+          ports:
+            - name: redis
+              containerPort: 6379
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            tcpSocket: { port: redis }
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+spec:
+  selector:
+    app.kubernetes.io/name: redis
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis

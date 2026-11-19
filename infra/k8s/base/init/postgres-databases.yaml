@@ -1,0 +1,53 @@
+# Creates each service's database that doesn't exist yet, then exits (infra/docker/postgres-databases.sh).
+#
+# Every init Job runs at once, where Compose orders them by depends_on: one that starts before what
+# it needs is up fails and is tried again, with a backoff, up to backoffLimit times. Each step is
+# idempotent, as Compose runs it on every `up`. A Job's pod template can't be changed, so a Job is
+# deleted before the manifests are applied again (infra/k8s/README.md).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: postgres-databases
+  labels:
+    app.kubernetes.io/name: postgres-databases
+    app.kubernetes.io/component: init
+spec:
+  backoffLimit: 10
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres-databases
+        app.kubernetes.io/component: init
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: postgres-databases
+          image: postgres:16
+          command: ["/init/postgres-databases.sh"]
+          env:
+            - { name: PGHOST, value: postgres }
+            - { name: PGUSER, value: ecomm }
+            - { name: PGDATABASE, value: postgres }
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 64Mi
+          volumeMounts:
+            - name: secrets
+              mountPath: /run/secrets
+              readOnly: true
+            - name: init
+              mountPath: /init
+              readOnly: true
+      volumes:
+        - name: secrets
+          projected:
+            sources:
+              - secret:
+                  name: postgres-password
+        - name: init
+          configMap:
+            name: postgres-databases
+            defaultMode: 0555

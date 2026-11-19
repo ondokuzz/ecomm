@@ -1,0 +1,54 @@
+# RMAs, in Postgres's returns_warranty database.
+# Probes, the shared JVM options and port 8080 come from patches/spring-service.yaml.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: returns-warranty
+  labels:
+    app.kubernetes.io/name: returns-warranty
+    app.kubernetes.io/component: spring-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: returns-warranty
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: returns-warranty
+        app.kubernetes.io/component: spring-service
+    spec:
+      containers:
+        - name: returns-warranty
+          image: ecomm/returns-warranty:latest
+          resources:
+            requests:
+              cpu: 100m
+              memory: 384Mi
+            limits:
+              memory: 384Mi
+          volumeMounts:
+            - name: secrets
+              mountPath: /run/secrets
+              readOnly: true
+      volumes:
+        - name: secrets
+          projected:
+            sources:
+              - secret:
+                  name: postgres-password
+                  items:
+                    - key: postgres-password
+                      path: spring.datasource.password
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: returns-warranty
+spec:
+  selector:
+    app.kubernetes.io/name: returns-warranty
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

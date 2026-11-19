@@ -1,0 +1,50 @@
+# Sets up or migrates Temporal's schema in its databases on the shared Postgres, then exits
+# (infra/docker/temporal-schema.sh).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: temporal-schema
+  labels:
+    app.kubernetes.io/name: temporal-schema
+    app.kubernetes.io/component: init
+spec:
+  backoffLimit: 10
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: temporal-schema
+        app.kubernetes.io/component: init
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: temporal-schema
+          image: temporalio/admin-tools:1.32.0
+          command: ["/init/temporal-schema.sh"]
+          env:
+            - { name: SQL_PLUGIN, value: postgres12 }
+            - { name: SQL_HOST, value: postgres }
+            - { name: SQL_PORT, value: "5432" }
+            - { name: SQL_USER, value: ecomm }
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 128Mi
+          volumeMounts:
+            - name: secrets
+              mountPath: /run/secrets
+              readOnly: true
+            - name: init
+              mountPath: /init
+              readOnly: true
+      volumes:
+        - name: secrets
+          projected:
+            sources:
+              - secret:
+                  name: postgres-password
+        - name: init
+          configMap:
+            name: temporal-schema
+            defaultMode: 0555

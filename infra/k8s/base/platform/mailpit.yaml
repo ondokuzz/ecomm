@@ -1,0 +1,53 @@
+# Catches every email the stack sends: services send to mailpit:1025, and its UI and API are on
+# mailpit:8025. Messages live in memory, up to its 500 most recent.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mailpit
+  labels:
+    app.kubernetes.io/name: mailpit
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mailpit
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mailpit
+    spec:
+      containers:
+        - name: mailpit
+          image: axllent/mailpit:v1.31.3
+          env:
+            - { name: MP_MAX_MESSAGES, value: "500" }
+            - { name: MP_SMTP_AUTH_ACCEPT_ANY, value: "true" }
+            - { name: MP_SMTP_AUTH_ALLOW_INSECURE, value: "true" }
+          ports:
+            - { name: http, containerPort: 8025 }
+            - { name: smtp, containerPort: 1025 }
+          readinessProbe:
+            exec:
+              command: ["/mailpit", "readyz"]
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            tcpSocket: { port: smtp }
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              memory: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailpit
+spec:
+  selector:
+    app.kubernetes.io/name: mailpit
+  ports:
+    - { name: http, port: 8025, targetPort: http }
+    - { name: smtp, port: 1025, targetPort: smtp }

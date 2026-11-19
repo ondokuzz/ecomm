@@ -1,0 +1,52 @@
+# Creates a topic per event schema, and dead-letter and redrive topics per consumer group, then
+# exits (infra/docker/kafka-topics.sh).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kafka-topics
+  labels:
+    app.kubernetes.io/name: kafka-topics
+    app.kubernetes.io/component: init
+spec:
+  backoffLimit: 10
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kafka-topics
+        app.kubernetes.io/component: init
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: kafka-topics
+          image: apache/kafka:4.3.1
+          command: ["/init/kafka-topics.sh"]
+          env:
+            - { name: KAFKA_HEAP_OPTS, value: -Xmx128m }
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              memory: 256Mi
+          volumeMounts:
+            - name: init
+              mountPath: /init
+              readOnly: true
+            - name: event-schemas
+              mountPath: /schemas
+              readOnly: true
+            - name: consumer-groups
+              mountPath: /consumer-groups
+              subPath: consumer-groups
+              readOnly: true
+      volumes:
+        - name: init
+          configMap:
+            name: kafka-topics
+            defaultMode: 0555
+        - name: event-schemas
+          configMap:
+            name: event-schemas
+        - name: consumer-groups
+          configMap:
+            name: consumer-groups

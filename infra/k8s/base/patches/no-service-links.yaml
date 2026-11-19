@@ -1,0 +1,7 @@
+# No pod is given the <SERVICE>_PORT and <SERVICE>_SERVICE_HOST variables Kubernetes sets for every
+# Service in the namespace by default. Kafka's image turns each KAFKA_* variable into a broker
+# setting, so the kafka Service's KAFKA_PORT=tcp://… would become one; and they would add some
+# hundred variables Compose doesn't set to every container. Containers find each other by name.
+- op: add
+  path: /spec/template/spec/enableServiceLinks
+  value: false

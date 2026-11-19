@@ -1,0 +1,109 @@
+# Identity & Access: the ecomm realm, imported on first start, with its login theme. One replica:
+# start-dev keeps sessions in a local cache. Tokens carry KC_HOSTNAME as their issuer; an overlay
+# sets the browser-facing one. Services fetch keys from keycloak:8080.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: keycloak
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+    spec:
+      containers:
+        - name: keycloak
+          image: quay.io/keycloak/keycloak:26.7.4
+          # Keycloak reads no secret from a file, so its database and bootstrap admin passwords
+          # are read from theirs into its environment as it starts. $$ is Kubernetes' escape for
+          # $, as it is Compose's.
+          command:
+            - bash
+            - -c
+            - >-
+              KC_DB_PASSWORD="$$(</run/secrets/postgres-password)"
+              KC_BOOTSTRAP_ADMIN_PASSWORD="$$(</run/secrets/keycloak-admin-password)"
+              exec /opt/keycloak/bin/kc.sh "$$@"
+            - kc.sh
+          args: ["start-dev", "--import-realm"]
+          env:
+            - { name: KC_HOSTNAME, value: "http://localhost:8180" }
+            - { name: KC_DB, value: postgres }
+            - { name: KC_DB_URL, value: "jdbc:postgresql://postgres:5432/keycloak" }
+            - { name: KC_DB_USERNAME, value: ecomm }
+            - { name: KC_HEALTH_ENABLED, value: "true" }
+            - { name: KC_BOOTSTRAP_ADMIN_USERNAME, value: admin }
+            - { name: JAVA_OPTS_KC_HEAP, value: "-XX:MaxRAMPercentage=40 -XX:InitialRAMPercentage=20" }
+          ports:
+            - { name: http, containerPort: 8080 }
+            - { name: management, containerPort: 9000 }
+          startupProbe:
+            httpGet: { path: /health/started, port: management }
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: { path: /health/ready, port: management }
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health/live, port: management }
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 200m
+              memory: 768Mi
+            limits:
+              memory: 768Mi
+          volumeMounts:
+            - name: secrets
+              mountPath: /run/secrets
+              readOnly: true
+            - name: realm
+              mountPath: /opt/keycloak/data/import
+              readOnly: true
+            - name: theme
+              mountPath: /opt/keycloak/themes/ecomm
+              readOnly: true
+      volumes:
+        - name: secrets
+          projected:
+            sources:
+              - secret:
+                  name: postgres-password
+              - secret:
+                  name: keycloak-admin-password
+        - name: realm
+          configMap:
+            name: keycloak-realm
+        # A ConfigMap's keys can't hold a /, so the theme's files are flattened in it
+        # (kustomization.yaml) and put back in their directories here.
+        - name: theme
+          configMap:
+            name: keycloak-theme
+            items:
+              - { key: theme.properties, path: login/theme.properties }
+              - { key: ecomm.css, path: login/resources/css/ecomm.css }
+              - { key: fonts.css, path: login/resources/css/fonts.css }
+              - { key: tokens.css, path: login/resources/css/tokens.css }
+              - { key: bricolage-grotesque-LICENSE.txt, path: login/resources/fonts/bricolage-grotesque-LICENSE.txt }
+              - { key: bricolage-grotesque-latin-wght-normal.woff2, path: login/resources/fonts/bricolage-grotesque-latin-wght-normal.woff2 }
+              - { key: inter-LICENSE.txt, path: login/resources/fonts/inter-LICENSE.txt }
+              - { key: inter-latin-wght-normal.woff2, path: login/resources/fonts/inter-latin-wght-normal.woff2 }
+              - { key: favicon.svg, path: login/resources/img/favicon.svg }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+spec:
+  selector:
+    app.kubernetes.io/name: keycloak
+  ports:
+    - { name: http, port: 8080, targetPort: http }

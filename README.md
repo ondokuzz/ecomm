@@ -7,6 +7,8 @@ A from-scratch e-commerce platform, architected as fifteen bounded contexts acro
 - `services/` — one directory per bounded context (see `GLOSSARY.md` for the domain terms, `docs/adr/` for why each is shaped the way it is)
 - `frontend/storefront`, `frontend/admin-console` — the two customer/staff-facing React apps
 - `platform/` — shared, cross-service concerns: `service-commons`, the hexagonal-architecture service starter template, the API gateway, and `event-schemas`, the integration events' JSON Schemas
+- `infra/docker` — the Compose stack's definitions and scripts
+- `infra/k8s` — the same stack as Kubernetes manifests, built with Kustomize ([its README](./infra/k8s/README.md))
 - `infra/terraform` — infrastructure-as-code for the eventual AWS deployment
 
 ## Docs
@@ -548,13 +550,14 @@ stack either: with it up, their containers time out starting. `docker compose st
 ## CI
 
 [`.github/workflows/ci.yml`](./.github/workflows/ci.yml) checks every pull request and every push
-to `main`, with six jobs:
+to `main`, with seven jobs:
 
 | Job | What it checks |
 |---|---|
 | `backend` | `./gradlew check` on JDK 21: Spotless, unit and Testcontainers tests, and `HexagonalRules` |
 | `event-schemas` | Registers the event schemas from before the change in a throwaway Apicurio, then the change's own, so a schema change that isn't backward compatible, such as a field made required or removed, fails |
 | `secrets` | Scans the repo and its history with [Gitleaks](https://github.com/gitleaks/gitleaks), by its own rules and [`.gitleaks.toml`](./.gitleaks.toml)'s, which adds any literal password or secret in a configuration file, and fails on a finding. The known dev placeholders of earlier sprints are allow-listed one by one, by fingerprint, in [`.gitleaksignore`](./.gitleaksignore). Then `make secrets` and a check that Compose's resolved configuration holds none of the generated values |
+| `k8s` | Builds the [Kubernetes manifests](./infra/k8s/README.md)' base and every overlay with Kustomize and validates them with kubeconform, then checks that the base has a workload for every Compose container, with the same image, environment, files, secrets and cap. Nothing is applied |
 | `frontend (<app>)` | `npm ci`, `lint`, `typecheck`, `test` and `build` for each app in its matrix: the Storefront and the Admin Console |
 | `images` | `docker compose build` of every service and frontend image. On a push to `main` it also pushes them to GHCR as `ghcr.io/ondokuzz/ecomm/<service>`, tagged with the commit SHA and `main` |
 | `e2e` | `make up`, then the Storefront's and the Admin Console's Playwright suites in Chromium. When it fails, the `e2e-failure` artifact keeps the Playwright reports, traces and `docker compose logs` |
@@ -570,5 +573,5 @@ A new frontend app joins the `frontend` job by adding its directory name to `mat
 Making the checks block a merge is a manual step, done once, since a workflow cannot require
 itself. In the repository's **Settings → Branches**, add a branch protection rule (or ruleset) for
 `main`, turn on **Require status checks to pass before merging**, and choose `backend`,
-`event-schemas`, `secrets`, `frontend (storefront)`, `frontend (admin-console)`, `images` and `e2e`. A check appears in that list only after it has run
+`event-schemas`, `secrets`, `k8s`, `frontend (storefront)`, `frontend (admin-console)`, `images` and `e2e`. A check appears in that list only after it has run
 once. On a private repository, branch protection needs a paid GitHub plan.

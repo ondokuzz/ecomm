@@ -11,6 +11,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.client.RestTestClient;
 import org.testcontainers.couchbase.BucketDefinition;
 import org.testcontainers.couchbase.CouchbaseContainer;
+import org.testcontainers.couchbase.CouchbaseService;
 import org.testcontainers.utility.DockerImageName;
 
 /**
@@ -31,7 +32,10 @@ abstract class CatalogApiTest {
               DockerImageName.parse("couchbase:community-7.6.2")
                   .asCompatibleSubstituteFor("couchbase/server"))
           .withBucket(new BucketDefinition("catalog").withPrimaryIndex(false))
-          .withBucket(new BucketDefinition(BackfillApiTest.BUCKET).withPrimaryIndex(false));
+          .withBucket(new BucketDefinition(BackfillApiTest.BUCKET).withPrimaryIndex(false))
+          .withBucket(new BucketDefinition(SeedJobApiTest.BUCKET).withPrimaryIndex(false))
+          // Three buckets of 100 MB, the least each may have, over the default 256 MB.
+          .withServiceQuota(CouchbaseService.KV, 300);
 
   /** The topics Product and Category events are published to. */
   static final String PRODUCT_TOPIC = "catalog.product";

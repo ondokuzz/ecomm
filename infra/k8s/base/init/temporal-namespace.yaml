@@ -1,0 +1,39 @@
+# Creates the default namespace with a 7-day retention, or sets that retention, then exits
+# (infra/docker/temporal-namespace.sh).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: temporal-namespace
+  labels:
+    app.kubernetes.io/name: temporal-namespace
+    app.kubernetes.io/component: init
+spec:
+  backoffLimit: 10
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: temporal-namespace
+        app.kubernetes.io/component: init
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: temporal-namespace
+          image: temporalio/admin-tools:1.32.0
+          command: ["/init/temporal-namespace.sh"]
+          env:
+            - { name: TEMPORAL_ADDRESS, value: "temporal:7233" }
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 128Mi
+          volumeMounts:
+            - name: init
+              mountPath: /init
+              readOnly: true
+      volumes:
+        - name: init
+          configMap:
+            name: temporal-namespace
+            defaultMode: 0555

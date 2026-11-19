@@ -776,8 +776,10 @@ services:
     mem_limit: 32m
     environment:
       REGISTRY_URL: http://apicurio:8080/apis/registry/v3
+    # The script and the schemas it reads from beside it, not the module's build output.
     volumes:
-      - ../../platform/event-schemas:/schemas:ro
+      - ../../platform/event-schemas/register.sh:/schemas/register.sh:ro
+      - ../../platform/event-schemas/schemas:/schemas/schemas:ro
     depends_on:
       apicurio: { condition: service_healthy }
     restart: "no"

@@ -1,0 +1,48 @@
+# Initialises the Couchbase cluster and creates the catalog bucket, then exits
+# (infra/docker/couchbase-init.sh). Compose leaves it uncapped; couchbase-cli is a Python program.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: couchbase-init
+  labels:
+    app.kubernetes.io/name: couchbase-init
+    app.kubernetes.io/component: init
+spec:
+  backoffLimit: 10
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: couchbase-init
+        app.kubernetes.io/component: init
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: couchbase-init
+          image: couchbase:community-7.6.2
+          command: ["/init/couchbase-init.sh"]
+          env:
+            - { name: COUCHBASE_USERNAME, value: admin }
+            - { name: COUCHBASE_BUCKET, value: catalog }
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              memory: 256Mi
+          volumeMounts:
+            - name: secrets
+              mountPath: /run/secrets
+              readOnly: true
+            - name: init
+              mountPath: /init
+              readOnly: true
+      volumes:
+        - name: secrets
+          projected:
+            sources:
+              - secret:
+                  name: couchbase-password
+        - name: init
+          configMap:
+            name: couchbase-init
+            defaultMode: 0555

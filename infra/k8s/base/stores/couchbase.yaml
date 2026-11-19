@@ -1,0 +1,87 @@
+# Catalog's store. Its SDK bootstraps from the ports the node advertises, so the Service serves
+# each of them under its own number. Compose leaves it uncapped; its quotas (couchbase-init) are
+# 768 MB, and it has been read at 760 MB to 1 GB.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: couchbase
+  labels:
+    app.kubernetes.io/name: couchbase
+spec:
+  serviceName: couchbase
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: couchbase
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: couchbase
+    spec:
+      containers:
+        - name: couchbase
+          image: couchbase:community-7.6.2
+          ports:
+            - { name: rest, containerPort: 8091 }
+            - { name: views, containerPort: 8092 }
+            - { name: query, containerPort: 8093 }
+            - { name: fts, containerPort: 8094 }
+            - { name: analytics, containerPort: 8095 }
+            - { name: eventing, containerPort: 8096 }
+            - { name: data, containerPort: 11210 }
+          # A cold start beside the rest of the stack has taken 4 minutes to serve its UI.
+          startupProbe:
+            httpGet: { path: /ui/index.html, port: rest }
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: { path: /ui/index.html, port: rest }
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            tcpSocket: { port: rest }
+            periodSeconds: 10
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 200m
+              memory: 1536Mi
+            limits:
+              memory: 1536Mi
+          volumeMounts:
+            - name: secrets
+              mountPath: /run/secrets
+              readOnly: true
+            - name: couchbase-data
+              mountPath: /opt/couchbase/var
+      volumes:
+        # Not used by the server, as in Compose.
+        - name: secrets
+          projected:
+            sources:
+              - secret:
+                  name: couchbase-password
+  volumeClaimTemplates:
+    - metadata:
+        name: couchbase-data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: couchbase
+spec:
+  selector:
+    app.kubernetes.io/name: couchbase
+  ports:
+    - { name: rest, port: 8091, targetPort: rest }
+    - { name: views, port: 8092, targetPort: views }
+    - { name: query, port: 8093, targetPort: query }
+    - { name: fts, port: 8094, targetPort: fts }
+    - { name: analytics, port: 8095, targetPort: analytics }
+    - { name: eventing, port: 8096, targetPort: eventing }
+    - { name: data, port: 11210, targetPort: data }

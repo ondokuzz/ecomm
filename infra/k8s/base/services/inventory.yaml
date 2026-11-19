@@ -1,0 +1,54 @@
+# Stock, Reservations and their ledger, in Postgres's inventory database.
+# Probes, the shared JVM options and port 8080 come from patches/spring-service.yaml.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventory
+  labels:
+    app.kubernetes.io/name: inventory
+    app.kubernetes.io/component: spring-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: inventory
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: inventory
+        app.kubernetes.io/component: spring-service
+    spec:
+      containers:
+        - name: inventory
+          image: ecomm/inventory:latest
+          resources:
+            requests:
+              cpu: 100m
+              memory: 384Mi
+            limits:
+              memory: 384Mi
+          volumeMounts:
+            - name: secrets
+              mountPath: /run/secrets
+              readOnly: true
+      volumes:
+        - name: secrets
+          projected:
+            sources:
+              - secret:
+                  name: postgres-password
+                  items:
+                    - key: postgres-password
+                      path: spring.datasource.password
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: inventory
+spec:
+  selector:
+    app.kubernetes.io/name: inventory
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

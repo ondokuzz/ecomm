@@ -1,0 +1,39 @@
+# Prometheus's configuration in the cluster. Compose's (infra/docker/prometheus/prometheus.yml)
+# names each Spring service's one container; here each service runs two pods behind one Service,
+# which would answer a scrape from either in turn, so every pod is found through the Kubernetes API
+# instead and scraped on its own. A new service is found by its label, with nothing to add here.
+# Each pod's metrics carry its service's name already (service-commons), and the dashboards sum
+# over instances. The Kafka exporter's job is Compose's.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: spring-services
+    metrics_path: /actuator/prometheus
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          own_namespace: true
+    relabel_configs:
+      # A Spring service's pods, on the port named http, and not a Job's.
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_component, __meta_kubernetes_pod_container_port_name]
+        regex: spring-service;http
+        action: keep
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+
+  # Consumer lag from the broker's committed offsets. Only its lag and each partition's oldest and
+  # newest offsets are kept, the lag's consumergroup label renamed group, as the consumers' own
+  # metrics name it.
+  - job_name: kafka-exporter
+    static_configs:
+      - targets: [kafka-exporter:9308]
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: kafka_consumergroup_lag|kafka_topic_partition_(current|oldest)_offset
+        action: keep
+      - source_labels: [consumergroup]
+        target_label: group
+      - regex: consumergroup
+        action: labeldrop
